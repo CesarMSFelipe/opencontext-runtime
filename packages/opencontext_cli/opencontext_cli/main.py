@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, NoReturn
@@ -84,6 +85,17 @@ from opencontext_core.safety.redaction import SinkGuard
 from opencontext_core.workflow_packs.signing import WorkflowPackSigner, WorkflowPackVerifier
 from opencontext_core.workspace.layout import ensure_workspace
 
+from opencontext_cli.commands.ci_check_cmd import add_ci_check_parser, handle_ci_check
+from opencontext_cli.commands.config_cmd import add_config_parser, handle_config
+from opencontext_cli.commands.git_cmd import add_git_parser, handle_git
+from opencontext_cli.commands.hints_cmd import add_hints_parser, handle_hints
+from opencontext_cli.commands.kg_cmd import add_kg_parser, handle_kg
+from opencontext_cli.commands.plugin_cmd import add_plugin_parser, handle_plugin
+from opencontext_cli.commands.setup_cmd import add_setup_parser, handle_setup
+from opencontext_cli.commands.sync_cmd import add_sync_parser, handle_sync
+from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
+from opencontext_cli.commands.update_cmd import add_update_parser, handle_update, add_upgrade_parser, handle_upgrade
+
 try:
     from opencontext_profiles import first_party_profiles
 except ModuleNotFoundError:
@@ -126,15 +138,48 @@ def _technology_template_names() -> tuple[str, ...]:
 TECHNOLOGY_TEMPLATE_NAMES = _technology_template_names()
 
 
+__version__ = "0.1.0"
+
+
 def main() -> None:
     """CLI entry point."""
 
     parser = _build_parser()
     args = parser.parse_args()
+    if hasattr(args, "version") and args.version:
+        print(f"opencontext {__version__}")
+        return
     try:
         _dispatch(args)
     except OpenContextError as exc:
-        raise SystemExit(f"opencontext: {exc}") from exc
+        print(f"Error: {exc}", file=__import__("sys").stderr)
+        _print_suggestion(args.command if hasattr(args, "command") else "")
+        raise SystemExit(1) from exc
+    except FileNotFoundError as exc:
+        print(f"Error: File not found - {exc}", file=__import__("sys").stderr)
+        raise SystemExit(1) from exc
+    except PermissionError as exc:
+        print(f"Error: Permission denied - {exc}", file=__import__("sys").stderr)
+        raise SystemExit(1) from exc
+    except KeyboardInterrupt:
+        print("\nOperation cancelled.")
+        raise SystemExit(130)
+
+
+def _print_suggestion(command: str) -> None:
+    """Print helpful suggestion after an error."""
+    if command == "index":
+        print("Try: opencontext onboard .")
+    elif command == "pack":
+        print("Try: opencontext index . && opencontext pack . --query 'Explain this project'")
+    elif command == "knowledge-graph":
+        print("Try: opencontext index .")
+    elif command in ("install", "setup"):
+        print("Try: opencontext setup install --profile full")
+    elif command == "doctor":
+        print("Try: opencontext onboard .")
+    else:
+        print("Run 'opencontext --help' for usage information.")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -143,6 +188,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--config",
         default=_default_config_path(),
         help="Path to opencontext.yaml configuration.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="Show version and exit.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -164,14 +215,26 @@ def _build_parser() -> argparse.ArgumentParser:
     onboard_parser.add_argument(
         "--mode", choices=[m.value for m in SecurityMode], default="private_project"
     )
+    onboard_parser.add_argument(
+        "--setup-mcp", action="store_true", help="Auto-configure MCP for OpenCode."
+    )
     doctor_parser = subparsers.add_parser("doctor", help="Run runtime health checks.")
     doctor_parser.add_argument(
         "scope",
         nargs="?",
         default="runtime",
-        choices=["runtime", "security", "project", "providers", "tokens", "tools"],
+        choices=["runtime", "security", "project", "providers", "tokens", "tools", "deep"],
     )
     doctor_parser.add_argument("--suggest-ignore", action="store_true")
+    doctor_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output results as JSON (CI-friendly).",
+    )
+    clean_parser = subparsers.add_parser("clean", help="Remove OpenContext data from project.")
+    clean_parser.add_argument("root", nargs="?", default=".", help="Project root.")
+    clean_parser.add_argument("--dry-run", action="store_true", help="Show what would be removed.")
+    clean_parser.add_argument("--force", "-f", action="store_true", help="Skip confirmation.")
     instructions_parser = subparsers.add_parser("instructions", help="Instruction import tooling.")
     instructions_subparsers = instructions_parser.add_subparsers(
         dest="instructions_command", required=True
@@ -301,6 +364,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     tunnel_discover.add_argument("--root", default=".", help="Project root.")
 
+    add_kg_parser(subparsers)
+    add_config_parser(subparsers)
+    add_plugin_parser(subparsers)
+    add_setup_parser(subparsers)
+    add_sync_parser(subparsers)
+    add_verify_parser(subparsers)
+    add_update_parser(subparsers)
+    add_upgrade_parser(subparsers)
+
     agent_context = subparsers.add_parser(
         "agent-context", help="Emit safe reusable agent context block."
     )
@@ -340,6 +412,9 @@ def _build_parser() -> argparse.ArgumentParser:
     checkpoint_sub.add_parser("create")
     checkpoint_sub.add_parser("diff")
     checkpoint_sub.add_parser("inspect")
+
+    mcp_parser = subparsers.add_parser("mcp", help="Start MCP server for agent integration.")
+    mcp_parser.add_argument("--db-path", default=".storage/opencontext/codegraph.db", help="Path to knowledge graph database.")
     check_parser = subparsers.add_parser("check", help="Run local governance checks.")
     check_sub = check_parser.add_subparsers(dest="check_command", required=True)
     check_run = check_sub.add_parser("run")
@@ -581,6 +656,14 @@ def _build_parser() -> argparse.ArgumentParser:
     drupal_tests_pack = drupal_tests_sub.add_parser("pack")
     drupal_tests_pack.add_argument("--missing", action="store_true")
 
+    # Status command
+    status_parser = subparsers.add_parser("status", help="Show project status.")
+    status_parser.add_argument("root", nargs="?", default=".", help="Project root.")
+
+    add_git_parser(subparsers)
+    add_ci_check_parser(subparsers)
+    add_hints_parser(subparsers)
+
     return parser
 
 
@@ -598,7 +681,7 @@ def _dispatch(args: argparse.Namespace) -> None:
         _init(args.config, args.template)
         return
     if command == "onboard":
-        _onboard(args.root, args.template, args.mode)
+        _onboard(args.root, args.template, args.mode, getattr(args, "setup_mcp", False))
         return
     if command == "instructions":
         _instructions(args.instructions_command)
@@ -704,6 +787,42 @@ def _dispatch(args: argparse.Namespace) -> None:
             getattr(args, "root", None),
         )
         return
+    if command == "knowledge-graph":
+        handle_kg(args)
+        return
+    if command == "git":
+        handle_git(args)
+        return
+    if command == "ci-check":
+        handle_ci_check(args)
+        return
+    if command == "hints":
+        handle_hints(args)
+        return
+    if command == "status":
+        _status(getattr(args, "root", "."))
+        return
+    if command == "config":
+        handle_config(args)
+        return
+    if command == "plugin":
+        handle_plugin(args)
+        return
+    if command == "setup":
+        handle_setup(args)
+        return
+    if command == "sync":
+        handle_sync(args)
+        return
+    if command == "verify":
+        handle_verify(args)
+        return
+    if command == "update":
+        handle_update(args)
+        return
+    if command == "upgrade":
+        handle_upgrade(args)
+        return
     runtime = _runtime(args.config)
     if command == "index":
         _index(runtime, args.root, args.incremental)
@@ -755,7 +874,9 @@ def _dispatch(args: argparse.Namespace) -> None:
             getattr(args, "min_token_reduction", 0.5),
         )
     elif command == "doctor":
-        _doctor(runtime, args.scope, args.suggest_ignore)
+        _doctor(runtime, args.scope, args.suggest_ignore, getattr(args, "json", False))
+    elif command == "clean":
+        _clean(args.root, args.dry_run, args.force)
     elif command == "run":
         _run(args.run_command, getattr(args, "task", None), getattr(args, "target", None))
     elif command == "orchestrate":
@@ -772,6 +893,8 @@ def _dispatch(args: argparse.Namespace) -> None:
         _governance(args.governance_command, runtime)
     elif command == "evidence":
         _evidence(args.evidence_command, runtime, getattr(args, "output_mode", "report"))
+    elif command == "mcp":
+        _mcp_serve(getattr(args, "db_path", ".storage/opencontext/codegraph.db"))
     else:
         _unreachable(command)
 
@@ -840,7 +963,8 @@ def _watch(root: str) -> None:
     print(f"Watch scaffold active for {root} (v0.1).")
 
 
-def _onboard(root: str, template: str = "generic", mode: str = "private_project") -> None:
+def _onboard(root: str, template: str = "generic", mode: str = "private_project", setup_mcp: bool = False) -> None:
+    from opencontext_core.dx.console_styles import console
     project_root = Path(root)
     created = ensure_workspace(project_root)
     config_path = project_root / "opencontext.yaml"
@@ -850,13 +974,68 @@ def _onboard(root: str, template: str = "generic", mode: str = "private_project"
         if isinstance(security, dict):
             security["mode"] = mode
         config_path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
-    print("OpenContext onboard complete.")
-    print(f"Template: {template}")
-    print(f"Security mode: {mode}")
-    print(f"Config: {config_path}")
-    print("Secure defaults: tools=off, mcp=off, external providers=off.")
-    for path in created:
-        print(f"- {path}")
+
+    console.header("OpenContext Onboard Complete")
+    console.print(f"[bold]Project:[/] {project_root.resolve()}")
+    console.print(f"[bold]Template:[/] {template}")
+    console.print(f"[bold]Security mode:[/] {mode}")
+    console.print(f"[bold]Config:[/] {config_path}")
+    console.print("")
+    console.section("Secure Defaults")
+    console.success("Tools: OFF")
+    console.success("MCP: OFF")
+    console.success("External providers: OFF")
+    console.success("Secret redaction: ON")
+    if created:
+        console.print("")
+        console.section("Created Directories")
+        for path in created:
+            console.success(str(path))
+
+    # Auto-index the project
+    console.print("")
+    console.info("Indexing project for knowledge graph...")
+    try:
+        runtime = _runtime(str(config_path))
+        manifest = runtime.index_project(project_root)
+        console.success(f"Indexed {len(manifest.files)} files, {len(manifest.symbols)} symbols")
+        kg_stats = manifest.metadata.get("knowledge_graph", {})
+        if kg_stats.get("nodes", 0) > 0:
+            console.success(f"Knowledge graph: {kg_stats['nodes']} nodes, {kg_stats.get('edges', 0)} edges")
+    except Exception as exc:
+        console.warning(f"Auto-index skipped: {exc}")
+
+    # Setup MCP integration if requested
+    if setup_mcp:
+        console.print("")
+        console.info("Setting up MCP integration...")
+        _setup_mcp_for_opencode()
+        console.success("MCP configured for OpenCode")
+
+    # Check first-run and suggest wizard
+    from opencontext_core.user_prefs import UserConfigStore
+    store = UserConfigStore()
+    if store.is_first_run():
+        console.print("")
+        console.section("First-Time Setup")
+        console.info("Welcome! Run the configuration wizard to customize your setup:")
+        console.print("     [bold]opencontext config wizard[/]")
+
+    console.print("")
+    console.section("Next Steps")
+    console.print("  [bold]1.[/] Configure your preferences:")
+    console.print("     [bold]opencontext config wizard[/]")
+    console.print("")
+    console.print("  [bold]2.[/] Generate a context pack:")
+    console.print(f"     [bold]opencontext pack {root} --query 'Explain this code'[/]")
+    console.print("")
+    console.print("  [bold]3.[/] Manage plugins:")
+    console.print("     [bold]opencontext plugin list[/]")
+    console.print("")
+    console.print("  [bold]4.[/] Or use the interactive TUI:")
+    console.print("     [bold]opencontext tui[/]")
+    console.print("")
+    console.info("For help: opencontext --help")
 
 
 def _instructions(action: str) -> None:
@@ -951,57 +1130,274 @@ def _workflow_pack_metadata(name: str | None) -> dict[str, Any]:
     }
 
 
-def _doctor(runtime: OpenContextRuntime, scope: str, suggest_ignore: bool = False) -> None:
+def _status(root: str = ".") -> None:
+    """Show project status at a glance."""
+    from opencontext_core.dx.console_styles import console
+    from opencontext_core.indexing.git_context import GitContextProvider
+
+    project_root = Path(root).resolve()
+    config_path = project_root / "opencontext.yaml"
+    opencontext_dir = project_root / ".opencontext"
+    manifest_path = project_root / ".storage" / "opencontext" / "project_manifest.json"
+    hints_path = project_root / ".opencontexthints"
+    checks_dir = project_root / ".opencontext" / "checks"
+
+    console.header("OpenContext Status")
+    console.print(f"[bold]Project:[/] {project_root}")
+    console.print("")
+
+    # Config status
+    console.section("Configuration")
+    if config_path.exists():
+        console.success(f"Config: {config_path}")
+    else:
+        console.error("Config: not found (run 'opencontext onboard .')")
+
+    # Index status
+    console.section("Index")
+    if manifest_path.exists():
+        try:
+            import json
+            with open(manifest_path) as f:
+                manifest = json.load(f)
+            files = len(manifest.get("files", []))
+            symbols = len(manifest.get("symbols", []))
+            console.success(f"Indexed: {files} files, {symbols} symbols")
+        except Exception:
+            console.warning("Index: manifest exists but could not be read")
+    else:
+        console.warning("Index: not indexed (run 'opencontext index .')")
+
+    # Git status
+    console.section("Git")
+    git = GitContextProvider(project_root)
+    if git.available:
+        stats = git.get_repo_stats()
+        console.success(f"Commits: {stats.get('total_commits', 0)}")
+        console.success(f"Contributors: {stats.get('contributors', 0)}")
+    else:
+        console.warning("Git: not a repository")
+
+    # Hints
+    console.section("Agent Hints")
+    if hints_path.exists():
+        console.success(f"Hints: {hints_path}")
+    else:
+        console.warning("Hints: not found (run 'opencontext hints init')")
+
+    # CI Checks
+    console.section("CI Checks")
+    if checks_dir.exists():
+        checks = list(checks_dir.glob("*.md"))
+        console.success(f"Checks: {len(checks)} check(s) configured")
+    else:
+        console.warning("Checks: not found (run 'opencontext ci-check init')")
+
+    # Working directory
+    console.section("Workspace")
+    if opencontext_dir.exists():
+        console.success(f"Workspace: {opencontext_dir}")
+    else:
+        console.warning("Workspace: not initialized")
+
+    console.print("")
+    console.info("Run 'opencontext --help' for all commands")
+
+
+def _doctor(
+    runtime: OpenContextRuntime,
+    scope: str,
+    suggest_ignore: bool = False,
+    json_output: bool = False,
+) -> None:
+    from opencontext_core.dx.console_styles import console
+
+    # ── Deep Diagnostics ──────────────────────────────────────────────
+    if scope == "deep":
+        from opencontext_core.doctor.deep import run_deep_diagnostics
+
+        report = run_deep_diagnostics(runtime.config)
+
+        if json_output:
+            json.dump(report.to_dict(), sys.stdout, indent=2)
+            sys.stdout.write("\n")
+            sys.exit(0 if report.is_healthy else 1)
+
+        console.header("OpenContext Deep Diagnostics")
+        console.print(f"Timestamp: {report.timestamp}")
+        console.print("")
+
+        sections = [
+            ("System", report.system, "blue"),
+            ("Configuration", report.config, "cyan"),
+            ("Verification", report.verification, "green"),
+            ("Components", report.components, "magenta"),
+            ("Plugins", report.plugins, "yellow"),
+            ("Updates", report.update, "white"),
+        ]
+
+        for title, items, color in sections:
+            if not items:
+                continue
+            console.section(title)
+            for d in items:
+                icon = {"passed": "✓", "warning": "⚠", "failed": "✗", "error": "✗", "info": "ℹ"}.get(
+                    d.status, "?"
+                )
+                style = {
+                    "passed": "green",
+                    "warning": "yellow",
+                    "failed": "red",
+                    "error": "red",
+                    "info": "white",
+                }.get(d.status, "white")
+                console.print(f"  [{style}]{icon}[/] {d.name}: {d.message}")
+                if d.recommendation:
+                    console.print(f"         [dim]→ {d.recommendation}[/dim]")
+            console.print("")
+
+        console.section("Summary")
+        total = len(report.all_checks)
+        console.print(
+            f"Total: {total} | "
+            f"[green]{report.passed} passed[/] | "
+            f"[yellow]{report.warnings} warnings[/] | "
+            f"[red]{report.failures} failed[/]"
+        )
+        if report.is_healthy:
+            console.print("\n[bold green]✓ System is healthy[/bold green]")
+        else:
+            console.print(
+                f"\n[bold red]✗ {report.failures} diagnostic(s) failed[/bold red]"
+            )
+        return
+
+    # ── Standard scopes ───────────────────────────────────────────────
     checks = (
         run_security_doctor(runtime.config) if scope == "security" else run_doctor(runtime.config)
     )
+
+    console.header(f"Doctor Check: {scope}")
+
     if scope == "tokens":
-        payload = {
-            "name": "tokens.report",
-            "ok": True,
-            "details": "Token report ready.",
-            "report": build_token_report(Path(".")).model_dump(),
-        }
-        if suggest_ignore:
-            payload["suggested_opencontextignore"] = suggest_opencontextignore(Path("."))
-        print(json.dumps(payload, indent=2))
-        return
-    if scope == "providers":
-        print(
-            json.dumps(
-                {
-                    "name": "providers.policy",
-                    "ok": True,
-                    "details": "Provider policy scaffold ready.",
-                },
-                indent=2,
-            )
+        report = build_token_report(Path("."))
+        console.success("Token report ready")
+        console.table(
+            "Token Report",
+            ["Metric", "Value"],
+            [
+                ["Indexable files", str(report.baseline_indexable_files)],
+                ["Total tokens", str(report.total_indexable_tokens)],
+                ["Raw characters", str(report.baseline_raw_character_count)],
+                ["Compression savings", str(report.compression_savings)],
+                ["Cache savings", str(report.cache_savings)],
+            ],
         )
+        if suggest_ignore:
+            console.info("Suggested .opencontextignore rules available")
         return
+
+    if scope == "providers":
+        console.success("Provider policy: scaffold ready")
+        console.info("Default provider: mock/mock-llm")
+        console.info("External providers: disabled")
+        return
+
     if scope == "tools":
         mode = runtime.config.security.mode
-        print(
-            json.dumps(
-                {
-                    "name": "tools.policy",
-                    "ok": not runtime.config.tools.mcp.enabled,
-                    "details": (
-                        "Tool execution is denied unless explicitly allowlisted and approved."
-                    ),
-                    "native_tools_enabled": runtime.config.tools.native.enabled,
-                    "mcp_enabled": runtime.config.tools.mcp.enabled,
-                    "default_decisions": [
-                        _action_decision(ActionType.CALL_TOOL, mode),
-                        _action_decision(ActionType.MCP_TOOL, mode),
-                        _action_decision(ActionType.NETWORK, mode),
-                        _action_decision(ActionType.WRITE_FILE, mode),
-                    ],
-                },
-                indent=2,
-            )
-        )
+        console.section("Tool Policy")
+        if runtime.config.tools.mcp.enabled:
+            console.warning("MCP: ENABLED")
+        else:
+            console.success("MCP: disabled")
+        if runtime.config.tools.native.enabled:
+            console.warning("Native tools: ENABLED")
+        else:
+            console.success("Native tools: disabled")
+        console.info("Tool execution is denied unless explicitly allowlisted and approved.")
         return
-    print(json.dumps([check.model_dump() for check in checks], indent=2))
+
+    # General health checks
+    passed = sum(1 for c in checks if getattr(c, "ok", False))
+    failed = len(checks) - passed
+
+    console.section("Results")
+    console.print(f"Checks: {len(checks)} | Passed: {passed} | Failed: {failed}")
+    console.print("")
+
+    for check in checks:
+        ok = getattr(check, "ok", False)
+        name = getattr(check, "name", "unknown")
+        details = getattr(check, "details", "")
+        if ok:
+            console.success(f"{name}: {details}")
+        else:
+            console.error(f"{name}: {details}")
+
+    if failed == 0:
+        console.print("")
+        console.success("All checks passed!")
+    else:
+        console.print("")
+        console.warning(f"{failed} check(s) failed. Review above.")
+
+
+def _clean(root: str, dry_run: bool, force: bool) -> None:
+    """Remove OpenContext data from a project directory."""
+
+    import shutil
+    from pathlib import Path
+
+    project_root = Path(root).resolve()
+    removed: list[str] = []
+
+    for name in (".storage", ".opencontext", ".opencontexthints"):
+        path = project_root / name
+        if path.exists():
+            if not dry_run:
+                shutil.rmtree(path, ignore_errors=True)
+            removed.append(str(path))
+
+    for name in ("opencontext.yaml", "opencontext.yml"):
+        path = project_root / name
+        if path.exists():
+            if not dry_run:
+                path.unlink(missing_ok=True)
+            removed.append(str(path))
+
+    if not removed:
+        print("No OpenContext data found.")
+        return
+
+    print(f"OpenContext data in {project_root}:")
+    for path in removed:
+        print(f"  - {path}")
+
+    if dry_run:
+        print("\nDry run: no files were removed.")
+        return
+
+    if not force:
+        try:
+            response = input("\nRemove all OpenContext data? [y/N]: ")
+        except (EOFError, KeyboardInterrupt):
+            print("\nAborted.")
+            return
+        if response.lower() not in ("y", "yes"):
+            print("Aborted.")
+            return
+
+        # Actually remove after confirmation
+        for name in (".storage", ".opencontext", ".opencontexthints"):
+            path = project_root / name
+            if path.exists():
+                shutil.rmtree(path, ignore_errors=True)
+        for name in ("opencontext.yaml", "opencontext.yml"):
+            path = project_root / name
+            if path.exists():
+                path.unlink(missing_ok=True)
+
+    print(f"\nRemoved {len(removed)} items.")
 
 
 def _tokens(
@@ -1089,6 +1485,56 @@ def _checkpoint(action: str) -> None:
         print(json.dumps(checkpoint.__dict__, indent=2))
         return
     print(f"Checkpoint scaffold command executed: {action}")
+
+
+def _mcp_serve(db_path: str) -> None:
+    """Start MCP server for agent integration."""
+
+    from opencontext_core.mcp_stdio import MCPServer
+
+    server = MCPServer(db_path=db_path)
+    try:
+        server.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.close()
+
+
+def _setup_mcp_for_opencode() -> None:
+    """Configure MCP integration for OpenCode."""
+
+    import json
+    from pathlib import Path
+
+    opencode_dir = Path.home() / ".config" / "opencode"
+    if not opencode_dir.exists():
+        opencode_dir.mkdir(parents=True, exist_ok=True)
+
+    mcp_config_path = opencode_dir / "mcp.json"
+    mcp_config = {
+        "mcpServers": {
+            "opencontext": {
+                "type": "stdio",
+                "command": "opencontext",
+                "args": ["mcp"]
+            }
+        }
+    }
+
+    # Merge with existing config if present
+    if mcp_config_path.exists():
+        try:
+            existing = json.loads(mcp_config_path.read_text(encoding="utf-8"))
+            if "mcpServers" not in existing:
+                existing["mcpServers"] = {}
+            existing["mcpServers"]["opencontext"] = mcp_config["mcpServers"]["opencontext"]
+            mcp_config = existing
+        except (json.JSONDecodeError, IOError):
+            pass
+
+    mcp_config_path.write_text(json.dumps(mcp_config, indent=2), encoding="utf-8")
+    print(f"MCP config written to: {mcp_config_path}")
 
 
 def _check(action: str, name: str) -> None:
