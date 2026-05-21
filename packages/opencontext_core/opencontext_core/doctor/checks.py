@@ -17,6 +17,10 @@ class DoctorCheck(BaseModel):
     details: str = Field(description="Human-readable check outcome.")
 
 
+# Alias for backwards compatibility with component_checks
+HealthCheck = DoctorCheck
+
+
 def run_doctor(config: OpenContextConfig) -> list[DoctorCheck]:
     """Run baseline local checks."""
 
