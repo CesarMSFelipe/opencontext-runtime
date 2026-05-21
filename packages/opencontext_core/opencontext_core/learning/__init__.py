@@ -1,0 +1,24 @@
+"""OpenContext self-improvement and learning system.
+
+Captures usage patterns, optimizes token spend, and enforces
+data governance policies for enterprise-grade deployments.
+"""
+
+from __future__ import annotations
+
+from opencontext_core.learning.feedback_collector import FeedbackCollector, OperationMetrics
+from opencontext_core.learning.governance_harness import ExecutionPolicy, GovernanceHarness
+from opencontext_core.learning.learning_orchestrator import LearningOrchestrator
+from opencontext_core.learning.pattern_learner import PatternLearner, TaskPattern
+from opencontext_core.learning.token_optimizer import TokenOptimizer
+
+__all__ = [
+    "ExecutionPolicy",
+    "FeedbackCollector",
+    "GovernanceHarness",
+    "LearningOrchestrator",
+    "OperationMetrics",
+    "PatternLearner",
+    "TaskPattern",
+    "TokenOptimizer",
+]
