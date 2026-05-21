@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from opencontext_core.indexing.git_context import GitContextProvider, GitDiff, GitFileInfo
+from opencontext_core.indexing.git_context import GitContextProvider
 
 
 class TestGitContextProvider:

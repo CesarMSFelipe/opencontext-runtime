@@ -140,15 +140,12 @@ class PatternLearner:
             pattern.occurrence_count += total
 
             if successful:
-                pattern.success_rate = (
-                    len(successful) / total if total > 0 else 0.0
-                )
+                pattern.success_rate = len(successful) / total if total > 0 else 0.0
                 pattern.avg_tokens_used = int(
                     sum(m.tokens_used for m in successful) / len(successful)
                 )
                 pattern.avg_context_items = int(
-                    sum(m.context_items_selected for m in successful)
-                    / len(successful)
+                    sum(m.context_items_selected for m in successful) / len(successful)
                 )
 
                 files: set[str] = set()

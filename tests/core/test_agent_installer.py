@@ -21,7 +21,9 @@ def temp_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 class TestAgentInstaller:
     """Test agent installer functionality."""
 
-    def test_detect_installed_agents_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_detect_installed_agents_empty(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Detect agents when none are installed."""
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -29,7 +31,9 @@ class TestAgentInstaller:
         detected = installer.detect_installed_agents()
         assert detected == []
 
-    def test_detect_installed_agents_some(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_detect_installed_agents_some(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Detect agents when some are installed."""
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)

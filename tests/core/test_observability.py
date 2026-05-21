@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from opencontext_core.context.observability import (
-    format_duration,
-    format_tokens,
-    format_cost,
     MetricPoint,
     estimate_cost,
+    format_cost,
+    format_duration,
+    format_tokens,
 )
 
 

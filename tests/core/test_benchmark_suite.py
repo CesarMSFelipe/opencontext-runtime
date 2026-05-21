@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from opencontext_core.evaluation.benchmark_suite import (
-    BenchmarkSuite,
     BenchmarkCase,
     BenchmarkCaseResult,
+    BenchmarkSuite,
     BenchmarkSuiteResult,
     ContextScore,
     ContextScorer,
     QualityDimension,
+    compare_results,
     format_benchmark_result,
     format_benchmark_result_json,
-    compare_results,
 )
 
 
@@ -26,10 +26,13 @@ class TestContextScore:
         assert score.recommendations == []
 
     def test_to_dict(self) -> None:
-        score = ContextScore(overall=85.0, dimensions={
-            QualityDimension.COMPLETENESS: 90.0,
-            QualityDimension.RELEVANCE: 80.0,
-        })
+        score = ContextScore(
+            overall=85.0,
+            dimensions={
+                QualityDimension.COMPLETENESS: 90.0,
+                QualityDimension.RELEVANCE: 80.0,
+            },
+        )
         d = score.to_dict()
         assert d["overall"] == 85.0
         assert d["dimensions"]["completeness"] == 90.0
@@ -73,10 +76,18 @@ class TestContextScorer:
     def test_pii_penalty(self) -> None:
         scorer = ContextScorer()
         clean = scorer.score_custom(
-            sources=["a.py"], tokens=500, baseline_tokens=1000, has_pii=False, age_hours=0,
+            sources=["a.py"],
+            tokens=500,
+            baseline_tokens=1000,
+            has_pii=False,
+            age_hours=0,
         )
         dirty = scorer.score_custom(
-            sources=["a.py"], tokens=500, baseline_tokens=1000, has_pii=True, age_hours=0,
+            sources=["a.py"],
+            tokens=500,
+            baseline_tokens=1000,
+            has_pii=True,
+            age_hours=0,
         )
         assert dirty.dimensions[QualityDimension.SAFETY] < clean.dimensions[QualityDimension.SAFETY]
 
@@ -144,6 +155,7 @@ class TestBenchmarkResultFormatting:
         suite = BenchmarkSuite()
         result = suite.run(case_ids=["completeness/minimal"])
         import json
+
         parsed = json.loads(format_benchmark_result_json(result))
         assert "summary" in parsed
         assert parsed["summary"]["total"] == 1
@@ -162,8 +174,12 @@ class TestBenchmarkDataClasses:
 
     def test_benchmark_case(self) -> None:
         case = BenchmarkCase(
-            id="test/case", name="Test", description="A test case",
-            category="completeness", setup={}, expected_min_score=80,
+            id="test/case",
+            name="Test",
+            description="A test case",
+            category="completeness",
+            setup={},
+            expected_min_score=80,
         )
         assert case.id == "test/case"
         assert case.expected_min_score == 80
@@ -171,16 +187,23 @@ class TestBenchmarkDataClasses:
     def test_benchmark_case_result(self) -> None:
         score = ContextScore(overall=95.0, dimensions={})
         result = BenchmarkCaseResult(
-            case_id="test/case", passed=True, score=score,
-            details="All good", duration_ms=10.5,
+            case_id="test/case",
+            passed=True,
+            score=score,
+            details="All good",
+            duration_ms=10.5,
         )
         assert result.passed
         assert result.score.overall == 95.0
 
     def test_benchmark_suite_result(self) -> None:
         result = BenchmarkSuiteResult(
-            timestamp="t", total_cases=5, passed=4, failed=1,
-            average_score=80.0, results=[],
+            timestamp="t",
+            total_cases=5,
+            passed=4,
+            failed=1,
+            average_score=80.0,
+            results=[],
         )
         assert result.passed == 4
         assert result.failed == 1
@@ -188,8 +211,11 @@ class TestBenchmarkDataClasses:
 
     def test_suite_result_to_dict(self) -> None:
         result = BenchmarkSuiteResult(
-            timestamp="2025-01-01T00:00:00", total_cases=2,
-            passed=2, failed=0, average_score=95.0,
+            timestamp="2025-01-01T00:00:00",
+            total_cases=2,
+            passed=2,
+            failed=0,
+            average_score=95.0,
             results=[],
         )
         d = result.to_dict()

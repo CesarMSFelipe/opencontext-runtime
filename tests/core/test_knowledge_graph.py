@@ -57,12 +57,8 @@ class UserService:
 class TestIndexProject:
     def test_indexes_project(self, kg: KnowledgeGraph, tmp_path: Path) -> None:
         (tmp_path / "src").mkdir()
-        (tmp_path / "src" / "main.py").write_text(
-            "def main():\n    pass\n"
-        )
-        (tmp_path / "src" / "utils.py").write_text(
-            "def helper():\n    return 42\n"
-        )
+        (tmp_path / "src" / "main.py").write_text("def main():\n    pass\n")
+        (tmp_path / "src" / "utils.py").write_text("def helper():\n    return 42\n")
         (tmp_path / "README.md").write_text("# Project\n")
 
         stats = kg.index_project(tmp_path)

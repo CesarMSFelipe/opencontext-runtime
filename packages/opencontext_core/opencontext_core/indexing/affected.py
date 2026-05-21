@@ -192,9 +192,7 @@ class AffectedTestFinder:
 
             # Recurse
             if current_depth + 1 < max_depth:
-                results.extend(
-                    self._trace_callers(caller_id, max_depth, current_depth + 1, seen)
-                )
+                results.extend(self._trace_callers(caller_id, max_depth, current_depth + 1, seen))
 
         return results
 

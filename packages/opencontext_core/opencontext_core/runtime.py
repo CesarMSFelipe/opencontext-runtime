@@ -34,21 +34,23 @@ from opencontext_core.llm.gateway import LLMGateway
 from opencontext_core.llm.mock import MockLLMGateway
 from opencontext_core.memory.stores import LocalProjectMemoryStore, ProjectMemoryStore
 from opencontext_core.models.context import ContextItem, ContextPackResult, ContextPriority
+from opencontext_core.models.llm import LLMRequest, LLMResponse
 from opencontext_core.models.project import ProjectManifest
 from opencontext_core.models.trace import RuntimeTrace, TraceEvent, TraceSpan
-from opencontext_core.project.profiles import TechnologyProfile
-from opencontext_core.retrieval.retriever import ProjectRetriever
-from opencontext_core.safety.firewall import ContextFirewall
-from opencontext_core.safety.trace_sanitizer import TraceSanitizer
-from opencontext_core.models.llm import LLMRequest, LLMResponse
 from opencontext_core.operating_model.call_budget import (
-    CallBudgetConfig,
     CallBudgetManager,
     FreeProviderRegistry,
 )
 from opencontext_core.operating_model.performance import ModelRoleRouter
 from opencontext_core.operating_model.quality import PreLLMQualityGate
+from opencontext_core.project.profiles import TechnologyProfile
+from opencontext_core.retrieval.retriever import ProjectRetriever
+from opencontext_core.safety.firewall import ContextFirewall
+from opencontext_core.safety.trace_sanitizer import TraceSanitizer
 from opencontext_core.trace.logger import LocalTraceLogger
+from opencontext_core.workflow.engine import WorkflowEngine
+from opencontext_core.workflow.steps import WorkflowServices
+from opencontext_core.workspace.layout import ensure_workspace
 
 
 class BudgetAwareLLMGateway:
@@ -73,7 +75,7 @@ class BudgetAwareLLMGateway:
 
         # Route with budget
         route = self.router.route_with_budget(role, task_complexity)
-        
+
         # Update request with routed provider/model
         request.provider = route["provider"]
         request.model = route["model"]
@@ -81,27 +83,25 @@ class BudgetAwareLLMGateway:
         # Final quality gate check
         source_count = len(request.context_items)
         gate_report = self.quality_gate.evaluate(
-            context_tokens=0, # Simplified for now
+            context_tokens=0,  # Simplified for now
             max_tokens=1000000,
             provider_allowed=True,
-            source_count=source_count or 1, # Hack to avoid missing_sources block in simple tests
+            source_count=source_count or 1,  # Hack to avoid missing_sources block in simple tests
             budget_manager=self.budget_manager,
             provider=request.provider,
-            model=request.model
+            model=request.model,
         )
-        
+
         if not gate_report.passed:
-            raise WorkflowExecutionError(f"Call blocked by budget quality gate: {gate_report.reason} - {gate_report.risks}")
+            raise WorkflowExecutionError(
+                f"Call blocked by budget quality gate: {gate_report.reason} - {gate_report.risks}"
+            )
 
         # Consume budget
         self.budget_manager.consume(request.provider, request.model)
-        
+
         # Execute
         return self.base_gateway.generate(request)
-
-from opencontext_core.workflow.engine import WorkflowEngine
-from opencontext_core.workflow.steps import WorkflowServices
-from opencontext_core.workspace.layout import ensure_workspace
 
 
 class RuntimeResult(BaseModel):
@@ -176,11 +176,11 @@ class OpenContextRuntime:
         )
         if self.embedding_worker and self.config.embedding.enabled:
             self.embedding_worker.start()
-        
+
         # Initialize call budget and routing
         self.free_registry = FreeProviderRegistry()
         self.budget_manager = CallBudgetManager()
-        
+
         # Map roles from config to router format
         router_roles = {}
         if self.config.models.default:
@@ -193,22 +193,20 @@ class OpenContextRuntime:
                 "provider": pconfig.provider,
                 "model": pconfig.model,
             }
-            
+
         self.router = ModelRoleRouter(
-            roles=router_roles,
-            budget_manager=self.budget_manager,
-            free_registry=self.free_registry
+            roles=router_roles, budget_manager=self.budget_manager, free_registry=self.free_registry
         )
         self.quality_gate = PreLLMQualityGate()
-        
+
         # Wrap gateway with budget awareness
         self.llm_gateway = BudgetAwareLLMGateway(
             base_gateway=self.llm_gateway,
             router=self.router,
             budget_manager=self.budget_manager,
-            quality_gate=self.quality_gate
+            quality_gate=self.quality_gate,
         )
-        
+
         self._validate_security_mode_guards()
 
     def index_project(self, root: str | Path | None = None) -> ProjectManifest:
@@ -239,7 +237,10 @@ class OpenContextRuntime:
             tokens_used=sum(f.tokens for f in manifest.files),
             files_consulted=len(manifest.files),
             symbols_consulted=len(manifest.symbols),
-            metadata={"kg_files_indexed": kg_stats.get("files_indexed", 0), "kg_nodes": kg_stats.get("nodes", 0)},
+            metadata={
+                "kg_files_indexed": kg_stats.get("files_indexed", 0),
+                "kg_nodes": kg_stats.get("nodes", 0),
+            },
         )
 
         return manifest
@@ -337,13 +338,9 @@ class OpenContextRuntime:
                 "context_pack", fallback=self.config.context.max_input_tokens
             )
         budget = max_tokens
-        op_id = self.learning.start_operation(
-            "context_pack", query, tokens_budgeted=budget
-        )
+        op_id = self.learning.start_operation("context_pack", query, tokens_budgeted=budget)
         pack, trace = self._build_context_pack_with_trace(query, max_tokens)
-        total_tokens = (
-            sum(trace.token_estimates.values()) if trace.token_estimates else 0
-        )
+        total_tokens = sum(trace.token_estimates.values()) if trace.token_estimates else 0
         self.learning.finish_operation(
             op_id,
             tokens_used=total_tokens,

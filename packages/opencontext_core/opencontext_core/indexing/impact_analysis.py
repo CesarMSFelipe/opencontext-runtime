@@ -63,10 +63,7 @@ class ImpactAnalyzer:
         all_dependents = self.call_graph.get_callers(node_id, depth=depth)
 
         # Remove direct callers from transitive list
-        transitive = [
-            d for d in all_dependents
-            if d["depth"] > 1
-        ]
+        transitive = [d for d in all_dependents if d["depth"] > 1]
 
         # Collect affected files
         affected_files = set()
@@ -105,8 +102,6 @@ class ImpactAnalyzer:
         """
 
         conn = self.db._connect()
-        rows = conn.execute(
-            "SELECT id FROM nodes WHERE name = ?", (symbol_name,)
-        ).fetchall()
+        rows = conn.execute("SELECT id FROM nodes WHERE name = ?", (symbol_name,)).fetchall()
 
         return [self.analyze(row["id"], depth) for row in rows]

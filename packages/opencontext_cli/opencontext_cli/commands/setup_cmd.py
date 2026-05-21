@@ -10,15 +10,14 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.text import Text
 
+from opencontext_core.setup.plan import InstallAction, build_plan
 from opencontext_core.setup.presets import (
     get_available_components,
     get_available_presets,
     get_available_profiles,
     resolve_preset_components,
 )
-from opencontext_core.setup.plan import build_plan
-from opencontext_core.user_prefs import UserConfigStore, UserFeatures, UserPreferences
-from opencontext_core.wizard import run_wizard
+from opencontext_core.user_prefs import UserConfigStore
 
 console = Console()
 
@@ -88,11 +87,13 @@ def _run_interactive(
     """Run interactive setup with rich prompts."""
 
     console.print()
-    console.print(Panel.fit(
-        "[bold]OpenContext Setup[/bold]\n"
-        "Configure your environment with presets, profiles, and components.",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold]OpenContext Setup[/bold]\n"
+            "Configure your environment with presets, profiles, and components.",
+            border_style="cyan",
+        )
+    )
 
     # Step 1: Choose preset
     if not preset:
@@ -140,11 +141,13 @@ def _run_interactive(
     # Step 7: Execute
     _execute_plan(plan, agent)
     console.print()
-    console.print(Panel.fit(
-        "[bold green]✓ Setup Complete[/bold green]\n"
-        "Run [bold]opencontext sync[/bold] to activate all changes.",
-        border_style="green",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold green]✓ Setup Complete[/bold green]\n"
+            "Run [bold]opencontext sync[/bold] to activate all changes.",
+            border_style="green",
+        )
+    )
 
 
 def _run_automated(
@@ -218,9 +221,7 @@ def _choose_profile(preset: str | None = None) -> str:
         "air-gapped": "security-officer",
     }
     default = suggestions.get(preset or "", "developer")
-    default_idx = next(
-        (i for i, p in enumerate(profiles) if p.id == default), 0
-    )
+    default_idx = next((i for i, p in enumerate(profiles) if p.id == default), 0)
 
     console.print("\n[bold]Available Profiles:[/]")
     for i, p in enumerate(profiles, 1):
@@ -266,7 +267,7 @@ def _show_plan(plan: Any) -> None:
         table.add_column("Component")
         table.add_column("Description")
         for action in plan.actions:
-            icon = {"pending": "·", "done": "✓", "skipped": "−", "failed": "✗"}.get(
+            icon = {"pending": "·", "done": "✓", "skipped": "-", "failed": "✗"}.get(
                 action.status, "·"
             )
             style = {"done": "green", "skipped": "yellow", "failed": "red"}.get(
@@ -291,14 +292,12 @@ def _show_plan(plan: Any) -> None:
 def _execute_plan(plan: Any, agent: str) -> None:
     """Execute the install plan."""
 
-    from opencontext_core.user_prefs import UserConfigStore
-    from rich.progress import Progress, SpinnerColumn, TextColumn
-
     store = UserConfigStore()
     prefs = store.load()
 
     # Apply profile defaults
     from opencontext_core.setup.presets import PROFILE_CATALOG
+
     profile_def = PROFILE_CATALOG.get(plan.profile)
     if profile_def:
         prefs.security_mode = profile_def.security_mode
@@ -327,10 +326,9 @@ def _execute_plan(plan: Any, agent: str) -> None:
 
     store.save(prefs)
     plan.actions = [
-        a if a.status == "skipped" else InstallAction(
-            a.type, a.component_id, a.component_name,
-            a.description, status="done"
-        )
+        a
+        if a.status == "skipped"
+        else InstallAction(a.type, a.component_id, a.component_name, a.description, status="done")
         for a in plan.actions
     ]
 
@@ -339,13 +337,10 @@ def _execute_plan(plan: Any, agent: str) -> None:
         console.print("\n[yellow]Configuring MCP for OpenCode...[/]")
         try:
             from opencontext_cli.main import _setup_mcp_for_opencode
+
             _setup_mcp_for_opencode()
             console.print("[green]✓ MCP configured[/]")
         except ImportError:
             console.print("[yellow]⚠ MCP setup skipped (CLI not available)[/]")
 
     console.print("[green]✓ Plan applied.[/]")
-
-
-# Re-export InstallAction for the filter above
-from opencontext_core.setup.plan import InstallAction

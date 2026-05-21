@@ -135,9 +135,7 @@ class CallGraphAnalyzer:
                     callee_id, max_depth, current_depth + 1, results, visited
                 )
 
-    def get_call_chains(
-        self, start_node_id: int, max_depth: int = 3
-    ) -> list[CallChain]:
+    def get_call_chains(self, start_node_id: int, max_depth: int = 3) -> list[CallChain]:
         """Get all call chains starting from a node.
 
         Args:

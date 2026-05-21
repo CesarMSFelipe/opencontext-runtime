@@ -4,16 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from opencontext_core.learning.feedback_collector import (
     FeedbackCollector,
-    OperationMetrics,
 )
 from opencontext_core.learning.governance_harness import (
     DataClassification,
     ExecutionAction,
-    ExecutionPolicy,
     GovernanceHarness,
 )
 from opencontext_core.learning.learning_orchestrator import LearningOrchestrator
@@ -31,9 +27,7 @@ class TestFeedbackCollector:
     def test_finish_operation_persists_metric(self, tmp_path: Path) -> None:
         collector = FeedbackCollector(storage_path=tmp_path)
         op_id = collector.start_operation("ask", "test query")
-        collector.finish_operation(
-            op_id, tokens_used=100, context_items_selected=5, success=True
-        )
+        collector.finish_operation(op_id, tokens_used=100, context_items_selected=5, success=True)
         metrics = collector.load_metrics()
         assert len(metrics) == 1
         assert metrics[0].tokens_used == 100
@@ -105,9 +99,7 @@ class TestPatternLearner:
             success_rate=0.9,
         )
 
-        boosts = learner.suggest_context_boost(
-            "bugfix", ["authenticate", "other_func"]
-        )
+        boosts = learner.suggest_context_boost("bugfix", ["authenticate", "other_func"])
         assert len(boosts) == 1
         assert boosts[0][0] == "authenticate"
 
@@ -133,9 +125,7 @@ class TestTokenOptimizer:
 
     def test_get_budget_fallback(self, tmp_path: Path) -> None:
         feedback = FeedbackCollector(storage_path=tmp_path)
-        optimizer = TokenOptimizer(
-            feedback, storage_path=tmp_path, default_budget=5000
-        )
+        optimizer = TokenOptimizer(feedback, storage_path=tmp_path, default_budget=5000)
         assert optimizer.get_budget("unknown") == 5000
 
     def test_report_savings(self, tmp_path: Path) -> None:

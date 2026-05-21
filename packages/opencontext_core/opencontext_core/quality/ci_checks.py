@@ -60,7 +60,7 @@ class CheckDefinition:
     auto_fix: bool = False
 
     @classmethod
-    def from_markdown(cls, content: str) -> "CheckDefinition":
+    def from_markdown(cls, content: str) -> CheckDefinition:
         """Parse a check definition from markdown content.
 
         Expected format:
@@ -139,7 +139,9 @@ class CheckRunner:
 
         return checks
 
-    def run_check(self, check: CheckDefinition, files: list[str] | None = None) -> list[CheckResult]:
+    def run_check(
+        self, check: CheckDefinition, files: list[str] | None = None
+    ) -> list[CheckResult]:
         """Run a single check against the project."""
         results: list[CheckResult] = []
 
@@ -160,7 +162,7 @@ class CheckRunner:
             for pattern in check.patterns:
                 for match in re.finditer(pattern, content, re.IGNORECASE):
                     # Get line number
-                    line_num = content[:match.start()].count("\n") + 1
+                    line_num = content[: match.start()].count("\n") + 1
 
                     results.append(
                         CheckResult(
@@ -210,7 +212,14 @@ class CheckRunner:
                 parts = path.parts
                 if any(
                     ignored in parts
-                    for ignored in [".git", "node_modules", ".venv", "venv", "__pycache__", ".opencontext"]
+                    for ignored in [
+                        ".git",
+                        "node_modules",
+                        ".venv",
+                        "venv",
+                        "__pycache__",
+                        ".opencontext",
+                    ]
                 ):
                     continue
                 matched.add(str(path.relative_to(self.project_path)))
@@ -226,7 +235,7 @@ class CheckRunner:
         errors = 0
 
         all_results: list[dict[str, Any]] = []
-        for check_name, check_results in results.items():
+        for _check_name, check_results in results.items():
             check_passed = all(r.status == CheckStatus.PASSED for r in check_results)
             if check_passed:
                 passed += 1
@@ -239,15 +248,17 @@ class CheckRunner:
                 elif r.severity == CheckSeverity.WARNING:
                     warnings += 1
 
-                all_results.append({
-                    "check": r.check_name,
-                    "status": r.status.value,
-                    "severity": r.severity.value,
-                    "message": r.message,
-                    "file": r.file,
-                    "line": r.line,
-                    "suggestion": r.suggestion,
-                })
+                all_results.append(
+                    {
+                        "check": r.check_name,
+                        "status": r.status.value,
+                        "severity": r.severity.value,
+                        "message": r.message,
+                        "file": r.file,
+                        "line": r.line,
+                        "suggestion": r.suggestion,
+                    }
+                )
 
         return {
             "summary": {

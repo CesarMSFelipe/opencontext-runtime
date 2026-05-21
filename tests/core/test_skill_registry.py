@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from opencontext_core.skills.compact_rules import generate_compact_rules
 from opencontext_core.skills.registry import (
     SkillEntry,
@@ -18,8 +16,7 @@ from opencontext_core.skills.registry import (
 )
 from opencontext_core.skills.resolver import resolve_skills
 
-
-SAMPLE_SKILL_MD = '''\
+SAMPLE_SKILL_MD = """\
 ---
 name: "python-best-practices"
 trigger: "python, typing, ruff"
@@ -41,9 +38,9 @@ trigger: "python, typing, ruff"
 
 ## Examples
 This is fluff that should not be included.
-'''
+"""
 
-SAMPLE_SKILL_2_MD = '''\
+SAMPLE_SKILL_2_MD = """\
 ---
 name: "pytest-testing"
 description: "Trigger: pytest testing patterns"
@@ -60,7 +57,7 @@ description: "Trigger: pytest testing patterns"
 ## Anti-patterns
 - Never use time.sleep in tests
 - Avoid global state in fixtures
-'''
+"""
 
 
 class TestFrontmatterParsing:
@@ -148,12 +145,8 @@ class TestBuildRegistry:
         user_dir.mkdir()
         proj_dir.mkdir()
 
-        (user_dir / "SKILL.md").write_text(
-            "---\nname: python\n---\n- User rule\n"
-        )
-        (proj_dir / "SKILL.md").write_text(
-            "---\nname: python\n---\n- Project rule\n"
-        )
+        (user_dir / "SKILL.md").write_text("---\nname: python\n---\n- User rule\n")
+        (proj_dir / "SKILL.md").write_text("---\nname: python\n---\n- Project rule\n")
 
         registry = build_registry(
             user_dirs=[str(user_dir)],
@@ -170,12 +163,8 @@ class TestBuildRegistry:
         user_dir.mkdir()
         proj_dir.mkdir()
 
-        (user_dir / "SKILL.md").write_text(
-            "---\nname: user-skill\n---\n- Rule A\n"
-        )
-        (proj_dir / "SKILL.md").write_text(
-            "---\nname: project-skill\n---\n- Rule B\n"
-        )
+        (user_dir / "SKILL.md").write_text("---\nname: user-skill\n---\n- Rule A\n")
+        (proj_dir / "SKILL.md").write_text("---\nname: project-skill\n---\n- Rule B\n")
 
         registry = build_registry(
             user_dirs=[str(user_dir)],
@@ -261,9 +250,7 @@ class TestResolver:
             ),
         ]
 
-        matched = resolve_skills(
-            skills, file_patterns=["*/python/*"], task_type="review"
-        )
+        matched = resolve_skills(skills, file_patterns=["*/python/*"], task_type="review")
 
         assert len(matched) == 1
         assert matched[0].name == "python"

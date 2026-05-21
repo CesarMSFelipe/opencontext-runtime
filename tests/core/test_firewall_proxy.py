@@ -6,14 +6,13 @@ from opencontext_core.safety.proxy import (
     AuditEntry,
     ContextFirewall,
     ProxyAction,
-    ProxyDecision,
     ProxyPolicy,
     SimpleProxyServer,
-    _scan_pii_simple,
-    _scan_secrets_simple,
-    _scan_prompt_injection_simple,
     _estimate_tokens,
     _generate_trace_id,
+    _scan_pii_simple,
+    _scan_prompt_injection_simple,
+    _scan_secrets_simple,
 )
 
 
@@ -162,6 +161,7 @@ class TestContextFirewall:
         path = str(tmp_path / "audit.json")
         fw.export_audit_json(path)
         import json
+
         with open(path) as f:
             data = json.load(f)
         assert len(data) == 1

@@ -24,9 +24,7 @@ from opencontext_core.wizard import (
 def add_config_parser(subparsers: Any) -> None:
     """Add config command parsers."""
 
-    config_parser = subparsers.add_parser(
-        "config", help="Manage OpenContext configuration."
-    )
+    config_parser = subparsers.add_parser("config", help="Manage OpenContext configuration.")
     config_sub = config_parser.add_subparsers(dest="config_command", required=True)
 
     # Wizard
@@ -42,9 +40,7 @@ def add_config_parser(subparsers: Any) -> None:
     config_sub.add_parser("reset", help="Reset to factory defaults.")
 
     # Reconfigure section
-    reconf_parser = config_sub.add_parser(
-        "reconfigure", help="Reconfigure a specific section."
-    )
+    reconf_parser = config_sub.add_parser("reconfigure", help="Reconfigure a specific section.")
     reconf_parser.add_argument(
         "section",
         choices=["security", "features", "tokens", "agents", "plugins"],
@@ -121,9 +117,9 @@ def _config_set(key: str, value: str) -> None:
 
     if key in key_map:
         attr_name, attr_type = key_map[key]
-        if attr_type == bool:
+        if attr_type is bool:
             parsed = value.lower() in ("true", "1", "yes", "on")
-        elif attr_type == int:
+        elif attr_type is int:
             parsed = int(value)
         else:
             parsed = value
@@ -175,12 +171,12 @@ def _config_backups() -> None:
 
     print()
     print(f"  {'Backup ID':<30} {'Timestamp':<25} {'Description':<20} {'Files'}")
-    print(f"  {'─'*30} {'─'*25} {'─'*20} {'─'*20}")
+    print(f"  {'─' * 30} {'─' * 25} {'─' * 20} {'─' * 20}")
     for b in backups:
         files_str = ", ".join(b.files) if b.files else "—"
         print(f"  {b.id:<30} {b.timestamp:<25} {b.description:<20} {files_str}")
     print(f"\n  {len(backups)} backup(s) available")
-    print(f"\n  Restore: opencontext config restore <id>")
+    print("\n  Restore: opencontext config restore <id>")
 
 
 def _config_restore(backup_id: str) -> None:
@@ -190,7 +186,7 @@ def _config_restore(backup_id: str) -> None:
         print(f"  ✓ Restored from backup: {backup_id}")
     else:
         print(f"  ✗ Backup not found: {backup_id}")
-        print(f"    List available: opencontext config backups")
+        print("    List available: opencontext config backups")
         sys.exit(1)
 
 
@@ -210,16 +206,15 @@ def _config_cleanup(keep_days: int) -> None:
                 backup_dir = ConfigBackupManager.BACKUP_DIR / b.id
                 if backup_dir.exists():
                     import shutil
+
                     shutil.rmtree(backup_dir)
                 removed += 1
         except (ValueError, OSError):
             continue
 
     # Rebuild index
-    remaining = [b for b in backups if b.id not in
-                  [r.id for r in ConfigBackupManager.list_backups()]]
+    [b for b in backups if b.id not in [r.id for r in ConfigBackupManager.list_backups()]]
     # Actually let's rebuild from disk
-    from pathlib import Path
     index = []
     for entry_dir in sorted(ConfigBackupManager.BACKUP_DIR.iterdir()):
         if entry_dir.is_dir() and entry_dir.name.startswith("backup-"):
@@ -230,18 +225,18 @@ def _config_cleanup(keep_days: int) -> None:
                 for f in entry_dir.iterdir():
                     if f.is_file():
                         files.append(f.name)
-                index.append({
-                    "id": entry_dir.name,
-                    "timestamp": ts,
-                    "description": desc,
-                    "files": files,
-                })
+                index.append(
+                    {
+                        "id": entry_dir.name,
+                        "timestamp": ts,
+                        "description": desc,
+                        "files": files,
+                    }
+                )
             except OSError:
                 continue
 
-    ConfigBackupManager.INDEX_FILE.write_text(
-        json.dumps(index, indent=2), encoding="utf-8"
-    )
+    ConfigBackupManager.INDEX_FILE.write_text(json.dumps(index, indent=2), encoding="utf-8")
 
     print(f"  ✓ Removed {removed} backup(s) older than {keep_days} days")
     print(f"    {len(index)} backup(s) remaining")

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -17,8 +17,8 @@ from urllib.request import Request, urlopen
 
 from opencontext_core.state import StateStore
 
-
 # ── Data ───────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class UpdateCheck:
@@ -48,6 +48,7 @@ CACHE_DURATION = timedelta(hours=24)
 
 # ── Update Check ───────────────────────────────────────────────────────────
 
+
 class UpdateChecker:
     """Check for newer versions on PyPI."""
 
@@ -59,6 +60,7 @@ class UpdateChecker:
 
         try:
             import importlib.metadata
+
             return importlib.metadata.version(PACKAGE_NAME)
         except importlib.metadata.PackageNotFoundError:
             return "0.0.0"
@@ -141,7 +143,10 @@ class UpdateChecker:
 
         check = cls.check()
         if not check.is_outdated:
-            return {"status": "current", "message": f"Already at latest version {check.current_version}"}
+            return {
+                "status": "current",
+                "message": f"Already at latest version {check.current_version}",
+            }
 
         try:
             result = subprocess.run(
@@ -193,7 +198,7 @@ class UpdateChecker:
 
         parts1 = [int(x) for x in v1.split(".")]
         parts2 = [int(x) for x in v2.split(".")]
-        for a, b in zip(parts1, parts2):
+        for a, b in zip(parts1, parts2, strict=False):
             if a < b:
                 return -1
             if a > b:

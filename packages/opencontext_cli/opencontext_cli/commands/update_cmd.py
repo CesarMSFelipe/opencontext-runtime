@@ -11,7 +11,7 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from opencontext_core.update import UpdateChecker, UpdateCheck
+from opencontext_core.update import UpdateCheck, UpdateChecker
 
 
 def _format_release_notes(check: UpdateCheck) -> str:
@@ -45,8 +45,7 @@ def add_upgrade_parser(subparsers: Any) -> None:
         "upgrade",
         help="Upgrade OpenContext to the latest version.",
         description=(
-            "Check for updates and install the latest version\n"
-            "via pip install --upgrade."
+            "Check for updates and install the latest version\nvia pip install --upgrade."
         ),
     )
 

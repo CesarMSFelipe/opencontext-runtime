@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
 
 from opencontext_core.state import StateStore
 from opencontext_core.user_prefs import UserConfigStore
@@ -66,13 +66,17 @@ class VerificationReport:
 
 # ── Individual Checks ──────────────────────────────────────────────────────
 
+
 def check_python_version() -> CheckResult:
     """Verify Python 3.12+."""
 
     import sys
+
     major, minor = sys.version_info[:2]
     if major >= 3 and minor >= 12:
-        return CheckResult("Python Version", "passed", f"Python {major}.{minor}.{sys.version_info[2]}")
+        return CheckResult(
+            "Python Version", "passed", f"Python {major}.{minor}.{sys.version_info[2]}"
+        )
     return CheckResult("Python Version", "warning", f"Python {major}.{minor} < 3.12 recommended")
 
 
@@ -82,13 +86,15 @@ def check_user_config() -> CheckResult:
     store = UserConfigStore()
     path = store.CONFIG_FILE
     if not path.exists():
-        return CheckResult("User Config", "warning", "No config yet — run 'opencontext config wizard'")
+        return CheckResult(
+            "User Config", "warning", "No config yet — run 'opencontext config wizard'"
+        )
 
     try:
         prefs = store.load()
-        return CheckResult("User Config", "passed",
-                           f"Config at {path}",
-                           f"Mode: {prefs.security_mode}")
+        return CheckResult(
+            "User Config", "passed", f"Config at {path}", f"Mode: {prefs.security_mode}"
+        )
     except Exception as e:
         return CheckResult("User Config", "failed", f"Corrupted config: {e}")
 
@@ -102,18 +108,21 @@ def check_knowledge_graph() -> CheckResult:
 
     db_path = Path(prefs.custom_storage_path) / "codegraph.db"
     if not db_path.exists():
-        return CheckResult("Knowledge Graph", "warning",
-                           "No database yet — run 'opencontext index .'",
-                           f"Expected at: {db_path.resolve()}")
+        return CheckResult(
+            "Knowledge Graph",
+            "warning",
+            "No database yet — run 'opencontext index .'",
+            f"Expected at: {db_path.resolve()}",
+        )
 
     try:
         import sqlite3
+
         conn = sqlite3.connect(str(db_path))
         cursor = conn.execute("SELECT COUNT(*) FROM files")
         file_count = cursor.fetchone()[0]
         conn.close()
-        return CheckResult("Knowledge Graph", "passed",
-                           f"Database with {file_count} indexed files")
+        return CheckResult("Knowledge Graph", "passed", f"Database with {file_count} indexed files")
     except Exception as e:
         return CheckResult("Knowledge Graph", "failed", f"Database error: {e}")
 
@@ -127,25 +136,28 @@ def check_mcp_config() -> CheckResult:
 
     # Check OpenCode MCP config across platform paths
     import json
+
     for mcp_path in _opencode_mcp_paths():
         if mcp_path.exists():
             try:
                 config = json.loads(mcp_path.read_text(encoding="utf-8"))
                 if "mcpServers" in config and "opencontext" in config["mcpServers"]:
-                    return CheckResult("MCP Server", "passed",
-                                       f"Configured at {mcp_path}")
-                return CheckResult("MCP Server", "warning",
-                                   "MCP config exists but opencontext entry missing")
+                    return CheckResult("MCP Server", "passed", f"Configured at {mcp_path}")
+                return CheckResult(
+                    "MCP Server", "warning", "MCP config exists but opencontext entry missing"
+                )
             except Exception:
                 return CheckResult("MCP Server", "warning", "MCP config exists but invalid")
-    return CheckResult("MCP Server", "warning",
-                       "Not configured — use 'opencontext onboard . --setup-mcp'")
+    return CheckResult(
+        "MCP Server", "warning", "Not configured — use 'opencontext onboard . --setup-mcp'"
+    )
 
 
 def check_plugins() -> CheckResult:
     """Verify installed plugins."""
 
     from opencontext_core.plugin_system import PluginRegistry
+
     registry = PluginRegistry()
     plugins = registry.discover()
     if not plugins:
@@ -169,26 +181,27 @@ def check_state() -> CheckResult:
         return CheckResult("Installation State", "warning", "No components tracked")
 
     details = []
-    for cid, cs in state.components.items():
+    for _cid, cs in state.components.items():
         details.append(f"{cs.name}: {'on' if cs.enabled else 'off'}")
-    return CheckResult("Installation State", "passed",
-                       f"{total} components tracked",
-                       "; ".join(details))
+    return CheckResult(
+        "Installation State", "passed", f"{total} components tracked", "; ".join(details)
+    )
 
 
 def check_disk_space() -> CheckResult:
     """Verify sufficient disk space."""
 
     import shutil
+
     storage_path = Path(UserConfigStore().load().custom_storage_path)
     if storage_path.exists():
         usage = shutil.disk_usage(storage_path)
-        free_gb = usage.free / (1024 ** 3)
+        free_gb = usage.free / (1024**3)
         if free_gb < 0.1:
-            return CheckResult("Disk Space", "warning",
-                               f"Only {free_gb:.1f} GB free — may affect indexing")
-        return CheckResult("Disk Space", "passed",
-                           f"{free_gb:.1f} GB free")
+            return CheckResult(
+                "Disk Space", "warning", f"Only {free_gb:.1f} GB free — may affect indexing"
+            )
+        return CheckResult("Disk Space", "passed", f"{free_gb:.1f} GB free")
     return CheckResult("Disk Space", "skipped", "Storage not yet created")
 
 
@@ -209,6 +222,7 @@ def run_all_checks() -> VerificationReport:
     """Run all verification checks."""
 
     from datetime import datetime
+
     report = VerificationReport(timestamp=datetime.now().isoformat())
 
     for name, check_fn, category in CHECK_REGISTRY:

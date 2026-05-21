@@ -82,8 +82,14 @@ class GitContextProvider:
             # Last modified date and author
             result = subprocess.run(
                 [
-                    "git", "-C", str(self.repo_path), "log",
-                    "-1", "--format=%aI|%an", "--", str(path),
+                    "git",
+                    "-C",
+                    str(self.repo_path),
+                    "log",
+                    "-1",
+                    "--format=%aI|%an",
+                    "--",
+                    str(path),
                 ],
                 capture_output=True,
                 text=True,
@@ -100,8 +106,14 @@ class GitContextProvider:
             # Commit count
             count_result = subprocess.run(
                 [
-                    "git", "-C", str(self.repo_path), "rev-list",
-                    "--count", "HEAD", "--", str(path),
+                    "git",
+                    "-C",
+                    str(self.repo_path),
+                    "rev-list",
+                    "--count",
+                    "HEAD",
+                    "--",
+                    str(path),
                 ],
                 capture_output=True,
                 text=True,
@@ -112,8 +124,14 @@ class GitContextProvider:
             # Lines added/removed
             stat_result = subprocess.run(
                 [
-                    "git", "-C", str(self.repo_path), "log",
-                    "--numstat", "--format=", "--", str(path),
+                    "git",
+                    "-C",
+                    str(self.repo_path),
+                    "log",
+                    "--numstat",
+                    "--format=",
+                    "--",
+                    str(path),
                 ],
                 capture_output=True,
                 text=True,
@@ -133,8 +151,13 @@ class GitContextProvider:
             # Top authors
             authors_result = subprocess.run(
                 [
-                    "git", "-C", str(self.repo_path), "log",
-                    "--format=%an", "--", str(path),
+                    "git",
+                    "-C",
+                    str(self.repo_path),
+                    "log",
+                    "--format=%an",
+                    "--",
+                    str(path),
                 ],
                 capture_output=True,
                 text=True,
@@ -164,10 +187,13 @@ class GitContextProvider:
             return []
 
         try:
-            since = datetime.now().isoformat()
+            datetime.now().isoformat()
             result = subprocess.run(
                 [
-                    "git", "-C", str(self.repo_path), "log",
+                    "git",
+                    "-C",
+                    str(self.repo_path),
+                    "log",
                     f"--since={days}.days ago",
                     f"--max-count={max_commits}",
                     "--format=%H|%an|%aI|%s",
@@ -220,7 +246,10 @@ class GitContextProvider:
         try:
             result = subprocess.run(
                 [
-                    "git", "-C", str(self.repo_path), "blame",
+                    "git",
+                    "-C",
+                    str(self.repo_path),
+                    "blame",
                     f"-L{line_start},{line_end}",
                     "--line-porcelain",
                     file_path,
@@ -258,8 +287,14 @@ class GitContextProvider:
         try:
             result = subprocess.run(
                 [
-                    "git", "-C", str(self.repo_path), "diff-tree",
-                    "--no-commit-id", "--name-only", "-r", "HEAD",
+                    "git",
+                    "-C",
+                    str(self.repo_path),
+                    "diff-tree",
+                    "--no-commit-id",
+                    "--name-only",
+                    "-r",
+                    "HEAD",
                 ],
                 capture_output=True,
                 text=True,
@@ -311,7 +346,10 @@ class GitContextProvider:
             # Contributors
             authors_result = subprocess.run(
                 [
-                    "git", "-C", str(self.repo_path), "log",
+                    "git",
+                    "-C",
+                    str(self.repo_path),
+                    "log",
                     "--format=%an",
                 ],
                 capture_output=True,

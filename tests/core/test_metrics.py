@@ -21,9 +21,7 @@ class TestOperationMetrics:
         assert m.duration_ms >= 10
 
     def test_total_tokens(self) -> None:
-        m = OperationMetrics(
-            operation="test", start_time=0, input_tokens=10, output_tokens=20
-        )
+        m = OperationMetrics(operation="test", start_time=0, input_tokens=10, output_tokens=20)
         assert m.total_tokens == 30
 
     def test_to_dict(self) -> None:
@@ -41,10 +39,13 @@ class TestMetricsCollector:
 
     def test_start_stop(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            MetricsCollector, "__init__",
-            lambda self, metrics_dir=".opencontext/metrics": setattr(
-                self, "metrics_dir", tmp_path
-            ) or setattr(self, "_current", {}) or setattr(self, "_history", [])
+            MetricsCollector,
+            "__init__",
+            lambda self, metrics_dir=".opencontext/metrics": (
+                setattr(self, "metrics_dir", tmp_path)
+                or setattr(self, "_current", {})
+                or setattr(self, "_history", [])
+            ),
         )
         collector = MetricsCollector(tmp_path)
         op_id = collector.start("test_op")
@@ -58,10 +59,13 @@ class TestMetricsCollector:
 
     def test_summary_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            MetricsCollector, "__init__",
-            lambda self, metrics_dir=".opencontext/metrics": setattr(
-                self, "metrics_dir", tmp_path
-            ) or setattr(self, "_current", {}) or setattr(self, "_history", [])
+            MetricsCollector,
+            "__init__",
+            lambda self, metrics_dir=".opencontext/metrics": (
+                setattr(self, "metrics_dir", tmp_path)
+                or setattr(self, "_current", {})
+                or setattr(self, "_history", [])
+            ),
         )
         collector = MetricsCollector(tmp_path)
         summary = collector.get_summary()
@@ -69,10 +73,13 @@ class TestMetricsCollector:
 
     def test_summary_with_data(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            MetricsCollector, "__init__",
-            lambda self, metrics_dir=".opencontext/metrics": setattr(
-                self, "metrics_dir", tmp_path
-            ) or setattr(self, "_current", {}) or setattr(self, "_history", [])
+            MetricsCollector,
+            "__init__",
+            lambda self, metrics_dir=".opencontext/metrics": (
+                setattr(self, "metrics_dir", tmp_path)
+                or setattr(self, "_current", {})
+                or setattr(self, "_history", [])
+            ),
         )
         collector = MetricsCollector(tmp_path)
         op1 = collector.start("op1")
@@ -86,10 +93,13 @@ class TestMetricsCollector:
 
     def test_clear(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            MetricsCollector, "__init__",
-            lambda self, metrics_dir=".opencontext/metrics": setattr(
-                self, "metrics_dir", tmp_path
-            ) or setattr(self, "_current", {}) or setattr(self, "_history", [])
+            MetricsCollector,
+            "__init__",
+            lambda self, metrics_dir=".opencontext/metrics": (
+                setattr(self, "metrics_dir", tmp_path)
+                or setattr(self, "_current", {})
+                or setattr(self, "_history", [])
+            ),
         )
         collector = MetricsCollector(tmp_path)
         op = collector.start("test")

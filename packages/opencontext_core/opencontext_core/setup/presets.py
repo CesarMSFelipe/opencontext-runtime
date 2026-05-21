@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
 
 
 class ComponentStatus(Enum):
@@ -107,6 +106,7 @@ COMPONENT_CATALOG: dict[str, ComponentDef] = {
 
 # ── Presets ────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class PresetDef:
     """Definition of a setup preset."""
@@ -172,6 +172,7 @@ PRESET_CATALOG: dict[str, PresetDef] = {
 
 
 # ── Profile Definitions ───────────────────────────────────────────────────
+
 
 @dataclass
 class ProfileDef:

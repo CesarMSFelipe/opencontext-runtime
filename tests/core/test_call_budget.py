@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from opencontext_core.operating_model import (
     CallBudgetConfig,
     CallBudgetManager,
@@ -47,7 +45,7 @@ def test_call_budget_manager_registers_and_checks() -> None:
 def test_call_budget_manager_consumes_calls() -> None:
     manager = CallBudgetManager()
     manager.consume("openai", "gpt-4")
-    available, remaining = manager.check_budget("openai", "gpt-4")
+    _available, remaining = manager.check_budget("openai", "gpt-4")
     assert remaining == 199
 
 
@@ -58,7 +56,7 @@ def test_call_budget_selects_local_when_paid_exhausted() -> None:
     for _ in range(200):
         manager.consume("openai", "gpt-4")
 
-    provider, model, reason = manager.select_provider("openai", "gpt-4")
+    provider, _model, reason = manager.select_provider("openai", "gpt-4")
     assert provider in ["ollama", "lmstudio", "localai"]
     assert "local" in reason.lower()
 
@@ -70,7 +68,7 @@ def test_call_budget_strict_mode_selects_local() -> None:
     for _ in range(200):
         manager.consume("openai", "gpt-4")
 
-    provider, model, reason = manager.select_provider("openai", "gpt-4")
+    provider, _model, reason = manager.select_provider("openai", "gpt-4")
     assert provider == "ollama"
     assert "local" in reason.lower()
 

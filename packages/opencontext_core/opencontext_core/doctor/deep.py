@@ -22,7 +22,6 @@ from opencontext_core.update import UpdateChecker
 from opencontext_core.user_prefs import UserConfigStore
 from opencontext_core.verification import run_all_checks
 
-
 # ── Data Model ──────────────────────────────────────────────────────────────
 
 
@@ -167,6 +166,7 @@ def _collect_system_info() -> list[DeepDiagnostic]:
     # Disk space on config volume
     try:
         import shutil
+
         usage = shutil.disk_usage(config_dir if config_dir.exists() else Path.home())
         free_gb = usage.free / (1024**3)
         diagnostics.append(
@@ -214,7 +214,10 @@ def _collect_config_info(config: OpenContextConfig) -> list[DeepDiagnostic]:
             name="config.security_mode",
             status="info",
             message=f"Security mode: {mode}",
-            details=f"External providers: {'enabled' if config.security.external_providers_enabled else 'disabled'}",
+            details=(
+                f"External providers: "
+                f"{'enabled' if config.security.external_providers_enabled else 'disabled'}"
+            ),
         )
     )
 
@@ -225,7 +228,10 @@ def _collect_config_info(config: OpenContextConfig) -> list[DeepDiagnostic]:
         DeepDiagnostic(
             name="config.tools",
             status="passed" if not (mcp_enabled or native_enabled) else "warning",
-            message=f"MCP: {'on' if mcp_enabled else 'off'}, Native: {'on' if native_enabled else 'off'}",
+            message=(
+                f"MCP: {'on' if mcp_enabled else 'off'}, "
+                f"Native: {'on' if native_enabled else 'off'}"
+            ),
             recommendation=(
                 "Both tools off is safest. Enable only what you need."
                 if mcp_enabled or native_enabled
@@ -237,7 +243,8 @@ def _collect_config_info(config: OpenContextConfig) -> list[DeepDiagnostic]:
     # Features
     prefs = UserConfigStore().load()
     features_on = sum(
-        1 for f in ["knowledge_graph", "mcp_server", "git_integration", "call_graph"]
+        1
+        for f in ["knowledge_graph", "mcp_server", "git_integration", "call_graph"]
         if getattr(prefs.features, f, False)
     )
     diagnostics.append(
@@ -348,14 +355,14 @@ def _from_plugins() -> list[DeepDiagnostic]:
                 name=f"plugin.{p.name}",
                 status="passed",
                 message=f"{p.name} v{p.version or '?'}",
-                details=f"Source: {source} | "
-                f"Installed: {getattr(p, 'installed_at', '?')}",
+                details=f"Source: {source} | Installed: {getattr(p, 'installed_at', '?')}",
             )
         )
 
     # Check for updates
     try:
         from opencontext_core.plugin_system import PluginUpdater
+
         updater = PluginUpdater(registry)
         updates = updater.check_updates()
         for p in updates:
@@ -395,7 +402,10 @@ def _from_updates() -> list[DeepDiagnostic]:
                 DeepDiagnostic(
                     name="update.available",
                     status="warning",
-                    message=f"v{result.latest_version} available (current: v{result.current_version})",
+                    message=(
+                        f"v{result.latest_version} available "
+                        f"(current: v{result.current_version})"
+                    ),
                     recommendation="Run 'opencontext upgrade'",
                 )
             )

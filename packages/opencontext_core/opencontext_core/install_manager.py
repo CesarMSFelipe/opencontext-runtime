@@ -18,22 +18,21 @@ from __future__ import annotations
 import json
 import platform
 import shutil
-import subprocess
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from opencontext_core.agent_installer import AgentInstaller, AgentTarget
 from opencontext_core.backup import BackupManager
 
 
-class InstallProfile(str, Enum):
+class InstallProfile(StrEnum):
     """Installation profile."""
 
     MINIMAL = "minimal"  # Core files only
-    FULL = "full"        # All agent configs + MCP + skills
-    CUSTOM = "custom"    # User-selected components
+    FULL = "full"  # All agent configs + MCP + skills
+    CUSTOM = "custom"  # User-selected components
     AGENTS_ONLY = "agents-only"  # Only agent configs
     MCP_ONLY = "mcp-only"  # Only MCP server config
 
@@ -68,7 +67,7 @@ class InstallationManager:
     STATE_FILE = "install-state.json"
 
     # Platform-specific config paths
-    PLATFORM_PATHS: dict[str, dict[str, str]] = {
+    PLATFORM_PATHS: ClassVar[dict[str, dict[str, str]]] = {
         "Darwin": {  # macOS
             "config_dir": "~/.config",
             "home_dir": "~",
@@ -84,7 +83,7 @@ class InstallationManager:
     }
 
     # Components available for installation
-    AVAILABLE_COMPONENTS: list[InstallComponent] = [
+    AVAILABLE_COMPONENTS: ClassVar[list[InstallComponent]] = [
         InstallComponent("mcp", "MCP server configuration", required=True),
         InstallComponent("agents", "AI agent configurations"),
         InstallComponent("skills", "Skill registry"),
@@ -499,11 +498,13 @@ class InstallationManager:
         updates = []
 
         if state.version != self.VERSION:
-            updates.append({
-                "type": "version",
-                "from": state.version,
-                "to": self.VERSION,
-            })
+            updates.append(
+                {
+                    "type": "version",
+                    "from": state.version,
+                    "to": self.VERSION,
+                }
+            )
 
         return updates
 

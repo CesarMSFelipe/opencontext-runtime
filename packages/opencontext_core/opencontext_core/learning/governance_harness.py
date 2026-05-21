@@ -126,9 +126,7 @@ class GovernanceHarness:
     ) -> dict[str, Any]:
         """Check if an operation complies with policy."""
 
-        action_str = (
-            action.value if isinstance(action, ExecutionAction) else action
-        )
+        action_str = action.value if isinstance(action, ExecutionAction) else action
         policy = self.policies.get(action_str)
 
         if not policy:
@@ -142,20 +140,15 @@ class GovernanceHarness:
 
         if policy.max_tokens and tokens_estimate > policy.max_tokens:
             violations.append(
-                f"Token estimate ({tokens_estimate}) exceeds "
-                f"maximum ({policy.max_tokens})"
+                f"Token estimate ({tokens_estimate}) exceeds maximum ({policy.max_tokens})"
             )
 
         if policy.max_files and file_count > policy.max_files:
-            violations.append(
-                f"File count ({file_count}) exceeds "
-                f"maximum ({policy.max_files})"
-            )
+            violations.append(f"File count ({file_count}) exceeds maximum ({policy.max_files})")
 
         if data_classification not in policy.allowed_data_classes:
             violations.append(
-                f"Data classification '{data_classification.value}' "
-                "not allowed for this action"
+                f"Data classification '{data_classification.value}' not allowed for this action"
             )
 
         return {
@@ -269,9 +262,7 @@ class GovernanceHarness:
                         actor=entry["actor"],
                         query=entry["query"],
                         tokens_used=entry.get("tokens_used", 0) or 0,
-                        data_classification=DataClassification(
-                            entry["data_classification"]
-                        ),
+                        data_classification=DataClassification(entry["data_classification"]),
                         policy_applied=entry["policy_applied"],
                         result=entry.get("result", ""),
                         checksum=entry["checksum"],
@@ -313,9 +304,7 @@ class GovernanceHarness:
                             actor=entry["actor"],
                             query=entry["query"],
                             tokens_used=entry.get("tokens_used", 0),
-                            data_classification=DataClassification(
-                                entry["data_classification"]
-                            ),
+                            data_classification=DataClassification(entry["data_classification"]),
                             policy_applied=entry["policy_applied"],
                             result=entry.get("result", ""),
                             checksum=entry["checksum"],
@@ -345,9 +334,7 @@ class GovernanceHarness:
                             f"{entry['query']}:{entry['tokens_used']}:"
                             f"{entry['data_classification']}:{entry['result']}"
                         )
-                        expected = hashlib.sha256(
-                            content.encode("utf-8")
-                        ).hexdigest()[:16]
+                        expected = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
                         if entry.get("checksum") == expected:
                             valid += 1
                         else:
@@ -381,9 +368,7 @@ class GovernanceHarness:
                         f"{entry['query']}:{entry['tokens_used']}:"
                         f"{entry['data_classification']}:{entry['result']}"
                     )
-                    expected = hashlib.sha256(
-                        content.encode("utf-8")
-                    ).hexdigest()[:16]
+                    expected = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
                     if entry.get("checksum") == expected:
                         valid += 1
                     else:

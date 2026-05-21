@@ -36,12 +36,12 @@ class LearningOrchestrator:
 
         self.feedback = FeedbackCollector(self.storage_path, db=db)
         self.governance = GovernanceHarness(db=db, storage_path=self.storage_path)
-        self.patterns = PatternLearner(
-            self.feedback, db=db, storage_path=self.storage_path
-        )
+        self.patterns = PatternLearner(self.feedback, db=db, storage_path=self.storage_path)
         self.optimizer = TokenOptimizer(
-            self.feedback, db=db, storage_path=self.storage_path,
-            default_budget=default_token_budget
+            self.feedback,
+            db=db,
+            storage_path=self.storage_path,
+            default_budget=default_token_budget,
         )
 
     def _try_load_db(self, db_path: Path | str) -> Any | None:
@@ -67,9 +67,7 @@ class LearningOrchestrator:
     ) -> str:
         """Begin tracking an operation. Returns operation ID."""
 
-        return self.feedback.start_operation(
-            operation_type, query, task_type, tokens_budgeted
-        )
+        return self.feedback.start_operation(operation_type, query, task_type, tokens_budgeted)
 
     def finish_operation(
         self,
@@ -127,9 +125,7 @@ class LearningOrchestrator:
             "savings_report": self.optimizer.report_savings(),
         }
 
-    def get_optimized_budget(
-        self, operation_type: str, fallback: int | None = None
-    ) -> int:
+    def get_optimized_budget(self, operation_type: str, fallback: int | None = None) -> int:
         """Get optimized token budget for an operation."""
 
         return self.optimizer.get_budget(operation_type, fallback)

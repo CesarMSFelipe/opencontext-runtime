@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import threading
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -24,7 +23,7 @@ logger = logging.getLogger(__name__)
 # ── Policy Model ────────────────────────────────────────────────────────────
 
 
-class ProxyAction(str, Enum):
+class ProxyAction(StrEnum):
     """Action the firewall takes after scanning context."""
 
     ALLOW = "allow"
@@ -142,13 +141,15 @@ def _scan_pii_simple(text: str) -> list[dict[str, Any]]:
             key = (kind, match.start(), match.end())
             if key not in seen:
                 seen.add(key)
-                findings.append({
-                    "kind": f"pii.{kind}",
-                    "start": match.start(),
-                    "end": match.end(),
-                    "value": match.group()[:40],
-                    "severity": "high" if kind in ("ssn",) else "medium",
-                })
+                findings.append(
+                    {
+                        "kind": f"pii.{kind}",
+                        "start": match.start(),
+                        "end": match.end(),
+                        "value": match.group()[:40],
+                        "severity": "high" if kind in ("ssn",) else "medium",
+                    }
+                )
 
     # Credit cards (with Luhn check)
     for match in _CC_RE.finditer(text):
@@ -157,13 +158,15 @@ def _scan_pii_simple(text: str) -> list[dict[str, Any]]:
             key = ("cc", match.start(), match.end())
             if key not in seen:
                 seen.add(key)
-                findings.append({
-                    "kind": "pii.credit_card",
-                    "start": match.start(),
-                    "end": match.end(),
-                    "value": digits[:4] + "****" + digits[-4:],
-                    "severity": "critical",
-                })
+                findings.append(
+                    {
+                        "kind": "pii.credit_card",
+                        "start": match.start(),
+                        "end": match.end(),
+                        "value": digits[:4] + "****" + digits[-4:],
+                        "severity": "critical",
+                    }
+                )
 
     return findings
 
@@ -176,7 +179,12 @@ _SECRETS_RE = [
     (re.compile(r"\bghp_[a-zA-Z0-9]{36}\b"), "github_token"),
     (re.compile(r"\bgithub_pat_[a-zA-Z0-9]{22,}\b"), "github_pat"),
     (re.compile(r"\b(?:ghr|gho|ghu|ghs)_[a-zA-Z0-9]{36}\b"), "github_token_alt"),
-    (re.compile(r"(?i)(?:api[_-]?key|secret|token|password)\s*[:=]\s*['\"][a-zA-Z0-9_\-./+=]{8,}['\"]"), "generic_secret"),
+    (
+        re.compile(
+            r"(?i)(?:api[_-]?key|secret|token|password)\s*[:=]\s*['\"][a-zA-Z0-9_\-./+=]{8,}['\"]"
+        ),
+        "generic_secret",
+    ),
 ]
 
 
@@ -192,13 +200,17 @@ def _scan_secrets_simple(text: str) -> list[dict[str, Any]]:
             if any(s <= start < e or s < end <= e for s, e in seen_ranges):
                 continue
             seen_ranges.append((start, end))
-            findings.append({
-                "kind": f"secret.{kind}",
-                "start": start,
-                "end": end,
-                "value": match.group()[:30] + "..." if len(match.group()) > 30 else match.group(),
-                "severity": "critical",
-            })
+            findings.append(
+                {
+                    "kind": f"secret.{kind}",
+                    "start": start,
+                    "end": end,
+                    "value": match.group()[:30] + "..."
+                    if len(match.group()) > 30
+                    else match.group(),
+                    "severity": "critical",
+                }
+            )
 
     return findings
 
@@ -228,13 +240,15 @@ def _scan_prompt_injection_simple(text: str) -> list[dict[str, Any]]:
         matched_text = match.group().lower().strip()
         if matched_text and matched_text not in seen:
             seen.add(matched_text)
-            findings.append({
-                "kind": "injection.keyword",
-                "start": match.start(),
-                "end": match.end(),
-                "value": matched_text[:60],
-                "severity": "high",
-            })
+            findings.append(
+                {
+                    "kind": "injection.keyword",
+                    "start": match.start(),
+                    "end": match.end(),
+                    "value": matched_text[:60],
+                    "severity": "high",
+                }
+            )
 
     return findings
 
@@ -250,6 +264,7 @@ def _estimate_tokens(text: str) -> int:
 def _generate_trace_id() -> str:
     """Generate a short trace/request ID."""
     import uuid
+
     return uuid.uuid4().hex[:16]
 
 
@@ -295,13 +310,18 @@ class ContextFirewall:
         if ctx_tokens > self.policy.max_context_tokens:
             decision = ProxyDecision(
                 action=ProxyAction.BLOCK,
-                findings=[{
-                    "kind": "context.too_large",
-                    "start": 0,
-                    "end": len(text),
-                    "value": f"{ctx_tokens} tokens exceeds limit of {self.policy.max_context_tokens}",
-                    "severity": "medium",
-                }],
+                findings=[
+                    {
+                        "kind": "context.too_large",
+                        "start": 0,
+                        "end": len(text),
+                        "value": (
+                            f"{ctx_tokens} tokens exceeds limit of "
+                            f"{self.policy.max_context_tokens}"
+                        ),
+                        "severity": "medium",
+                    }
+                ],
                 reason=f"Context too large: {ctx_tokens} > {self.policy.max_context_tokens} tokens",
             )
             self._record_stats(decision.action, provider)
@@ -336,7 +356,8 @@ class ContextFirewall:
         # 5. Redact if needed
         redacted = None
         if action == ProxyAction.REDACT or (
-            action == ProxyAction.ALLOW and pii_findings
+            action == ProxyAction.ALLOW
+            and pii_findings
             and self.policy.action_on_pii == ProxyAction.REDACT
         ):
             redacted = self._redact_text(text, pii_findings)
@@ -349,7 +370,10 @@ class ContextFirewall:
             provider=provider or "unknown",
             model=model or "unknown",
             action=action,
-            findings=[{k: f["value"] if k == "value" else f[k] for k in ("kind", "severity", "value")} for f in all_findings[:20]],
+            findings=[
+                {k: f["value"] if k == "value" else f[k] for k in ("kind", "severity", "value")}
+                for f in all_findings[:20]
+            ],
             context_size_tokens=ctx_tokens,
             duration_ms=round(duration, 1),
             policy_snapshot=self.policy.to_dict(),
@@ -423,9 +447,15 @@ class ContextFirewall:
             else:
                 self._stats["allowed"] += 1
             if provider:
-                prov_stats = self._stats["by_provider"].setdefault(provider, {
-                    "total": 0, "blocked": 0, "redacted": 0, "allowed": 0,
-                })
+                prov_stats = self._stats["by_provider"].setdefault(
+                    provider,
+                    {
+                        "total": 0,
+                        "blocked": 0,
+                        "redacted": 0,
+                        "allowed": 0,
+                    },
+                )
                 prov_stats["total"] += 1
                 if action == ProxyAction.BLOCK:
                     prov_stats["blocked"] += 1
@@ -475,8 +505,6 @@ class SimpleProxyServer:
     def _make_handler(self) -> type:
         """Create a request handler class for http.server."""
         firewall = self.firewall
-        host = self.host
-        port = self.port
 
         import http.server as server
 
@@ -495,12 +523,15 @@ class SimpleProxyServer:
             def do_GET(self):
                 if self.path == "/health":
                     stats = firewall.get_stats()
-                    self._send_json(200, {
-                        "status": "ok",
-                        "total_scanned": stats["total_requests"],
-                        "blocked": stats["blocked"],
-                        "redacted": stats["redacted"],
-                    })
+                    self._send_json(
+                        200,
+                        {
+                            "status": "ok",
+                            "total_scanned": stats["total_requests"],
+                            "blocked": stats["blocked"],
+                            "redacted": stats["redacted"],
+                        },
+                    )
                 elif self.path == "/stats":
                     self._send_json(200, firewall.get_stats())
                 elif self.path == "/policy":
@@ -526,16 +557,21 @@ class SimpleProxyServer:
                     model = data.get("model", "")
 
                     decision = firewall.scan_context(text, provider=provider, model=model)
-                    self._send_json(200, {
-                        "action": decision.action.value,
-                        "text": decision.redacted_text or text,
-                        "findings": [
-                            {"kind": f["kind"], "severity": f["severity"]}
-                            for f in decision.findings[:10]
-                        ],
-                        "reason": decision.reason,
-                        "trace_id": decision.audit_entry.trace_id if decision.audit_entry else "",
-                    })
+                    self._send_json(
+                        200,
+                        {
+                            "action": decision.action.value,
+                            "text": decision.redacted_text or text,
+                            "findings": [
+                                {"kind": f["kind"], "severity": f["severity"]}
+                                for f in decision.findings[:10]
+                            ],
+                            "reason": decision.reason,
+                            "trace_id": decision.audit_entry.trace_id
+                            if decision.audit_entry
+                            else "",
+                        },
+                    )
                 except json.JSONDecodeError:
                     self._send_json(400, {"error": "invalid_json"})
                 except Exception as exc:
@@ -547,6 +583,7 @@ class SimpleProxyServer:
     def start(self) -> None:
         """Start the proxy server (blocking call)."""
         import http.server as server
+
         handler = self._make_handler()
         self._server = server.HTTPServer((self.host, self.port), handler)
         logger.info("Context Firewall proxy listening on %s", self.proxy_url)
@@ -563,6 +600,7 @@ class SimpleProxyServer:
         self._thread.start()
         # Wait briefly for server to start
         import time as _time
+
         _time.sleep(0.1)
 
     def stop(self) -> None:

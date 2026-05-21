@@ -13,10 +13,7 @@ from typing import Any
 
 from opencontext_core.setup.presets import (
     COMPONENT_CATALOG,
-    ComponentDef,
     ComponentStatus,
-    PresetDef,
-    ProfileDef,
     resolve_preset_components,
 )
 
@@ -80,7 +77,7 @@ class InstallPlan:
             icon = {
                 "pending": "  ·",
                 "done": "  ✓",
-                "skipped": "  −",
+                "skipped": "  -",
                 "failed": "  ✗",
             }.get(action.status, "  ·")
             lines.append(f"  {icon} {action.description}")
@@ -140,6 +137,7 @@ def build_plan(
     if profile_id is None:
         if preset_id:
             from opencontext_core.setup.presets import PRESET_CATALOG
+
             preset = PRESET_CATALOG.get(preset_id)
             if preset:
                 profile_id = preset.profile
@@ -168,7 +166,9 @@ def build_plan(
 
         if status == ComponentStatus.INSTALLED:
             plan.actions.append(
-                InstallAction("skip", cid, comp.name, f"{comp.name} already installed", status="skipped")
+                InstallAction(
+                    "skip", cid, comp.name, f"{comp.name} already installed", status="skipped"
+                )
             )
             continue
 
@@ -198,22 +198,16 @@ def build_plan(
         )
 
     # File changes
-    plan.file_changes.append(
-        FileChange(str(user_config_path), "modify", "Update user preferences")
-    )
+    plan.file_changes.append(FileChange(str(user_config_path), "modify", "Update user preferences"))
 
     mcp_path = Path.home() / ".config" / "opencode" / "mcp.json"
     if "mcp-server" in resolved_components:
-        plan.file_changes.append(
-            FileChange(str(mcp_path), "modify", "Configure MCP for OpenCode")
-        )
+        plan.file_changes.append(FileChange(str(mcp_path), "modify", "Configure MCP for OpenCode"))
 
     plugins_dir = Path.home() / ".config" / "opencontext" / "plugins"
     for cid in resolved_components:
         if cid == "plugins":
-            plan.file_changes.append(
-                FileChange(str(plugins_dir), "create", "Plugin directory")
-            )
+            plan.file_changes.append(FileChange(str(plugins_dir), "create", "Plugin directory"))
             break
 
     return plan
@@ -249,14 +243,16 @@ def _check_component_status(component_id: str) -> ComponentStatus:
 
     if component_id in feature_map:
         return (
-            ComponentStatus.INSTALLED if feature_map[component_id]
+            ComponentStatus.INSTALLED
+            if feature_map[component_id]
             else ComponentStatus.NOT_INSTALLED
         )
 
     # Plugins check
     if component_id == "plugins":
         return (
-            ComponentStatus.INSTALLED if len(prefs.installed_plugins) > 0
+            ComponentStatus.INSTALLED
+            if len(prefs.installed_plugins) > 0
             else ComponentStatus.NOT_INSTALLED
         )
 

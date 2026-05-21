@@ -8,10 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from opencontext_core.config import OpenContextConfig
-from opencontext_core.doctor.checks import HealthCheck
 
 
 @dataclass
@@ -64,7 +62,10 @@ class ComponentDoctor:
                         name="kg_database",
                         ok=True,
                         status="healthy",
-                        details=f"Database exists with {stats.get('nodes', 0)} nodes, {stats.get('edges', 0)} edges",
+                        details=(
+                            f"Database exists with {stats.get('nodes', 0)} nodes, "
+                            f"{stats.get('edges', 0)} edges"
+                        ),
                     )
                 )
 
@@ -138,17 +139,27 @@ class ComponentDoctor:
         checks = []
 
         # Check if server module loads
-        try:
-            from opencontext_core.mcp_stdio import MCPServer
+        import importlib
 
-            checks.append(
-                ComponentCheck(
-                    name="mcp_module",
-                    ok=True,
-                    status="healthy",
-                    details="MCP server module loaded",
+        try:
+            if importlib.util.find_spec("opencontext_core.mcp_stdio"):
+                checks.append(
+                    ComponentCheck(
+                        name="mcp_module",
+                        ok=True,
+                        status="healthy",
+                        details="MCP server module loaded",
+                    )
                 )
-            )
+            else:
+                checks.append(
+                    ComponentCheck(
+                        name="mcp_module",
+                        ok=False,
+                        status="missing",
+                        details="MCP server module not available",
+                    )
+                )
         except ImportError as exc:
             checks.append(
                 ComponentCheck(
@@ -218,17 +229,27 @@ class ComponentDoctor:
 
         checks = []
 
-        try:
-            from opencontext_core.agents.sdd_orchestrator import SDDOrchestrator
+        import importlib
 
-            checks.append(
-                ComponentCheck(
-                    name="sdd_orchestrator",
-                    ok=True,
-                    status="healthy",
-                    details="SDD orchestrator loaded",
+        try:
+            if importlib.util.find_spec("opencontext_core.agents.sdd_orchestrator"):
+                checks.append(
+                    ComponentCheck(
+                        name="sdd_orchestrator",
+                        ok=True,
+                        status="healthy",
+                        details="SDD orchestrator loaded",
+                    )
                 )
-            )
+            else:
+                checks.append(
+                    ComponentCheck(
+                        name="sdd_orchestrator",
+                        ok=False,
+                        status="missing",
+                        details="SDD orchestrator not available",
+                    )
+                )
         except ImportError as exc:
             checks.append(
                 ComponentCheck(
@@ -274,7 +295,7 @@ class ComponentDoctor:
         try:
             from opencontext_core.skills.registry import SkillRegistry
 
-            registry = SkillRegistry()
+            SkillRegistry()
             checks.append(
                 ComponentCheck(
                     name="skill_registry",
@@ -300,17 +321,27 @@ class ComponentDoctor:
 
         checks = []
 
-        try:
-            from opencontext_core.memory.topic_keys import TopicKeyGenerator
+        import importlib
 
-            checks.append(
-                ComponentCheck(
-                    name="memory_topic_keys",
-                    ok=True,
-                    status="healthy",
-                    details="Topic key generator loaded",
+        try:
+            if importlib.util.find_spec("opencontext_core.memory.topic_keys"):
+                checks.append(
+                    ComponentCheck(
+                        name="memory_topic_keys",
+                        ok=True,
+                        status="healthy",
+                        details="Topic key generator loaded",
+                    )
                 )
-            )
+            else:
+                checks.append(
+                    ComponentCheck(
+                        name="memory_topic_keys",
+                        ok=False,
+                        status="missing",
+                        details="Topic key generator not available",
+                    )
+                )
         except ImportError as exc:
             checks.append(
                 ComponentCheck(

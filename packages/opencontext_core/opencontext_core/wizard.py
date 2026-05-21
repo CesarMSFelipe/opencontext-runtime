@@ -6,13 +6,9 @@ providers, and plugins. Uses rich for a modern interactive TUI.
 
 from __future__ import annotations
 
-from typing import Any
-
 from rich.console import Console
-from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
-from rich.text import Text
 
 from opencontext_core.plugin_system import (
     PluginInstaller,
@@ -21,7 +17,6 @@ from opencontext_core.plugin_system import (
 )
 from opencontext_core.user_prefs import (
     UserConfigStore,
-    UserFeatures,
     UserPreferences,
 )
 
@@ -105,7 +100,7 @@ def _plugin_wizard_step(prefs: UserPreferences) -> None:
             name = plug.name
             version = plug.versions[0].version if plug.versions else "—"
             status = "✓ installed" if name in installed else "—"
-            marker = f"  [{len(available)}] " if False else "   "
+            f"  [{len(available)}] " if False else "   "
             table.add_row("", name, f"v{version}", plug.description[:55], status)
 
         console.print(table)
@@ -135,12 +130,8 @@ def _plugin_wizard_step(prefs: UserPreferences) -> None:
 
     # Auto-update preference
     console.print()
-    prefs.check_updates = _ask_bool(
-        "Check for updates automatically?", prefs.check_updates
-    )
-    prefs.auto_update_plugins = _ask_bool(
-        "Auto-update plugins?", prefs.auto_update_plugins
-    )
+    prefs.check_updates = _ask_bool("Check for updates automatically?", prefs.check_updates)
+    prefs.auto_update_plugins = _ask_bool("Auto-update plugins?", prefs.auto_update_plugins)
 
 
 def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> UserPreferences:
@@ -222,18 +213,14 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
     prefs.default_token_budget = _ask_int(
         "Default token budget per operation", prefs.default_token_budget, 1000, 100000
     )
-    prefs.max_input_tokens = _ask_int(
-        "Max input tokens", prefs.max_input_tokens, 1000, 200000
-    )
+    prefs.max_input_tokens = _ask_int("Max input tokens", prefs.max_input_tokens, 1000, 200000)
 
     # Step 4: Agent Integrations
     _print_section("Step 4: Agent Integrations")
     console.print("\nWhich AI agents do you use?")
 
     for agent, enabled in prefs.agent_integrations.items():
-        prefs.agent_integrations[agent] = _ask_bool(
-            f"  Enable {agent}?", enabled
-        )
+        prefs.agent_integrations[agent] = _ask_bool(f"  Enable {agent}?", enabled)
 
     # Step 5: Plugins
     _print_section("Step 5: Plugins")
@@ -297,14 +284,20 @@ def reconfigure(section: str | None = None) -> None:
             0 if prefs.security_mode == "private_project" else 1,
         )
     elif section == "features":
-        prefs.features.knowledge_graph = _ask_bool("Knowledge Graph?", prefs.features.knowledge_graph)
+        prefs.features.knowledge_graph = _ask_bool(
+            "Knowledge Graph?", prefs.features.knowledge_graph
+        )
         prefs.features.call_graph = _ask_bool("Call Graph?", prefs.features.call_graph)
-        prefs.features.learning_system = _ask_bool("Learning System?", prefs.features.learning_system)
+        prefs.features.learning_system = _ask_bool(
+            "Learning System?", prefs.features.learning_system
+        )
     elif section == "tokens":
         prefs.default_token_budget = _ask_int("Token budget", prefs.default_token_budget)
     elif section == "agents":
         for agent in prefs.agent_integrations:
-            prefs.agent_integrations[agent] = _ask_bool(f"{agent}?", prefs.agent_integrations[agent])
+            prefs.agent_integrations[agent] = _ask_bool(
+                f"{agent}?", prefs.agent_integrations[agent]
+            )
     elif section == "plugins":
         _plugin_wizard_step(prefs)
     else:
@@ -331,15 +324,15 @@ def show_config() -> None:
     console.print(f"\n  Security Mode: {prefs.security_mode}")
     console.print(f"  Data Classification: {prefs.data_classification}")
 
-    console.print(f"\n  Features:")
+    console.print("\n  Features:")
     for key, value in vars(prefs.features).items():
         console.print(f"    {key}: {'ON' if value else 'OFF'}")
 
-    console.print(f"\n  Token Budgets:")
+    console.print("\n  Token Budgets:")
     console.print(f"    Default: {prefs.default_token_budget}")
     console.print(f"    Max Input: {prefs.max_input_tokens}")
 
-    console.print(f"\n  Agents:")
+    console.print("\n  Agents:")
     for agent, enabled in prefs.agent_integrations.items():
         console.print(f"    {agent}: {'enabled' if enabled else 'disabled'}")
 
@@ -353,15 +346,15 @@ def show_config() -> None:
                 status = "✓" if p.enabled else "○"
                 console.print(f"    {status} {p.name} v{p.version} [{p.install_source}]")
         else:
-            console.print(f"\n  Plugins: none installed")
+            console.print("\n  Plugins: none installed")
     except Exception:
-        console.print(f"\n  Plugins: (error reading plugins)")
+        console.print("\n  Plugins: (error reading plugins)")
 
-    console.print(f"\n  Learning:")
+    console.print("\n  Learning:")
     console.print(f"    Auto-optimize: {'ON' if prefs.learning_auto_optimize else 'OFF'}")
     console.print(f"    Share anonymous: {'ON' if prefs.learning_share_anonymous else 'OFF'}")
 
-    console.print(f"\n  Updates:")
+    console.print("\n  Updates:")
     console.print(f"    Check updates: {'ON' if prefs.check_updates else 'OFF'}")
     console.print(f"    Auto-update plugins: {'ON' if prefs.auto_update_plugins else 'OFF'}")
 

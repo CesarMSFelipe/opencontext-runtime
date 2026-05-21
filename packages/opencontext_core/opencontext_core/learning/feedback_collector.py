@@ -99,9 +99,7 @@ class FeedbackCollector:
                 if metadata:
                     metric.metadata.update(metadata)
                 if "start_time" in metric.metadata:
-                    metric.duration_ms = (
-                        time.time() - metric.metadata["start_time"]
-                    ) * 1000
+                    metric.duration_ms = (time.time() - metric.metadata["start_time"]) * 1000
                 self._persist(metric)
                 self._pending.remove(metric)
                 break
@@ -165,14 +163,8 @@ class FeedbackCollector:
                         duration_ms=record.get("duration_ms", 0) or 0,
                         tokens_used=record.get("tokens_used", 0) or 0,
                         tokens_budgeted=record.get("tokens_budgeted", 0) or 0,
-                        context_items_selected=record.get(
-                            "context_items_selected", 0
-                        )
-                        or 0,
-                        context_items_omitted=record.get(
-                            "context_items_omitted", 0
-                        )
-                        or 0,
+                        context_items_selected=record.get("context_items_selected", 0) or 0,
+                        context_items_omitted=record.get("context_items_omitted", 0) or 0,
                         files_consulted=record.get("files_consulted", 0) or 0,
                         symbols_consulted=record.get("symbols_consulted", 0) or 0,
                         task_type=record.get("task_type"),
@@ -203,9 +195,7 @@ class FeedbackCollector:
                     continue
                 try:
                     record = json.loads(line)
-                    if operation_type and record.get(
-                        "operation_type"
-                    ) != operation_type:
+                    if operation_type and record.get("operation_type") != operation_type:
                         continue
                     if task_type and record.get("task_type") != task_type:
                         continue
@@ -218,12 +208,8 @@ class FeedbackCollector:
                             duration_ms=record.get("duration_ms", 0),
                             tokens_used=record.get("tokens_used", 0),
                             tokens_budgeted=record.get("tokens_budgeted", 0),
-                            context_items_selected=record.get(
-                                "context_items_selected", 0
-                            ),
-                            context_items_omitted=record.get(
-                                "context_items_omitted", 0
-                            ),
+                            context_items_selected=record.get("context_items_selected", 0),
+                            context_items_omitted=record.get("context_items_omitted", 0),
                             files_consulted=record.get("files_consulted", 0),
                             symbols_consulted=record.get("symbols_consulted", 0),
                             task_type=record.get("task_type"),

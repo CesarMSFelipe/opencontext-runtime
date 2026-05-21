@@ -10,11 +10,11 @@ import json
 import logging
 import threading
 import time
-from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
-from opencontext_core.models.trace import RuntimeTrace, TraceSpan
+from opencontext_core.models.trace import RuntimeTrace
 
 logger = logging.getLogger(__name__)
 
@@ -91,10 +91,14 @@ def _trace_to_otlp_json(trace: RuntimeTrace) -> dict[str, Any]:
             {"key": "workflow.name", "value": {"stringValue": trace.workflow_name}},
             {"key": "llm.provider", "value": {"stringValue": trace.provider}},
             {"key": "llm.model", "value": {"stringValue": trace.model}},
-            {"key": "context.selected_items",
-             "value": {"intValue": str(len(trace.selected_context_items))}},
-            {"key": "context.discarded_items",
-             "value": {"intValue": str(len(trace.discarded_context_items))}},
+            {
+                "key": "context.selected_items",
+                "value": {"intValue": str(len(trace.selected_context_items))},
+            },
+            {
+                "key": "context.discarded_items",
+                "value": {"intValue": str(len(trace.discarded_context_items))},
+            },
             {"key": "context.compression", "value": {"stringValue": trace.compression_strategy}},
             {"key": "service.name", "value": {"stringValue": "opencontext"}},
             {"key": "telemetry.sdk.name", "value": {"stringValue": "opencontext"}},
@@ -105,8 +109,7 @@ def _trace_to_otlp_json(trace: RuntimeTrace) -> dict[str, Any]:
                 "timeUnixNano": str(_to_rfc3339_nanos(e.timestamp)),
                 "name": e.name,
                 "attributes": [
-                    {"key": k, "value": {"stringValue": str(v)}}
-                    for k, v in e.attributes.items()
+                    {"key": k, "value": {"stringValue": str(v)}} for k, v in e.attributes.items()
                 ],
             }
             for e in trace.events
@@ -116,17 +119,21 @@ def _trace_to_otlp_json(trace: RuntimeTrace) -> dict[str, Any]:
 
     # Token estimates as events
     for key, val in trace.token_estimates.items():
-        root_span["attributes"].append({
-            "key": f"tokens.{key}",
-            "value": {"intValue": str(val)},
-        })
+        root_span["attributes"].append(
+            {
+                "key": f"tokens.{key}",
+                "value": {"intValue": str(val)},
+            }
+        )
 
     # Timings as attributes
     for step, ms in trace.timings_ms.items():
-        root_span["attributes"].append({
-            "key": f"timing.{step}",
-            "value": {"doubleValue": ms},
-        })
+        root_span["attributes"].append(
+            {
+                "key": f"timing.{step}",
+                "value": {"doubleValue": ms},
+            }
+        )
 
     # Child spans
     child_spans = []
@@ -140,8 +147,7 @@ def _trace_to_otlp_json(trace: RuntimeTrace) -> dict[str, Any]:
             "startTimeUnixNano": str(_to_rfc3339_nanos(span.start_time)),
             "endTimeUnixNano": str(_to_rfc3339_nanos(span.end_time)),
             "attributes": [
-                {"key": k, "value": {"stringValue": str(v)}}
-                for k, v in span.attributes.items()
+                {"key": k, "value": {"stringValue": str(v)}} for k, v in span.attributes.items()
             ],
             "events": [
                 {
@@ -170,7 +176,7 @@ def _trace_to_otlp_json(trace: RuntimeTrace) -> dict[str, Any]:
                 "scopeSpans": [
                     {
                         "scope": {"name": "opencontext.traces"},
-                        "spans": [root_span] + child_spans,
+                        "spans": [root_span, *child_spans],
                     }
                 ],
             }
@@ -200,6 +206,7 @@ class OtelExporter:
             return False
         try:
             import urllib.request as req
+
             data = _trace_to_otlp_json(trace)
             body = json.dumps(data).encode("utf-8")
             headers = {"Content-Type": "application/json"}
@@ -219,12 +226,12 @@ class OtelExporter:
             return False
         try:
             import urllib.request as req
+
             now_nano = _to_rfc3339_nanos(None)
             scope_metrics = []
             for m in metrics:
                 attrs = [
-                    {"key": k, "value": {"stringValue": str(v)}}
-                    for k, v in m.attributes.items()
+                    {"key": k, "value": {"stringValue": str(v)}} for k, v in m.attributes.items()
                 ]
                 dp = {
                     "timeUnixNano": str(now_nano),
@@ -232,25 +239,36 @@ class OtelExporter:
                 }
                 if attrs:
                     dp["attributes"] = attrs
-                scope_metrics.append({
-                    "name": m.name,
-                    "unit": m.unit or "1",
-                    "gauge": {"dataPoints": [dp]},
-                })
+                scope_metrics.append(
+                    {
+                        "name": m.name,
+                        "unit": m.unit or "1",
+                        "gauge": {"dataPoints": [dp]},
+                    }
+                )
 
-            body = json.dumps({
-                "resourceMetrics": [{
-                    "resource": {
-                        "attributes": [
-                            {"key": "service.name", "value": {"stringValue": self.service_name}},
-                        ]
-                    },
-                    "scopeMetrics": [{
-                        "scope": {"name": "opencontext.metrics"},
-                        "metrics": scope_metrics,
-                    }],
-                }],
-            }).encode("utf-8")
+            body = json.dumps(
+                {
+                    "resourceMetrics": [
+                        {
+                            "resource": {
+                                "attributes": [
+                                    {
+                                        "key": "service.name",
+                                        "value": {"stringValue": self.service_name},
+                                    },
+                                ]
+                            },
+                            "scopeMetrics": [
+                                {
+                                    "scope": {"name": "opencontext.metrics"},
+                                    "metrics": scope_metrics,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ).encode("utf-8")
 
             url = f"{self.endpoint}/v1/metrics"
             headers = {"Content-Type": "application/json"}
@@ -272,8 +290,20 @@ class OtelExporter:
 
 
 _PROVIDER_RATES: dict[str, dict[str, float]] = {
-    "openai": {"gpt-4": 0.03, "gpt-4-turbo": 0.01, "gpt-3.5-turbo": 0.0015, "gpt-4o": 0.005, "*": 0.003},
-    "anthropic": {"claude-3-opus": 0.015, "claude-3-sonnet": 0.003, "claude-3-haiku": 0.00025, "claude-sonnet-4": 0.003, "*": 0.003},
+    "openai": {
+        "gpt-4": 0.03,
+        "gpt-4-turbo": 0.01,
+        "gpt-3.5-turbo": 0.0015,
+        "gpt-4o": 0.005,
+        "*": 0.003,
+    },
+    "anthropic": {
+        "claude-3-opus": 0.015,
+        "claude-3-sonnet": 0.003,
+        "claude-3-haiku": 0.00025,
+        "claude-sonnet-4": 0.003,
+        "*": 0.003,
+    },
     "google": {"gemini-pro": 0.00025, "*": 0.001},
     "mock": {"*": 0.0},
     "*": {"*": 0.002},
@@ -305,12 +335,22 @@ class MetricsCollector:
         # Token totals
         total_tokens = sum(trace.token_estimates.values()) if trace.token_estimates else 0
         self._add(MetricPoint("context.total_tokens", float(total_tokens), now, unit="1"))
-        self._add(MetricPoint(
-            "context.selected_items", float(len(trace.selected_context_items)), now, unit="1",
-        ))
-        self._add(MetricPoint(
-            "context.discarded_items", float(len(trace.discarded_context_items)), now, unit="1",
-        ))
+        self._add(
+            MetricPoint(
+                "context.selected_items",
+                float(len(trace.selected_context_items)),
+                now,
+                unit="1",
+            )
+        )
+        self._add(
+            MetricPoint(
+                "context.discarded_items",
+                float(len(trace.discarded_context_items)),
+                now,
+                unit="1",
+            )
+        )
 
         # Duration
         total_ms = sum(trace.timings_ms.values()) if trace.timings_ms else 0
@@ -318,26 +358,46 @@ class MetricsCollector:
 
         # Errors
         error_count = float(len(trace.errors))
-        self._add(MetricPoint("workflow.errors", error_count, now, unit="1",
-                              attributes={"workflow": trace.workflow_name}))
+        self._add(
+            MetricPoint(
+                "workflow.errors",
+                error_count,
+                now,
+                unit="1",
+                attributes={"workflow": trace.workflow_name},
+            )
+        )
 
         # Cost
         if trace.provider and total_tokens:
             cost = estimate_cost(trace.provider, trace.model, total_tokens)
-            self._add(MetricPoint("cost.estimated_usd", cost, now, unit="usd",
-                                  attributes={"provider": trace.provider, "model": trace.model}))
+            self._add(
+                MetricPoint(
+                    "cost.estimated_usd",
+                    cost,
+                    now,
+                    unit="usd",
+                    attributes={"provider": trace.provider, "model": trace.model},
+                )
+            )
 
         # Workflow-specific
-        self._add(MetricPoint("workflow.runs", 1.0, now, unit="1",
-                              attributes={"workflow": trace.workflow_name}))
+        self._add(
+            MetricPoint(
+                "workflow.runs", 1.0, now, unit="1", attributes={"workflow": trace.workflow_name}
+            )
+        )
 
     def record_quality_score(self, score: float, details: dict[str, Any] | None = None) -> None:
         """Record a context quality score metric."""
-        self._add(MetricPoint(
-            "context.quality_score", score,
-            attributes=details or {},
-            unit="1",
-        ))
+        self._add(
+            MetricPoint(
+                "context.quality_score",
+                score,
+                attributes=details or {},
+                unit="1",
+            )
+        )
 
     def flush(self) -> list[MetricPoint]:
         """Return all buffered points and clear the buffer."""
@@ -360,8 +420,9 @@ class MetricsCollector:
 class ContextDashboard:
     """Provides aggregated context metrics for the TUI dashboard."""
 
-    def __init__(self, trace_logger: "LocalTraceLogger | None" = None):  # noqa: F821
+    def __init__(self, trace_logger: LocalTraceLogger | None = None):  # noqa: F821
         from opencontext_core.trace.logger import LocalTraceLogger
+
         self._logger = trace_logger or LocalTraceLogger()
         self._quality_scores: list[float] = []
 
@@ -381,19 +442,25 @@ class ContextDashboard:
                 try:
                     trace = self._logger.load(path.stem)
                     total_ms = sum(trace.timings_ms.values())
-                    total_tokens = sum(trace.token_estimates.values()) if trace.token_estimates else 0
-                    results.append({
-                        "run_id": trace.run_id,
-                        "workflow": trace.workflow_name,
-                        "provider": trace.provider,
-                        "model": trace.model,
-                        "tokens": total_tokens,
-                        "tokens_fmt": format_tokens(total_tokens),
-                        "duration_ms": total_ms,
-                        "duration_fmt": format_duration(total_ms),
-                        "errors": len(trace.errors),
-                        "created_at": trace.created_at.isoformat() if hasattr(trace.created_at, 'isoformat') else str(trace.created_at),
-                    })
+                    total_tokens = (
+                        sum(trace.token_estimates.values()) if trace.token_estimates else 0
+                    )
+                    results.append(
+                        {
+                            "run_id": trace.run_id,
+                            "workflow": trace.workflow_name,
+                            "provider": trace.provider,
+                            "model": trace.model,
+                            "tokens": total_tokens,
+                            "tokens_fmt": format_tokens(total_tokens),
+                            "duration_ms": total_ms,
+                            "duration_fmt": format_duration(total_ms),
+                            "errors": len(trace.errors),
+                            "created_at": trace.created_at.isoformat()
+                            if hasattr(trace.created_at, "isoformat")
+                            else str(trace.created_at),
+                        }
+                    )
                 except Exception:
                     continue
             return results
@@ -402,8 +469,9 @@ class ContextDashboard:
 
     def show_timeline(self, hours: int = 24) -> dict[str, Any]:
         """Aggregate metrics per hour for the last N hours."""
-        from datetime import timedelta, timezone
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        from datetime import timedelta
+
+        cutoff = datetime.now(UTC) - timedelta(hours=hours)
 
         hourly: dict[str, dict] = {}
         total_traces = 0
@@ -416,8 +484,7 @@ class ContextDashboard:
                 try:
                     trace = self._logger.load(path.stem)
                     if trace.created_at.tzinfo is None:
-                        from datetime import timezone as tz
-                        created = trace.created_at.replace(tzinfo=tz.utc)
+                        created = trace.created_at.replace(tzinfo=UTC)
                     else:
                         created = trace.created_at
                     if created < cutoff:
@@ -425,8 +492,11 @@ class ContextDashboard:
                     hour_key = created.strftime("%Y-%m-%dT%H:00")
                     if hour_key not in hourly:
                         hourly[hour_key] = {
-                            "trace_count": 0, "total_tokens": 0, "total_duration": 0.0,
-                            "error_count": 0, "total_cost": 0.0,
+                            "trace_count": 0,
+                            "total_tokens": 0,
+                            "total_duration": 0.0,
+                            "error_count": 0,
+                            "total_cost": 0.0,
                         }
                     h = hourly[hour_key]
                     h["trace_count"] += 1
@@ -478,7 +548,11 @@ class ContextDashboard:
                 try:
                     t = self._logger.load(path.stem)
                     if not last_trace_time:
-                        last_trace_time = t.created_at.isoformat() if hasattr(t.created_at, 'isoformat') else str(t.created_at)
+                        last_trace_time = (
+                            t.created_at.isoformat()
+                            if hasattr(t.created_at, "isoformat")
+                            else str(t.created_at)
+                        )
                     top_workflows[t.workflow_name] = top_workflows.get(t.workflow_name, 0) + 1
                     error_count += len(t.errors)
                 except Exception:
@@ -488,8 +562,7 @@ class ContextDashboard:
 
         top_workflow = max(top_workflows, key=top_workflows.get) if top_workflows else "none"
         avg_quality = (
-            sum(self._quality_scores) / len(self._quality_scores)
-            if self._quality_scores else None
+            sum(self._quality_scores) / len(self._quality_scores) if self._quality_scores else None
         )
 
         return {

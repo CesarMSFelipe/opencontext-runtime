@@ -10,13 +10,12 @@ import json
 import shutil
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from opencontext_core.user_prefs import UserConfigStore
 
-
 # ── Installation State ─────────────────────────────────────────────────────
+
 
 @dataclass
 class ComponentState:
@@ -54,6 +53,7 @@ class InstallationState:
 
 
 # ── State Store ────────────────────────────────────────────────────────────
+
 
 class StateStore:
     """Persistent store for installation state."""
@@ -145,6 +145,7 @@ class StateStore:
 
 
 # ── Backup & Rollback ──────────────────────────────────────────────────────
+
 
 @dataclass
 class BackupEntry:

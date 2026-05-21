@@ -136,9 +136,7 @@ class TokenOptimizer:
                 continue
 
             tokens_used = [m.tokens_used for m in op_metrics if m.tokens_used > 0]
-            tokens_budgeted = [
-                m.tokens_budgeted for m in op_metrics if m.tokens_budgeted > 0
-            ]
+            tokens_budgeted = [m.tokens_budgeted for m in op_metrics if m.tokens_budgeted > 0]
 
             if not tokens_used:
                 continue
@@ -205,7 +203,5 @@ class TokenOptimizer:
         return {
             "total_potential_savings_tokens": total_savings,
             "by_operation_type": details,
-            "recommendation": (
-                "Run optimize_budgets() regularly to reduce token waste."
-            ),
+            "recommendation": ("Run optimize_budgets() regularly to reduce token waste."),
         }

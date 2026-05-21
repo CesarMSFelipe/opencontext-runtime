@@ -283,9 +283,7 @@ class GraphDatabase:
         """Get a node by ID."""
 
         conn = self._connect()
-        row = conn.execute(
-            "SELECT * FROM nodes WHERE id = ?", (node_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
 
         if row is None:
             return None
@@ -419,9 +417,7 @@ class GraphDatabase:
         """Get a file record by path."""
 
         conn = self._connect()
-        row = conn.execute(
-            "SELECT * FROM files WHERE path = ?", (path,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM files WHERE path = ?", (path,)).fetchone()
 
         if row is None:
             return None

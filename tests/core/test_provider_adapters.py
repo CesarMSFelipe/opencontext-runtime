@@ -9,6 +9,7 @@ from opencontext_core.providers.adapters import (
     ProviderConfig,
     ProviderRegistry,
 )
+from opencontext_core.errors import ProviderError
 
 
 class TestMockAdapter:

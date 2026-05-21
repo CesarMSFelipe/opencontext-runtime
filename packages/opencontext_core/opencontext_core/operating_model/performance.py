@@ -198,9 +198,7 @@ class ModelRoleRouter:
             "model": str(selected.get("model", "mock-llm")),
         }
 
-    def route_with_budget(
-        self, role: str, task_complexity: str = "standard"
-    ) -> dict[str, str]:
+    def route_with_budget(self, role: str, task_complexity: str = "standard") -> dict[str, str]:
         """Route considering call budget and task complexity."""
 
         preferred = self.route(role)
@@ -224,7 +222,7 @@ class ModelRoleRouter:
                 if self.free_registry and hasattr(self.free_registry, "is_working"):
                     if not self.free_registry.is_working(local):
                         continue
-                
+
                 available, _ = self.budget_manager.check_budget(local, model)
                 if available:
                     return {"provider": local, "model": model}
@@ -234,8 +232,10 @@ class ModelRoleRouter:
             # Filter working local providers
             working_locals = self.local_providers
             if self.free_registry and hasattr(self.free_registry, "is_working"):
-                working_locals = [l for l in self.local_providers if self.free_registry.is_working(l)]
-                
+                working_locals = [
+                    p for p in self.local_providers if self.free_registry.is_working(p)
+                ]
+
             provider, model, _ = self.budget_manager.select_provider(
                 provider, model, working_locals
             )
@@ -249,7 +249,7 @@ class ModelRoleRouter:
                 if self.free_registry and hasattr(self.free_registry, "is_working"):
                     if not self.free_registry.is_working(local):
                         continue
-                        
+
                 local_available, _ = self.budget_manager.check_budget(local, model)
                 if local_available:
                     return {"provider": local, "model": model}

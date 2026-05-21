@@ -49,7 +49,7 @@ class TestContextBuilder:
             encoding="utf-8",
         )
 
-        result = kg.index_file("test.py", test_file.read_text(encoding="utf-8"))
+        kg.index_file("test.py", test_file.read_text(encoding="utf-8"))
 
         builder = ContextBuilder(db_path=db_path)
         context = builder.build_context(task="authentication", max_nodes=10, root=tmp_path)

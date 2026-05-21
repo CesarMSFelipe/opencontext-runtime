@@ -137,6 +137,7 @@ class UserConfigStore:
         if self.CONFIG_FILE.exists():
             try:
                 from opencontext_core.state import ConfigBackupManager
+
                 ConfigBackupManager.auto_backup()
             except ImportError:
                 pass

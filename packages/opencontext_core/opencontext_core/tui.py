@@ -91,9 +91,16 @@ class OpenContextTUI:
             print("  0. Exit")
             choice = input("\nSelect: ").strip()
             mapping = {
-                "1": "init", "2": "index", "3": "search",
-                "4": "context", "5": "impact", "6": "install",
-                "7": "sdd", "8": "doctor", "9": "status", "0": "quit",
+                "1": "init",
+                "2": "index",
+                "3": "search",
+                "4": "context",
+                "5": "impact",
+                "6": "install",
+                "7": "sdd",
+                "8": "doctor",
+                "9": "status",
+                "0": "quit",
             }
             return mapping.get(choice)
 
@@ -302,9 +309,9 @@ class OpenContextTUI:
 
         print("\n--- Project Status ---")
         print(f"Root: {self.project_root}")
-        config_status = 'exists' if self.config_path.exists() else 'missing'
+        config_status = "exists" if self.config_path.exists() else "missing"
         print(f"Config: {self.config_path} ({config_status})")
-        workspace_status = 'exists' if self.opencontext_dir.exists() else 'missing'
+        workspace_status = "exists" if self.opencontext_dir.exists() else "missing"
         print(f"Workspace: {self.opencontext_dir} ({workspace_status})")
 
         # Knowledge graph stats
@@ -327,6 +334,3 @@ class OpenContextTUI:
         print()
         print("Falling back to simple menu...")
         self._tui_mode()
-
-
-

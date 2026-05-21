@@ -12,6 +12,21 @@ from typing import Any, NoReturn
 
 import yaml
 
+from opencontext_cli.commands.ci_check_cmd import add_ci_check_parser, handle_ci_check
+from opencontext_cli.commands.config_cmd import add_config_parser, handle_config
+from opencontext_cli.commands.git_cmd import add_git_parser, handle_git
+from opencontext_cli.commands.hints_cmd import add_hints_parser, handle_hints
+from opencontext_cli.commands.kg_cmd import add_kg_parser, handle_kg
+from opencontext_cli.commands.plugin_cmd import add_plugin_parser, handle_plugin
+from opencontext_cli.commands.setup_cmd import add_setup_parser, handle_setup
+from opencontext_cli.commands.sync_cmd import add_sync_parser, handle_sync
+from opencontext_cli.commands.update_cmd import (
+    add_update_parser,
+    add_upgrade_parser,
+    handle_update,
+    handle_upgrade,
+)
+from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
 from opencontext_core.actions import ActionRequest, ActionType, evaluate_action
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
 from opencontext_core.compat import UTC
@@ -22,7 +37,7 @@ from opencontext_core.dx.checkpoints import ContextCheckpoint, fingerprint
 from opencontext_core.dx.checks import ensure_checks
 from opencontext_core.dx.instructions import import_instructions
 from opencontext_core.dx.security_reports import scan_project
-from opencontext_core.dx.tokens import build_token_report, suggest_opencontextignore
+from opencontext_core.dx.tokens import build_token_report
 from opencontext_core.errors import OpenContextError
 from opencontext_core.evaluation import (
     BasicEvaluator,
@@ -84,17 +99,6 @@ from opencontext_core.safety.provider_policy import ProviderPolicyEnforcer
 from opencontext_core.safety.redaction import SinkGuard
 from opencontext_core.workflow_packs.signing import WorkflowPackSigner, WorkflowPackVerifier
 from opencontext_core.workspace.layout import ensure_workspace
-
-from opencontext_cli.commands.ci_check_cmd import add_ci_check_parser, handle_ci_check
-from opencontext_cli.commands.config_cmd import add_config_parser, handle_config
-from opencontext_cli.commands.git_cmd import add_git_parser, handle_git
-from opencontext_cli.commands.hints_cmd import add_hints_parser, handle_hints
-from opencontext_cli.commands.kg_cmd import add_kg_parser, handle_kg
-from opencontext_cli.commands.plugin_cmd import add_plugin_parser, handle_plugin
-from opencontext_cli.commands.setup_cmd import add_setup_parser, handle_setup
-from opencontext_cli.commands.sync_cmd import add_sync_parser, handle_sync
-from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
-from opencontext_cli.commands.update_cmd import add_update_parser, handle_update, add_upgrade_parser, handle_upgrade
 
 try:
     from opencontext_profiles import first_party_profiles
@@ -163,7 +167,7 @@ def main() -> None:
         raise SystemExit(1) from exc
     except KeyboardInterrupt:
         print("\nOperation cancelled.")
-        raise SystemExit(130)
+        raise SystemExit(130) from None
 
 
 def _print_suggestion(command: str) -> None:
@@ -414,7 +418,11 @@ def _build_parser() -> argparse.ArgumentParser:
     checkpoint_sub.add_parser("inspect")
 
     mcp_parser = subparsers.add_parser("mcp", help="Start MCP server for agent integration.")
-    mcp_parser.add_argument("--db-path", default=".storage/opencontext/codegraph.db", help="Path to knowledge graph database.")
+    mcp_parser.add_argument(
+        "--db-path",
+        default=".storage/opencontext/codegraph.db",
+        help="Path to knowledge graph database.",
+    )
     check_parser = subparsers.add_parser("check", help="Run local governance checks.")
     check_sub = check_parser.add_subparsers(dest="check_command", required=True)
     check_run = check_sub.add_parser("run")
@@ -963,8 +971,11 @@ def _watch(root: str) -> None:
     print(f"Watch scaffold active for {root} (v0.1).")
 
 
-def _onboard(root: str, template: str = "generic", mode: str = "private_project", setup_mcp: bool = False) -> None:
+def _onboard(
+    root: str, template: str = "generic", mode: str = "private_project", setup_mcp: bool = False
+) -> None:
     from opencontext_core.dx.console_styles import console
+
     project_root = Path(root)
     created = ensure_workspace(project_root)
     config_path = project_root / "opencontext.yaml"
@@ -1001,7 +1012,9 @@ def _onboard(root: str, template: str = "generic", mode: str = "private_project"
         console.success(f"Indexed {len(manifest.files)} files, {len(manifest.symbols)} symbols")
         kg_stats = manifest.metadata.get("knowledge_graph", {})
         if kg_stats.get("nodes", 0) > 0:
-            console.success(f"Knowledge graph: {kg_stats['nodes']} nodes, {kg_stats.get('edges', 0)} edges")
+            console.success(
+                f"Knowledge graph: {kg_stats['nodes']} nodes, {kg_stats.get('edges', 0)} edges"
+            )
     except Exception as exc:
         console.warning(f"Auto-index skipped: {exc}")
 
@@ -1014,6 +1027,7 @@ def _onboard(root: str, template: str = "generic", mode: str = "private_project"
 
     # Check first-run and suggest wizard
     from opencontext_core.user_prefs import UserConfigStore
+
     store = UserConfigStore()
     if store.is_first_run():
         console.print("")
@@ -1158,6 +1172,7 @@ def _status(root: str = ".") -> None:
     if manifest_path.exists():
         try:
             import json
+
             with open(manifest_path) as f:
                 manifest = json.load(f)
             files = len(manifest.get("files", []))
@@ -1236,14 +1251,18 @@ def _doctor(
             ("Updates", report.update, "white"),
         ]
 
-        for title, items, color in sections:
+        for title, items, _color in sections:
             if not items:
                 continue
             console.section(title)
             for d in items:
-                icon = {"passed": "✓", "warning": "⚠", "failed": "✗", "error": "✗", "info": "ℹ"}.get(
-                    d.status, "?"
-                )
+                icon = {
+                    "passed": "✓",
+                    "warning": "⚠",
+                    "failed": "✗",
+                    "error": "✗",
+                    "info": "i",
+                }.get(d.status, "?")
                 style = {
                     "passed": "green",
                     "warning": "yellow",
@@ -1267,9 +1286,7 @@ def _doctor(
         if report.is_healthy:
             console.print("\n[bold green]✓ System is healthy[/bold green]")
         else:
-            console.print(
-                f"\n[bold red]✗ {report.failures} diagnostic(s) failed[/bold red]"
-            )
+            console.print(f"\n[bold red]✗ {report.failures} diagnostic(s) failed[/bold red]")
         return
 
     # ── Standard scopes ───────────────────────────────────────────────
@@ -1304,7 +1321,6 @@ def _doctor(
         return
 
     if scope == "tools":
-        mode = runtime.config.security.mode
         console.section("Tool Policy")
         if runtime.config.tools.mcp.enabled:
             console.warning("MCP: ENABLED")
@@ -1513,13 +1529,7 @@ def _setup_mcp_for_opencode() -> None:
 
     mcp_config_path = opencode_dir / "mcp.json"
     mcp_config = {
-        "mcpServers": {
-            "opencontext": {
-                "type": "stdio",
-                "command": "opencontext",
-                "args": ["mcp"]
-            }
-        }
+        "mcpServers": {"opencontext": {"type": "stdio", "command": "opencontext", "args": ["mcp"]}}
     }
 
     # Merge with existing config if present
@@ -1530,7 +1540,7 @@ def _setup_mcp_for_opencode() -> None:
                 existing["mcpServers"] = {}
             existing["mcpServers"]["opencontext"] = mcp_config["mcpServers"]["opencontext"]
             mcp_config = existing
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             pass
 
     mcp_config_path.write_text(json.dumps(mcp_config, indent=2), encoding="utf-8")

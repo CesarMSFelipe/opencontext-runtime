@@ -24,29 +24,22 @@ from opencontext_core.plugin_system import (
     PluginUpdater,
     RegistryFetcher,
 )
-from opencontext_core.state import StateStore
 
 
 def add_plugin_parser(subparsers: Any) -> None:
     """Add plugin command parsers."""
 
-    plugin_parser = subparsers.add_parser(
-        "plugin", help="Manage OpenContext plugins."
-    )
+    plugin_parser = subparsers.add_parser("plugin", help="Manage OpenContext plugins.")
     plugin_sub = plugin_parser.add_subparsers(dest="plugin_command", required=True)
 
     # List
     list_parser = plugin_sub.add_parser("list", help="List installed plugins.")
-    list_parser.add_argument(
-        "--json", action="store_true", help="Output as JSON."
-    )
+    list_parser.add_argument("--json", action="store_true", help="Output as JSON.")
 
     # Search
     search_parser = plugin_sub.add_parser("search", help="Search available plugins.")
     search_parser.add_argument("query", nargs="?", default="", help="Search query.")
-    search_parser.add_argument(
-        "--registry", default="", help="Custom registry URL."
-    )
+    search_parser.add_argument("--registry", default="", help="Custom registry URL.")
     search_parser.add_argument(
         "--refresh", action="store_true", help="Force refresh registry cache."
     )
@@ -54,18 +47,12 @@ def add_plugin_parser(subparsers: Any) -> None:
     # Install
     install_parser = plugin_sub.add_parser("install", help="Install a plugin.")
     install_parser.add_argument("name", help="Plugin name.")
-    install_parser.add_argument(
-        "--github", default="", help="Install from GitHub (owner/repo)."
-    )
-    install_parser.add_argument(
-        "--url", default="", help="Install from URL."
-    )
+    install_parser.add_argument("--github", default="", help="Install from GitHub (owner/repo).")
+    install_parser.add_argument("--url", default="", help="Install from URL.")
     install_parser.add_argument(
         "--ver", default="", help="Specific version to install (e.g. 0.1.0)."
     )
-    install_parser.add_argument(
-        "--registry", default="", help="Custom registry URL."
-    )
+    install_parser.add_argument("--registry", default="", help="Custom registry URL.")
 
     # Remove
     remove_parser = plugin_sub.add_parser("remove", help="Remove a plugin.")
@@ -143,7 +130,7 @@ def _plugin_list(args: Any) -> None:
     print()
     # Header
     print(f"  {'Name':<22} {'Version':<10} {'Source':<12} {'Status':<10} {'Description'}")
-    print(f"  {'─'*22} {'─'*10} {'─'*12} {'─'*10} {'─'*50}")
+    print(f"  {'─' * 22} {'─' * 10} {'─' * 12} {'─' * 10} {'─' * 50}")
     for p in plugins:
         status = "✓ enabled" if p.enabled else "○ disabled"
         source = {"local": "local", "registry": "registry", "github": "GitHub", "url": "URL"}.get(
@@ -233,6 +220,7 @@ def _plugin_remove(args: Any) -> None:
     backup_dir = plugin_dir.parent / f".{args.name}.bak"
     if plugin_dir.exists():
         import shutil
+
         if backup_dir.exists():
             shutil.rmtree(backup_dir)
         shutil.copytree(plugin_dir, backup_dir)
@@ -241,12 +229,14 @@ def _plugin_remove(args: Any) -> None:
         # Clean up backup
         if backup_dir.exists():
             import shutil
+
             shutil.rmtree(backup_dir)
         print(f"  ✓ '{args.name}' removed.\n")
     else:
         # Restore from backup
         if backup_dir.exists():
             import shutil
+
             plugin_dir.mkdir(parents=True, exist_ok=True)
             for item in backup_dir.iterdir():
                 shutil.copy2(item, plugin_dir / item.name)

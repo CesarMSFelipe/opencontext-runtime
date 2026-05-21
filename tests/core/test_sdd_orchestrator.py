@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from opencontext_core.agents.artifact_store import (
-    EngramStore,
     NoneStore,
     OpenSpecStore,
 )
@@ -114,9 +111,7 @@ class TestSDDOrchestrator:
         assert orch.can_run_phase("propose")
 
     def test_run_phase_success(self, tmp_path: Path) -> None:
-        config = SDDConfig(
-            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}
-        )
+        config = SDDConfig(artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}})
         orch = SDDOrchestrator(config=config)
         orch.start_change("test-change")
 
@@ -136,23 +131,28 @@ class TestSDDOrchestrator:
         assert "Dependencies" in result.executive_summary
 
     def test_is_complete(self, tmp_path: Path) -> None:
-        config = SDDConfig(
-            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}
-        )
+        config = SDDConfig(artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}})
         orch = SDDOrchestrator(config=config)
         orch.start_change("test")
 
         assert not orch.is_complete()
 
-        for phase in ["explore", "propose", "spec", "design", "tasks", "apply", "verify", "archive"]:
+        for phase in [
+            "explore",
+            "propose",
+            "spec",
+            "design",
+            "tasks",
+            "apply",
+            "verify",
+            "archive",
+        ]:
             orch.run_phase(phase, f"# {phase}\n")
 
         assert orch.is_complete()
 
     def test_get_next_phases(self, tmp_path: Path) -> None:
-        config = SDDConfig(
-            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}
-        )
+        config = SDDConfig(artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}})
         orch = SDDOrchestrator(config=config)
         orch.start_change("test")
 

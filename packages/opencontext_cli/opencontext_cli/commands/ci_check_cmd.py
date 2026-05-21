@@ -46,9 +46,7 @@ def handle_ci_check(args: Any) -> None:
         else:
             console.header("CI Checks")
             if not checks:
-                console.dim(
-                    "No checks found. Run 'opencontext ci-check init'"
-                )
+                console.dim("No checks found. Run 'opencontext ci-check init'")
             else:
                 console.table(
                     "Discovered Checks",

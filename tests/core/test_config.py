@@ -93,9 +93,7 @@ def test_model_assignments_override(tmp_path: Path) -> None:
 
 
 def test_artifact_store_mode_engram() -> None:
-    sdd = SDDConfig(
-        artifact_store={"mode": "engram", "engram": {"project": "my-project"}}
-    )
+    sdd = SDDConfig(artifact_store={"mode": "engram", "engram": {"project": "my-project"}})
     assert sdd.artifact_store.mode == ArtifactStoreMode.ENGRAM
     assert sdd.artifact_store.engram.project == "my-project"
 

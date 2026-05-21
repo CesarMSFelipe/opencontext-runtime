@@ -9,7 +9,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 
 @dataclass
@@ -50,7 +50,7 @@ class MetricsCollector:
     """Collects and reports performance metrics."""
 
     # Token costs per 1M tokens (approximate)
-    COST_PER_1M_TOKENS: dict[str, dict[str, float]] = {
+    COST_PER_1M_TOKENS: ClassVar[dict[str, dict[str, float]]] = {
         "openai": {"input": 2.50, "output": 10.00},  # GPT-4o
         "anthropic": {"input": 3.00, "output": 15.00},  # Claude Sonnet
         "openrouter": {"input": 1.00, "output": 5.00},  # Average
@@ -137,9 +137,7 @@ class MetricsCollector:
                     "count": len(metrics),
                     "total_tokens": sum(m.total_tokens for m in metrics),
                     "total_cost_usd": round(sum(m.cost_usd for m in metrics), 6),
-                    "avg_duration_ms": round(
-                        sum(m.duration_ms for m in metrics) / len(metrics), 2
-                    ),
+                    "avg_duration_ms": round(sum(m.duration_ms for m in metrics) / len(metrics), 2),
                 }
                 for op, metrics in by_operation.items()
             },
@@ -168,7 +166,7 @@ class MetricsCollector:
             date = time.strftime("%Y-%m-%d", time.localtime(time.time() - i * 86400))
             path = self.metrics_dir / f"{date}.jsonl"
             if path.exists():
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
                         if line:

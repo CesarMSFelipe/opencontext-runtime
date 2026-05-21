@@ -246,7 +246,7 @@ class MCPServer:
                     "line": c.line,
                 }
                 for c in callers
-            ]
+            ],
         }
 
     def _handle_callees(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -271,7 +271,7 @@ class MCPServer:
                     "line": c.line,
                 }
                 for c in callees
-            ]
+            ],
         }
 
     def _handle_impact(self, params: dict[str, Any]) -> dict[str, Any]:

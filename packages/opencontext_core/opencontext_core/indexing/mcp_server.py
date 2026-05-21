@@ -65,9 +65,7 @@ class CodeGraphMCPServer:
 
         # Find node by name
         conn = self.db._connect()
-        rows = conn.execute(
-            "SELECT id FROM nodes WHERE name = ? LIMIT 1", (symbol,)
-        ).fetchall()
+        rows = conn.execute("SELECT id FROM nodes WHERE name = ? LIMIT 1", (symbol,)).fetchall()
 
         if not rows:
             return {"symbol": symbol, "callers": [], "count": 0}
@@ -85,9 +83,7 @@ class CodeGraphMCPServer:
         """Find what a symbol calls."""
 
         conn = self.db._connect()
-        rows = conn.execute(
-            "SELECT id FROM nodes WHERE name = ? LIMIT 1", (symbol,)
-        ).fetchall()
+        rows = conn.execute("SELECT id FROM nodes WHERE name = ? LIMIT 1", (symbol,)).fetchall()
 
         if not rows:
             return {"symbol": symbol, "callees": [], "count": 0}
@@ -101,15 +97,11 @@ class CodeGraphMCPServer:
             "count": len(callees),
         }
 
-    def codegraph_impact(
-        self, symbol: str, depth: int = 2
-    ) -> dict[str, Any]:
+    def codegraph_impact(self, symbol: str, depth: int = 2) -> dict[str, Any]:
         """Analyze impact of changing a symbol."""
 
         conn = self.db._connect()
-        rows = conn.execute(
-            "SELECT id FROM nodes WHERE name = ?", (symbol,)
-        ).fetchall()
+        rows = conn.execute("SELECT id FROM nodes WHERE name = ?", (symbol,)).fetchall()
 
         if not rows:
             return {
@@ -136,9 +128,7 @@ class CodeGraphMCPServer:
         """Get details about a specific symbol."""
 
         conn = self.db._connect()
-        rows = conn.execute(
-            "SELECT * FROM nodes WHERE name = ? LIMIT 1", (symbol,)
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM nodes WHERE name = ? LIMIT 1", (symbol,)).fetchall()
 
         if not rows:
             return {"symbol": symbol, "found": False}
@@ -161,9 +151,7 @@ class CodeGraphMCPServer:
         """Get indexed file structure."""
 
         conn = self.db._connect()
-        rows = conn.execute(
-            "SELECT path, language FROM files ORDER BY path"
-        ).fetchall()
+        rows = conn.execute("SELECT path, language FROM files ORDER BY path").fetchall()
 
         return {
             "count": len(rows),

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from auth import AuthService, AuthenticationError
+from auth import AuthService
 from models import Project, Task
 
 

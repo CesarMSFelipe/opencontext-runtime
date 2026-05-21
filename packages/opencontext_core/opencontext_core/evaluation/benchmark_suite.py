@@ -9,16 +9,15 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
-
 
 # ── Quality Dimensions ──────────────────────────────────────────────────────
 
 
-class QualityDimension(str, Enum):
+class QualityDimension(StrEnum):
     """Dimensions evaluated in a context quality score."""
 
     COMPLETENESS = "completeness"
@@ -61,9 +60,7 @@ class ContextScore:
     def to_dict(self) -> dict[str, Any]:
         return {
             "overall": round(self.overall, 1),
-            "dimensions": {
-                dim.value: round(score, 1) for dim, score in self.dimensions.items()
-            },
+            "dimensions": {dim.value: round(score, 1) for dim, score in self.dimensions.items()},
             "recommendations": self.recommendations,
             "metadata": self.metadata,
         }
@@ -75,9 +72,13 @@ class ContextScore:
 def _generate_recommendations(dimensions: dict[QualityDimension, float]) -> list[str]:
     """Generate actionable improvement suggestions based on dimension scores."""
     recs = []
-    if QualityDimension.COMPLETENESS in dimensions and dimensions[QualityDimension.COMPLETENESS] < 70:
+    if (
+        QualityDimension.COMPLETENESS in dimensions
+        and dimensions[QualityDimension.COMPLETENESS] < 70
+    ):
         recs.append(
-            f"Increase source coverage — completeness is {dimensions[QualityDimension.COMPLETENESS]:.0f}%. "
+            f"Increase source coverage — completeness is "
+            f"{dimensions[QualityDimension.COMPLETENESS]:.0f}%. "
             "Consider expanding retrieval to include more relevant symbols and dependencies."
         )
     if QualityDimension.RELEVANCE in dimensions and dimensions[QualityDimension.RELEVANCE] < 70:
@@ -85,7 +86,10 @@ def _generate_recommendations(dimensions: dict[QualityDimension, float]) -> list
             f"High noise detected (relevance: {dimensions[QualityDimension.RELEVANCE]:.0f}%) — "
             "consider stricter relevance filtering or adjusting the query."
         )
-    if QualityDimension.TOKEN_EFFICIENCY in dimensions and dimensions[QualityDimension.TOKEN_EFFICIENCY] < 70:
+    if (
+        QualityDimension.TOKEN_EFFICIENCY in dimensions
+        and dimensions[QualityDimension.TOKEN_EFFICIENCY] < 70
+    ):
         recs.append(
             f"Token efficiency is low ({dimensions[QualityDimension.TOKEN_EFFICIENCY]:.0f}%) — "
             "enable context compression or reduce included sources."
@@ -108,7 +112,7 @@ class ContextScorer:
 
     def score_from_trace(
         self,
-        trace: "RuntimeTrace",  # noqa: F821
+        trace: RuntimeTrace,  # noqa: F821
         baseline_tokens: int = 0,
     ) -> ContextScore:
         """Compute quality score from a RuntimeTrace."""
@@ -171,7 +175,7 @@ class ContextScorer:
 
     def score_from_pack(
         self,
-        pack: "ContextPackResult",  # noqa: F821
+        pack: ContextPackResult,  # noqa: F821
         repo_root: str = ".",
         has_pii: bool = False,
         age_hours: float = 0,
@@ -237,7 +241,8 @@ class ContextScorer:
         relevance = 100.0
         efficiency = (
             min(100.0, max(0, 100 * (baseline_tokens - tokens) / baseline_tokens))
-            if baseline_tokens > 0 else 50.0
+            if baseline_tokens > 0
+            else 50.0
         )
         safety = 100.0 if not has_pii else 70.0
         freshness = self._freshness_from_age(age_hours)
@@ -322,7 +327,11 @@ BUILTIN_CASES: list[BenchmarkCase] = [
         name="Multi-file Coverage",
         description="Cross-file symbols query. Needs good retrieval coverage.",
         category="completeness",
-        setup={"sources": ["src/api.py", "src/models.py", "src/db.py"], "tokens": 1500, "baseline_tokens": 3000},
+        setup={
+            "sources": ["src/api.py", "src/models.py", "src/db.py"],
+            "tokens": 1500,
+            "baseline_tokens": 3000,
+        },
         expected_min_score=70,
         tags=["coverage", "retrieval"],
     ),
@@ -349,7 +358,12 @@ BUILTIN_CASES: list[BenchmarkCase] = [
         name="Clean Context Safety",
         description="No PII or secrets. Expects perfect safety score.",
         category="safety",
-        setup={"sources": ["src/utils.py"], "tokens": 300, "baseline_tokens": 300, "has_pii": False},
+        setup={
+            "sources": ["src/utils.py"],
+            "tokens": 300,
+            "baseline_tokens": 300,
+            "has_pii": False,
+        },
         expected_min_score=100,
         tags=["safety", "pii"],
     ),
@@ -456,20 +470,23 @@ class BenchmarkSuite:
                 score = self.scorer.score_custom(**case.setup)
                 passed = score.overall >= case.expected_min_score
                 detail = (
-                    f"Score {score.overall:.1f} >= {case.expected_min_score}: {'PASS' if passed else 'FAIL'}"
+                    f"Score {score.overall:.1f} >= {case.expected_min_score}: "
+                    f"{'PASS' if passed else 'FAIL'}"
                 )
             except Exception as exc:
                 score = ContextScore(overall=0, dimensions={})
                 passed = False
                 detail = f"Error: {exc}"
             duration = (time.monotonic() - start) * 1000
-            results.append(BenchmarkCaseResult(
-                case_id=case.id,
-                passed=passed,
-                score=score,
-                details=detail,
-                duration_ms=duration,
-            ))
+            results.append(
+                BenchmarkCaseResult(
+                    case_id=case.id,
+                    passed=passed,
+                    score=score,
+                    details=detail,
+                    duration_ms=duration,
+                )
+            )
             if verbose:
                 print(f"  {case.id:40} {detail} ({duration:.0f}ms)")
 
@@ -566,6 +583,8 @@ def compare_results(
     total_after = after.average_score
     total_delta = total_after - total_before
     lines.append("─" * 75)
-    lines.append(f"{'Average':40} {total_before:>8.1f}   {total_after:>8.1f}   {total_delta:>+6.1f}")
+    lines.append(
+        f"{'Average':40} {total_before:>8.1f}   {total_after:>8.1f}   {total_delta:>+6.1f}"
+    )
 
     return "\n".join(lines)

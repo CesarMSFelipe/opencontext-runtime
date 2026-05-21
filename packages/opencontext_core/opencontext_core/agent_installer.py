@@ -163,7 +163,9 @@ class AgentInstaller:
 
         return generator(location, target)
 
-    def _gen_claude_config(self, location: str, target: AgentTarget = AgentTarget.CLAUDE_CODE) -> dict[str, Any]:
+    def _gen_claude_config(
+        self, location: str, target: AgentTarget = AgentTarget.CLAUDE_CODE
+    ) -> dict[str, Any]:
         """Generate Claude Code / OpenClaw configuration."""
 
         agent_dir = self._get_agent_dir(target)
@@ -220,7 +222,9 @@ class AgentInstaller:
             "files": files_created,
         }
 
-    def _gen_opencode_config(self, location: str, target: AgentTarget = AgentTarget.OPENCODE) -> dict[str, Any]:
+    def _gen_opencode_config(
+        self, location: str, target: AgentTarget = AgentTarget.OPENCODE
+    ) -> dict[str, Any]:
         """Generate OpenCode / Kilo Code / Kimi Code configuration."""
 
         config_dir = self._get_agent_dir(target)
@@ -272,7 +276,9 @@ class AgentInstaller:
             "files": files_created,
         }
 
-    def _gen_cursor_config(self, location: str, target: AgentTarget = AgentTarget.CURSOR) -> dict[str, Any]:
+    def _gen_cursor_config(
+        self, location: str, target: AgentTarget = AgentTarget.CURSOR
+    ) -> dict[str, Any]:
         """Generate Cursor / Kiro IDE configuration."""
 
         agent_dir = self._get_agent_dir(target)
@@ -294,7 +300,9 @@ class AgentInstaller:
             "files": [str(rules_path)],
         }
 
-    def _gen_codex_config(self, location: str, target: AgentTarget = AgentTarget.CODEX) -> dict[str, Any]:
+    def _gen_codex_config(
+        self, location: str, target: AgentTarget = AgentTarget.CODEX
+    ) -> dict[str, Any]:
         """Generate Codex CLI / Qwen Code / Pi configuration."""
 
         agent_dir = self._get_agent_dir(target)
@@ -312,7 +320,9 @@ class AgentInstaller:
             "files": [str(agents_md)],
         }
 
-    def _gen_windsurf_config(self, location: str, target: AgentTarget = AgentTarget.WINDSURF) -> dict[str, Any]:
+    def _gen_windsurf_config(
+        self, location: str, target: AgentTarget = AgentTarget.WINDSURF
+    ) -> dict[str, Any]:
         """Generate Windsurf configuration."""
 
         windsurf_dir = self._get_agent_dir(target)
@@ -331,7 +341,9 @@ class AgentInstaller:
             "files": [str(workflow_path)],
         }
 
-    def _gen_vscode_config(self, location: str, target: AgentTarget = AgentTarget.VSCODE_COPILOT) -> dict[str, Any]:
+    def _gen_vscode_config(
+        self, location: str, target: AgentTarget = AgentTarget.VSCODE_COPILOT
+    ) -> dict[str, Any]:
         """Generate VS Code Copilot configuration."""
 
         vscode_dir = self._get_agent_dir(target)
@@ -353,7 +365,9 @@ class AgentInstaller:
             "files": [str(settings_path)],
         }
 
-    def _gen_gemini_config(self, location: str, target: AgentTarget = AgentTarget.GEMINI_CLI) -> dict[str, Any]:
+    def _gen_gemini_config(
+        self, location: str, target: AgentTarget = AgentTarget.GEMINI_CLI
+    ) -> dict[str, Any]:
         """Generate Gemini CLI / Antigravity configuration."""
 
         agent_dir = self._get_agent_dir(target)

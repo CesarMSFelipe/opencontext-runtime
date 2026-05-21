@@ -22,6 +22,13 @@ from opencontext_core.operating_model.ai_leak import (
     TaintedContext,
     UnicodeObfuscationScanner,
 )
+from opencontext_core.operating_model.call_budget import (
+    CallBudgetConfig,
+    CallBudgetManager,
+    CallUsage,
+    FreeProviderRegistry,
+    ProviderType,
+)
 from opencontext_core.operating_model.evidence import (
     FileEvidence,
     PromptContextSBOM,
@@ -44,13 +51,6 @@ from opencontext_core.operating_model.performance import (
     ModelRoleRouter,
     OfflinePrecomputer,
     ProviderContextCacheAdapter,
-)
-from opencontext_core.operating_model.call_budget import (
-    CallBudgetConfig,
-    CallBudgetManager,
-    CallUsage,
-    FreeProviderRegistry,
-    ProviderType,
 )
 from opencontext_core.operating_model.quality import (
     CriticStep,
@@ -116,13 +116,13 @@ __all__ = [
     "PolicyDiffEngine",
     "PostLLMQualityGate",
     "PreLLMQualityGate",
-    "ProviderType",
     "PromptConfigSanitizer",
     "PromptContextSBOM",
     "PromptContextSBOMBuilder",
     "PromptContract",
     "PromptSecretLinter",
     "ProviderContextCacheAdapter",
+    "ProviderType",
     "PublicSafePromptExporter",
     "QualityGateReport",
     "ReleaseAuditReport",

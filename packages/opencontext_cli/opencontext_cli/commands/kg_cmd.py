@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 from opencontext_core.dx.console_styles import console
@@ -58,9 +57,9 @@ def handle_kg(args: Any) -> None:
     limit = getattr(args, "limit", 20)
     depth = getattr(args, "depth", 2)
     radius = getattr(args, "radius", 2)
-    max_nodes = getattr(args, "max_nodes", 20)
+    getattr(args, "max_nodes", 20)
     json_output = getattr(args, "json", False)
-    root = getattr(args, "root", ".")
+    getattr(args, "root", ".")
 
     kg = KnowledgeGraph()
 

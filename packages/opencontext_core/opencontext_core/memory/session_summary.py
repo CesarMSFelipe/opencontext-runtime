@@ -34,9 +34,7 @@ class SessionSummary:
             lines.extend(["## Next Steps"] + [f"- {n}" for n in self.next_steps] + [""])
 
         if self.relevant_files:
-            lines.extend(
-                ["## Relevant Files"] + [f"- {f}" for f in self.relevant_files] + [""]
-            )
+            lines.extend(["## Relevant Files"] + [f"- {f}" for f in self.relevant_files] + [""])
 
         return "\n".join(lines)
 

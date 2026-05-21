@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
-from auth import AuthService, AuthenticationError, User
+from auth import AuthenticationError, AuthService
 
 
 class TestAuthService:

@@ -11,24 +11,21 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import os
 import shutil
-import sys
 import tempfile
 import zipfile
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.request import Request, urlopen
-
 
 # ── Constants ──────────────────────────────────────────────────────────────
 
 DEFAULT_REGISTRY_URL = (
-    "https://raw.githubusercontent.com/"
-    "opencontext/plugin-registry/main/registry.json"
+    "https://raw.githubusercontent.com/opencontext/plugin-registry/main/registry.json"
 )
 
 PLUGIN_CACHE_DURATION = timedelta(hours=1)
@@ -36,6 +33,7 @@ UPDATE_CACHE_DURATION = timedelta(hours=24)
 
 
 # ── Data Models ────────────────────────────────────────────────────────────
+
 
 @dataclass
 class PluginInfo:
@@ -53,7 +51,7 @@ class PluginInfo:
     homepage: str = ""
     repository: str = ""
     install_source: str = "local"  # local | registry | github | url
-    source_url: str = ""           # registry URL, GitHub repo, or download URL
+    source_url: str = ""  # registry URL, GitHub repo, or download URL
     installed_at: str = ""
     updated_at: str = ""
 
@@ -94,6 +92,7 @@ class InstallResult:
 
 # ── Base Plugin Class ──────────────────────────────────────────────────────
 
+
 class Plugin(ABC):
     """Base class for OpenContext plugins."""
 
@@ -107,21 +106,21 @@ class Plugin(ABC):
     def version(self) -> str:
         pass
 
+    @abstractmethod
     def initialize(self, context: dict[str, Any]) -> None:
         """Called when plugin is loaded."""
-        pass
 
+    @abstractmethod
     def shutdown(self) -> None:
         """Called when plugin is unloaded."""
-        pass
 
+    @abstractmethod
     def register_commands(self, registry: Any) -> None:
         """Register CLI commands."""
-        pass
 
+    @abstractmethod
     def register_hooks(self, registry: Any) -> None:
         """Register hooks."""
-        pass
 
 
 # ── Built-in Registry Data ─────────────────────────────────────────────────
@@ -177,6 +176,7 @@ _BUILTIN_REGISTRY: list[dict[str, Any]] = [
 
 # ── Registry Fetcher ───────────────────────────────────────────────────────
 
+
 class RegistryFetcher:
     """Fetches and caches the remote plugin registry."""
 
@@ -227,11 +227,7 @@ class RegistryFetcher:
         q = query.lower()
         results = []
         for p in plugins:
-            if (
-                q in p.name.lower()
-                or q in p.description.lower()
-                or q in p.author.lower()
-            ):
+            if q in p.name.lower() or q in p.description.lower() or q in p.author.lower():
                 results.append(p)
         return results
 
@@ -323,6 +319,7 @@ class RegistryFetcher:
 
 # ── Plugin Installer ───────────────────────────────────────────────────────
 
+
 class PluginInstaller:
     """Installs plugins from various sources."""
 
@@ -330,7 +327,9 @@ class PluginInstaller:
         self.registry = registry or PluginRegistry()
 
     def install_from_registry(
-        self, name: str, version: str | None = None,
+        self,
+        name: str,
+        version: str | None = None,
     ) -> InstallResult:
         """Install a plugin from the remote registry."""
 
@@ -338,7 +337,8 @@ class PluginInstaller:
         entry = fetcher.get(name)
         if entry is None:
             return InstallResult(
-                name=name, version="",
+                name=name,
+                version="",
                 status="failed",
                 message=f"Plugin '{name}' not found in registry",
             )
@@ -350,9 +350,13 @@ class PluginInstaller:
             if ver_info is None:
                 available = ", ".join(v.version for v in entry.versions)
                 return InstallResult(
-                    name=name, version=version,
+                    name=name,
+                    version=version,
                     status="failed",
-                    message=f"Version '{version}' not available for '{name}' — available: {available}",
+                    message=(
+                        f"Version '{version}' not available for '{name}' "
+                        f"— available: {available}"
+                    ),
                 )
             target_version = version
         else:
@@ -360,7 +364,8 @@ class PluginInstaller:
             ver_info = entry.versions[0] if entry.versions else None
             if ver_info is None:
                 return InstallResult(
-                    name=name, version="",
+                    name=name,
+                    version="",
                     status="failed",
                     message=f"No versions available for '{name}'",
                 )
@@ -370,7 +375,8 @@ class PluginInstaller:
         existing = self.registry.get_info(name)
         if existing and existing.version == target_version:
             return InstallResult(
-                name=name, version=target_version,
+                name=name,
+                version=target_version,
                 status="skipped",
                 message=f"'{name}' v{target_version} already installed",
             )
@@ -400,7 +406,9 @@ class PluginInstaller:
             )
 
     def install_from_github(
-        self, repo: str, name: str | None = None,
+        self,
+        repo: str,
+        name: str | None = None,
     ) -> InstallResult:
         """Install a plugin from a GitHub repository.
 
@@ -412,16 +420,17 @@ class PluginInstaller:
         # Normalize repo
         repo = repo.strip().rstrip("/")
         if repo.startswith("https://github.com/"):
-            repo = repo[len("https://github.com/"):]
+            repo = repo[len("https://github.com/") :]
         if repo.startswith("github.com/"):
-            repo = repo[len("github.com/"):]
+            repo = repo[len("github.com/") :]
         if repo.endswith(".git"):
             repo = repo[:-4]
 
         parts = repo.split("/")
         if len(parts) < 2:
             return InstallResult(
-                name=repo, version="",
+                name=repo,
+                version="",
                 status="failed",
                 message=f"Invalid GitHub repo format: '{repo}'. Use 'owner/repo'.",
             )
@@ -432,7 +441,13 @@ class PluginInstaller:
         # Fetch latest release via GitHub API
         api_url = f"https://api.github.com/repos/{owner}/{repo_name}/releases/latest"
         try:
-            req = Request(api_url, headers={"User-Agent": "OpenContext/1.0", "Accept": "application/vnd.github.v3+json"})
+            req = Request(
+                api_url,
+                headers={
+                    "User-Agent": "OpenContext/1.0",
+                    "Accept": "application/vnd.github.v3+json",
+                },
+            )
             with urlopen(req, timeout=15) as resp:
                 release = json.loads(resp.read().decode())
 
@@ -459,13 +474,16 @@ class PluginInstaller:
                 install_source="github",
                 source_url=f"https://github.com/{owner}/{repo_name}",
                 homepage=f"https://github.com/{owner}/{repo_name}",
-                description=release.get("body", "").split("\n")[0] if release.get("body") else f"Plugin from {owner}/{repo_name}",
+                description=release.get("body", "").split("\n")[0]
+                if release.get("body")
+                else f"Plugin from {owner}/{repo_name}",
                 author=owner,
             )
-        except Exception as e:
+        except Exception:
             # Fallback: try archive download without API
             return self._install_from_github_archive(
-                owner=owner, repo_name=repo_name,
+                owner=owner,
+                repo_name=repo_name,
                 plugin_name=plugin_name,
             )
 
@@ -481,14 +499,15 @@ class PluginInstaller:
         )
 
     def _install_from_github_archive(
-        self, owner: str, repo_name: str, plugin_name: str,
+        self,
+        owner: str,
+        repo_name: str,
+        plugin_name: str,
     ) -> InstallResult:
         """Fallback: download GitHub archive without API."""
 
         # Try to guess the latest tag or use main branch
-        archive_url = (
-            f"https://github.com/{owner}/{repo_name}/archive/refs/heads/main.zip"
-        )
+        archive_url = f"https://github.com/{owner}/{repo_name}/archive/refs/heads/main.zip"
         try:
             req = Request(archive_url)
             with urlopen(req, timeout=15) as resp:
@@ -506,7 +525,8 @@ class PluginInstaller:
             )
         except Exception as e:
             return InstallResult(
-                name=plugin_name, version="",
+                name=plugin_name,
+                version="",
                 status="failed",
                 message=f"Could not download from {owner}/{repo_name}: {e}",
                 source=f"https://github.com/{owner}/{repo_name}",
@@ -530,7 +550,8 @@ class PluginInstaller:
         existing = self.registry.get_info(name)
         if existing and existing.version == version and existing.source_url == source_url:
             return InstallResult(
-                name=name, version=version,
+                name=name,
+                version=version,
                 status="skipped",
                 message=f"'{name}' v{version} already installed from same source",
             )
@@ -548,12 +569,14 @@ class PluginInstaller:
             # Verify checksum if provided
             if checksum and checksum.startswith("sha256:"):
                 import hashlib
-                expected = checksum[len("sha256:"):]
+
+                expected = checksum[len("sha256:") :]
                 actual = hashlib.sha256(Path(tmp_path).read_bytes()).hexdigest()
                 if actual != expected:
                     Path(tmp_path).unlink(missing_ok=True)
                     return InstallResult(
-                        name=name, version=version,
+                        name=name,
+                        version=version,
                         status="failed",
                         message="Checksum mismatch — download may be corrupted",
                     )
@@ -575,7 +598,7 @@ class PluginInstaller:
                     if top_level:
                         for member in members:
                             if member == top_level or member.startswith(top_level):
-                                rel = member[len(top_level):].lstrip("/")
+                                rel = member[len(top_level) :].lstrip("/")
                                 if not rel:
                                     continue
                                 target = plugin_dir / rel
@@ -589,6 +612,7 @@ class PluginInstaller:
             else:
                 # Assume tar.gz
                 import tarfile
+
                 with tarfile.open(tmp_path, "r:*") as tf:
                     tf.extractall(str(plugin_dir))
 
@@ -612,9 +636,7 @@ class PluginInstaller:
                     "installed_at": datetime.now().isoformat(),
                     "updated_at": datetime.now().isoformat(),
                 }
-                manifest_path.write_text(
-                    json.dumps(manifest, indent=2), encoding="utf-8"
-                )
+                manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
             else:
                 # Update existing manifest
                 try:
@@ -629,9 +651,7 @@ class PluginInstaller:
                         manifest["description"] = description
                     if author:
                         manifest["author"] = author
-                    manifest_path.write_text(
-                        json.dumps(manifest, indent=2), encoding="utf-8"
-                    )
+                    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
                 except (json.JSONDecodeError, OSError):
                     pass
 
@@ -644,7 +664,8 @@ class PluginInstaller:
             _track_plugin_in_state(name, version, install_source, source_url)
 
             return InstallResult(
-                name=name, version=version,
+                name=name,
+                version=version,
                 status="installed",
                 message=f"'{name}' v{version} installed",
                 source=source_url or url,
@@ -664,7 +685,8 @@ class PluginInstaller:
                 Path(tmp_path).unlink(missing_ok=True)
 
             return InstallResult(
-                name=name, version=version or "0.1.0",
+                name=name,
+                version=version or "0.1.0",
                 status="failed",
                 message=str(e),
                 error=str(e),
@@ -685,7 +707,8 @@ class PluginInstaller:
         plugin_dir = self.registry.plugins_dir / name
         if plugin_dir.exists():
             return InstallResult(
-                name=name, version=version,
+                name=name,
+                version=version,
                 status="skipped",
                 message=f"'{name}' already installed",
             )
@@ -706,13 +729,18 @@ class PluginInstaller:
             "installed_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
         }
-        (plugin_dir / "plugin.json").write_text(
-            json.dumps(manifest, indent=2), encoding="utf-8"
-        )
+        (plugin_dir / "plugin.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         (plugin_dir / "plugin.py").write_text(
-            '"""{} plugin."""\n\nclass OpenContextPlugin:\n    @property\n    def name(self):\n        return "{}"\n    @property\n    def version(self):\n        return "{}"\n    @property\n    def description(self):\n        return "{}"\n'.format(
+            (
+                '"""{} plugin."""\n\n'
+                "class OpenContextPlugin:\n"
+                "    @property\n    def name(self):\n        return \"{}\"\n"
+                "    @property\n    def version(self):\n        return \"{}\"\n"
+                "    @property\n    def description(self):\n        return \"{}\"\n"
+            ).format(
                 description or name,
-                name, version,
+                name,
+                version,
                 description or "",
             ),
             encoding="utf-8",
@@ -721,7 +749,8 @@ class PluginInstaller:
         _track_plugin_in_state(name, version, install_source, repository)
 
         return InstallResult(
-            name=name, version=version,
+            name=name,
+            version=version,
             status="installed",
             message=f"'{name}' v{version} installed (scaffold — no download URL available)",
         )
@@ -752,6 +781,7 @@ class PluginInstaller:
 
 
 # ── Plugin Updater ─────────────────────────────────────────────────────────
+
 
 class PluginUpdater:
     """Checks for and applies plugin updates."""
@@ -784,7 +814,8 @@ class PluginUpdater:
         info = self.registry.get_info(name)
         if info is None:
             return InstallResult(
-                name=name, version="",
+                name=name,
+                version="",
                 status="failed",
                 message=f"Plugin '{name}' not installed",
             )
@@ -814,13 +845,19 @@ class PluginUpdater:
                         )
                         if result.status == "installed":
                             result.status = "updated"
-                            result.message = f"'{info.name}' updated {info.version} → {latest.version}"
+                            result.message = (
+                                f"'{info.name}' updated {info.version} → {latest.version}"
+                            )
                         return result
                     else:
                         return InstallResult(
-                            name=info.name, version=info.version,
+                            name=info.name,
+                            version=info.version,
                             status="skipped",
-                            message=f"'{info.name}' v{info.version} — update v{latest.version} available but no download URL",
+                            message=(
+                                f"'{info.name}' v{info.version} — update "
+                                f"v{latest.version} available but no download URL"
+                            ),
                         )
 
         # If installed from GitHub, check releases
@@ -838,10 +875,7 @@ class PluginUpdater:
         # Check if source URL has a newer version in registry
         if info.source_url:
             for entry in self.fetcher.fetch():
-                if (
-                    entry.repository == info.source_url
-                    or entry.homepage == info.source_url
-                ):
+                if entry.repository == info.source_url or entry.homepage == info.source_url:
                     if entry.versions:
                         latest = entry.versions[0]
                         if self._is_newer(latest.version, info.version):
@@ -859,7 +893,8 @@ class PluginUpdater:
                                 return result
 
         return InstallResult(
-            name=info.name, version=info.version,
+            name=info.name,
+            version=info.version,
             status="skipped",
             message=f"'{info.name}' v{info.version} is up to date",
         )
@@ -871,7 +906,7 @@ class PluginUpdater:
         parts_latest = [int(x) for x in latest.replace("v", "").split(".")]
         parts_current = [int(x) for x in current.replace("v", "").split(".")]
 
-        for a, b in zip(parts_latest, parts_current):
+        for a, b in zip(parts_latest, parts_current, strict=False):
             if a > b:
                 return True
             if a < b:
@@ -880,6 +915,7 @@ class PluginUpdater:
 
 
 # ── Plugin Registry (local) ────────────────────────────────────────────────
+
 
 class PluginRegistry:
     """Registry for managing locally installed plugins."""
@@ -1086,6 +1122,7 @@ class PluginRegistry:
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
+
 def _get_top_level_dir(members: list[str]) -> str | None:
     """Get the top-level directory name from a list of archive members."""
 
@@ -1098,7 +1135,10 @@ def _get_top_level_dir(members: list[str]) -> str | None:
 
 
 def _track_plugin_in_state(
-    name: str, version: str, source: str, source_url: str,
+    name: str,
+    version: str,
+    source: str,
+    source_url: str,
 ) -> None:
     """Track plugin in StateStore."""
 
@@ -1107,6 +1147,7 @@ def _track_plugin_in_state(
             ComponentState,
             StateStore,
         )
+
         state = StateStore.load()
         now = datetime.now().isoformat()
         existing = state.plugins.get(name)
@@ -1135,6 +1176,7 @@ def _untrack_plugin_in_state(name: str) -> None:
 
     try:
         from opencontext_core.state import StateStore
+
         state = StateStore.load()
         state.plugins.pop(name, None)
         StateStore.save(state)

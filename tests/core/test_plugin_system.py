@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from opencontext_core.plugin_system import PluginInfo, PluginRegistry
+from opencontext_core.plugin_system import PluginRegistry
 
 
 class TestPluginRegistry:
@@ -14,17 +14,31 @@ class TestPluginRegistry:
 
     def test_discover_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            PluginRegistry, "__init__",
-            lambda self, plugins_dir=None: setattr(self, "plugins_dir", tmp_path) or setattr(self, "_plugins", {}) or setattr(self, "_commands", {}) or setattr(self, "_hooks", {})
+            PluginRegistry,
+            "__init__",
+            lambda self, plugins_dir=None: (
+                setattr(self, "plugins_dir", tmp_path)
+                or setattr(self, "_plugins", {})
+                or setattr(self, "_commands", {})
+                or setattr(self, "_hooks", {})
+            ),
         )
         registry = PluginRegistry(tmp_path)
         plugins = registry.discover()
         assert plugins == []
 
-    def test_enable_disable_nonexistent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_enable_disable_nonexistent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(
-            PluginRegistry, "__init__",
-            lambda self, plugins_dir=None: setattr(self, "plugins_dir", tmp_path) or setattr(self, "_plugins", {}) or setattr(self, "_commands", {}) or setattr(self, "_hooks", {})
+            PluginRegistry,
+            "__init__",
+            lambda self, plugins_dir=None: (
+                setattr(self, "plugins_dir", tmp_path)
+                or setattr(self, "_plugins", {})
+                or setattr(self, "_commands", {})
+                or setattr(self, "_hooks", {})
+            ),
         )
         registry = PluginRegistry(tmp_path)
         assert not registry.enable("nonexistent")
@@ -32,8 +46,14 @@ class TestPluginRegistry:
 
     def test_register_command(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            PluginRegistry, "__init__",
-            lambda self, plugins_dir=None: setattr(self, "plugins_dir", tmp_path) or setattr(self, "_plugins", {}) or setattr(self, "_commands", {}) or setattr(self, "_hooks", {})
+            PluginRegistry,
+            "__init__",
+            lambda self, plugins_dir=None: (
+                setattr(self, "plugins_dir", tmp_path)
+                or setattr(self, "_plugins", {})
+                or setattr(self, "_commands", {})
+                or setattr(self, "_hooks", {})
+            ),
         )
         registry = PluginRegistry(tmp_path)
         registry.register_command("test", lambda: "result")
@@ -42,8 +62,14 @@ class TestPluginRegistry:
 
     def test_register_hook(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            PluginRegistry, "__init__",
-            lambda self, plugins_dir=None: setattr(self, "plugins_dir", tmp_path) or setattr(self, "_plugins", {}) or setattr(self, "_commands", {}) or setattr(self, "_hooks", {})
+            PluginRegistry,
+            "__init__",
+            lambda self, plugins_dir=None: (
+                setattr(self, "plugins_dir", tmp_path)
+                or setattr(self, "_plugins", {})
+                or setattr(self, "_commands", {})
+                or setattr(self, "_hooks", {})
+            ),
         )
         registry = PluginRegistry(tmp_path)
         registry.register_hook("event", lambda x: x * 2)

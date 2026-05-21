@@ -69,6 +69,7 @@ class PasswordHasher:
         """Hash a password."""
         # In production, use bcrypt or argon2
         import hashlib
+
         return hashlib.sha256(password.encode()).hexdigest()
 
     @staticmethod
@@ -87,6 +88,7 @@ class SessionManager:
     def create_session(self, user_id: int) -> str:
         """Create a new session for a user."""
         import secrets
+
         token = secrets.token_urlsafe(32)
         self._sessions[token] = {
             "user_id": user_id,
