@@ -1,6 +1,31 @@
-# OpenContext Runtime
+<p align="center">
+  <img src="docs/assets/logo.svg" width="120" alt="OpenContext Logo">
+</p>
 
-OpenContext Runtime is a secure, zero-trust, token-efficient context engineering runtime for LLM applications. It indexes private projects, builds compact repo maps, selects high-signal context, redacts secrets, controls input and output tokens, assembles cache-friendly prompts, records auditable traces, and provides a first-class local memory layer.
+<h1 align="center">OpenContext Runtime</h1>
+
+<p align="center">
+  <b>Context Engineering for AI Agents</b>
+</p>
+
+<p align="center">
+  <a href="#installation"><img src="https://img.shields.io/badge/python-3.12+-00C9A7.svg" alt="Python 3.12+"></a>
+  <a href="#installation"><img src="https://img.shields.io/badge/install-curl%20%7C%20bash-00A8E8.svg" alt="Install"></a>
+  <a href="#tests"><img src="https://img.shields.io/badge/tests-342%20passed-00C9A7.svg" alt="Tests"></a>
+  <a href="#license"><img src="https://img.shields.io/badge/license-MIT-845EC2.svg" alt="MIT License"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#installation">Install</a> •
+  <a href="#documentation-map">Docs</a> •
+  <a href="#cli-reference">CLI</a> •
+  <a href="#agent-integration">Agents</a>
+</p>
+
+---
+
+OpenContext is a secure, zero-trust, token-efficient context engineering runtime for LLM applications. It indexes private projects, builds compact repo maps, selects high-signal context, redacts secrets, controls input and output tokens, assembles cache-friendly prompts, records auditable traces, and provides a first-class local memory layer.
 
 It answers one product question:
 
@@ -10,6 +35,11 @@ It answers one product question:
 
 - A Python 3.12+ context engineering runtime.
 - A local-first context packer for AI coding agents.
+- A **semantic code knowledge graph** with call graph analysis, impact analysis, and FTS5 search.
+- A **Spec-Driven Development (SDD) orchestrator** with 7-phase lifecycle and per-phase model assignment.
+- A **skill registry** with auto-discovery, compact rules, and context-aware resolution.
+- An **agent installer** supporting 13+ AI coding agents (Claude Code, OpenCode, Cursor, Codex, Windsurf, etc.).
+- An **MCP server** exposing 8 knowledge graph tools to AI agents.
 - A safety layer for secrets, provider policy, prompt injection boundaries, traces, cache, memory, and exports.
 - A workflow scaffold for repeatable team AI operations.
 - A technology-agnostic core with optional Technology Profiles.
@@ -27,22 +57,40 @@ LLMs are only as safe and useful as the context they receive. Dumping a whole re
 ### Once Published on PyPI (Simple)
 
 ```bash
-# Install from PyPI
-pip install opencontext-core opencontext-cli
+# Install from PyPI (single package — includes CLI + core + profiles)
+pip install opencontext-cli
 
-cd your-project
-opencontext onboard
-opencontext pack . --query "Review authentication" --mode plan --copy
+# Or install specific packages
+pip install opencontext-core opencontext-opencontext-profiles opencontext-providers
 ```
 
-For embedded use:
+### Runtime-First Quickstart
+
+The default path does not require users to learn OpenContext commands. Install the runtime in
+the host application, then call the Python API or HTTP API from your agent harness. This is the
+recommended path for IDE extensions, local wrappers, independent developers, and products that want
+OpenContext to run quietly behind the scenes.
+
+```bash
+pip install opencontext-core opencontext-api
+```
 
 ```python
 from opencontext_core import OpenContextRuntime
+from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 
 runtime = OpenContextRuntime()
 runtime.setup_project(".")
 prepared = runtime.prepare_context("Review authentication", max_tokens=6000)
+
+# Build code knowledge graph
+kg = KnowledgeGraph()
+kg.index_project(".")
+stats = kg.get_stats()
+print(f"Indexed: {stats['nodes']} nodes, {stats['edges']} edges")
+
+print("Trace:", prepared.trace_id)
+print("Sources:", prepared.included_sources)
 print(prepared.context)
 ```
 
@@ -62,49 +110,7 @@ That is enough to get a compact, redacted, task-specific context pack with sourc
 accounting, omission reasons, and a trace id. The rest of the documentation explains how to tune
 policies, memory, workflows, integrations, and enterprise controls after the basic flow works.
 
-**Publishing to PyPI**: See [docs/getting-started/publishing-to-pypi.md](docs/getting-started/publishing-to-pypi.md) for setup and release instructions.
-
-## Runtime-First Quickstart
-
-The default path does not require users to learn OpenContext commands. Install the runtime in
-the host application, then call the Python API or HTTP API from your agent harness. This is the
-recommended path for IDE extensions, local wrappers, independent developers, and products that want
-OpenContext to run quietly behind the scenes.
-
-```bash
-python3 -m pip install opencontext-core opencontext-api opencontext-profiles
-```
-
-```python
-from opencontext_core import OpenContextRuntime
-
-runtime = OpenContextRuntime()
-setup = runtime.setup_project(".")
-context = runtime.prepare_context("Review authentication", max_tokens=6000)
-
-print(setup.files, setup.symbols)
-print(context.trace_id)
-print(context.context)
-```
-
-What happens:
-
-- `setup_project(".")` creates the local harness and index:
-  - `.opencontext/` policy, template, agent, model, memory, report, and eval placeholders.
-  - `opencontext.yaml` when no config exists.
-  - A persisted project manifest under the runtime storage path.
-- `prepare_context(...)` retrieves only relevant project context, redacts secrets, enforces token
-  budgets, records included and omitted sources, and persists a trace.
-- `load_trace(context.trace_id)` can later inspect exactly what context was selected, what was
-  omitted, and which token budget decisions were made.
-
-The returned `PreparedContext` contains:
-
-- `context`: compact redacted text that can be passed to an agent/model as untrusted evidence.
-- `included_sources`: files or symbols included in the context.
-- `omitted_sources`: relevant candidates left out because of budget or ranking decisions.
-- `trace_id`: persisted audit id.
-- `token_usage`: context and prompt token accounting.
+**Publishing to PyPI**: See [docs/guides/pypi-publishing.md](docs/guides/pypi-publishing.md) for the full release checklist and dependency order.
 
 ### Does OpenContext Use The Whole Repository?
 
@@ -115,8 +121,6 @@ The indexer scans all files allowed by ignore rules, extracts file metadata and 
 manifest, and persists that project map locally. For each user task, retrieval and ranking select a
 small high-signal subset. Context packing then enforces the token budget, redacts secrets, and
 records omission reasons.
-
-This gives the model repo-wide awareness without paying for or leaking a full repository dump.
 
 Use `.opencontextignore` and `.gitignore` to exclude generated files, vendored dependencies,
 virtualenvs, build outputs, logs, caches, private exports, or any source tree that should never be
@@ -139,21 +143,98 @@ flow is:
 This gives the developer repo-aware assistance without teaching them OpenContext-specific
 commands. The CLI is still available when they want terminal control.
 
-Minimal local helper:
+## Semantic Search
 
-```python
-from opencontext_core import OpenContextRuntime
+Search code semantically using vector embeddings:
 
-runtime = OpenContextRuntime()
-runtime.setup_project(".")
+```bash
+# Pure semantic search
+opencontext semantic "authentication flow"
 
-task = "Explain the authentication flow and point to the important files"
-prepared = runtime.prepare_context(task, max_tokens=6000)
-
-print("Trace:", prepared.trace_id)
-print("Sources:", prepared.included_sources)
-print(prepared.context)
+# Hybrid search (semantic + keyword)
+opencontext semantic "user login" --hybrid --top-k 10
 ```
+
+## Graph Visualization
+
+Visualize code relationships:
+
+```bash
+# Export full graph to DOT
+opencontext visualize --output codegraph.dot --max-nodes 100
+
+# Export as SVG (requires graphviz)
+opencontext visualize --output codegraph.svg --format svg
+
+# Export call graph for specific symbol
+opencontext visualize --symbol authenticate_user --output auth.dot
+```
+
+## Performance Metrics
+
+Track token usage, timing, and costs:
+
+```bash
+# Show summary
+opencontext metrics summary
+
+# Show recent operations
+opencontext metrics recent
+
+# Show historical metrics
+opencontext metrics history --days 7
+
+# Clear metrics
+opencontext metrics clear
+```
+
+## Plugin System
+
+OpenContext has a deny-by-default plugin system. Plugins live in `~/.config/opencontext/plugins/`.
+
+```bash
+# List installed plugins
+opencontext plugin list
+
+# Install a built-in plugin (security-audit, performance, team)
+opencontext plugin install security-audit
+
+# Enable/disable
+opencontext plugin enable security-audit
+opencontext plugin disable security-audit
+
+# Remove a plugin
+opencontext plugin remove security-audit
+
+# Search available plugins
+opencontext plugin search
+```
+
+See [Plugin Documentation](docs/configuration/plugins.md) for development and security model.
+
+## Configuration Wizard
+
+Customize your global preferences interactively:
+
+```bash
+# Run the full wizard (6 steps)
+opencontext config wizard
+
+# View current configuration
+opencontext config show
+
+# Reconfigure specific areas
+opencontext config reconfigure security
+opencontext config reconfigure tokens
+
+# Set individual values
+opencontext config set token_budget 15000
+
+# Reset to factory defaults
+opencontext config reset
+```
+
+See [User Configuration](docs/configuration/user-config.md) for details.
 
 ## Using OpenContext With Different Agents
 
@@ -189,6 +270,21 @@ opencontext agent init --target openclaw
 For runtime-only integrations, generate or ship equivalent instructions in the host application.
 The important rule is the same everywhere: ask OpenContext for minimal context before prompting the
 model, and treat retrieved context as untrusted evidence.
+
+## LLM Provider Management
+
+OpenContext supports multiple LLM providers through a unified adapter interface:
+
+```bash
+# List available providers
+opencontext llm list
+
+# Chat with a provider
+opencontext llm chat "Hello" --provider openrouter --model openrouter/auto
+opencontext llm chat "Explain this code" --provider anthropic --model claude-sonnet-4-20250514
+```
+
+Supported providers: OpenRouter (100+ models), Anthropic (Claude), OpenAI (GPT), Local (Ollama/vLLM), Mock (default).
 
 ### Provider And Model Routing
 
@@ -280,6 +376,8 @@ The root README is the starting point. From here, use the documentation by task:
   ContextBench, plan drift detection, critic/verifier scaffolds, and tool-chain analysis.
 - [Integrations](docs/integrations/python-sdk.md): Python SDK, API, CLI, Codex, Claude Code,
   Cursor, Windsurf, OpenCode/Kilo Code, DDEV, and GitHub Action integration notes.
+- [Guides](docs/guides/agent-hints.md): agent hints, CI checks, git context, five-minute setup,
+  and agent orchestration.
 - [Profiles](docs/profiles/overview.md): generic, Python, Node/TypeScript, Drupal, Symfony, and
   profile authoring.
 - [Operations](docs/operations/run-receipts.md): approvals, hooks, playbooks, shared commands,
@@ -298,7 +396,7 @@ The same map is available as a docs-only index in [docs/README.md](docs/README.m
 Install the CLI only when you want explicit terminal commands:
 
 ```bash
-python3 -m pip install opencontext-cli
+pip install opencontext-cli
 cd your-project
 opencontext onboard
 opencontext index .
@@ -323,7 +421,7 @@ See [Optional CLI Installation](docs/getting-started/cli-installation.md) for CL
 Editable development install:
 
 ```bash
-python3 -m pip install -e packages/opencontext_core -e packages/opencontext_profiles -e packages/opencontext_providers -e packages/opencontext_cli -e packages/opencontext_api
+pip install -e packages/opencontext_core -e packages/opencontext_profiles -e packages/opencontext_providers -e packages/opencontext_cli -e packages/opencontext_api
 ```
 
 ## Zero-Key Mode
@@ -391,6 +489,240 @@ opencontext cache plan --query "review auth"
 opencontext evidence pack --output-mode report
 ```
 
+## Knowledge Graph Commands
+
+OpenContext includes a full code knowledge graph with SQLite+FTS5, call graph analysis, impact analysis, and framework route detection:
+
+```bash
+# Index a project into the knowledge graph
+opencontext index .
+
+# Search for symbols
+opencontext knowledge-graph search "authenticate" --limit 20
+opencontext knowledge-graph query "user" --kind function
+
+# Build context for a task
+opencontext knowledge-graph context "implement auth" --max-nodes 20
+
+# Trace call relationships
+opencontext knowledge-graph callers "authenticate_user" --depth 2
+opencontext knowledge-graph callees "authenticate_user" --depth 2
+
+# Analyze change impact
+opencontext knowledge-graph impact "authenticate_user" --radius 2
+
+# Check index status
+opencontext knowledge-graph status
+```
+
+## Installation & Setup
+
+OpenContext provides a complete installation management system for agent configuration:
+
+```bash
+# Install with interactive wizard
+opencontext setup install
+
+# Install specific profile
+opencontext setup install --profile full
+opencontext setup install --profile minimal
+opencontext setup install --profile agents-only
+
+# Install for specific agents
+opencontext setup install --target claude,opencode,cursor
+
+# Install specific components
+opencontext setup install --component mcp --component agents
+
+# Update installation
+opencontext setup update
+opencontext setup update --check-only
+
+# Verify installation health
+opencontext setup verify
+
+# Show installation status
+opencontext setup status
+
+# Uninstall (keeps backups by default)
+opencontext setup uninstall
+opencontext setup uninstall --keep-backups
+```
+
+### Installation Profiles
+
+- **minimal**: MCP server config only
+- **full**: All components (MCP, agents, skills, profiles, hooks, docs)
+- **agents-only**: Only AI agent configurations
+- **mcp-only**: Only MCP server configuration
+- **custom**: User-selected components
+
+### Agent Installer
+
+Install OpenContext integration for your favorite AI agents:
+
+```bash
+# Auto-detect installed agents
+opencontext install
+
+# Install specific agents
+opencontext install --target claude,opencode,cursor
+
+# Local (project-only) install
+opencontext install --location local
+```
+
+Supported agents: Claude Code, OpenCode, Kilo Code, Gemini CLI, Cursor, VS Code Copilot, Codex, Windsurf, Antigravity, Kimi Code, Kiro IDE, Qwen Code, OpenClaw, Pi.
+
+## MCP Server
+
+Start the MCP server for agent integration:
+
+```bash
+# Stdio transport (for Claude Code, Cursor, etc.)
+opencontext serve --mcp
+```
+
+Available MCP tools:
+- `opencontext_search` - Find symbols by name
+- `opencontext_context` - Build relevant code context
+- `opencontext_callers` - Trace callers
+- `opencontext_callees` - Trace callees
+- `opencontext_impact` - Analyze change impact
+- `opencontext_node` - Get symbol details
+- `opencontext_files` - List indexed files
+- `opencontext_status` - Check index health
+
+## Git Context
+
+Enrich knowledge graph queries with git history and authorship:
+
+```bash
+# Show repository stats
+opencontext git status
+
+# Show git history for a file
+opencontext git history src/auth.py
+
+# Show recent changes
+opencontext git recent --days 7 --max-commits 20
+
+# Show blame for specific lines
+opencontext git blame src/auth.py --start 10 --end 25
+```
+
+Git context integrates with the knowledge graph to provide additional metadata such as last author, commit count, and recent change history when building AI task context.
+
+## CI Checks
+
+Define and run automated code checks enforceable in CI:
+
+```bash
+# Initialize checks directory with samples
+opencontext ci-check init
+
+# List discovered checks
+opencontext ci-check list
+
+# Run all checks
+opencontext ci-check run
+
+# Run checks on a specific file
+opencontext ci-check run --file src/auth.py
+
+# Create a new check template
+opencontext ci-check create "API Validation"
+```
+
+Checks are defined as markdown files in `.opencontext/checks/` with YAML frontmatter:
+
+```markdown
+---
+name: Security Review
+description: Review for security issues
+severity: error
+files:
+- "*.py"
+patterns:
+- "password\\s*="
+- "secret\\s*="
+---
+Review this code for security issues.
+```
+
+## Agent Hints
+
+Provide project-specific instructions to AI agents via `.opencontexthints`:
+
+```bash
+# Initialize hints file
+opencontext hints init
+
+# Show combined hints from all sources
+opencontext hints show
+
+# Validate hints files
+opencontext hints validate
+```
+
+The `.opencontexthints` file defines conventions, architecture, workflows, patterns, and warnings:
+
+```
+project: My Project
+
+[conventions]
+- Use type hints for all function signatures
+- Prefer dataclasses over dicts
+
+[architecture]
+- Core business logic is in the domain layer
+- Infrastructure concerns are in adapters
+
+[workflows]
+- Run the full test suite before committing
+
+[patterns]
+- Repository pattern for data access
+
+[warnings]
+- Never commit secrets or API keys
+```
+
+Also supports `AGENTS.md`, `CLAUDE.md`, and agent-specific rule files.
+
+## Affected Tests
+
+Find which tests are affected by code changes:
+
+```bash
+# From changed files
+opencontext affected src/auth.py src/utils.py
+
+# From git diff
+git diff --name-only | opencontext affected --stdin
+
+# With custom filter
+opencontext affected src/auth.py --filter "*e2e*"
+
+# Output only file paths
+opencontext affected src/auth.py --quiet
+```
+
+## SDD Workflow
+
+Run Spec-Driven Development workflows:
+
+```bash
+# Initialize SDD context
+opencontext sdd explore "how does auth work?"
+
+# Create proposal
+opencontext sdd propose "implement OAuth"
+
+# Run complete flow
+opencontext sdd flow "implement OAuth" --max-tokens 6000
+```
+
 ## Token Efficiency
 
 OpenContext reduces input and output waste with:
@@ -454,7 +786,7 @@ Context packs include selected sources, token stats, security warnings, included
 opencontext pack . --query "Review authentication" --mode review --max-tokens 6000
 ```
 
-Use context packs with Codex, Cursor, Claude Code, OpenCode, Kilo Code, Cline, Roo, Goose, Windsurf, or another coding agent by copying the generated pack into the agent session.
+Use context packs with Codex, Cursor, Claude Code, OpenCode, Kilo Code, Cline, Roo, Windsurf, or another coding agent by copying the generated pack into the agent session.
 
 ## Agent Tool Integrations
 
@@ -642,6 +974,14 @@ answer quality needs provider-specific evals on top of this layer.
 Implemented:
 
 - Local project indexing, repo maps, retrieval, ranking, context packing.
+- **Code knowledge graph** with SQLite+FTS5, call graph analysis, impact analysis, and framework route detection (19+ languages).
+- **Context builder** for AI tasks using knowledge graph search and call graph traversal.
+- **Affected test finder** tracing dependencies to identify tests impacted by changes.
+- **MCP stdio server** exposing 8 tools for agent integration.
+- **Agent installer** supporting 13+ AI coding agents with auto-detection and config generation.
+- **SDD orchestrator** with 7-phase lifecycle, artifact stores (engram/openspec/hybrid), DAG state tracking, and per-phase model assignment.
+- **Skill registry** with auto-discovery, compact rules extraction, and context-aware resolution.
+- **Engram-style memory extensions** with topic keys, session summaries, and proactive save triggers.
 - Static dependency graph extraction, optional cross-project graph tunnel storage, and local
   deterministic embedding records behind core interfaces.
 - Secret scanning and sink redaction.
@@ -653,13 +993,11 @@ Implemented:
 - Progressive memory repository, multi-signal memory search, pinning, expansion, harvesting,
   novelty gate, temporal graph, context DAG, compression quality gate, and GC scaffold.
 - Controlled harness preflight planner and traceable tool permission pipeline.
-- MCP response compression boundary for future adapters.
 - Prebuilt safe configs and onboarding workspace.
 - Prompt/release/output leak scanners and team/performance/quality scaffolds.
 - Persistent local approval inbox under `.opencontext/approvals`.
 - Optional provider adapter package outside core (`opencontext_providers`) with mock adapter and external-provider scaffold.
 - Local HMAC workflow-pack integrity signatures with `opencontext packs sign` and `opencontext packs verify`.
-- Static dependency graph extraction during indexing.
 - Context quality evaluator for context packs and traces.
 - Release evidence artifacts with file hashes and release-audit findings.
 - Prompt/context SBOM artifacts with prompt/context/policy hashes and selected source refs.
@@ -667,7 +1005,7 @@ Implemented:
 
 Scaffolded:
 
-- MCP adapter execution, native tool execution, real provider SDK adapters, provider explicit caches,
+- Native tool execution, real provider SDK adapters, provider explicit caches,
   org baseline enforcement, release transparency logs, public-key signed workflow packs, sandbox
   execution, critic/verifier model calls, prompt/context SBOM signing, and enterprise governance
   dashboards.

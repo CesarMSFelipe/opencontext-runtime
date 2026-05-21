@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="ocGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00C9A7"/>
+      <stop offset="100%" style="stop-color:#00A8E8"/>
+    </linearGradient>
+    <linearGradient id="ocGradDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#009B7D"/>
+      <stop offset="100%" style="stop-color:#0085C7"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="90" fill="url(#ocGrad)"/>
+  
+  <!-- Inner circle -->
+  <circle cx="100" cy="100" r="75" fill="#1a1a2e"/>
+  
+  <!-- O letter -->
+  <circle cx="70" cy="100" r="20" fill="none" stroke="url(#ocGrad)" stroke-width="8"/>
+  
+  <!-- C letter -->
+  <path d="M 125 80 A 20 20 0 1 0 125 120" fill="none" stroke="url(#ocGrad)" stroke-width="8" stroke-linecap="round"/>
+  
+  <!-- Context dot -->
+  <circle cx="100" cy="155" r="6" fill="#00C9A7"/>
+</svg>

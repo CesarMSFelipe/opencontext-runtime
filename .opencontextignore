@@ -1,9 +1,32 @@
 # OpenContext token/noise defaults
+.agents/**
+.kilo/**
+.mypy_cache/**
+.opencontext/**
+.pytest_cache/**
+.ruff_cache/**
+.storage/**
+.venv/**
+venv/**
 **/node_modules/**
 **/vendor/**
 **/dist/**
 **/build/**
 **/.git/**
 **/*.min.js
+**/__pycache__/**
+**/*.pyc
 .opencontext-proof/**
 tmp/opencontext-proof/**
+
+# Generated/local analysis artifacts. Read explicitly if a task needs them.
+DATOS_REALES_CONSUMO_API.md
+ENTREGA_COMPLETA.md
+FREE_API_CONSUMPTION_REPORT.md
+INDEX.md
+INFOGRAFIAS_PLANIFICACION.md
+PLANIFICACION_INFOGRAFIAS.md
+RESUMEN_EJECUTIVO.md
+demo_api_comparison.py
+generate_infographic_data.py
+infographic_data.json

@@ -42,6 +42,14 @@ navigation layer.
 - [Technology profiles](architecture/technology-profiles.md)
 - [Implementation matrix](architecture/implementation-matrix.md)
 
+## Guides
+
+- [Agent hints](guides/agent-hints.md) — Project-specific instructions for AI agents
+- [CI checks](guides/ci-checks.md) — Automated code review checks
+- [Git context](guides/git-context.md) — Git-aware knowledge graph enrichment
+- [Five-minute setup](guides/five-minute-setup.md)
+- [Agent orchestration](guides/agent-orchestration.md)
+
 ## Runtime Areas
 
 - [Token efficiency](token-efficiency/overview.md)

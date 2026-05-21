@@ -1,29 +1,49 @@
 # Cursor
 
 ## Purpose
-Use OpenContext packs as redacted project evidence for Cursor and keep workspace rules focused on safe context gathering.
-
-## Current Status
-Implemented: `opencontext agent init --target cursor` creates `.cursor/rules/opencontext.mdc`.
+Cursor uses `.cursor/rules/*.mdc` for project rules. OpenContext generates
+a rule file with MCP tool docs and all CLI commands.
 
 ## Setup
+
 ```bash
 opencontext onboard
 opencontext agent init --target cursor
-opencontext doctor security
-opencontext pack . --query "Review authentication" --mode plan --copy
 ```
 
-The generated rule tells Cursor to prefer `opencontext pack` and `opencontext agent-context` over whole-repository prompts.
+This creates `~/.cursor/rules/opencontext.mdc`.
+
+## Available Commands (via Terminal)
+
+```bash
+# Code exploration
+opencontext pack . --query "Review auth" --mode plan --copy
+opencontext index .
+opencontext inspect repomap
+
+# Health & updates
+opencontext verify
+opencontext update
+opencontext upgrade
+
+# Plugins
+opencontext plugin search
+opencontext plugin install <name>
+opencontext plugin list
+
+# Config
+opencontext config show
+opencontext config reconfigure plugins
+```
+
+## MCP Tools
+
+Cursor supports MCP via its config. Run `opencontext onboard . --setup-mcp`
+to configure, then use the 8 KG tools directly.
 
 ## Related Commands
+
 ```bash
 opencontext agent init --target cursor
 opencontext agent-context "Review access control" --target cursor --copy
-opencontext pack . --query "review auth" --copy
 ```
-
-## Implemented Code
-- `packages/opencontext_core/opencontext_core/adapters/agent_manifest.py`
-- `packages/opencontext_cli/opencontext_cli/main.py`
-- `packages/opencontext_core/opencontext_core/runtime.py`

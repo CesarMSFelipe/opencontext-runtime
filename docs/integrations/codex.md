@@ -1,19 +1,47 @@
-# Codex
+# Codex CLI
 
 ## Purpose
-Use `opencontext pack --copy` or `opencontext agent-context --target codex` to feed safe context into Codex.
+Codex CLI uses `AGENTS.md` for project instructions. OpenContext generates
+this file with MCP tool documentation and all CLI commands.
 
-## Current Status
-CLI/API/local SDK paths are implemented. Agent-specific integrations are documented patterns unless a command explicitly exists.
+## Setup
 
-## Related Commands
 ```bash
-opencontext agent-context "Review access control" --target codex --copy
-opencontext pack . --query "review auth" --copy
-opencontext ddev init
+opencontext onboard
+opencontext agent init --target codex
 ```
 
-## Implemented Code
-- `packages/opencontext_cli/opencontext_cli/main.py`
-- `packages/opencontext_api/opencontext_api/main.py`
-- `packages/opencontext_core/opencontext_core/runtime.py`
+This creates `~/.codex/AGENTS.md` with the full OpenContext reference.
+
+## Available Commands
+
+```bash
+# Code exploration
+opencontext pack . --query "Review auth" --mode plan --copy
+opencontext index .
+opencontext inspect repomap
+
+# Health
+opencontext verify
+opencontext verify --json
+
+# Updates
+opencontext update
+opencontext upgrade
+
+# Plugins
+opencontext plugin search
+opencontext plugin install <name>
+opencontext plugin info <name>
+
+# Config
+opencontext config show
+opencontext config reconfigure plugins
+```
+
+## Related Commands
+
+```bash
+opencontext agent init --target codex
+opencontext agent-context "Review access control" --target codex --copy
+```

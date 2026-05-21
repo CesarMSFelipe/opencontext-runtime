@@ -44,3 +44,4 @@ run-self-improvement.sh
 # Editor and OS noise
 .DS_Store
 Thumbs.db
+.kilo/*

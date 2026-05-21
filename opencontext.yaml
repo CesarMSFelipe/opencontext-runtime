@@ -1,0 +1,159 @@
+project:
+  name: "opencontext-runtime-local-low-consumption"
+
+models:
+  default:
+    provider: "mock"
+    model: "mock-llm"
+    private_endpoint: true
+    training_opt_in: false
+    zero_data_retention: true
+  roles:
+    classify:
+      provider: "mock"
+      model: "mock-llm"
+    retrieve:
+      provider: "mock"
+      model: "mock-llm"
+    rerank:
+      provider: "mock"
+      model: "mock-llm"
+    compress:
+      provider: "mock"
+      model: "mock-llm"
+    generate:
+      provider: "mock"
+      model: "mock-llm"
+    validate:
+      provider: "mock"
+      model: "mock-llm"
+    audit:
+      provider: "mock"
+      model: "mock-llm"
+    summarize:
+      provider: "mock"
+      model: "mock-llm"
+    orchestrate:
+      provider: "mock"
+      model: "mock-llm"
+
+project_index:
+  enabled: true
+  root: "."
+  profile: "python"
+  ignore:
+    - ".git"
+    - ".storage"
+    - ".opencontext"
+    - ".agents"
+    - ".kilo"
+    - ".venv"
+    - "venv"
+    - "__pycache__"
+    - "*.pyc"
+    - ".pytest_cache"
+    - ".mypy_cache"
+    - ".ruff_cache"
+    - "dist"
+    - "build"
+    - "tmp"
+    - "node_modules"
+    - "vendor"
+
+context:
+  max_input_tokens: 4000
+  reserve_output_tokens: 800
+  sections:
+    system: 400
+    instructions: 350
+    tool_schemas: 0
+    project_manifest: 500
+    repo_map: 900
+    workflow_contract: 250
+    memory: 300
+    retrieved_context: 1800
+    conversation: 300
+    tools: 0
+  compression:
+    enabled: true
+    strategy: "extractive_head_tail"
+    caveman_intensity: "full"
+    max_compression_ratio: 0.35
+    adaptive: true
+    protected_spans: true
+
+retrieval:
+  strategy: "hybrid"
+  top_k: 8
+  rerank_top_k: 4
+
+repo_map:
+  enabled: true
+  max_tokens: 900
+  include_symbols: true
+  include_dependencies: false
+
+cache:
+  exact:
+    enabled: true
+    storage: "local"
+  semantic:
+    enabled: false
+
+security:
+  mode: "private_project"
+  fail_closed: true
+  external_providers_enabled: false
+
+providers:
+  external_enabled: false
+
+tools:
+  native:
+    enabled: false
+  mcp:
+    enabled: false
+    require_allowlist: true
+    allow_stdio: false
+    sandbox: true
+
+traces:
+  store_raw_context: false
+  store_redacted_context: true
+
+memory:
+  enabled: true
+  harvest_after_run: false
+  require_approval: true
+  store_raw: false
+
+embedding:
+  enabled: false
+
+output:
+  mode: "technical_terse"
+  max_output_tokens: 800
+  preserve:
+    - "code"
+    - "commands"
+    - "paths"
+    - "symbols"
+    - "warnings"
+    - "numbers"
+
+token_budgets:
+  ask:
+    input: 2500
+    output: 600
+  plan:
+    input: 3000
+    output: 700
+  review:
+    input: 3500
+    output: 800
+  audit:
+    input: 3500
+    output: 900
+  implement_pack:
+    input: 4000
+    output: 800
