@@ -1,0 +1,192 @@
+"""OpenContext brand styles and console utilities.
+
+Provides consistent colors, styles, and formatting across the CLI.
+Uses rich for colored output, tables, panels, and progress bars.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+    from rich.style import Style
+    from rich.table import Table
+    from rich.text import Text
+
+    RICH_AVAILABLE = True
+except ImportError:
+    RICH_AVAILABLE = False
+
+# Brand colors
+BRAND_PRIMARY = "#00C9A7"  # Teal
+BRAND_SECONDARY = "#00A8E8"  # Blue
+BRAND_ACCENT = "#845EC2"  # Purple
+BRAND_SUCCESS = "#00C9A7"
+BRAND_WARNING = "#FFC75F"
+BRAND_ERROR = "#FF6F91"
+BRAND_INFO = "#00A8E8"
+BRAND_DIM = "#6C757D"
+
+# Styles (only if rich is available)
+if RICH_AVAILABLE:
+    STYLE_SUCCESS = Style(color=BRAND_SUCCESS, bold=True)
+    STYLE_ERROR = Style(color=BRAND_ERROR, bold=True)
+    STYLE_WARNING = Style(color=BRAND_WARNING, bold=True)
+    STYLE_INFO = Style(color=BRAND_INFO, bold=True)
+    STYLE_DIM = Style(color=BRAND_DIM)
+    STYLE_PRIMARY = Style(color=BRAND_PRIMARY, bold=True)
+    STYLE_SECONDARY = Style(color=BRAND_SECONDARY)
+else:
+    STYLE_SUCCESS = None
+    STYLE_ERROR = None
+    STYLE_WARNING = None
+    STYLE_INFO = None
+    STYLE_DIM = None
+    STYLE_PRIMARY = None
+    STYLE_SECONDARY = None
+
+
+class BrandConsole:
+    """Console wrapper with brand styling."""
+
+    def __init__(self) -> None:
+        self._console = Console() if RICH_AVAILABLE else None
+
+    @property
+    def available(self) -> bool:
+        return self._console is not None
+
+    def print(self, *args: Any, **kwargs: Any) -> None:
+        """Print with rich if available."""
+        if self._console:
+            self._console.print(*args, **kwargs)
+        else:
+            print(*args, **kwargs)
+
+    def success(self, message: str) -> None:
+        self.print(f"[bold {BRAND_SUCCESS}]✓[/] {message}")
+
+    def error(self, message: str) -> None:
+        self.print(f"[bold {BRAND_ERROR}]✗[/] {message}")
+
+    def warning(self, message: str) -> None:
+        self.print(f"[bold {BRAND_WARNING}]⚠[/] {message}")
+
+    def info(self, message: str) -> None:
+        self.print(f"[bold {BRAND_INFO}]i[/] {message}")
+
+    def dim(self, message: str) -> None:
+        self.print(f"[{BRAND_DIM}]{message}[/{BRAND_DIM}]")
+
+    def header(self, title: str) -> None:
+        """Print a branded header panel."""
+        if self._console:
+            self._console.print(
+                Panel(
+                    Text(title, justify="center", style=f"bold {BRAND_PRIMARY}"),
+                    border_style=BRAND_PRIMARY,
+                    padding=(1, 2),
+                )
+            )
+        else:
+            print(f"\n{'=' * 60}")
+            print(f"  {title}")
+            print(f"{'=' * 60}\n")
+
+    def section(self, title: str) -> None:
+        """Print a section header."""
+        self.print(f"\n[bold {BRAND_PRIMARY}]{title}[/]")
+        self.print(f"[{BRAND_DIM}]{'─' * 40}[/]")
+
+    def table(self, title: str, columns: list[str], rows: list[list[str]]) -> Table | None:
+        """Create a styled table."""
+        if not self._console:
+            # Fallback: simple text table
+            print(f"\n{title}:")
+            for row in rows:
+                print("  " + " | ".join(row))
+            return None
+
+        table = Table(title=title, title_style=f"bold {BRAND_PRIMARY}")
+        for col in columns:
+            table.add_column(col, style=BRAND_SECONDARY)
+        for row in rows:
+            table.add_row(*row)
+        self._console.print(table)
+        return table
+
+    def progress(self, description: str = "Working...") -> Any:
+        """Create a progress context manager."""
+        if not self._console:
+            print(description)
+            return _NoOpProgress()
+
+        return Progress(
+            SpinnerColumn(style=BRAND_PRIMARY),
+            TextColumn(f"[bold {BRAND_PRIMARY}]{description}[/]"),
+            console=self._console,
+        )
+
+    def panel(self, content: str, title: str | None = None) -> None:
+        """Print content in a panel."""
+        if self._console:
+            self._console.print(
+                Panel(content, title=title, border_style=BRAND_SECONDARY, padding=(1, 2))
+            )
+        else:
+            if title:
+                print(f"\n{title}:")
+            print(content)
+
+
+class _NoOpProgress:
+    """No-op progress for when rich is not available."""
+
+    def __enter__(self) -> _NoOpProgress:
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        pass
+
+    def add_task(self, *args: Any, **kwargs: Any) -> int:
+        return 0
+
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+
+# Global console instance
+console = BrandConsole()
+
+
+def success(message: str) -> None:
+    """Print success message."""
+    console.success(message)
+
+
+def error(message: str) -> None:
+    """Print error message."""
+    console.error(message)
+
+
+def warning(message: str) -> None:
+    """Print warning message."""
+    console.warning(message)
+
+
+def info(message: str) -> None:
+    """Print info message."""
+    console.info(message)
+
+
+def header(title: str) -> None:
+    """Print branded header."""
+    console.header(title)
+
+
+def section(title: str) -> None:
+    """Print section header."""
+    console.section(title)
