@@ -1,0 +1,386 @@
+project:
+  name: example-project
+models:
+  default:
+    provider: mock
+    model: mock-llm
+    private_endpoint: true
+    training_opt_in: false
+    zero_data_retention: true
+  roles:
+    classify:
+      provider: mock
+      model: mock-llm
+    retrieve:
+      provider: mock
+      model: mock-llm
+    rerank:
+      provider: mock
+      model: mock-llm
+    compress:
+      provider: mock
+      model: mock-llm
+    generate:
+      provider: mock
+      model: mock-llm
+    validate:
+      provider: mock
+      model: mock-llm
+    audit:
+      provider: mock
+      model: mock-llm
+    summarize:
+      provider: mock
+      model: mock-llm
+    orchestrate:
+      provider: mock
+      model: mock-llm
+project_index:
+  enabled: true
+  root: .
+  profile: generic
+  ignore:
+  - .git
+  - .opencontext
+  - .storage
+  - .venv
+  - venv
+  - '*.egg-info'
+  - __pycache__
+  - '*.pyc'
+  - vendor
+  - node_modules
+  - var/cache
+  - web/sites/default/files
+  - dist
+  - build
+  - coverage
+  - .pytest_cache
+  - .mypy_cache
+  - .ruff_cache
+  - cache
+  - logs
+  - '*.log'
+  - '*.min.js'
+  - '*.min.css'
+context:
+  max_input_tokens: 12000
+  reserve_output_tokens: 1500
+  sections:
+    system: 1000
+    instructions: 1000
+    tool_schemas: 500
+    project_manifest: 1000
+    repo_map: 3000
+    workflow_contract: 500
+    memory: 2000
+    retrieved_context: 6500
+    conversation: 1000
+    tools: 500
+  ranking:
+    weights:
+      relevance: 0.45
+      priority: 0.25
+      source_trust: 0.15
+      token_efficiency: 0.15
+  compression:
+    enabled: true
+    strategy: extractive_head_tail
+    caveman_intensity: full
+    max_compression_ratio: 0.5
+    adaptive: true
+    protected_spans: true
+retrieval:
+  strategy: hybrid
+  top_k: 20
+  rerank_top_k: 8
+repo_map:
+  enabled: true
+  max_tokens: 3000
+  include_symbols: true
+  include_dependencies: true
+context_packing:
+  strategy: priority_value_density
+  preserve_priorities:
+  - P0
+  - P1
+compression:
+  adaptive: true
+  protected_spans: true
+  default_strategy: extractive_head_tail
+cache:
+  exact:
+    enabled: true
+    storage: local
+  semantic:
+    enabled: false
+    similarity_threshold: 0.92
+    require_same_workflow: true
+    require_same_project_hash: true
+  mcp:
+    enabled: false
+    compression_enabled: true
+    compression_ratio: 0.5
+    preserve_code_blocks: true
+    cache_ttl_seconds: 3600
+safety:
+  secret_scanning:
+    enabled: true
+    redact: true
+  prompt_injection_detection:
+    enabled: true
+security:
+  mode: private_project
+  fail_closed: true
+  default_classification: internal
+  external_providers_enabled: false
+providers:
+  external_enabled: false
+provider_policies:
+- provider: mock
+  allowed: true
+  allowed_classifications:
+  - public
+  - internal
+  - confidential
+  - secret
+  - regulated
+  require_redaction: false
+  require_zero_data_retention: false
+  require_private_endpoint: false
+  allow_training_opt_in: false
+  notes: Local deterministic provider used for development and tests.
+- provider: local
+  allowed: true
+  allowed_classifications:
+  - public
+  - internal
+  - confidential
+  - secret
+  - regulated
+  require_redaction: false
+  require_zero_data_retention: false
+  require_private_endpoint: false
+  allow_training_opt_in: false
+  notes: Reserved local provider policy; no external SDK is enabled in core.
+- provider: openai
+  allowed: false
+  allowed_classifications:
+  - public
+  - internal
+  require_redaction: true
+  require_zero_data_retention: true
+  require_private_endpoint: false
+  allow_training_opt_in: false
+  notes: External providers are disabled by default.
+observability:
+  local_traces:
+    enabled: true
+  opentelemetry:
+    enabled: false
+traces:
+  store_raw_context: false
+  store_redacted_context: true
+tools:
+  native:
+    enabled: false
+  mcp:
+    enabled: false
+    require_allowlist: true
+    allow_stdio: false
+    sandbox: true
+memory:
+  enabled: true
+  harvest_after_run: false
+  require_approval: true
+  store_raw: false
+  default_classification: internal
+  retention_days: 90
+  prune_low_reuse: true
+  prune_superseded: true
+  prune_expired: true
+embedding:
+  enabled: true
+  provider: local
+  model: deterministic-1536
+  dimensions: 1536
+  batch_size: 100
+  async_worker: true
+  write_path_sync_timeout_ms: 150
+  storage_backend: local
+  queue_max_size: 10000
+  worker_concurrency: 4
+output:
+  mode: concise
+  max_output_tokens: 1500
+  preserve:
+  - code
+  - commands
+  - paths
+  - symbols
+  - warnings
+  - numbers
+egress:
+  network: deny
+  external_urls: ask
+  webhooks: deny
+  clipboard: allow_redacted
+  file_export: allow_redacted
+  tool_output_forwarding: deny
+provider_cache:
+  strategy: auto
+  explicit_cache_enabled: false
+  ttl_seconds: 3600
+  cacheable_sections:
+  - tool_schemas
+  - system
+  - project_manifest
+  - repo_map
+  - workflow_contract
+context_layers:
+  static:
+    cacheable: true
+    budget_tokens: 2000
+    trust_level: trusted
+    refresh_policy: versioned
+  project:
+    cacheable: true
+    budget_tokens: 4000
+    trust_level: internal
+    refresh_policy: on_index
+  memory:
+    cacheable: partial
+    budget_tokens: 1500
+    trust_level: internal
+    refresh_policy: on_demand
+  turn:
+    cacheable: false
+    budget_tokens: 2000
+    trust_level: user_input
+    refresh_policy: per_turn
+  tool:
+    cacheable: false
+    budget_tokens: 1000
+    trust_level: untrusted
+    refresh_policy: per_call
+token_budgets:
+  ask:
+    input: 6000
+    output: 1000
+  plan:
+    input: 10000
+    output: 2000
+  review:
+    input: 12000
+    output: 2500
+  audit:
+    input: 12000
+    output: 3000
+  implement_pack:
+    input: 16000
+    output: 2000
+latency:
+  max_seconds:
+    ask: 20
+    plan: 60
+    audit: 120
+commands:
+  review-pr:
+    workflow: code-review
+    mode: review
+    output_mode: concise
+  security-audit:
+    workflow: security-audit
+    mode: audit
+    output_mode: report
+hooks:
+  pre_context_pack:
+  - security.scan
+  - prompt.audit
+  post_context_pack:
+  - trace.persist
+  - tokens.report
+  pre_release:
+  - release.audit
+  - prompt.audit
+  - security.scan
+profiles: {}
+server:
+  enabled: false
+  host: 127.0.0.1
+  port: 8000
+workflows:
+  code_assistant:
+    steps:
+    - project.load_manifest
+    - project.retrieve
+    - context.rank
+    - context.pack
+    - context.compress
+    - prompt.assemble
+    - llm.generate
+    - trace.persist
+  sdd:
+    steps:
+    - project.load_manifest
+    - context.explore
+    - context.propose
+    - context.test
+    - context.verify
+    - context.review
+    - context.archive
+    - trace.sdd_persist
+  sdd_apply:
+    steps:
+    - project.load_manifest
+    - context.explore
+    - context.propose
+    - context.apply
+    - context.test
+    - context.verify
+    - context.review
+    - context.up-code
+    - context.archive
+    - trace.sdd_persist
+sdd:
+  artifact_store:
+    mode: none
+    engram: {}
+    openspec:
+      path: openspec/
+  delivery_strategy: plan-only
+  chain_strategy: stacked-to-main
+  model_assignments:
+    explore: default
+    propose: default
+    spec: default
+    design: default
+    tasks: default
+    apply: default
+    verify: default
+    archive: default
+  interactive: false
+knowledge_graph:
+  enabled: false
+  languages: []
+  exclude:
+  - node_modules/**
+  - vendor/**
+  - __pycache__/**
+  - .git/**
+  - '*.min.js'
+  - '*.min.css'
+  max_file_size: 1048576
+  track_call_sites: true
+  auto_sync: true
+  track_class_hierarchy: true
+skills:
+  enabled: false
+  registry_path: .atl/skill-registry.md
+  auto_discover: true
+  user_dirs:
+  - ~/.config/opencode/skills/
+  - ~/.claude/skills/
+  project_dirs:
+  - .claude/skills/
+  - skills/
