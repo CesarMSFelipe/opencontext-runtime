@@ -7,9 +7,9 @@ import pytest
 from opencontext_core.providers.adapters import (
     MockAdapter,
     ProviderConfig,
+    ProviderError,
     ProviderRegistry,
 )
-from opencontext_core.errors import ProviderError
 
 
 class TestMockAdapter:
@@ -49,7 +49,7 @@ class TestProviderRegistry:
 
     def test_create_unknown(self) -> None:
         registry = ProviderRegistry()
-        with pytest.raises(Exception):
+        with pytest.raises(ProviderError):
             registry.create("unknown")
 
     def test_get_available(self) -> None:

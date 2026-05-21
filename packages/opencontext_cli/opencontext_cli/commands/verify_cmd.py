@@ -112,9 +112,9 @@ def handle_verify(args: Any) -> None:
         print(f"\nOpenContext Health Check ({report.timestamp})")
         print("=" * 50)
         for r in report.results:
-            icon = {
-                "passed": "✓", "warning": "⚠", "failed": "✗", "skipped": "--"
-            }.get(r.status, "?")
+            icon = {"passed": "✓", "warning": "⚠", "failed": "✗", "skipped": "--"}.get(
+                r.status, "?"
+            )
             print(f"  {icon} {r.name}: {r.message}")
         print(f"\n{report.passed} passed, {report.warnings} warnings, {report.failures} failed")
 

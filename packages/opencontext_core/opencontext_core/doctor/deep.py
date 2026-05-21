@@ -403,8 +403,7 @@ def _from_updates() -> list[DeepDiagnostic]:
                     name="update.available",
                     status="warning",
                     message=(
-                        f"v{result.latest_version} available "
-                        f"(current: v{result.current_version})"
+                        f"v{result.latest_version} available (current: v{result.current_version})"
                     ),
                     recommendation="Run 'opencontext upgrade'",
                 )

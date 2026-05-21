@@ -354,8 +354,7 @@ class PluginInstaller:
                     version=version,
                     status="failed",
                     message=(
-                        f"Version '{version}' not available for '{name}' "
-                        f"— available: {available}"
+                        f"Version '{version}' not available for '{name}' — available: {available}"
                     ),
                 )
             target_version = version
@@ -734,9 +733,9 @@ class PluginInstaller:
             (
                 '"""{} plugin."""\n\n'
                 "class OpenContextPlugin:\n"
-                "    @property\n    def name(self):\n        return \"{}\"\n"
-                "    @property\n    def version(self):\n        return \"{}\"\n"
-                "    @property\n    def description(self):\n        return \"{}\"\n"
+                '    @property\n    def name(self):\n        return "{}"\n'
+                '    @property\n    def version(self):\n        return "{}"\n'
+                '    @property\n    def description(self):\n        return "{}"\n'
             ).format(
                 description or name,
                 name,

@@ -23,3 +23,7 @@ class WorkflowExecutionError(OpenContextError):
 
 class LLMGatewayError(OpenContextError):
     """Raised when an LLM gateway cannot complete a request."""
+
+
+class ProviderError(LLMGatewayError):
+    """Raised when a provider adapter fails."""

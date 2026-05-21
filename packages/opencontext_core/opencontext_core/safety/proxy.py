@@ -316,8 +316,7 @@ class ContextFirewall:
                         "start": 0,
                         "end": len(text),
                         "value": (
-                            f"{ctx_tokens} tokens exceeds limit of "
-                            f"{self.policy.max_context_tokens}"
+                            f"{ctx_tokens} tokens exceeds limit of {self.policy.max_context_tokens}"
                         ),
                         "severity": "medium",
                     }

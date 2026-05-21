@@ -16,11 +16,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-
-class ProviderError(Exception):
-    """Error from a provider adapter."""
-
-    pass
+from opencontext_core.errors import ProviderError
 
 
 @dataclass
