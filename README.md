@@ -11,7 +11,7 @@
 <p align="center">
   <a href="#installation"><img src="https://img.shields.io/badge/python-3.12+-00C9A7.svg" alt="Python 3.12+"></a>
   <a href="#installation"><img src="https://img.shields.io/badge/install-curl%20%7C%20bash-00A8E8.svg" alt="Install"></a>
-  <a href="#tests"><img src="https://img.shields.io/badge/tests-342%20passed-00C9A7.svg" alt="Tests"></a>
+  <a href="#tests"><img src="https://img.shields.io/badge/tests-96%20passed-00C9A7.svg" alt="Tests"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-845EC2.svg" alt="MIT License"></a>
 </p>
 
@@ -36,7 +36,7 @@ It answers one product question:
 - A Python 3.12+ context engineering runtime.
 - A local-first context packer for AI coding agents.
 - A **semantic code knowledge graph** with call graph analysis, impact analysis, and FTS5 search.
-- A **Spec-Driven Development (SDD) orchestrator** with 7-phase lifecycle and per-phase model assignment.
+- A **Spec-Driven Development (SDD) orchestrator** with 8-phase lifecycle and per-phase model assignment.
 - A **skill registry** with auto-discovery, compact rules, and context-aware resolution.
 - An **agent installer** supporting 13+ AI coding agents (Claude Code, OpenCode, Cursor, Codex, Windsurf, etc.).
 - An **MCP server** exposing 8 knowledge graph tools to AI agents.
@@ -710,18 +710,38 @@ opencontext affected src/auth.py --quiet
 
 ## SDD Workflow
 
-Run Spec-Driven Development workflows:
+Run the 8-phase Spec-Driven Development lifecycle:
 
 ```bash
-# Initialize SDD context
-opencontext sdd explore "how does auth work?"
+# Investigate the codebase
+opencontext sdd explore "How does authentication work?"
 
-# Create proposal
-opencontext sdd propose "implement OAuth"
+# Create a change proposal
+opencontext sdd propose "Implement OAuth2"
 
-# Run complete flow
-opencontext sdd flow "implement OAuth" --max-tokens 6000
+# Write detailed specifications
+opencontext sdd spec
+
+# Create technical design
+opencontext sdd design
+
+# Break into implementation tasks
+opencontext sdd tasks
+
+# Implement changes
+opencontext sdd apply --workflow sdd
+
+# Verify against specs
+opencontext sdd verify
+
+# Archive artifacts
+opencontext sdd archive
+
+# Run complete flow (all 8 phases)
+opencontext sdd flow "Implement OAuth2" --max-tokens 6000
 ```
+
+Per-phase model assignment via `SDDProfile` in `opencontext.yaml`. Artifact stores: engram, openspec, hybrid, or none.
 
 ## Token Efficiency
 
@@ -979,8 +999,18 @@ Implemented:
 - **Affected test finder** tracing dependencies to identify tests impacted by changes.
 - **MCP stdio server** exposing 8 tools for agent integration.
 - **Agent installer** supporting 13+ AI coding agents with auto-detection and config generation.
-- **SDD orchestrator** with 7-phase lifecycle, artifact stores (engram/openspec/hybrid), DAG state tracking, and per-phase model assignment.
+- **SDD orchestrator** with 8-phase lifecycle (explore → propose → spec → design → tasks → apply → verify → archive), artifact stores (engram/openspec/hybrid), DAG state tracking, and per-phase model assignment via SDDProfile.
+- **SDD profile manager** for named per-phase model profiles.
+- **Agent orchestrator** with pluggable skill-based agents, subagent spawning, DAG state tracking, and token management.
 - **Skill registry** with auto-discovery, compact rules extraction, and context-aware resolution.
+- **Learning system** with memory usability layer, context-aware retrieval, semantic reranking, and learning orchestrator.
+- **LLM provider adapters** (OpenRouter, Anthropic, OpenAI, Local/Ollama, Mock) with unified adapter interface outside core.
+- **Quality gates** with 7 built-in checks (security, quality, docs, performance, accessibility, dependencies, type safety).
+- **Interactive setup wizard** with installation profiles (minimal, full, agents-only, mcp-only) and post-install verification.
+- **Context observability pipeline** with OTel-compatible export and `LocalTraceLogger`.
+- **Context quality evaluator** with 5-dimension benchmark suite and ContextBench.
+- **Deep diagnostics** (`opencontext doctor deep`) for runtime introspection.
+- **LLM context firewall** with transparent proxy, secret redaction, and egress controls.
 - **Engram-style memory extensions** with topic keys, session summaries, and proactive save triggers.
 - Static dependency graph extraction, optional cross-project graph tunnel storage, and local
   deterministic embedding records behind core interfaces.

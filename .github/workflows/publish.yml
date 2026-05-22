@@ -53,4 +53,3 @@ jobs:
         with:
           packages-dir: ${{ matrix.path }}/dist/
           print-hash: true
-          password: ${{ secrets.PYPI_API_TOKEN }}
