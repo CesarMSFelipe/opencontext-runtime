@@ -24,7 +24,7 @@ def _default_config_dir() -> Path:
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
         return base / "opencontext"
     # Linux / macOS — keep existing convention: ~/.config/opencontext
-    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))  # type: ignore[unreachable]
     return base / "opencontext"
 
 
