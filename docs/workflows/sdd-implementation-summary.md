@@ -229,7 +229,7 @@ workflows:
 | Aspect | Before | After (SDD) |
 |--------|--------|-------------|
 | **Technology coupling** | Per-framework adapters | Single agnostic workflow |
-| **Context prep** | Ad-hoc, manual | Standardized 7-phase pipeline |
+| **Context prep** | Ad-hoc, manual | Standardized 8-phase pipeline |
 | **Safety checks** | Optional | Built into every phase |
 | **Traceability** | Varies by tool | Consistent across all uses |
 | **Agent support** | Per-agent integration | Any agent, same interface |
@@ -246,7 +246,7 @@ workflows:
 
 ## Conclusion
 
-The SDD workflow provides OpenContext's users with a **unified, technology-agnostic approach** to specification-driven development. By standardizing on the 7-phase pipeline (Explore → Propose → Apply → Test → Verify → Review → Archive), teams can:
+The SDD workflow provides OpenContext's users with a **unified, technology-agnostic approach** to specification-driven development. By standardizing on the 8-phase pipeline (Explore → Propose → Spec → Design → Tasks → Apply → Verify → Archive), teams can:
 
 - Onboard faster with consistent workflows
 - Maintain security and compliance
