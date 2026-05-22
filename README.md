@@ -9,19 +9,30 @@
 </p>
 
 <p align="center">
-  <a href="#installation"><img src="https://img.shields.io/badge/python-3.12+-00C9A7.svg" alt="Python 3.12+"></a>
-  <a href="#installation"><img src="https://img.shields.io/badge/install-curl%20%7C%20bash-00A8E8.svg" alt="Install"></a>
+  <a href="#installation--setup"><img src="https://img.shields.io/badge/python-3.12+-00C9A7.svg" alt="Python 3.12+"></a>
+  <a href="#installation--setup"><img src="https://img.shields.io/badge/install-curl%20%7C%20bash-00A8E8.svg" alt="Install"></a>
   <a href="#tests"><img src="https://img.shields.io/badge/tests-96%20passed-00C9A7.svg" alt="Tests"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-845EC2.svg" alt="MIT License"></a>
 </p>
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
-  <a href="#installation">Install</a> •
+  <a href="#installation--setup">Install</a> •
   <a href="#documentation-map">Docs</a> •
   <a href="#cli-reference">CLI</a> •
   <a href="#agent-integration">Agents</a>
 </p>
+
+---
+
+| Method | Command |
+|--------|---------|
+| **Homebrew** | `brew install opencontext` |
+| **npm** | `npm install -g opencontext` |
+| **pnpm** | `pnpm add -g opencontext` |
+| **pip** | `pip install opencontext-cli` |
+| **One-liner** | `curl -fsSL https://raw.githubusercontent.com/.../install.sh \| bash` |
+| **Source** | `git clone + pip install -e packages/*` |
 
 ---
 
@@ -54,17 +65,36 @@ LLMs are only as safe and useful as the context they receive. Dumping a whole re
 
 ## Start In Two Minutes
 
-### Once Published on PyPI (Simple)
+### Install via Homebrew (macOS / Linux)
 
 ```bash
-# Install from PyPI (single package — includes CLI + core + profiles)
-pip install opencontext-cli
-
-# Or install specific packages
-pip install opencontext-core opencontext-opencontext-profiles opencontext-providers
+brew tap CesarMSFelipe/opencontext
+brew install opencontext
 ```
 
-### Runtime-First Quickstart
+### Install via npm / pnpm
+
+```bash
+npm install -g opencontext
+# or
+pnpm add -g opencontext
+```
+
+### Install via pip (PyPI)
+
+```bash
+pip install opencontext-cli
+```
+
+### One-Liner (curl | bash)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh | bash
+```
+
+Installs via pipx automatically. Requires Python 3.12+ and pip. See [CLI Installation](docs/getting-started/cli-installation.md) for details.
+
+### Runtime-First Quickstart (Python API)
 
 The default path does not require users to learn OpenContext commands. Install the runtime in
 the host application, then call the Python API or HTTP API from your agent harness. This is the
@@ -94,12 +124,18 @@ print("Sources:", prepared.included_sources)
 print(prepared.context)
 ```
 
-### Current Development Installation
+### From Source (Development)
 
 ```bash
 git clone https://github.com/CesarMSFelipe/OpenContext-Runtime.git
 cd OpenContext-Runtime
-pip install -e packages/opencontext_core -e packages/opencontext_cli
+
+# Install all packages in editable mode
+pip install -e packages/opencontext_core \
+  -e packages/opencontext_profiles \
+  -e packages/opencontext_providers \
+  -e packages/opencontext_cli \
+  -e packages/opencontext_api
 
 cd your-project
 opencontext onboard
