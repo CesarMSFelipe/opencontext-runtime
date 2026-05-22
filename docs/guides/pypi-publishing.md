@@ -49,7 +49,7 @@ python -m build
 twine check dist/*
 
 # 4. Install locally and test
-pip install dist/opencontext_core-0.1.0-py3-none-any.whl
+pip install dist/opencontext_core-0.2.0-py3-none-any.whl
 
 # 5. Upload to PyPI
 twine upload dist/*
@@ -87,8 +87,8 @@ echo "All packages published!"
 
 | Version | Status | Notes |
 |---------|--------|-------|
-| 0.1.0 | Current dev | Alpha — all core features |
-| 0.2.0 | Planned | Plugin registry with remote downloads |
+| 0.1.0 | Previous | MVP — core indexing, repo maps, memory |
+| 0.2.0 | Current dev | SDD orchestration, agent system, learning, quality gates |
 | 1.0.0 | Planned | Stable API, production ready |
 
 ## Dependencies Per Package
@@ -106,14 +106,14 @@ prompt-toolkit>=3.0
 
 ### opencontext-cli
 ```
-opencontext-core>=0.1.0
-opencontext-profiles>=0.1.0
+opencontext-core>=0.2.0
+opencontext-profiles>=0.2.0
 ```
 
 ### opencontext-api
 ```
-opencontext-core>=0.1.0
-opencontext-profiles>=0.1.0
+opencontext-core>=0.2.0
+opencontext-profiles>=0.2.0
 fastapi>=0.110
 httpx>=0.27
 ```

@@ -44,7 +44,7 @@ opencontext plugin search --refresh
 opencontext plugin install security-audit
 
 # Specific version
-opencontext plugin install security-audit --ver 0.1.0
+opencontext plugin install security-audit --ver 0.2.0
 
 # From GitHub (owner/repo)
 opencontext plugin install <name> --github owner/repo
@@ -177,7 +177,7 @@ my-plugin/
 ```json
 {
   "name": "my-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "What my plugin does",
   "author": "Your Name",
   "entry_point": "plugin.py",
@@ -209,7 +209,7 @@ class OpenContextPlugin:
 
     @property
     def version(self):
-        return "0.1.0"
+        return "0.2.0"
 
     def initialize(self, context):
         """Called when the plugin is loaded."""
@@ -262,7 +262,7 @@ All capabilities default to denied. Explicitly grant only what the plugin needs.
 ```json
 {
   "name": "my-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "analyzer",
   "entrypoint": "plugin.py",
   "max_data_classification": "internal",
