@@ -205,6 +205,151 @@ def check_disk_space() -> CheckResult:
     return CheckResult("Disk Space", "skipped", "Storage not yet created")
 
 
+def check_harness_phases() -> CheckResult:
+    """Verify all 6 SDD harness phases are available."""
+
+    try:
+        from opencontext_core.harness.phases import (
+            ApplyPhase,
+            ArchivePhase,
+            ExplorePhase,
+            ProposePhase,
+            ReviewPhase,
+            VerifyPhase,
+        )
+
+        phases = {
+            "explore": ExplorePhase,
+            "propose": ProposePhase,
+            "apply": ApplyPhase,
+            "verify": VerifyPhase,
+            "review": ReviewPhase,
+            "archive": ArchivePhase,
+        }
+        missing = [name for name, cls in phases.items() if cls is None]
+        if missing:
+            return CheckResult(
+                "Harness Phases",
+                "warning",
+                f"Missing phases: {', '.join(missing)}",
+            )
+
+        # Verify each phase has an id attribute
+        phase_ids = {
+            "explore": ExplorePhase.id,
+            "propose": ProposePhase.id,
+            "apply": ApplyPhase.id,
+            "verify": VerifyPhase.id,
+            "review": ReviewPhase.id,
+            "archive": ArchivePhase.id,
+        }
+        return CheckResult(
+            "Harness Phases",
+            "passed",
+            f"6/6 phases available: {', '.join(f'{k}={v}' for k, v in phase_ids.items())}",
+        )
+    except ImportError as exc:
+        return CheckResult("Harness Phases", "failed", f"Import error: {exc}")
+    except Exception as exc:
+        return CheckResult("Harness Phases", "failed", f"Check error: {exc}")
+
+
+def check_harness_runner() -> CheckResult:
+    """Verify HarnessRunner can be instantiated."""
+
+    try:
+        from pathlib import Path
+
+        from opencontext_core.harness.models import BudgetMode
+        from opencontext_core.harness.runner import HarnessRunner
+
+        runner = HarnessRunner(root=Path.cwd())
+        state = runner.create_run("verify-check", "health check")
+        if state and state.run_id:
+            return CheckResult(
+                "Harness Runner",
+                "passed",
+                f"Runner ready, sample run_id: {state.run_id[:16]}",
+            )
+        return CheckResult("Harness Runner", "warning", "Runner created but no run_id")
+    except ImportError as exc:
+        return CheckResult("Harness Runner", "failed", f"Import error: {exc}")
+    except Exception as exc:
+        return CheckResult("Harness Runner", "failed", f"Check error: {exc}")
+
+
+def check_adapters() -> CheckResult:
+    """Verify adapter availability.
+
+    Checks that LocalAdapter, PythonAdapter, and AiderAdapter
+    are importable and their availability can be queried.
+    """
+
+    try:
+        from opencontext_core.adapters.aider import AiderAdapter
+        from opencontext_core.adapters.local import LocalAdapter, PythonAdapter
+
+        local = LocalAdapter()
+        python = PythonAdapter()
+        aider = AiderAdapter()
+
+        local_ok = local.check_available()
+        python_ok = python.check_available()
+        aider_ok = aider.check_available()
+
+        details_parts = []
+        details_parts.append(f"local={'✓' if local_ok else '✗'}")
+        details_parts.append(f"python={'✓' if python_ok else '✗'}")
+        details_parts.append(f"aider={'✓' if aider_ok else '—'}")
+        details = ", ".join(details_parts)
+
+        if local_ok and python_ok:
+            return CheckResult("Adapters", "passed", f"Core adapters ready ({details})")
+        return CheckResult(
+            "Adapters",
+            "warning",
+            f"Some adapters unavailable ({details})",
+        )
+    except ImportError as exc:
+        return CheckResult("Adapters", "failed", f"Import error: {exc}")
+    except Exception as exc:
+        return CheckResult("Adapters", "failed", f"Check error: {exc}")
+
+
+def check_boundary_service() -> CheckResult:
+    """Verify BoundaryService and AdapterRequest are importable.
+
+    Does NOT run a workflow — only validates that the service can be
+    instantiated and build a valid request model.
+    """
+
+    try:
+        from opencontext_core.adapters.boundary import AdapterRequest, AdapterTarget, BoundaryService
+
+        service = BoundaryService()
+        assert service.root is not None, "BoundaryService must have a root"
+
+        # Validate request model construction (no dispatch)
+        req = AdapterRequest(
+            target=AdapterTarget.OPENCODE,
+            task="health check",
+            root=str(service.root),
+            budget_mode="off",
+        )
+        assert req.target == AdapterTarget.OPENCODE
+        assert req.task == "health check"
+
+        return CheckResult(
+            "Boundary Service",
+            "passed",
+            f"Service ready, accepts {len(AdapterTarget)} targets",
+        )
+    except ImportError as exc:
+        return CheckResult("Boundary Service", "failed", f"Import error: {exc}")
+    except Exception as exc:
+        return CheckResult("Boundary Service", "failed", f"Check error: {exc}")
+
+
 # ── Registry ───────────────────────────────────────────────────────────────
 
 CHECK_REGISTRY: list[tuple[str, Callable[[], CheckResult], str]] = [
@@ -215,6 +360,10 @@ CHECK_REGISTRY: list[tuple[str, Callable[[], CheckResult], str]] = [
     ("Plugins", check_plugins, "Plugins"),
     ("Installation State", check_state, "State"),
     ("Disk Space", check_disk_space, "System"),
+    ("Harness Phases", check_harness_phases, "Workflow"),
+    ("Harness Runner", check_harness_runner, "Workflow"),
+    ("Adapters", check_adapters, "Integration"),
+    ("Boundary Service", check_boundary_service, "Integration"),
 ]
 
 

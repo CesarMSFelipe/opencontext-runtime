@@ -43,6 +43,35 @@ class UserFeatures:
 
 
 @dataclass
+class SDDPreferences:
+    """SDD/TDD workflow preferences."""
+
+    tdd_mode: str = "ask"
+    sdd_model_profile: str = "hybrid"
+    orchestrator_profile: str = "multi-phase"
+    token_budget_per_phase: dict[str, int] = field(
+        default_factory=lambda: {
+            "explore": 6000,
+            "propose": 6000,
+            "apply": 12000,
+            "verify": 4000,
+            "review": 4000,
+            "archive": 2000,
+        }
+    )
+
+
+@dataclass
+class AgentPreferences:
+    """Agent client preferences."""
+
+    active_clients: list[str] = field(default_factory=lambda: ["opencode"])
+    default_client: str = "opencode"
+    agent_files_generated: bool = False
+    mcp_configured: bool = False
+
+
+@dataclass
 class UserPreferences:
     """Persisted user preferences for OpenContext."""
 
@@ -58,6 +87,12 @@ class UserPreferences:
     # Features
     features: UserFeatures = field(default_factory=UserFeatures)
 
+    # SDD/TDD workflow
+    sdd: SDDPreferences = field(default_factory=SDDPreferences)
+
+    # Agent clients
+    agents: AgentPreferences = field(default_factory=AgentPreferences)
+
     # Token budgets
     default_token_budget: int = 10000
     max_input_tokens: int = 12000
@@ -72,7 +107,7 @@ class UserPreferences:
     enabled_plugins: list[str] = field(default_factory=list)
     installed_plugins: list[str] = field(default_factory=list)
 
-    # Agent integrations
+    # Agent integrations (legacy flat map kept for backward compat)
     agent_integrations: dict[str, bool] = field(
         default_factory=lambda: {
             "opencode": True,
@@ -80,8 +115,24 @@ class UserPreferences:
             "cursor": False,
             "windsurf": False,
             "kilo-code": False,
+            "gemini-cli": False,
+            "vscode-copilot": False,
+            "antigravity": False,
+            "kimi-code": False,
+            "kiro-ide": False,
+            "qwen-code": False,
+            "codex": False,
+            "openclaw": False,
+            "pi": False,
         }
     )
+
+    # SDD/TDD interaction defaults (legacy flat fields kept for backward compat)
+    active_agent: str = "opencode"
+    sdd_tdd_mode: str = "ask"
+    sdd_token_budget: int = 3000
+    sdd_model_profile: str = "default"
+    setup_completed: bool = False
 
     # Paths
     custom_storage_path: str = ".storage/opencontext"
@@ -116,8 +167,14 @@ class UserConfigStore:
             try:
                 data = json.loads(self.CONFIG_FILE.read_text(encoding="utf-8"))
                 features_data = data.pop("features", {})
-                features = UserFeatures(**features_data)
-                self._preferences = UserPreferences(**data, features=features)
+                sdd_data = data.pop("sdd", {})
+                agents_data = data.pop("agents", {})
+                features = UserFeatures(**{k: v for k, v in features_data.items() if k in UserFeatures.__dataclass_fields__})
+                sdd = SDDPreferences(**{k: v for k, v in sdd_data.items() if k in SDDPreferences.__dataclass_fields__})
+                agents = AgentPreferences(**{k: v for k, v in agents_data.items() if k in AgentPreferences.__dataclass_fields__})
+                known = set(UserPreferences.__dataclass_fields__) - {"features", "sdd", "agents"}
+                filtered = {k: v for k, v in data.items() if k in known}
+                self._preferences = UserPreferences(**filtered, features=features, sdd=sdd, agents=agents)
                 return self._preferences
             except (json.JSONDecodeError, TypeError):
                 pass
