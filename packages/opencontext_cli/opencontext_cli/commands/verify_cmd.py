@@ -19,9 +19,9 @@ def add_verify_parser(subparsers: Any) -> None:
 
     verify_parser = subparsers.add_parser(
         "verify",
-        help="Run post-install health checks.",
+        help="Run component health checks.",
         description=(
-            "Verify that OpenContext components are installed and working.\n"
+            "Verify that all OpenContext components are installed and working.\n"
             "Runs checks for Python version, user config, tree-sitter,\n"
             "knowledge graph, MCP config, plugins, and more."
         ),
