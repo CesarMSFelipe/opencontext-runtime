@@ -99,6 +99,29 @@ create_venv() {
     echo "✓ Virtual environment created"
 }
 
+_add_venv_to_path() {
+    local venv_bin="$1"
+    local added=false
+    for profile in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+        if [ -f "$profile" ]; then
+            if ! grep -q "$venv_bin" "$profile" 2>/dev/null; then
+                echo "" >> "$profile"
+                echo "# OpenContext Runtime" >> "$profile"
+                echo "export PATH=\"$venv_bin:\$PATH\"" >> "$profile"
+                added=true
+                echo "✓ Added to PATH in $(basename "$profile")"
+            fi
+        fi
+    done
+    if [ "$added" = false ]; then
+        echo ""
+        echo "⚠ Could not auto-configure PATH."
+        echo "  Add this to your shell profile manually:"
+        echo "    export PATH=\"$venv_bin:\$PATH\""
+        echo ""
+    fi
+}
+
 # Determine pip command to use (system or venv)
 get_pip_cmd() {
     if [ -f "$VENV_DIR/bin/pip" ]; then
@@ -207,24 +230,28 @@ install_opencontext() {
         echo "✓ Installed from source"
     fi
 
-    # Create wrapper script in ~/.local/bin if using venv
+    # Ensure opencontext command is available
     if [ -d "$VENV_DIR" ]; then
-        mkdir -p "$BIN_DIR"
-        VENV_PYTHON=$(get_python_cmd)
-        cat > "$BIN_DIR/opencontext" <<EOF
-#!/usr/bin/env bash
-exec $VENV_PYTHON -m opencontext_cli "\$@"
-EOF
-        chmod +x "$BIN_DIR/opencontext"
-        echo "✓ Created wrapper: $BIN_DIR/opencontext"
+        # Using venv: add venv/bin to PATH via shell profile
+        VENV_BIN=""
+        if [ -d "$VENV_DIR/bin" ]; then
+            VENV_BIN="$VENV_DIR/bin"
+        elif [ -d "$VENV_DIR/Scripts" ]; then
+            VENV_BIN="$VENV_DIR/Scripts"
+        fi
+
+        if [ -n "$VENV_BIN" ] && [ -f "$VENV_BIN/opencontext" ]; then
+            # Add venv/bin to PATH in shell profiles
+            _add_venv_to_path "$VENV_BIN"
+        fi
     fi
 
-    # Check if opencontext is in PATH
-    if ! command -v opencontext &>/dev/null; then
+    # Remind user to reload shell if PATH was just updated
+    if [ -d "$VENV_DIR" ] && ! command -v opencontext &>/dev/null; then
         echo ""
-        echo "⚠ 'opencontext' is not in your PATH."
-        echo "  Add this to your shell profile:"
-        echo "    export PATH=\"\$PATH:$BIN_DIR\""
+        echo "ℹ PATH updated. Run one of these to use 'opencontext' now:"
+        echo "    source ~/.bashrc     # or ~/.zshrc"
+        echo "    # or start a new terminal session"
         echo ""
     fi
 
