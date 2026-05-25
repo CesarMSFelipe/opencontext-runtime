@@ -81,23 +81,15 @@ check_pip() {
 
 # Detect PEP 668 externally-managed environment
 is_externally_managed() {
-    # Check for PEP 668 marker file in stdlib path (Ubuntu/Debian, Fedora, etc.)
-    local stdlib_path
-    stdlib_path=$("$PYTHON_CMD" -c 'import sysconfig; print(sysconfig.get_path("stdlib"))' 2>/dev/null)
-    if [ -n "$stdlib_path" ] && [ -f "$stdlib_path/EXTERNALLY-MANAGED" ]; then
+    # Check for PEP 668 marker file or pip error code
+    if [ -f "$($PYTHON_CMD -c 'import sys; print(sys.prefix)')/EXTERNALLY-MANAGED" ] 2>/dev/null; then
         return 0
     fi
-    # Fallback: check sys.prefix (some distros place it here)
-    local prefix
-    prefix=$("$PYTHON_CMD" -c 'import sys; print(sys.prefix)' 2>/dev/null)
-    if [ -n "$prefix" ] && [ -f "$prefix/EXTERNALLY-MANAGED" ]; then
-        return 0
+    # Also check via pip dry-run (Ubuntu/Debian may not create the marker file)
+    if ! "$PYTHON_CMD" -m pip install --dry-run pip 2>/dev/null | grep -q "externally-managed"; then
+        return 1
     fi
-    # Last resort: try pip dry-run and check for the error
-    if "$PYTHON_CMD" -m pip install --dry-run pip 2>&1 | grep -qi "externally-managed"; then
-        return 0
-    fi
-    return 1
+    return 0
 }
 
 create_venv() {
