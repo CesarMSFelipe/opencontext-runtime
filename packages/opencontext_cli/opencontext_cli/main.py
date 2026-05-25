@@ -209,8 +209,32 @@ def _notify_outdated(args: argparse.Namespace) -> None:
         )
 
 
+class _DeprecationAwareParser(argparse.ArgumentParser):
+    """Custom parser that shows helpful messages for removed deprecated commands."""
+
+    _DEPRECATED: frozenset[str] = frozenset({
+        "run", "orchestrate", "validate", "propose",
+        "governance", "evidence",
+    })
+
+    def error(self, message: str) -> NoReturn:
+        # Only check the first non-flag argument (the top-level command)
+        for arg in sys.argv[1:]:
+            if not arg.startswith("-"):
+                if arg in self._DEPRECATED:
+                    print(
+                        f"error: '{arg}' has been removed.",
+                        file=sys.stderr,
+                    )
+                    print("  Use 'opencontext harness run' instead.", file=sys.stderr)
+                    print("  See 'opencontext --help' for available commands.", file=sys.stderr)
+                    raise SystemExit(2)
+                break
+        super().error(message)
+
+
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="opencontext")
+    parser = _DeprecationAwareParser(prog="opencontext")
     parser.add_argument(
         "--config",
         default=_default_config_path(),
@@ -507,35 +531,9 @@ def _build_parser() -> argparse.ArgumentParser:
     security_sub.add_parser("report")
     security_policy = security_sub.add_parser("policy")
     security_policy.add_argument("action", choices=["inspect"])
-    run_parser = subparsers.add_parser(
-        "run",
-        help=argparse.SUPPRESS,
-    )
-    run_parser.add_argument("--task", default="", help="[Ignored] Use harness run instead.")
-
-    orchestrate_parser = subparsers.add_parser(
-        "orchestrate",
-        help=argparse.SUPPRESS,
-    )
-    orchestrate_parser.add_argument("--requirements", default="", help="[Ignored] Use harness run instead.")
-
-    validate_parser = subparsers.add_parser(
-        "validate",
-        help=argparse.SUPPRESS,
-    )
-    validate_parser.add_argument("--profile", default="generic")
-
-    propose_parser = subparsers.add_parser(
-        "propose",
-        help=argparse.SUPPRESS,
-    )
-    propose_sub = propose_parser.add_subparsers(dest="propose_command", required=True)
-    propose_patch = propose_sub.add_parser("patch", help="[DEPRECATED] Use harness run instead.")
-    propose_patch.add_argument("--task", required=True)
-
     refacil_parser = subparsers.add_parser(
         "sdd",
-        help=argparse.SUPPRESS,
+        help="[DEPRECATED] Use 'harness run' instead.",
     )
     refacil_sub = refacil_parser.add_subparsers(dest="sdd_command", required=True)
     refacil_init = refacil_sub.add_parser("init", help="Detect local SDD/TDD capabilities.")
@@ -609,23 +607,6 @@ def _build_parser() -> argparse.ArgumentParser:
     provider_simulate.add_argument("--provider", required=True)
     provider_simulate.add_argument("--classification", default="internal")
     provider_simulate.add_argument("--mode", choices=[m.value for m in SecurityMode], default=None)
-
-    governance_parser = subparsers.add_parser(
-        "governance",
-        help=argparse.SUPPRESS,
-    )
-    governance_sub = governance_parser.add_subparsers(dest="governance_command", required=True)
-    governance_sub.add_parser("report")
-
-    evidence_parser = subparsers.add_parser(
-        "evidence",
-        help=argparse.SUPPRESS,
-    )
-    evidence_sub = evidence_parser.add_subparsers(dest="evidence_command", required=True)
-    evidence_pack = evidence_sub.add_parser("pack")
-    evidence_pack.add_argument(
-        "--output-mode", choices=[mode.value for mode in OutputMode], default="report"
-    )
 
     prompt_parser = subparsers.add_parser("prompt", help="Prompt leak and public-safety tools.")
     prompt_sub = prompt_parser.add_subparsers(dest="prompt_command", required=True)
@@ -1066,22 +1047,8 @@ def _dispatch(args: argparse.Namespace) -> None:
         _doctor(runtime, args.scope, args.suggest_ignore, getattr(args, "json", False))
     elif command == "clean":
         _clean(args.root, args.dry_run, args.force)
-    elif command == "run":
-        _run(args.run_command, getattr(args, "task", None), getattr(args, "target", None))
-    elif command == "orchestrate":
-        _orchestrate(args.requirements, runtime.config.security.mode)
-    elif command == "debug":
-        _debug(args.log, args.mode, runtime.config.security.mode)
-    elif command == "validate":
-        _validate(args.profile, runtime.config.security.mode)
-    elif command == "propose":
-        _propose(args.propose_command, args.task, runtime.config.security.mode)
     elif command == "provider":
         _provider_simulate(args.provider, args.classification, runtime, args.mode)
-    elif command == "governance":
-        _governance(args.governance_command, runtime)
-    elif command == "evidence":
-        _evidence(args.evidence_command, runtime, getattr(args, "output_mode", "report"))
     elif command == "mcp":
         _mcp_serve(getattr(args, "db_path", ".storage/opencontext/codegraph.db"))
     else:
@@ -1664,34 +1631,6 @@ def _security(
         print(rendered)
         return
     _scaffold_deprecated(f"security {action}", "opencontext verify")
-
-
-def _governance(action: str, runtime: OpenContextRuntime) -> None:
-    _scaffold_deprecated("governance", "opencontext check")
-
-
-def _evidence(action: str, runtime: OpenContextRuntime, output_mode: str = "report") -> None:
-    _scaffold_deprecated("evidence", "opencontext release evidence")
-
-
-def _run(action: str, task: str | None, target: str | None) -> None:
-    _scaffold_deprecated(f"run {action}", "opencontext harness run")
-
-
-def _orchestrate(requirements: str, security_mode: SecurityMode) -> None:
-    _scaffold_deprecated("orchestrate", "opencontext harness run --workflow sdd")
-
-
-def _debug(log_path: str, mode: str, security_mode: SecurityMode) -> None:
-    _scaffold_deprecated("debug", "opencontext harness run")
-
-
-def _validate(profile: str, security_mode: SecurityMode) -> None:
-    _scaffold_deprecated("validate", "opencontext verify")
-
-
-def _propose(action: str, task: str, security_mode: SecurityMode) -> None:
-    _scaffold_deprecated(f"propose {action}", "opencontext harness run --workflow sdd")
 
 
 def _provider_simulate(

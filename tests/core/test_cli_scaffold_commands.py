@@ -13,8 +13,6 @@ from opencontext_cli.main import (
     _doctor,
     _drupal,
     _eval,
-    _evidence,
-    _governance,
     _init,
     _pack,
     _pack_diff,
@@ -116,7 +114,7 @@ def test_more_required_scaffolds(tmp_path: Path, monkeypatch, capsys) -> None:
     assert json.loads(capsys.readouterr().out)["profile"] == "drupal"
 
 
-def test_provider_governance_and_evidence_deprecation(tmp_path: Path, capsys) -> None:
+def test_provider_simulate_denies_confidential(tmp_path: Path, capsys) -> None:
     project = tmp_path / "project"
     project.mkdir()
     config_path = write_config(tmp_path, project)
@@ -125,16 +123,6 @@ def test_provider_governance_and_evidence_deprecation(tmp_path: Path, capsys) ->
     _provider_simulate("openai", "confidential", runtime)
     provider = json.loads(capsys.readouterr().out)
     assert provider["decision"]["allowed"] is False
-
-    _governance("report", runtime)
-    governance = json.loads(capsys.readouterr().out)
-    assert governance["status"] == "removed"
-    assert "opencontext check" in governance["hint"]
-
-    _evidence("pack", runtime)
-    evidence = json.loads(capsys.readouterr().out)
-    assert evidence["status"] == "removed"
-    assert "opencontext release evidence" in evidence["hint"]
 
 
 def test_pack_output_file_is_redacted(tmp_path: Path, capsys) -> None:
