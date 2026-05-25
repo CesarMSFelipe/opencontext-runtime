@@ -629,7 +629,7 @@ def _build_parser() -> argparse.ArgumentParser:
         description=(
             "Execute SDD or custom harness workflows with phase governance, "
             "token budget enforcement, and gate evaluation. The harness runs "
-             "phases (explore -> propose -> apply -> verify -> review -> archive) "
+            "phases (explore -> propose -> apply -> verify -> review -> archive) "
             "and persists results to .opencontext/runs/<run_id>/."
         ),
     )
@@ -639,7 +639,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Execute a harness workflow.",
         description=(
             "Run a harness workflow with the given task. Available workflows:\n"
-             "  sdd           Full SDD: explore -> propose -> apply -> verify -> review -> archive\n"
+            "  sdd           Full SDD: explore -> propose -> apply"
+            " -> verify -> review -> archive\n"
             "  explore-only  Single phase: explore (index + context pack)\n"
             "  apply-only    Apply + verify + archive\n\n"
             "Results are saved to .opencontext/runs/<run_id>/ and printed to stdout."
