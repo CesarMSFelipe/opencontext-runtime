@@ -25,7 +25,7 @@ class ProjectIndexExistsGate:
             id=self.id,
             phase="explore",
             status=GateStatus.FAILED,
-            message="Project manifest missing — run `opencontext onboard .` first.",
+            message="Project manifest missing — run `opencontext install` first.",
         )
 
 

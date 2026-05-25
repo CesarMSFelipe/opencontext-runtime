@@ -55,7 +55,12 @@ opencontext pack . --query "Explain how authentication works" --copy
 
 That's it. Three commands. No config files to edit, no API keys to set up.
 
-`opencontext install` works on **Linux, macOS, and Windows**. It auto-detects your project stack (Python, Node.js, etc.), sets up the knowledge graph, SDD/TDD harness, agent integrations, and project index — everything needed to start coding with AI assistance.
+`opencontext install` works on **Linux, macOS, and Windows**. It auto-detects your project stack, walks you through each step with progress indicators, and sets up the knowledge graph, SDD/TDD harness, agent integrations, and project index — everything needed to start coding with AI assistance.
+
+After installing, fine-tune everything with:
+```bash
+opencontext config wizard     # Interactive TUI menu
+```
 
 ---
 
@@ -156,10 +161,10 @@ opencontext plugin list                             # Installed plugins
 ### Configuration
 
 ```bash
+opencontext config wizard                 # Interactive TUI menu
 opencontext config show                   # View preferences
 opencontext config set features.knowledge_graph true   # Dot-notation
 opencontext config get sdd.tdd_mode                   # Read any path
-opencontext config wizard                  # Interactive setup
 ```
 
 ### Agent Integration

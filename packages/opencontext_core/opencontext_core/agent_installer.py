@@ -447,7 +447,7 @@ class AgentInstaller:
 | **KG** | `opencontext pack . --query "<task>"` | Generate context pack |
 | | `opencontext index .` | Index project |
 | **Setup** | `opencontext init` | Create project config |
-| | `opencontext onboard .` | Full project setup |
+| | `opencontext install` | Full project setup |
 |"""
 
         # Agent-specific prefix

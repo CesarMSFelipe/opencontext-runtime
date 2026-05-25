@@ -149,7 +149,7 @@ def check_mcp_config() -> CheckResult:
             except Exception:
                 return CheckResult("MCP Server", "warning", "MCP config exists but invalid")
     return CheckResult(
-        "MCP Server", "warning", "Not configured — use 'opencontext onboard . --setup-mcp'"
+        "MCP Server", "warning", "Not configured — use 'opencontext install'"
     )
 
 
@@ -324,7 +324,11 @@ def check_boundary_service() -> CheckResult:
     """
 
     try:
-        from opencontext_core.adapters.boundary import AdapterRequest, AdapterTarget, BoundaryService
+        from opencontext_core.adapters.boundary import (
+            AdapterRequest,
+            AdapterTarget,
+            BoundaryService,
+        )
 
         service = BoundaryService()
         assert service.root is not None, "BoundaryService must have a root"
