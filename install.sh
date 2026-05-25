@@ -4,8 +4,10 @@
 
 set -euo pipefail
 
-OPENCONTEXT_VERSION="0.1.0"
+OPENCONTEXT_VERSION="0.3.0"
 REPO_URL="https://github.com/CesarMSFelipe/OpenContext-Runtime"
+VENV_DIR="${HOME}/.opencontext/venv"
+BIN_DIR="${HOME}/.local/bin"
 
 # Parse flags
 YES_MODE=false
@@ -37,7 +39,7 @@ done
 
 # Cleanup handler — removes temp dir on exit
 cleanup() {
-    if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then
+    if [[ -n "${TEMP_DIR:-}" && -d "$TEMP_DIR" ]]; then
         rm -rf "$TEMP_DIR"
     fi
 }
@@ -77,6 +79,56 @@ check_pip() {
     echo "✓ pip"
 }
 
+# Detect PEP 668 externally-managed environment
+is_externally_managed() {
+    # Check for PEP 668 marker file in stdlib path (Ubuntu/Debian, Fedora, etc.)
+    local stdlib_path
+    stdlib_path=$("$PYTHON_CMD" -c 'import sysconfig; print(sysconfig.get_path("stdlib"))' 2>/dev/null)
+    if [ -n "$stdlib_path" ] && [ -f "$stdlib_path/EXTERNALLY-MANAGED" ]; then
+        return 0
+    fi
+    # Fallback: check sys.prefix (some distros place it here)
+    local prefix
+    prefix=$("$PYTHON_CMD" -c 'import sys; print(sys.prefix)' 2>/dev/null)
+    if [ -n "$prefix" ] && [ -f "$prefix/EXTERNALLY-MANAGED" ]; then
+        return 0
+    fi
+    # Last resort: try pip dry-run and check for the error
+    if "$PYTHON_CMD" -m pip install --dry-run pip 2>&1 | grep -qi "externally-managed"; then
+        return 0
+    fi
+    return 1
+}
+
+create_venv() {
+    echo ""
+    echo "Creating virtual environment at $VENV_DIR ..."
+    "$PYTHON_CMD" -m venv "$VENV_DIR"
+    echo "✓ Virtual environment created"
+}
+
+# Determine pip command to use (system or venv)
+get_pip_cmd() {
+    if [ -f "$VENV_DIR/bin/pip" ]; then
+        echo "$VENV_DIR/bin/python -m pip"
+    elif [ -f "$VENV_DIR/Scripts/pip.exe" ]; then
+        echo "$VENV_DIR/Scripts/python -m pip"
+    else
+        echo "$PYTHON_CMD -m pip"
+    fi
+}
+
+# Determine python command to use
+get_python_cmd() {
+    if [ -f "$VENV_DIR/bin/python" ]; then
+        echo "$VENV_DIR/bin/python"
+    elif [ -f "$VENV_DIR/Scripts/python.exe" ]; then
+        echo "$VENV_DIR/Scripts/python.exe"
+    else
+        echo "$PYTHON_CMD"
+    fi
+}
+
 install_opencontext() {
     echo ""
     echo "╔══════════════════════════════════════════════════════════════╗"
@@ -87,12 +139,50 @@ install_opencontext() {
     check_python
     check_pip
 
+    PIP_CMD=$(get_pip_cmd)
+    PY_CMD=$(get_python_cmd)
+
+    echo ""
+
+    # Check if we need a virtual environment (PEP 668)
+    if is_externally_managed; then
+        echo "⚠ Externally-managed Python environment detected (PEP 668)."
+        echo "  OpenContext will be installed in an isolated virtual environment."
+        echo ""
+
+        if [ ! -d "$VENV_DIR" ]; then
+            if [ "$YES_MODE" = true ]; then
+                create_venv
+            else
+                read -rp "Create virtual environment at $VENV_DIR? [Y/n] " answer
+                case "$answer" in
+                    [Nn]*)
+                        echo "Installation cancelled."
+                        echo ""
+                        echo "Alternatives:"
+                        echo "  1. Use pipx:  pipx install opencontext-cli"
+                        echo "  2. Use --break-system-packages (not recommended)"
+                        echo "  3. Run with --yes to auto-create the venv"
+                        exit 0
+                        ;;
+                    *)
+                        create_venv
+                        ;;
+                esac
+            fi
+        fi
+
+        # Re-resolve commands after venv creation
+        PIP_CMD=$(get_pip_cmd)
+        PY_CMD=$(get_python_cmd)
+    fi
+
     echo ""
     echo "Installing OpenContext packages..."
     echo ""
 
     # Try pip install first (when published)
-    if "$PYTHON_CMD" -m pip install opencontext-core opencontext-cli --quiet 2>/dev/null; then
+    if $PIP_CMD install opencontext-core opencontext-cli --quiet 2>/dev/null; then
         echo "✓ Installed from PyPI"
     else
         echo "PyPI packages not found. Installing from source..."
@@ -121,16 +211,28 @@ install_opencontext() {
         }
 
         cd "$TEMP_DIR/opencontext"
-        "$PYTHON_CMD" -m pip install -e packages/opencontext_core -e packages/opencontext_cli --quiet
+        $PIP_CMD install -e packages/opencontext_core -e packages/opencontext_cli --quiet
         echo "✓ Installed from source"
+    fi
+
+    # Create wrapper script in ~/.local/bin if using venv
+    if [ -d "$VENV_DIR" ]; then
+        mkdir -p "$BIN_DIR"
+        VENV_PYTHON=$(get_python_cmd)
+        cat > "$BIN_DIR/opencontext" <<EOF
+#!/usr/bin/env bash
+exec $VENV_PYTHON -m opencontext_cli "\$@"
+EOF
+        chmod +x "$BIN_DIR/opencontext"
+        echo "✓ Created wrapper: $BIN_DIR/opencontext"
     fi
 
     # Check if opencontext is in PATH
     if ! command -v opencontext &>/dev/null; then
         echo ""
-        echo "Warning: 'opencontext' command not found in PATH."
-        echo "You may need to add Python scripts directory to your PATH:"
-        echo "  export PATH=\"\$PATH:\$HOME/.local/bin\""
+        echo "⚠ 'opencontext' is not in your PATH."
+        echo "  Add this to your shell profile:"
+        echo "    export PATH=\"\$PATH:$BIN_DIR\""
         echo ""
     fi
 
