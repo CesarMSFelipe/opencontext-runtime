@@ -3,6 +3,7 @@
 Usage:
   opencontext plugin list              List installed plugins
   opencontext plugin search [query]    Search remote registry
+  opencontext plugin init <name>       Scaffold a new plugin
   opencontext plugin install <name>    Install from registry
   opencontext plugin install <name> --github owner/repo
   opencontext plugin install <name> --url <url>
@@ -16,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from opencontext_core.plugin_system import (
@@ -44,6 +46,20 @@ def add_plugin_parser(subparsers: Any) -> None:
         "--refresh", action="store_true", help="Force refresh registry cache."
     )
 
+    # Init
+    init_parser = plugin_sub.add_parser("init", help="Scaffold a new plugin.")
+    init_parser.add_argument("name", help="Plugin name (alphanumeric + hyphens).")
+    init_parser.add_argument(
+        "--description", default="", help="Short plugin description."
+    )
+    init_parser.add_argument("--author", default="", help="Plugin author name.")
+    init_parser.add_argument(
+        "--template",
+        choices=["basic", "advanced"],
+        default="basic",
+        help="Scaffold template to use (default: basic).",
+    )
+
     # Install
     install_parser = plugin_sub.add_parser("install", help="Install a plugin.")
     install_parser.add_argument("name", help="Plugin name.")
@@ -65,6 +81,7 @@ def add_plugin_parser(subparsers: Any) -> None:
     # Info
     info_parser = plugin_sub.add_parser("info", help="Show plugin details.")
     info_parser.add_argument("name", help="Plugin name.")
+    info_parser.add_argument("--json", action="store_true", help="Output as JSON.")
 
     # Enable/Disable
     enable_parser = plugin_sub.add_parser("enable", help="Enable a plugin.")
@@ -83,6 +100,8 @@ def handle_plugin(args: Any) -> None:
         _plugin_list(args)
     elif command == "search":
         _plugin_search(args)
+    elif command == "init":
+        _plugin_init(args)
     elif command == "install":
         _plugin_install(args)
     elif command == "remove":
@@ -178,6 +197,109 @@ def _plugin_search(args: Any) -> None:
     print()
     print("  Install:  opencontext plugin install <name>")
     print("  Details:  opencontext plugin info <name>")
+
+
+def _plugin_init(args: Any) -> None:
+    """Scaffold a new plugin directory."""
+
+    name = args.name.strip()
+    if not name.replace("-", "").replace("_", "").isalnum():
+        print(f"\n  ✗ Invalid plugin name: '{name}'. Use alphanumeric, hyphens, or underscores.\n")
+        return
+
+    plugin_dir = Path.cwd() / name
+    if plugin_dir.exists():
+        print(f"\n  ✗ Directory '{name}' already exists.\n")
+        return
+
+    description = args.description or f"Plugin '{name}'"
+    author = args.author or ""
+    class_name = "".join(
+        part.capitalize() for part in name.replace("-", "_").split("_")
+    )
+    if class_name.endswith("Plugin"):
+        base_name = class_name
+    else:
+        base_name = f"{class_name}Plugin"
+
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- plugin.yaml ---
+    yaml_content = (
+        f"name: {name}\n"
+        f"version: 0.1.0\n"
+        f"description: {description}\n"
+        f"author: {author}\n"
+        f"entry_point: plugin.py\n"
+        f"hooks: []\n"
+    )
+    (plugin_dir / "plugin.yaml").write_text(yaml_content, encoding="utf-8")
+    print(f"  ✓ Created {name}/plugin.yaml")
+
+    # --- plugin.py ---
+    if args.template == "advanced":
+        plugin_py = (
+            f'"""Advanced {name} plugin."""\n\n'
+            f"from __future__ import annotations\n\n"
+            f"from typing import Any\n\n\n"
+            f"class {base_name}:\n"
+            f'    """{name} plugin."""\n\n'
+            f"    @property\n"
+            f"    def name(self) -> str:\n"
+            f'        return "{name}"\n\n'
+            f"    @property\n"
+            f"    def version(self) -> str:\n"
+            f'        return "0.1.0"\n\n'
+            f"    @property\n"
+            f"    def description(self) -> str:\n"
+            f'        return "{description}"\n\n'
+            f"    def initialize(self, context: dict[str, Any]) -> None:\n"
+            f'        """Called when plugin is loaded."""\n'
+            f"        pass\n\n"
+            f"    def shutdown(self) -> None:\n"
+            f'        """Called when plugin is unloaded."""\n'
+            f"        pass\n\n"
+            f"    def register_commands(self, registry: Any) -> None:\n"
+            f'        """Register CLI commands."""\n'
+            f"        pass\n\n"
+            f"    def register_hooks(self, registry: Any) -> None:\n"
+            f'        """Register hooks."""\n'
+            f"        registry.register_hook(\"post_execute\", self.on_post_execute)\n\n"
+            f"    def on_post_execute(self, result: Any) -> None:\n"
+            f"        pass\n"
+        )
+    else:
+        plugin_py = (
+            f'"""{name} plugin."""\n\n\n'
+            f"class {base_name}:\n"
+            f"    @property\n"
+            f"    def name(self):\n"
+            f'        return "{name}"\n'
+            f"\n"
+            f"    @property\n"
+            f"    def version(self):\n"
+            f'        return "0.1.0"\n'
+            f"\n"
+            f"    @property\n"
+            f"    def description(self):\n"
+            f'        return "{description}"\n'
+        )
+    (plugin_dir / "plugin.py").write_text(plugin_py, encoding="utf-8")
+    print(f"  ✓ Created {name}/plugin.py")
+
+    # --- README.md ---
+    readme = (
+        f"# {name}\n\n"
+        f"{description}\n\n"
+        f"## Installation\n\n"
+        f"```bash\nopencontext plugin install {name}\n```\n\n"
+        f"## Usage\n\n"
+        f"Describe how to use this plugin.\n"
+    )
+    (plugin_dir / "README.md").write_text(readme, encoding="utf-8")
+    print(f"  ✓ Created {name}/README.md")
+
+    print(f"\n  Plugin '{name}' scaffolded. Edit plugin.py to add your logic.\n")
 
 
 def _plugin_install(args: Any) -> None:
@@ -289,6 +411,46 @@ def _plugin_info(args: Any) -> None:
     registry = PluginRegistry()
     info = registry.get_info(args.name)
 
+    # Check registry for latest version
+    latest_version = "unknown"
+    try:
+        fetcher = RegistryFetcher()
+        entry = fetcher.get(args.name)
+        if entry and entry.versions:
+            latest_version = entry.versions[0].version
+    except Exception:
+        pass
+
+    if args.json:
+        if info is None:
+            data = {
+                "name": args.name,
+                "installed": False,
+                "latest": latest_version,
+            }
+        else:
+            data = {
+                "name": info.name,
+                "installed": True,
+                "version": info.version,
+                "latest": latest_version,
+                "description": info.description,
+                "author": info.author,
+                "homepage": info.homepage,
+                "repository": info.repository,
+                "enabled": info.enabled,
+                "install_source": info.install_source,
+                "source_url": info.source_url,
+                "entry_point": info.entry_point,
+                "installed_at": info.installed_at,
+                "updated_at": info.updated_at,
+                "hooks": info.hooks,
+            }
+            if latest_version != "unknown" and latest_version != info.version:
+                data["update_available"] = True
+        print(json.dumps(data, indent=2))
+        return
+
     if info is None:
         # Check registry
         fetcher = RegistryFetcher()
@@ -311,11 +473,15 @@ def _plugin_info(args: Any) -> None:
     print(f"\n  {info.name}")
     print(f"  {'─' * len(info.name)}")
     print(f"  Version:      {info.version}")
+    if latest_version != "unknown" and latest_version != info.version:
+        print(f"  Latest:       {latest_version}  (update available)")
+    else:
+        print(f"  Latest:       {latest_version}")
     print(f"  Description:  {info.description}")
     print(f"  Author:       {info.author or '—'}")
     print(f"  Homepage:     {info.homepage or '—'}")
     print(f"  Repository:   {info.repository or '—'}")
-    print(f"  Status:       {'✓ enabled' if info.enabled else '○ disabled'}")
+    print(f"  Status:       {'enabled' if info.enabled else 'disabled'}")
     print(f"  Source:       {info.install_source}")
     print(f"  Source URL:   {info.source_url or '—'}")
     print(f"  Entry point:  {info.entry_point}")
