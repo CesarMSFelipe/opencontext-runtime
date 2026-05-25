@@ -8,7 +8,7 @@ delta comparison across runs.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from opencontext_core.harness.models import HarnessRunResult
@@ -39,7 +39,7 @@ class MemoryDelta:
         self.decision_deltas = decision_deltas or []
         self.artifact_deltas = artifact_deltas or []
         self.warnings = warnings or []
-        self.timestamp = timestamp or datetime.now(timezone.utc).isoformat()
+        self.timestamp = timestamp or datetime.now(UTC).isoformat()
 
     def to_dict(self) -> dict[str, Any]:
         return {

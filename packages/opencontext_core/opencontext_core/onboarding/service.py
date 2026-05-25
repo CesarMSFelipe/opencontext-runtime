@@ -7,7 +7,6 @@ configuration, and MCP setup in a single pass.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -52,14 +51,14 @@ class OnboardingService:
 
     def run(self, options: OnboardingOptions) -> OnboardingResult:
         """Execute the full onboarding pipeline."""
-        from opencontext_core.workspace.layout import ensure_workspace
-        from opencontext_core.config import default_config_data
-        from opencontext_core.user_prefs import UserConfigStore
-        from opencontext_core.sdd_runtime import write_sdd_context
         from opencontext_core.adapters.agent_manifest import (
             AgentIntegrationGenerator,
             AgentTarget,
         )
+        from opencontext_core.config import default_config_data
+        from opencontext_core.sdd_runtime import write_sdd_context
+        from opencontext_core.user_prefs import UserConfigStore
+        from opencontext_core.workspace.layout import ensure_workspace
 
         root = options.root.resolve()
         result = OnboardingResult(root=str(root))

@@ -118,7 +118,6 @@ class LocalAdapter(AgentAdapter):
     @staticmethod
     def _command_exists(cmd: str) -> bool:
         """Check if a command is available on PATH."""
-        import shutil
 
         return shutil.which(cmd) is not None
 
