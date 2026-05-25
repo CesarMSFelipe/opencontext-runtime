@@ -42,15 +42,18 @@ You should see a list of available commands.
 
 ## Quick Start (3 Minutes)
 
-### 1. Onboard Your Project
+### 1. Install & Configure Your Project
 
 ```bash
 cd your-project
-opencontext onboard
+opencontext install
 ```
 
-This creates:
+This auto-detects your stack and walks you through:
 - `opencontext.yaml` — Project configuration
+- Project indexing and knowledge graph
+- SDD/TDD harness setup
+- Agent integration files
 - `.opencontext/` — Working directory for indexes, memory, traces
 
 ### 2. Index Your Code
@@ -276,7 +279,7 @@ Ensure you have write permissions in the project directory.
 
 ```bash
 opencontext --help
-opencontext onboard --help
+opencontext install --help
 opencontext pack --help
 ```
 
@@ -292,7 +295,7 @@ opencontext pack --help
 
 ```bash
 # Setup
-opencontext onboard .
+opencontext install
 opencontext index .
 
 # Search

@@ -6,14 +6,12 @@ import argparse
 import contextlib
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Any, NoReturn
 
 import yaml
 
 from opencontext_cli.commands.ci_check_cmd import add_ci_check_parser, handle_ci_check
-from opencontext_core.update import UpdateChecker
 from opencontext_cli.commands.config_cmd import add_config_parser, handle_config
 from opencontext_cli.commands.git_cmd import add_git_parser, handle_git
 from opencontext_cli.commands.hints_cmd import add_hints_parser, handle_hints
@@ -30,12 +28,10 @@ from opencontext_cli.commands.update_cmd import (
 from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
 from opencontext_core.actions import ActionRequest, ActionType, evaluate_action
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
-from opencontext_core.compat import UTC
 from opencontext_core.config import SecurityMode, default_config_data, load_config
 from opencontext_core.context.modes import ContextMode
 from opencontext_core.doctor.checks import run_doctor, run_security_doctor
 from opencontext_core.dx.checkpoints import ContextCheckpoint, fingerprint
-from opencontext_core.dx.checks import ensure_checks
 from opencontext_core.dx.instructions import import_instructions
 from opencontext_core.dx.security_reports import scan_project
 from opencontext_core.dx.tokens import build_token_report
@@ -46,12 +42,6 @@ from opencontext_core.evaluation import (
     ContextQualityEvaluator,
     load_context_bench_cases,
     load_eval_cases,
-)
-from opencontext_core.indexing.graph_tunnel import (
-    CrossProjectEdge,
-    GraphTunnel,
-    GraphTunnelStore,
-    discover_tunnels_from_manifest,
 )
 from opencontext_core.memory_usability import (
     ContextRepository,
@@ -88,7 +78,6 @@ from opencontext_core.operating_model import (
     PublicSafePromptExporter,
     ReleaseEvidenceBuilder,
     ReleaseLeakScanner,
-    RunReceiptGenerator,
     TeamCommandRegistry,
     TeamPlaybookRegistry,
     TeamReportGenerator,
@@ -99,6 +88,7 @@ from opencontext_core.safety.prompt_injection import render_untrusted_context
 from opencontext_core.safety.provider_policy import ProviderPolicyEnforcer
 from opencontext_core.safety.redaction import SinkGuard
 from opencontext_core.sdd_runtime import build_sdd_context, write_sdd_context
+from opencontext_core.update import UpdateChecker
 from opencontext_core.workflow_packs.signing import WorkflowPackSigner, WorkflowPackVerifier
 from opencontext_core.workspace.layout import ensure_workspace
 
@@ -1106,9 +1096,10 @@ def _template_config(template: str) -> dict[str, Any]:
 def _install(args: argparse.Namespace) -> None:
     """Quick project setup wizard with auto-detection and step-by-step progress."""
 
-    from opencontext_core.dx.console_styles import console
     from rich.prompt import Confirm
     from rich.status import Status
+
+    from opencontext_core.dx.console_styles import console
 
     root = Path(args.root)
 
@@ -1137,10 +1128,10 @@ def _install(args: argparse.Namespace) -> None:
     # Suggest defaults
     tdd = "strict" if has_pytest else "ask"
     console.print("  Will configure:")
-    console.print(f"    • Project index + knowledge graph")
+    console.print("    • Project index + knowledge graph")
     console.print(f"    • SDD/TDD (mode: {tdd})")
-    console.print(f"    • Agent integration (opencode)")
-    console.print(f"    • Harness workflow")
+    console.print("    • Agent integration (opencode)")
+    console.print("    • Harness workflow")
     console.print()
 
     if not args.yes:
@@ -1166,8 +1157,8 @@ def _install(args: argparse.Namespace) -> None:
         with Status(phase_label, console=console, spinner="dots") as status:
             try:
                 if phase_key == "workspace":
-                    from opencontext_core.workspace.layout import ensure_workspace
                     from opencontext_core.user_prefs import UserConfigStore
+                    from opencontext_core.workspace.layout import ensure_workspace
 
                     ensure_workspace(root)
                     store = UserConfigStore()
@@ -1336,7 +1327,7 @@ def _onboard(
     force_agent_files: bool = False,
 ) -> None:
     from opencontext_core.dx.console_styles import console
-    from opencontext_core.onboarding.service import OnboardingService, OnboardingOptions
+    from opencontext_core.onboarding.service import OnboardingOptions, OnboardingService
 
     project_root = Path(root)
     options = OnboardingOptions(
@@ -1476,7 +1467,7 @@ def _status(root: str = ".") -> None:
     if config_path.exists():
         console.success(f"Config: {config_path}")
     else:
-        console.error("Config: not found (run 'opencontext onboard .')")
+        console.error("Config: not found (run 'opencontext install')")
 
     # Index status
     console.section("Index")

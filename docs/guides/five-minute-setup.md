@@ -53,7 +53,7 @@ If you prefer more control, use the individual commands:
 
 ```bash
 opencontext init --template python    # Choose a stack template
-opencontext onboard .                 # Full guided onboarding
+opencontext install                   # Full guided setup
 ```
 
 ## 4. Check Safety
@@ -87,6 +87,8 @@ If clipboard support is unavailable, OpenContext prints the pack instead.
 Configure MCP for AI agents:
 
 ```bash
+opencontext install --yes
+# or for MCP-specific configuration:
 opencontext onboard . --setup-mcp
 ```
 
