@@ -76,7 +76,7 @@ class SecurityScanPassedGate:
 
     id = "security_scan_passed"
 
-    def evaluate(self, findings: list) -> PhaseGate:
+    def evaluate(self, findings: list[str]) -> PhaseGate:
         if not findings:
             return PhaseGate(
                 id=self.id,
