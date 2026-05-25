@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 from opencontext_core.harness.models import BudgetMode, GateStatus
 from opencontext_core.harness.runner import HarnessRunner
@@ -58,10 +57,12 @@ class TestHarnessRunnerConfig:
     def test_loads_yaml_config(self, tmp_path: Path) -> None:
         harness_dir = tmp_path / ".opencontext"
         harness_dir.mkdir(parents=True, exist_ok=True)
-        (harness_dir / "harness.yaml").write_text(
-            "version: '0.1'\nworkflow_defaults:\n  budget_mode: strict\nphases:\n  explore:\n    budget_tokens: 8000\n",
-            encoding="utf-8",
+        config_yaml = (
+            "version: '0.1'\n"
+            "workflow_defaults:\n  budget_mode: strict\n"
+            "phases:\n  explore:\n    budget_tokens: 8000\n"
         )
+        (harness_dir / "harness.yaml").write_text(config_yaml, encoding="utf-8")
         from opencontext_core.harness.config import HarnessConfig
 
         config = HarnessConfig.from_yaml_file(harness_dir / "harness.yaml")

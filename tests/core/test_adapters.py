@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from opencontext_core.adapters import AiderAdapter, AgentResult, LocalAdapter, PythonAdapter
+from opencontext_core.adapters import AgentResult, AiderAdapter, LocalAdapter, PythonAdapter
 from opencontext_core.adapters.base import AgentAdapter
 
 
@@ -13,7 +13,7 @@ class TestAgentAdapterBase:
         """AgentAdapter is abstract and cannot be instantiated directly."""
         try:
             AgentAdapter()  # type: ignore[abstract]
-            assert False, "Should have raised TypeError"
+            raise AssertionError("Should have raised TypeError")
         except TypeError:
             pass
 

@@ -9,12 +9,11 @@ from opencontext_core.harness.models import (
     BudgetMode,
     GateStatus,
     HarnessArtifact,
-    HarnessDecision,
     HarnessRunResult,
     PhaseGate,
     PhaseLedger,
 )
-from opencontext_core.harness.runner import HarnessRunner, HarnessState
+from opencontext_core.harness.runner import HarnessRunner
 
 
 class TestHarnessRunnerPersistence:
@@ -90,9 +89,7 @@ class TestHarnessRunnerPersistence:
         assert run_data["task"] == "auth task"
         assert run_data["status"] == "passed"
 
-        artifacts_data = json.loads(
-            (run_dir / "artifacts.json").read_text(encoding="utf-8")
-        )
+        artifacts_data = json.loads((run_dir / "artifacts.json").read_text(encoding="utf-8"))
         assert len(artifacts_data["artifacts"]) == 1
         assert artifacts_data["artifacts"][0]["id"] == "a1"
 

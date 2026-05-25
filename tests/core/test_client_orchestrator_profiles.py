@@ -213,9 +213,7 @@ class TestSDDContextOrchestrationFields:
 
 
 class TestSetupExperienceWithSddProfile:
-    def test_execute_plan_stores_sdd_model_profile(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_execute_plan_stores_sdd_model_profile(self, tmp_path: Path, monkeypatch) -> None:
         config_dir = tmp_path / "config"
         monkeypatch.setattr(UserConfigStore, "CONFIG_DIR", config_dir)
         monkeypatch.setattr(UserConfigStore, "CONFIG_FILE", config_dir / "user-config.json")

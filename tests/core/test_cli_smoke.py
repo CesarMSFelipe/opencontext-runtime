@@ -55,11 +55,16 @@ class TestHarnessCli:
         """Run explore-only workflow in a temp directory with pyproject.toml."""
         (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
         result = _run_cli(
-            "harness", "run",
-            "--workflow", "explore-only",
-            "--task", "cli smoke test",
-            "--root", str(tmp_path),
-            "--budget-mode", "off",
+            "harness",
+            "run",
+            "--workflow",
+            "explore-only",
+            "--task",
+            "cli smoke test",
+            "--root",
+            str(tmp_path),
+            "--budget-mode",
+            "off",
             timeout=30,
         )
         assert result.returncode == 0
@@ -69,9 +74,12 @@ class TestHarnessCli:
 
     def test_harness_run_invalid_workflow(self) -> None:
         result = _run_cli(
-            "harness", "run",
-            "--workflow", "nonexistent",
-            "--task", "test",
+            "harness",
+            "run",
+            "--workflow",
+            "nonexistent",
+            "--task",
+            "test",
             timeout=10,
         )
         assert result.returncode != 0
@@ -87,11 +95,16 @@ class TestHarnessCli:
     def test_harness_run_json_output(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
         result = _run_cli(
-            "harness", "run",
-            "--workflow", "explore-only",
-            "--task", "json test",
-            "--root", str(tmp_path),
-            "--budget-mode", "off",
+            "harness",
+            "run",
+            "--workflow",
+            "explore-only",
+            "--task",
+            "json test",
+            "--root",
+            str(tmp_path),
+            "--budget-mode",
+            "off",
             "--json",
             timeout=30,
         )

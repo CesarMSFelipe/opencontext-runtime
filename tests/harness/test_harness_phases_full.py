@@ -19,8 +19,7 @@ class TestProposePhase:
     def test_propose_creates_proposal_json(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
         runner = HarnessRunner(root=tmp_path)
-        result = runner.run("explore-only", "test proposal", BudgetMode.OFF)
-        run_dir = tmp_path / ".opencontext" / "runs" / result.run_id
+        runner.run("explore-only", "test proposal", BudgetMode.OFF)
 
         # Manually run propose phase on same state
         state = runner.create_run("sdd", "proposal task")
@@ -32,9 +31,8 @@ class TestProposePhase:
         assert phase_result.phase == "propose"
         assert phase_result.status in (GateStatus.PASSED, GateStatus.WARNING)
 
-        proposal = run_dir.parent / state.run_id / "proposal.json"
         # ProposePhase writes to run_id dir on state, but it used its own run_id
-        # Let's just check the proposal phase result directly
+        # Just check the proposal phase result directly
         assert len(phase_result.artifacts) >= 1
         assert phase_result.artifacts[0].kind == "proposal"
 
@@ -122,13 +120,23 @@ class TestReviewPhase:
         state = runner.create_run("sdd", "review test")
 
         # Artificially populate the state with some phase results
-        from opencontext_core.harness.models import PhaseLedger, PhaseGate
+        from opencontext_core.harness.models import PhaseGate, PhaseLedger
 
         state.ledgers.append(
-            PhaseLedger(phase="explore", used_tokens=100, budget_tokens=1000, budget_mode=BudgetMode.WARN)
+            PhaseLedger(
+                phase="explore",
+                used_tokens=100,
+                budget_tokens=1000,
+                budget_mode=BudgetMode.WARN,
+            )
         )
         state.ledgers.append(
-            PhaseLedger(phase="propose", used_tokens=0, budget_tokens=500, budget_mode=BudgetMode.WARN)
+            PhaseLedger(
+                phase="propose",
+                used_tokens=0,
+                budget_tokens=500,
+                budget_mode=BudgetMode.WARN,
+            )
         )
         state.gates.append(
             PhaseGate(id="g1", phase="explore", status=GateStatus.PASSED, message="ok")
@@ -138,7 +146,11 @@ class TestReviewPhase:
         )
         state.artifacts.append(
             HarnessArtifact(
-                id="a1", phase="explore", path="/tmp/a.json", kind="context-pack", description="test"
+                id="a1",
+                phase="explore",
+                path="/tmp/a.json",
+                kind="context-pack",
+                description="test",
             )
         )
 
@@ -186,7 +198,7 @@ class TestSddWorkflowPhases:
         assert result.workflow == "sdd"
 
         # Should have results from all phases
-        phases_seen = set(l.phase for l in result.ledgers)
+        phases_seen = set(ledger.phase for ledger in result.ledgers)
         assert "explore" in phases_seen
         assert "propose" in phases_seen
         assert "apply" in phases_seen
@@ -212,7 +224,7 @@ class TestSddWorkflowPhases:
         runner = HarnessRunner(root=tmp_path)
         result = runner.run("apply-only", "apply only", BudgetMode.OFF)
 
-        phases_seen = set(l.phase for l in result.ledgers)
+        phases_seen = set(ledger.phase for ledger in result.ledgers)
         assert "apply" in phases_seen
         assert "verify" in phases_seen
         assert "archive" in phases_seen
@@ -222,5 +234,5 @@ class TestSddWorkflowPhases:
         """Unknown workflow runs explore + archive only."""
         runner = HarnessRunner(root=tmp_path)
         result = runner.run("unknown", "unknown workflow", BudgetMode.OFF)
-        phases_seen = set(l.phase for l in result.ledgers)
+        phases_seen = set(ledger.phase for ledger in result.ledgers)
         assert "explore" in phases_seen or len(phases_seen) >= 0

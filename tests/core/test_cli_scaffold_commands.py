@@ -22,7 +22,6 @@ from opencontext_cli.main import (
     _tokens,
     _watch,
 )
-from opencontext_core.config import SecurityMode
 from opencontext_core.runtime import OpenContextRuntime
 
 

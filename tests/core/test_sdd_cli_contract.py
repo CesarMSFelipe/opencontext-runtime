@@ -57,7 +57,7 @@ class TestSddFlow:
     def test_sdd_flow_returns_completed_status(self, tmp_path: Path, capsys) -> None:
         """SDD flow delegates to harness runner and returns completion status."""
         (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
-        runtime, project_root = _sample_runtime(tmp_path)
+        runtime, _project_root = _sample_runtime(tmp_path)
 
         _sdd_flow(runtime, "test harness flow", str(tmp_path), 6000, budget_mode="off")
 

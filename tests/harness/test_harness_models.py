@@ -5,11 +5,11 @@ from __future__ import annotations
 from opencontext_core.harness.models import (
     BudgetMode,
     GateStatus,
-    PhaseLedger,
-    PhaseGate,
     HarnessArtifact,
     HarnessDecision,
     HarnessRunResult,
+    PhaseGate,
+    PhaseLedger,
 )
 
 
@@ -100,9 +100,7 @@ class TestPhaseGate:
 
 class TestHarnessArtifact:
     def test_create(self) -> None:
-        a = HarnessArtifact(
-            id="a1", phase="apply", path="/tmp/out.json", kind="json"
-        )
+        a = HarnessArtifact(id="a1", phase="apply", path="/tmp/out.json", kind="json")
         assert a.kind == "json"
         assert a.description == ""
 
@@ -119,9 +117,7 @@ class TestHarnessArtifact:
 
 class TestHarnessDecision:
     def test_create(self) -> None:
-        d = HarnessDecision(
-            id="d1", phase="propose", status="approved", rationale="LGTM"
-        )
+        d = HarnessDecision(id="d1", phase="propose", status="approved", rationale="LGTM")
         assert d.trace_id is None
         assert d.metadata == {}
 

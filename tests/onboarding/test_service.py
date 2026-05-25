@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
 from opencontext_core.onboarding.service import (
     OnboardingOptions,
     OnboardingResult,
@@ -54,9 +55,7 @@ def test_onboarding_result_defaults() -> None:
 def test_onboarding_service_run_creates_workspace(tmp_path: Path) -> None:
     """Verify OnboardingService.run() creates .opencontext directory."""
     service = OnboardingService()
-    result = service.run(
-        OnboardingOptions(root=tmp_path, force_agent_files=True)
-    )
+    result = service.run(OnboardingOptions(root=tmp_path, force_agent_files=True))
     assert (tmp_path / ".opencontext").exists()
     assert result.root == str(tmp_path.resolve())
 
@@ -77,9 +76,7 @@ def test_onboarding_service_creates_config(tmp_path: Path) -> None:
 
 def test_onboarding_service_creates_sdd_context(tmp_path: Path) -> None:
     service = OnboardingService()
-    result = service.run(
-        OnboardingOptions(root=tmp_path, force_agent_files=True)
-    )
+    _result = service.run(OnboardingOptions(root=tmp_path, force_agent_files=True))
     sdd_json = tmp_path / ".opencontext" / "sdd" / "context.json"
     assert sdd_json.exists()
     data = json.loads(sdd_json.read_text(encoding="utf-8"))
@@ -89,9 +86,7 @@ def test_onboarding_service_creates_sdd_context(tmp_path: Path) -> None:
 
 def test_onboarding_service_creates_harness_yaml(tmp_path: Path) -> None:
     service = OnboardingService()
-    result = service.run(
-        OnboardingOptions(root=tmp_path, force_agent_files=True)
-    )
+    result = service.run(OnboardingOptions(root=tmp_path, force_agent_files=True))
     harness = tmp_path / ".opencontext" / "harness.yaml"
     assert harness.exists()
     assert result.harness_config_path == str(harness)
@@ -105,7 +100,7 @@ def test_onboarding_service_creates_harness_yaml(tmp_path: Path) -> None:
 
 def test_onboarding_service_creates_agent_contracts(tmp_path: Path) -> None:
     service = OnboardingService()
-    result = service.run(
+    _result = service.run(
         OnboardingOptions(
             root=tmp_path,
             active_clients=["opencode", "cursor"],
@@ -141,9 +136,7 @@ def test_onboarding_service_sdd_context_content(tmp_path: Path) -> None:
     assert "opencode" in data["orchestrator_profiles"]
 
 
-def test_onboarding_service_saves_preferences(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_onboarding_service_saves_preferences(tmp_path: Path, monkeypatch: Any) -> None:
     from opencontext_core.user_prefs import UserConfigStore
 
     config_dir = tmp_path / "config"
@@ -162,9 +155,7 @@ def test_onboarding_service_saves_preferences(
         )
     )
 
-    prefs = json.loads(
-        (config_dir / "user-config.json").read_text(encoding="utf-8")
-    )
+    prefs = json.loads((config_dir / "user-config.json").read_text(encoding="utf-8"))
     assert prefs["sdd"]["tdd_mode"] == "strict"
     assert prefs["sdd"]["sdd_model_profile"] == "premium"
     assert prefs["sdd"]["orchestrator_profile"] == "solo-compact"
@@ -180,8 +171,6 @@ def test_onboarding_service_harness_yaml_enterprise(tmp_path: Path) -> None:
             force_agent_files=True,
         )
     )
-    data = yaml.safe_load(
-        (tmp_path / ".opencontext" / "harness.yaml").read_text(encoding="utf-8")
-    )
+    data = yaml.safe_load((tmp_path / ".opencontext" / "harness.yaml").read_text(encoding="utf-8"))
     assert data["agents"]["default_client"] == "opencode"
     assert data["agents"]["mode"] == "multi-phase"

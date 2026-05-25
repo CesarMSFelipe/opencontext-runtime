@@ -38,9 +38,9 @@ class TestAgentCapabilities:
         for client_id, cap in AGENT_CAPABILITIES.items():
             assert cap.id == client_id, f"{client_id} id mismatch"
             assert cap.display_name, f"{client_id} missing display_name"
-            assert cap.orchestrator_type in (
-                "solo-compact", "multi-phase", "subagent-native"
-            ), f"{client_id} bad orchestrator_type"
+            assert cap.orchestrator_type in ("solo-compact", "multi-phase", "subagent-native"), (
+                f"{client_id} bad orchestrator_type"
+            )
 
     def test_list_includes_new_agents(self) -> None:
         agents = list_supported_agents()

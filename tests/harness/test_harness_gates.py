@@ -17,9 +17,7 @@ from opencontext_core.harness.models import BudgetMode, GateStatus, PhaseLedger
 
 class TestProjectIndexExistsGate:
     def test_passes_when_manifest_exists(self, tmp_path: Path) -> None:
-        manifest = (
-            tmp_path / ".storage" / "opencontext" / "project_manifest.json"
-        )
+        manifest = tmp_path / ".storage" / "opencontext" / "project_manifest.json"
         manifest.parent.mkdir(parents=True, exist_ok=True)
         manifest.write_text("{}")
         gate = ProjectIndexExistsGate()

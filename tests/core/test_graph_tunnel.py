@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from opencontext_core.indexing.graph_tunnel import (
@@ -14,8 +14,7 @@ from opencontext_core.indexing.graph_tunnel import (
 )
 from opencontext_core.models.project import DependencyEdge, DependencyGraph, ProjectManifest
 
-
-_NOW = datetime.now(timezone.utc)
+_NOW = datetime.now(UTC)
 
 
 def _manifest(**kwargs: object) -> ProjectManifest:
@@ -128,9 +127,7 @@ class TestGraphTunnelStore:
 
     def test_delete_tunnel(self, tmp_path: Path) -> None:
         store = GraphTunnelStore(base_path=tmp_path)
-        tunnel = GraphTunnel.from_discovered(
-            source_project="a", target_project="b", edges=[]
-        )
+        tunnel = GraphTunnel.from_discovered(source_project="a", target_project="b", edges=[])
         store.save_tunnel(tunnel)
         assert store.get_tunnel("a", "b") is not None
 
@@ -217,9 +214,7 @@ class TestDiscoverTunnels:
         target_storage.mkdir(parents=True)
         target_manifest_path = target_storage / "project_manifest.json"
         target_manifest = _manifest(project_name="target-lib", root=str(target_root))
-        target_manifest_path.write_text(
-            target_manifest.model_dump_json(indent=2), encoding="utf-8"
-        )
+        target_manifest_path.write_text(target_manifest.model_dump_json(indent=2), encoding="utf-8")
 
         # Source manifest with unresolved edge pointing to target
         unresolved_edge = DependencyEdge(
@@ -233,16 +228,16 @@ class TestDiscoverTunnels:
             nodes=["src/main.py"],
             edges=[],
             unresolved=[unresolved_edge],
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
         )
         source_manifest = _manifest(
-            project_name="source", root=str(source_root), dependency_graph=dep_graph,
+            project_name="source",
+            root=str(source_root),
+            dependency_graph=dep_graph,
         )
 
         store = GraphTunnelStore(base_path=tmp_path / "store")
-        tunnels = discover_tunnels_from_manifest(
-            source_manifest, store, projects_root=tmp_path
-        )
+        tunnels = discover_tunnels_from_manifest(source_manifest, store, projects_root=tmp_path)
         assert len(tunnels) == 1
         assert tunnels[0].source_project == "source"
         assert tunnels[0].target_project == "target-lib"
@@ -276,10 +271,12 @@ class TestDiscoverTunnels:
             nodes=["src/main.py"],
             edges=[],
             unresolved=[unresolved_edge],
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
         )
         manifest = _manifest(
-            project_name="source", root=str(tmp_path / "source"), dependency_graph=dep_graph,
+            project_name="source",
+            root=str(tmp_path / "source"),
+            dependency_graph=dep_graph,
         )
         (tmp_path / "source").mkdir(exist_ok=True)
 
@@ -316,10 +313,12 @@ class TestDiscoverTunnels:
             nodes=["src/app.py"],
             edges=[],
             unresolved=[unresolved_edge],
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
         )
         manifest = _manifest(
-            project_name="rel-source", root=str(source_root), dependency_graph=dep_graph,
+            project_name="rel-source",
+            root=str(source_root),
+            dependency_graph=dep_graph,
         )
 
         tunnels = discover_tunnels_from_manifest(manifest, store, projects_root=tmp_path)
