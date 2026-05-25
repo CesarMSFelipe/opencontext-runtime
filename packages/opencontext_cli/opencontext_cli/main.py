@@ -176,15 +176,15 @@ def main() -> None:
 def _print_suggestion(command: str) -> None:
     """Print helpful suggestion after an error."""
     if command == "index":
-        print("Try: opencontext onboard .")
+        print("Try: opencontext install")
     elif command == "pack":
         print("Try: opencontext index . && opencontext pack . --query 'Explain this project'")
     elif command == "knowledge-graph":
         print("Try: opencontext index .")
     elif command in ("install", "setup"):
-        print("Try: opencontext setup install --profile full")
+        print("Try: opencontext install")
     elif command == "doctor":
-        print("Try: opencontext onboard .")
+        print("Try: opencontext install")
     else:
         print("Run 'opencontext --help' for usage information.")
 

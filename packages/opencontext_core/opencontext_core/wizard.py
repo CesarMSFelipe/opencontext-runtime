@@ -323,9 +323,8 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
     console.print(f"Location: {store.CONFIG_FILE}")
     console.print("\nNext steps:")
     console.print("  1. cd your-project")
-    console.print("  2. opencontext onboard .")
-    if prefs.features.mcp_server and prefs.agent_integrations.get("opencode"):
-        console.print("  3. opencontext onboard . --setup-mcp")
+    console.print("  2. opencontext install")
+    console.print("  3. opencontext index .")
 
     return prefs
 
