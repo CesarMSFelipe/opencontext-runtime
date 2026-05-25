@@ -10,6 +10,11 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.text import Text
 
+from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
+from opencontext_core.agent_installer import AgentInstaller
+from opencontext_core.agent_installer import AgentTarget as GlobalAgentTarget
+from opencontext_core.runtime import OpenContextRuntime
+from opencontext_core.sdd_runtime import write_sdd_context
 from opencontext_core.setup.plan import InstallAction, build_plan
 from opencontext_core.setup.presets import (
     get_available_components,
@@ -20,6 +25,27 @@ from opencontext_core.setup.presets import (
 from opencontext_core.user_prefs import UserConfigStore
 
 console = Console()
+
+
+def _check_first_run() -> bool:
+    """Check if this is a first run and suggest onboard if so."""
+    store = UserConfigStore()
+    prefs = store.load()
+    if prefs.first_run:
+        console.print()
+        console.print(
+            Panel.fit(
+                "[bold yellow]First Run Detected[/bold yellow]\n"
+                "It looks like you haven't run [bold]opencontext install[/bold] yet.\n"
+                "For a complete project setup in one step, run:\n\n"
+                "  [bold cyan]opencontext install[/bold cyan]\n\n"
+                "This will auto-detect your project, create your config, index your code,\n"
+                "and configure SDD/TDD, agent integrations, and the harness workflow.",
+                border_style="yellow",
+            )
+        )
+        return True
+    return False
 
 
 def add_setup_parser(subparsers: Any) -> None:
@@ -56,8 +82,34 @@ def add_setup_parser(subparsers: Any) -> None:
     )
     setup_parser.add_argument(
         "--agent",
-        default="opencode",
-        help="Agent to configure (default: opencode).",
+        action="append",
+        default=None,
+        help="Agent to configure. Repeat or comma-separate. Default: opencode.",
+    )
+    setup_parser.add_argument(
+        "--tdd",
+        choices=["ask", "strict", "off"],
+        default="ask",
+        help="TDD behavior for SDD agents: ask each change, strict, or off.",
+    )
+    setup_parser.add_argument("--root", default=".", help="Project root to initialize.")
+    setup_parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=3000,
+        help="Default per-phase SDD context budget.",
+    )
+    setup_parser.add_argument(
+        "--sdd-profile",
+        choices=["default", "cheap", "hybrid", "premium"],
+        default=None,
+        help="SDD model profile: which models to use per phase.",
+    )
+    setup_parser.add_argument(
+        "--orchestrator-profile",
+        choices=["solo-compact", "multi-phase", "subagent-native"],
+        default=None,
+        help="Orchestration strategy for SDD agents.",
     )
 
 
@@ -69,12 +121,21 @@ def handle_setup(args: Any) -> None:
     components = getattr(args, "components", None)
     dry_run = getattr(args, "dry_run", False)
     non_interactive = getattr(args, "non_interactive", False)
-    agent = getattr(args, "agent", "opencode")
+    agents = _parse_agents(getattr(args, "agent", None))
+    tdd_mode = getattr(args, "tdd", "ask")
+    root = getattr(args, "root", ".")
+    max_tokens = getattr(args, "max_tokens", 3000)
+    sdd_profile = getattr(args, "sdd_profile", None)
+    orchestrator_profile = getattr(args, "orchestrator_profile", None)
 
     if non_interactive:
-        _run_automated(preset, profile, components, dry_run, agent)
+        _run_automated(
+            preset, profile, components, dry_run, agents, tdd_mode, root, max_tokens, sdd_profile, orchestrator_profile
+        )
     else:
-        _run_interactive(preset, profile, components, dry_run, agent)
+        _run_interactive(
+            preset, profile, components, dry_run, agents, tdd_mode, root, max_tokens, sdd_profile, orchestrator_profile
+        )
 
 
 def _run_interactive(
@@ -82,9 +143,17 @@ def _run_interactive(
     profile: str | None,
     components: list[str] | None,
     dry_run: bool,
-    agent: str,
+    agents: list[str],
+    tdd_mode: str,
+    root: str,
+    max_tokens: int,
+    sdd_profile: str | None = None,
+    orchestrator_profile: str | None = None,
 ) -> None:
     """Run interactive setup with rich prompts."""
+
+    # Check first run — suggest onboard before proceeding
+    _check_first_run()
 
     console.print()
     console.print(
@@ -119,32 +188,46 @@ def _run_interactive(
             if custom_components:
                 components = custom_components
 
-    # Step 4: Build plan
+    # Step 4: Agent + SDD/TDD choices
+    agents = _choose_agents(agents)
+    tdd_mode = _choose_tdd_mode(tdd_mode)
+
+    # Step 5: SDD model profile
+    if not sdd_profile:
+        sdd_profile = _choose_sdd_profile()
+
+    # Step 6: Build plan
     plan = build_plan(
         preset_id=preset,
         profile_id=profile,
         components=components,
     )
 
-    # Step 5: Show plan
+    # Step 7: Show plan
     _show_plan(plan)
+    console.print(f"\n[bold]Agents:[/] {', '.join(agents)}")
+    console.print(f"[bold]TDD mode:[/] {tdd_mode}")
+    console.print(f"[bold]SDD model profile:[/] {sdd_profile}")
+    console.print(f"[bold]SDD token budget/phase:[/] {max_tokens}")
+    if orchestrator_profile:
+        console.print(f"[bold]Orchestrator profile:[/] {orchestrator_profile}")
 
     if dry_run:
         console.print("\n[bold yellow]── Dry run — no changes made ──[/]")
         return
 
-    # Step 6: Confirm
+    # Step 8: Confirm
     if not Confirm.ask("\nApply this plan?", default=True):
         console.print("[yellow]Setup cancelled.[/]")
         return
 
-    # Step 7: Execute
-    _execute_plan(plan, agent)
+    # Step 9: Execute
+    _execute_plan(plan, agents, tdd_mode, root, max_tokens, sdd_profile, orchestrator_profile)
     console.print()
     console.print(
         Panel.fit(
             "[bold green]✓ Setup Complete[/bold green]\n"
-            "Run [bold]opencontext sync[/bold] to activate all changes.",
+            "OpenContext SDD/TDD, graph, memory, and selected agents are ready.",
             border_style="green",
         )
     )
@@ -155,9 +238,17 @@ def _run_automated(
     profile: str | None,
     components: list[str] | None,
     dry_run: bool,
-    agent: str,
+    agents: list[str],
+    tdd_mode: str,
+    root: str,
+    max_tokens: int,
+    sdd_profile: str | None = None,
+    orchestrator_profile: str | None = None,
 ) -> None:
     """Run automated setup (non-interactive)."""
+
+    # Check first run — suggest onboard before proceeding
+    _check_first_run()
 
     if not preset and not components:
         preset = "minimal"
@@ -174,7 +265,7 @@ def _run_automated(
             console.print(line)
         return
 
-    _execute_plan(plan, agent)
+    _execute_plan(plan, agents, tdd_mode, root, max_tokens, sdd_profile or "default", orchestrator_profile)
     console.print("[green]✓ Setup complete.[/]")
 
 
@@ -236,6 +327,71 @@ def _choose_profile(preset: str | None = None) -> str:
     return profiles[int(choice) - 1].id
 
 
+def _parse_agents(values: list[str] | None) -> list[str]:
+    if not values:
+        return ["opencode"]
+    agents: list[str] = []
+    for raw in values:
+        for item in raw.split(","):
+            normalized = item.strip()
+            if normalized and normalized not in agents:
+                agents.append(normalized)
+    return agents or ["opencode"]
+
+
+def _choose_agents(default_agents: list[str]) -> list[str]:
+    supported = [target.value for target in AgentTarget]
+    selected = list(dict.fromkeys(default_agents))
+    console.print("\n[bold]Agent clients to configure:[/]")
+    for agent in supported:
+        enabled = agent in selected
+        if Confirm.ask(f"  Enable {agent}?", default=enabled):
+            if agent not in selected:
+                selected.append(agent)
+        elif agent in selected:
+            selected.remove(agent)
+    return selected or ["opencode"]
+
+
+def _choose_tdd_mode(default: str) -> str:
+    modes = ["ask", "strict", "off"]
+    labels = {
+        "ask": "ask — agent asks per change (recommended)",
+        "strict": "strict — tests first whenever a harness exists",
+        "off": "off — SDD still works but TDD is optional",
+    }
+    console.print("\n[bold]TDD behavior:[/]")
+    for i, mode in enumerate(modes, 1):
+        marker = " (default)" if mode == default else ""
+        console.print(f"  {i}. {labels[mode]}{marker}")
+    choice = Prompt.ask(
+        "Select TDD mode",
+        choices=[str(i) for i in range(1, len(modes) + 1)],
+        default=str(modes.index(default) + 1 if default in modes else 1),
+    )
+    return modes[int(choice) - 1]
+
+
+def _choose_sdd_profile() -> str:
+    profiles = ["default", "cheap", "hybrid", "premium"]
+    labels = {
+        "default": "default — use one model for all phases",
+        "cheap": "cheap — fast/free models for exploration, premium for design/verify",
+        "hybrid": "hybrid — mix of cheap and premium models per phase",
+        "premium": "premium — strongest models for all phases",
+    }
+    console.print("\n[bold]SDD model profile:[/]")
+    for i, p in enumerate(profiles, 1):
+        marker = " (recommended)" if p == "cheap" else ""
+        console.print(f"  {i}. {labels[p]}{marker}")
+    choice = Prompt.ask(
+        "Select SDD model profile",
+        choices=[str(i) for i in range(1, len(profiles) + 1)],
+        default="1",
+    )
+    return profiles[int(choice) - 1]
+
+
 def _choose_components() -> list[str]:
     """Interactive component selection."""
 
@@ -289,8 +445,16 @@ def _show_plan(plan: Any) -> None:
             console.print(f"  ⚠ {w}")
 
 
-def _execute_plan(plan: Any, agent: str) -> None:
-    """Execute the install plan."""
+def _execute_plan(
+    plan: Any,
+    agents: list[str],
+    tdd_mode: str = "ask",
+    root: str = ".",
+    max_tokens: int = 3000,
+    sdd_profile: str = "default",
+    orchestrator_profile: str | None = None,
+) -> None:
+    """Execute the install plan and leave SDD/TDD ready for selected agents."""
 
     store = UserConfigStore()
     prefs = store.load()
@@ -324,6 +488,16 @@ def _execute_plan(plan: Any, agent: str) -> None:
             if section == "features":
                 setattr(prefs.features, field, True)
 
+    prefs.active_agent = agents[0] if agents else "opencode"
+    prefs.sdd_tdd_mode = tdd_mode
+    prefs.sdd_token_budget = max_tokens
+    prefs.sdd_model_profile = sdd_profile
+    prefs.sdd.orchestrator_profile = orchestrator_profile or prefs.sdd.orchestrator_profile
+    prefs.setup_completed = True
+    for known_agent in list(prefs.agent_integrations):
+        prefs.agent_integrations[known_agent] = known_agent in agents
+    for selected_agent in agents:
+        prefs.agent_integrations[selected_agent] = True
     store.save(prefs)
     plan.actions = [
         a
@@ -332,15 +506,51 @@ def _execute_plan(plan: Any, agent: str) -> None:
         for a in plan.actions
     ]
 
-    # Handle MCP setup
-    if "mcp-server" in plan.components and agent == "opencode":
-        console.print("\n[yellow]Configuring MCP for OpenCode...[/]")
+    root_path = __import__("pathlib").Path(root)
+
+    # Project-local instructions for every selected client. These files make the
+    # graph/memory/SDD rules available immediately in the repository.
+    generator = AgentIntegrationGenerator()
+    generated_files = []
+    for selected_agent in agents:
         try:
-            from opencontext_cli.main import _setup_mcp_for_opencode
+            generated_files.extend(
+                generator.generate(root_path, target=AgentTarget(selected_agent), force=True)
+            )
+        except ValueError:
+            console.print(f"[yellow]⚠ Unknown project-local agent target: {selected_agent}[/]")
 
-            _setup_mcp_for_opencode()
-            console.print("[green]✓ MCP configured[/]")
-        except ImportError:
-            console.print("[yellow]⚠ MCP setup skipped (CLI not available)[/]")
+    # Global client config (MCP + profile files) for selected clients, matching
+    # agentic workflow tool's install-time activation model but using OpenContext's local KG.
+    if "mcp-server" in plan.components or "knowledge-graph" in plan.components:
+        global_targets = []
+        for selected_agent in agents:
+            try:
+                global_targets.append(GlobalAgentTarget(selected_agent))
+            except ValueError:
+                continue
+        if global_targets:
+            AgentInstaller(project_root=root_path).install(
+                targets=global_targets, location="global", yes=True
+            )
 
-    console.print("[green]✓ Plan applied.[/]")
+    # SDD/TDD artifacts and graph index are created now so the user does not
+    # need a second setup step after the wizard.
+    sdd_context, sdd_files = write_sdd_context(
+        root_path,
+        token_budget_per_phase=max_tokens,
+        tdd_mode=tdd_mode,
+        active_clients=agents,
+        sdd_model_profile=sdd_profile,
+    )
+    try:
+        manifest = OpenContextRuntime().index_project(root_path)
+        index_status = {"files": len(manifest.files), "symbols": len(manifest.symbols)}
+    except Exception as exc:  # pragma: no cover - defensive, surfaced to user
+        index_status = {"error": str(exc)}
+
+    console.print(f"[green]✓ Plan applied for agents:[/] {', '.join(agents)}")
+    console.print(f"[green]✓ SDD/TDD artifacts:[/] {', '.join(str(p) for p in sdd_files)}")
+    console.print(f"[green]✓ Strict TDD detected:[/] {sdd_context.strict_tdd}; mode: {tdd_mode}")
+    console.print(f"[green]✓ Project-local agent files:[/] {len(generated_files)}")
+    console.print(f"[green]✓ Knowledge graph index:[/] {index_status}")
