@@ -92,9 +92,7 @@ class EngramMemoryAdapter:
             warnings=current.warnings,
         )
 
-    def build_memory_entry(
-        self, delta: MemoryDelta, project: str = "default"
-    ) -> dict[str, Any]:
+    def build_memory_entry(self, delta: MemoryDelta, project: str = "default") -> dict[str, Any]:
         """Build a structured memory entry suitable for engram storage.
 
         Returns a dict with the fields expected by engram's mem_save:
@@ -109,9 +107,7 @@ class EngramMemoryAdapter:
             "project": project,
         }
 
-    def _compute_token_deltas(
-        self, current: HarnessRunResult
-    ) -> dict[str, int]:
+    def _compute_token_deltas(self, current: HarnessRunResult) -> dict[str, int]:
         deltas: dict[str, int] = {}
         for ledger in current.ledgers:
             phase = ledger.phase
@@ -122,7 +118,7 @@ class EngramMemoryAdapter:
 
             if self._previous:
                 prev_ledger = next(
-                    (l for l in self._previous.ledgers if l.phase == phase),
+                    (ledger for ledger in self._previous.ledgers if ledger.phase == phase),
                     None,
                 )
                 if prev_ledger:
@@ -130,17 +126,15 @@ class EngramMemoryAdapter:
                     deltas[f"{phase}/delta"] = delta
 
         # Totals
-        total_used = sum(l.used_tokens for l in current.ledgers)
+        total_used = sum(ledger.used_tokens for ledger in current.ledgers)
         deltas["total/used"] = total_used
         if self._previous:
-            prev_total = sum(l.used_tokens for l in self._previous.ledgers)
+            prev_total = sum(ledger.used_tokens for ledger in self._previous.ledgers)
             deltas["total/delta"] = total_used - prev_total
 
         return deltas
 
-    def _compute_gate_deltas(
-        self, current: HarnessRunResult
-    ) -> list[dict[str, Any]]:
+    def _compute_gate_deltas(self, current: HarnessRunResult) -> list[dict[str, Any]]:
         gates = []
         for gate in current.gates:
             entry: dict[str, Any] = {
@@ -153,9 +147,7 @@ class EngramMemoryAdapter:
             gates.append(entry)
         return gates
 
-    def _compute_decision_deltas(
-        self, current: HarnessRunResult
-    ) -> list[dict[str, Any]]:
+    def _compute_decision_deltas(self, current: HarnessRunResult) -> list[dict[str, Any]]:
         return [
             {
                 "id": d.id,
@@ -166,9 +158,7 @@ class EngramMemoryAdapter:
             for d in current.decisions
         ]
 
-    def _compute_artifact_deltas(
-        self, current: HarnessRunResult
-    ) -> list[dict[str, Any]]:
+    def _compute_artifact_deltas(self, current: HarnessRunResult) -> list[dict[str, Any]]:
         return [
             {
                 "id": a.id,
@@ -187,16 +177,11 @@ class EngramMemoryAdapter:
         ]
 
         if delta.token_deltas:
-            tok_lines = "\n".join(
-                f"  - {k}: {v}" for k, v in delta.token_deltas.items()
-            )
+            tok_lines = "\n".join(f"  - {k}: {v}" for k, v in delta.token_deltas.items())
             sections.append(f"**Token Deltas**:\n{tok_lines}")
 
         if delta.gate_deltas:
-            gate_lines = "\n".join(
-                f"  - {g['id']}: {g['status']}"
-                for g in delta.gate_deltas
-            )
+            gate_lines = "\n".join(f"  - {g['id']}: {g['status']}" for g in delta.gate_deltas)
             sections.append(f"**Gate Evaluations**:\n{gate_lines}")
 
         if delta.decision_deltas:
@@ -207,10 +192,7 @@ class EngramMemoryAdapter:
             sections.append(f"**Decisions**:\n{dec_lines}")
 
         if delta.artifact_deltas:
-            art_lines = "\n".join(
-                f"  - {a['kind']}: {a['path']}"
-                for a in delta.artifact_deltas
-            )
+            art_lines = "\n".join(f"  - {a['kind']}: {a['path']}" for a in delta.artifact_deltas)
             sections.append(f"**Artifacts**:\n{art_lines}")
 
         if delta.warnings:

@@ -205,7 +205,7 @@ def _orchestrator_section(client: str) -> str:
     ]
     if profile.kg_lookup_first:
         lines.append(
-            "Always query the knowledge graph (`opencontext kg query \"<task>\"`) "
+            'Always query the knowledge graph (`opencontext kg query "<task>"`) '
             "and read `.opencontext/sdd/context.json` before reading any source files."
         )
     if profile.delegation_hint:

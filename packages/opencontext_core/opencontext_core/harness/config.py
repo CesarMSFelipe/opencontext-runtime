@@ -21,35 +21,73 @@ class HarnessConfig:
     version: str = "0.1"
     budget_mode: str = "warn"
     artifact_root: str = ".opencontext/runs"
-    phases: dict[str, PhaseConfig] = field(default_factory=lambda: {
-        "explore": PhaseConfig(budget_tokens=6000, gates=[
-            "project_index_exists", "context_pack_created", "no_secret_leakage",
-        ]),
-        "propose": PhaseConfig(budget_tokens=6000, gates=[
-            "trace_id_created", "included_sources_present", "omissions_recorded",
-        ]),
-        "apply": PhaseConfig(budget_tokens=12000, gates=[
-            "provider_policy_passed", "approval_required_for_writes",
-        ]),
-        "verify": PhaseConfig(budget_tokens=4000, gates=[
-            "security_scan_passed", "no_high_risk_exports",
-        ]),
-        "review": PhaseConfig(budget_tokens=4000, gates=[
-            "review_artifact_created",
-        ]),
-        "archive": PhaseConfig(budget_tokens=2000, gates=[
-            "trace_persisted", "memory_delta_created", "graph_delta_created",
-        ]),
-    })
+    phases: dict[str, PhaseConfig] = field(
+        default_factory=lambda: {
+            "explore": PhaseConfig(
+                budget_tokens=6000,
+                gates=[
+                    "project_index_exists",
+                    "context_pack_created",
+                    "no_secret_leakage",
+                ],
+            ),
+            "propose": PhaseConfig(
+                budget_tokens=6000,
+                gates=[
+                    "trace_id_created",
+                    "included_sources_present",
+                    "omissions_recorded",
+                ],
+            ),
+            "apply": PhaseConfig(
+                budget_tokens=12000,
+                gates=[
+                    "provider_policy_passed",
+                    "approval_required_for_writes",
+                ],
+            ),
+            "verify": PhaseConfig(
+                budget_tokens=4000,
+                gates=[
+                    "security_scan_passed",
+                    "no_high_risk_exports",
+                ],
+            ),
+            "review": PhaseConfig(
+                budget_tokens=4000,
+                gates=[
+                    "review_artifact_created",
+                ],
+            ),
+            "archive": PhaseConfig(
+                budget_tokens=2000,
+                gates=[
+                    "trace_persisted",
+                    "memory_delta_created",
+                    "graph_delta_created",
+                ],
+            ),
+        }
+    )
     active_clients: list[str] = field(default_factory=lambda: ["opencode"])
     default_client: str = "opencode"
     orchestrator_mode: str = "multi-phase"
-    forbidden_paths: list[str] = field(default_factory=lambda: [
-        ".env", "secrets/", "private/", "vendor/", "node_modules/",
-    ])
-    forbidden_commands: list[str] = field(default_factory=lambda: [
-        "rm -rf", "git push --force", "curl | bash",
-    ])
+    forbidden_paths: list[str] = field(
+        default_factory=lambda: [
+            ".env",
+            "secrets/",
+            "private/",
+            "vendor/",
+            "node_modules/",
+        ]
+    )
+    forbidden_commands: list[str] = field(
+        default_factory=lambda: [
+            "rm -rf",
+            "git push --force",
+            "curl | bash",
+        ]
+    )
 
     @classmethod
     def from_yaml_file(cls, path: Path) -> HarnessConfig:

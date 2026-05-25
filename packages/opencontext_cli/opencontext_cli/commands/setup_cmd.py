@@ -130,11 +130,29 @@ def handle_setup(args: Any) -> None:
 
     if non_interactive:
         _run_automated(
-            preset, profile, components, dry_run, agents, tdd_mode, root, max_tokens, sdd_profile, orchestrator_profile
+            preset,
+            profile,
+            components,
+            dry_run,
+            agents,
+            tdd_mode,
+            root,
+            max_tokens,
+            sdd_profile,
+            orchestrator_profile,
         )
     else:
         _run_interactive(
-            preset, profile, components, dry_run, agents, tdd_mode, root, max_tokens, sdd_profile, orchestrator_profile
+            preset,
+            profile,
+            components,
+            dry_run,
+            agents,
+            tdd_mode,
+            root,
+            max_tokens,
+            sdd_profile,
+            orchestrator_profile,
         )
 
 
@@ -265,7 +283,15 @@ def _run_automated(
             console.print(line)
         return
 
-    _execute_plan(plan, agents, tdd_mode, root, max_tokens, sdd_profile or "default", orchestrator_profile)
+    _execute_plan(
+        plan,
+        agents,
+        tdd_mode,
+        root,
+        max_tokens,
+        sdd_profile or "default",
+        orchestrator_profile,
+    )
     console.print("[green]✓ Setup complete.[/]")
 
 

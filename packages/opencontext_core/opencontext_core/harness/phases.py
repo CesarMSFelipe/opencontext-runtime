@@ -103,7 +103,9 @@ class ExplorePhase(HarnessPhase):
                 HarnessArtifact(
                     id=f"explore-pack-{state.run_id[:8]}",
                     phase="explore",
-                    path=str(state.root / ".opencontext" / "runs" / state.run_id / "context-pack.json"),
+                    path=str(
+                        state.root / ".opencontext" / "runs" / state.run_id / "context-pack.json"
+                    ),
                     kind="context-pack",
                     description=f"Context pack with {len(pack.included)} items",
                 )
@@ -237,9 +239,7 @@ class ApplyPhase(HarnessPhase):
             "changes": [],
             "summary": f"Applied changes for: {state.task}",
         }
-        apply_manifest_path.write_text(
-            json.dumps(apply_manifest, indent=2), encoding="utf-8"
-        )
+        apply_manifest_path.write_text(json.dumps(apply_manifest, indent=2), encoding="utf-8")
 
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(apply_manifest_path),
@@ -299,9 +299,7 @@ class VerifyPhase(HarnessPhase):
                 else f"Tests failed ({test_result['exit_code']})"
             ),
         }
-        verify_report_path.write_text(
-            json.dumps(verify_report, indent=2), encoding="utf-8"
-        )
+        verify_report_path.write_text(json.dumps(verify_report, indent=2), encoding="utf-8")
 
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(verify_report_path),
@@ -412,17 +410,11 @@ class ReviewPhase(HarnessPhase):
             "task": state.task,
             "created_at": datetime.now(UTC).isoformat(),
             "status": "completed",
-            "phases_completed": len(set(l.phase for l in state.ledgers)),
+            "phases_completed": len(set(ledger.phase for ledger in state.ledgers)),
             "total_gates": len(state.gates),
-            "passed_gates": sum(
-                1 for g in state.gates if g.status == GateStatus.PASSED
-            ),
-            "warning_gates": sum(
-                1 for g in state.gates if g.status == GateStatus.WARNING
-            ),
-            "failed_gates": sum(
-                1 for g in state.gates if g.status == GateStatus.FAILED
-            ),
+            "passed_gates": sum(1 for g in state.gates if g.status == GateStatus.PASSED),
+            "warning_gates": sum(1 for g in state.gates if g.status == GateStatus.WARNING),
+            "failed_gates": sum(1 for g in state.gates if g.status == GateStatus.FAILED),
             "total_artifacts": len(state.artifacts),
             "total_decisions": len(state.decisions),
             "warnings": state.warnings,

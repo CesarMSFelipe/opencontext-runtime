@@ -49,9 +49,7 @@ def add_plugin_parser(subparsers: Any) -> None:
     # Init
     init_parser = plugin_sub.add_parser("init", help="Scaffold a new plugin.")
     init_parser.add_argument("name", help="Plugin name (alphanumeric + hyphens).")
-    init_parser.add_argument(
-        "--description", default="", help="Short plugin description."
-    )
+    init_parser.add_argument("--description", default="", help="Short plugin description.")
     init_parser.add_argument("--author", default="", help="Plugin author name.")
     init_parser.add_argument(
         "--template",
@@ -214,9 +212,7 @@ def _plugin_init(args: Any) -> None:
 
     description = args.description or f"Plugin '{name}'"
     author = args.author or ""
-    class_name = "".join(
-        part.capitalize() for part in name.replace("-", "_").split("_")
-    )
+    class_name = "".join(part.capitalize() for part in name.replace("-", "_").split("_"))
     if class_name.endswith("Plugin"):
         base_name = class_name
     else:
@@ -264,7 +260,7 @@ def _plugin_init(args: Any) -> None:
             f"        pass\n\n"
             f"    def register_hooks(self, registry: Any) -> None:\n"
             f'        """Register hooks."""\n'
-            f"        registry.register_hook(\"post_execute\", self.on_post_execute)\n\n"
+            f'        registry.register_hook("post_execute", self.on_post_execute)\n\n'
             f"    def on_post_execute(self, result: Any) -> None:\n"
             f"        pass\n"
         )

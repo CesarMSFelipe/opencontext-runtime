@@ -169,12 +169,21 @@ class UserConfigStore:
                 features_data = data.pop("features", {})
                 sdd_data = data.pop("sdd", {})
                 agents_data = data.pop("agents", {})
-                features = UserFeatures(**{k: v for k, v in features_data.items() if k in UserFeatures.__dataclass_fields__})
-                sdd = SDDPreferences(**{k: v for k, v in sdd_data.items() if k in SDDPreferences.__dataclass_fields__})
-                agents = AgentPreferences(**{k: v for k, v in agents_data.items() if k in AgentPreferences.__dataclass_fields__})
+                features_fields = UserFeatures.__dataclass_fields__
+                sdd_fields = SDDPreferences.__dataclass_fields__
+                agents_fields = AgentPreferences.__dataclass_fields__
+                features = UserFeatures(
+                    **{k: v for k, v in features_data.items() if k in features_fields}
+                )
+                sdd = SDDPreferences(**{k: v for k, v in sdd_data.items() if k in sdd_fields})
+                agents = AgentPreferences(
+                    **{k: v for k, v in agents_data.items() if k in agents_fields}
+                )
                 known = set(UserPreferences.__dataclass_fields__) - {"features", "sdd", "agents"}
                 filtered = {k: v for k, v in data.items() if k in known}
-                self._preferences = UserPreferences(**filtered, features=features, sdd=sdd, agents=agents)
+                self._preferences = UserPreferences(
+                    **filtered, features=features, sdd=sdd, agents=agents
+                )
                 return self._preferences
             except (json.JSONDecodeError, TypeError):
                 pass

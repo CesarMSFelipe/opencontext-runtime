@@ -46,8 +46,8 @@ class ClientOrchestratorProfile:
 def _multi_phase_instructions(budget: int = 3000) -> dict[str, str]:
     return {
         "explore": (
-            f"Query the knowledge graph with `opencontext kg query \"<task>\"` first. "
-            f"Then run `opencontext pack . --query \"<task>\" --max-tokens {budget} --mode plan`. "
+            f'Query the knowledge graph with `opencontext kg query "<task>"` first. '
+            f'Then run `opencontext pack . --query "<task>" --max-tokens {budget} --mode plan`. '
             "Never read broad file sets before this step."
         ),
         "propose": (
@@ -63,13 +63,12 @@ def _multi_phase_instructions(budget: int = 3000) -> dict[str, str]:
             "Keep the design under the phase token budget."
         ),
         "tasks": (
-            "Break work into atomic file-level tasks. "
-            "Each task must fit in one apply cycle."
+            "Break work into atomic file-level tasks. Each task must fit in one apply cycle."
         ),
         "apply": (
             "Read `.opencontext/sdd/context.json` for TDD mode. "
             "If strict or ask-and-confirmed: write failing test first, then implementation. "
-            "Run `opencontext pack . --query \"<changed symbol>\" --mode diff` before editing."
+            'Run `opencontext pack . --query "<changed symbol>" --mode diff` before editing.'
         ),
         "verify": (
             "Run focused tests first (from `context.json` test_capabilities), "
@@ -86,7 +85,7 @@ def _subagent_native_instructions(budget: int = 3000) -> dict[str, str]:
     return {
         "explore": (
             f"Spawn a background research agent with context from `opencontext pack . "
-            f"--query \"<task>\" --max-tokens {budget} --mode plan`. "
+            f'--query "<task>" --max-tokens {budget} --mode plan`. '
             "Coordinator must not read raw files directly."
         ),
         "propose": (
@@ -123,7 +122,7 @@ def _subagent_native_instructions(budget: int = 3000) -> dict[str, str]:
 def _solo_compact_instructions(budget: int = 3000) -> dict[str, str]:
     return {
         "explore": (
-            f"Run `opencontext pack . --query \"<task>\" --max-tokens {budget} --mode plan` "
+            f'Run `opencontext pack . --query "<task>" --max-tokens {budget} --mode plan` '
             "once. Use that pack as the only project context for this session."
         ),
         "propose": (
@@ -144,12 +143,10 @@ def _solo_compact_instructions(budget: int = 3000) -> dict[str, str]:
             "Do not reload context between tasks."
         ),
         "verify": (
-            "Run test capabilities from `.opencontext/sdd/context.json`. "
-            "Report pass/fail inline."
+            "Run test capabilities from `.opencontext/sdd/context.json`. Report pass/fail inline."
         ),
         "archive": (
-            "Save a one-paragraph session summary to memory: "
-            "`opencontext memory save --brief`."
+            "Save a one-paragraph session summary to memory: `opencontext memory save --brief`."
         ),
     }
 
@@ -226,8 +223,7 @@ CLIENT_ORCHESTRATOR_PROFILES: dict[str, ClientOrchestratorProfile] = {
             "One compact context pack per task is sufficient; do not spawn sub-agents."
         ),
         tdd_integration=(
-            "AGENTS.md TDD rules apply. "
-            "Codex will ask once before apply in 'ask' mode."
+            "AGENTS.md TDD rules apply. Codex will ask once before apply in 'ask' mode."
         ),
     ),
     "windsurf": ClientOrchestratorProfile(
@@ -264,8 +260,7 @@ CLIENT_ORCHESTRATOR_PROFILES: dict[str, ClientOrchestratorProfile] = {
         phase_instructions=_solo_compact_instructions(),
         kg_lookup_first=True,
         delegation_hint=(
-            "Gemini CLI uses GEMINI.md. Solo-compact mode. "
-            "Compact context pack once per task."
+            "Gemini CLI uses GEMINI.md. Solo-compact mode. Compact context pack once per task."
         ),
         tdd_integration="GEMINI.md TDD rules apply. Ask mode: prompt before apply.",
     ),
@@ -342,8 +337,7 @@ CLIENT_ORCHESTRATOR_PROFILES: dict[str, ClientOrchestratorProfile] = {
         phase_instructions=_multi_phase_instructions(),
         kg_lookup_first=True,
         delegation_hint=(
-            "Continue uses .continuerc.json. Multi-phase mode with "
-            "built-in context management."
+            "Continue uses .continuerc.json. Multi-phase mode with built-in context management."
         ),
         tdd_integration="Continue supports TDD via configuration. Ask mode per phase.",
     ),

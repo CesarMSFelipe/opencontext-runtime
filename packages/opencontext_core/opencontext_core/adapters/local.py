@@ -9,6 +9,7 @@ from __future__ import annotations
 import shlex
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from opencontext_core.adapters.base import AgentAdapter, AgentResult

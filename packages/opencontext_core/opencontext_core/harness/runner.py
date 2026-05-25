@@ -55,9 +55,7 @@ class HarnessRunner:
 
     def __init__(self, root: Path, config: HarnessConfig | None = None) -> None:
         self.root = root.resolve()
-        self.config = config or HarnessConfig.from_yaml_file(
-            root / ".opencontext" / "harness.yaml"
-        )
+        self.config = config or HarnessConfig.from_yaml_file(root / ".opencontext" / "harness.yaml")
         self.enforcer = TokenBudgetEnforcer()
 
     def create_run(self, workflow: str, task: str) -> HarnessState:
@@ -190,9 +188,7 @@ class HarnessRunner:
                 "workflow": result.workflow,
                 "task": result.task,
                 "status": (
-                    result.status.value
-                    if hasattr(result.status, "value")
-                    else str(result.status)
+                    result.status.value if hasattr(result.status, "value") else str(result.status)
                 ),
                 "created_at": result.created_at,
             },

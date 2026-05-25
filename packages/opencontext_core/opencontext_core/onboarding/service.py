@@ -93,9 +93,7 @@ class OnboardingService:
                     semantic = cache.get("semantic")
                     if isinstance(semantic, dict):
                         semantic["enabled"] = False
-            config_path.write_text(
-                yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8"
-            )
+            config_path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
         result.config_path = str(config_path)
 
         # 3. Save user preferences
@@ -134,7 +132,7 @@ class OnboardingService:
             result.warnings.append(f"Auto-index skipped: {exc}")
 
         # 5. Generate SDD/TDD context
-        sdd_context, sdd_files = write_sdd_context(
+        _sdd_context, sdd_files = write_sdd_context(
             root,
             token_budget_per_phase=sdd_token_budget,
             tdd_mode=options.tdd_mode,
@@ -167,9 +165,7 @@ class OnboardingService:
                     f"Agent file exists (use --force-agent-files to overwrite): {agent_path}"
                 )
                 continue
-            agent_path.write_text(
-                self._agent_contract_md(client, options), encoding="utf-8"
-            )
+            agent_path.write_text(self._agent_contract_md(client, options), encoding="utf-8")
             result.generated_agent_files.append(str(agent_path))
 
         # 8. Generate harness.yaml
@@ -201,7 +197,8 @@ class OnboardingService:
             "",
             "## Before acting",
             "1. Read `.opencontext/sdd/context.json`.",
-            "2. Build a context pack: `opencontext pack . --query \"<task>\" --max-tokens 3000 --mode plan`.",
+            '2. Build a context pack: `opencontext pack . --query "<task>"'
+            " --max-tokens 3000 --mode plan`.",
             "3. Preserve trace_id across all phases.",
             "4. Do not dump the full repository.",
             f"5. Respect TDD mode: `{options.tdd_mode}`.",
@@ -286,7 +283,9 @@ class OnboardingService:
             "agents": {
                 "mode": options.orchestrator_profile,
                 "active_clients": options.active_clients,
-                "default_client": options.active_clients[0] if options.active_clients else "opencode",
+                "default_client": (
+                    options.active_clients[0] if options.active_clients else "opencode"
+                ),
             },
             "safety": {
                 "forbidden_paths": [

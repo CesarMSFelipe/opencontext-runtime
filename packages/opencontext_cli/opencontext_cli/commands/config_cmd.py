@@ -82,6 +82,7 @@ def handle_config(args: Any) -> None:
         use_tui = not getattr(args, "non_interactive", False)
         if use_tui:
             from opencontext_core.wizard import run_wizard_menu
+
             run_wizard_menu()
         else:
             run_wizard(non_interactive=True)
@@ -131,7 +132,10 @@ CONFIG_PATHS: dict[str, tuple[type, str]] = {
     # Nested: sdd.*
     "sdd.tdd_mode": (str, "TDD mode: ask, strict, or off"),
     "sdd.sdd_model_profile": (str, "SDD model profile: default, cheap, hybrid, premium"),
-    "sdd.orchestrator_profile": (str, "Orchestrator profile: solo-compact, multi-phase, subagent-native"),
+    "sdd.orchestrator_profile": (
+        str,
+        "Orchestrator profile: solo-compact, multi-phase, subagent-native",
+    ),
     # Nested: agents.*
     "agents.default_client": (str, "Default agent client"),
     "agents.active_clients": (list, "Active agent clients (comma-separated)"),
@@ -145,7 +149,7 @@ def _resolve_config_path(prefs: Any, dotted: str) -> tuple[Any, str] | None:
     """
     parts = dotted.split(".")
     obj = prefs
-    for i, part in enumerate(parts[:-1]):
+    for _i, part in enumerate(parts[:-1]):
         if hasattr(obj, part):
             obj = getattr(obj, part)
         else:
@@ -166,6 +170,7 @@ def _coerce_value(value: str, target_type: type) -> object:
         return int(value)
     elif target_type is list:
         import json
+
         try:
             parsed = json.loads(value)
             if isinstance(parsed, list):
@@ -185,20 +190,20 @@ def _config_set(key: str, value: str) -> None:
     prefs = store.load()
 
     if key in CONFIG_PATHS:
-        target_type, description = CONFIG_PATHS[key]
+        _target_type, _description = CONFIG_PATHS[key]
         resolved = _resolve_config_path(prefs, key)
         if resolved is None:
             print(f"Error: Cannot resolve path '{key}'")
             return
         parent, attr = resolved
         try:
-            parsed = _coerce_value(value, target_type)
+            parsed = _coerce_value(value, _target_type)
             setattr(parent, attr, parsed)
             store.save(prefs)
             print(f"Set {key} = {parsed}")
         except (ValueError, TypeError) as exc:
             print(f"Error: Cannot set '{key}' to '{value}': {exc}")
-            print(f"Expected type: {target_type.__name__}")
+            print(f"Expected type: {_target_type.__name__}")
     else:
         print(f"Unknown key: {key}")
         print(f"Available paths ({len(CONFIG_PATHS)}):")
@@ -213,7 +218,7 @@ def _config_get(key: str) -> None:
     prefs = store.load()
 
     if key in CONFIG_PATHS:
-        target_type, description = CONFIG_PATHS[key]
+        _target_type, _description = CONFIG_PATHS[key]
         resolved = _resolve_config_path(prefs, key)
         if resolved is None:
             print(f"Error: Cannot resolve path '{key}'")

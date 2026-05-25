@@ -202,10 +202,16 @@ def _notify_outdated(args: argparse.Namespace) -> None:
 class _DeprecationAwareParser(argparse.ArgumentParser):
     """Custom parser that shows helpful messages for removed deprecated commands."""
 
-    _DEPRECATED: frozenset[str] = frozenset({
-        "run", "orchestrate", "validate", "propose",
-        "governance", "evidence",
-    })
+    _DEPRECATED: frozenset[str] = frozenset(
+        {
+            "run",
+            "orchestrate",
+            "validate",
+            "propose",
+            "governance",
+            "evidence",
+        }
+    )
 
     def error(self, message: str) -> NoReturn:
         # Only check the first non-flag argument (the top-level command)
@@ -434,24 +440,6 @@ def _build_parser() -> argparse.ArgumentParser:
         token_parser.add_argument("--include-ignored", action="store_true")
         token_parser.add_argument("--limit", type=int, default=10)
         token_parser.add_argument("--output", default=None)
-
-    graph_parser = subparsers.add_parser("graph", help="Cross-project graph tunnel tools.")
-    graph_sub = graph_parser.add_subparsers(dest="graph_command", required=True)
-    # Tunnel management
-    tunnel_parser = graph_sub.add_parser("tunnel", help="Graph tunnel management.")
-    tunnel_sub = tunnel_parser.add_subparsers(dest="tunnel_command", required=True)
-    tunnel_list = tunnel_sub.add_parser("list", help="List tunnels.")
-    tunnel_list.add_argument("--project", default=None, help="Filter by project name.")
-    tunnel_add = tunnel_sub.add_parser("add", help="Manually add a tunnel.")
-    tunnel_add.add_argument("--target-project", required=True, help="Target project name.")
-    tunnel_add.add_argument("--edges-json", required=True, help="JSON array of edge definitions.")
-    tunnel_remove = tunnel_sub.add_parser("remove", help="Remove a tunnel.")
-    tunnel_remove.add_argument("--source-project", required=True)
-    tunnel_remove.add_argument("--target-project", required=True)
-    tunnel_discover = tunnel_sub.add_parser(
-        "discover", help="Auto-discover tunnels from dependencies."
-    )
-    tunnel_discover.add_argument("--root", default=".", help="Project root.")
 
     add_kg_parser(subparsers)
     add_config_parser(subparsers)
@@ -936,17 +924,6 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command == "refacil":
         _sdd(args)
         return
-    if command == "graph":
-        _graph(
-            args.graph_command,
-            getattr(args, "tunnel_command", None),
-            getattr(args, "project", None),
-            getattr(args, "target_project", None),
-            getattr(args, "edges_json", None),
-            getattr(args, "source_project", None),
-            getattr(args, "root", None),
-        )
-        return
     if command == "knowledge-graph":
         handle_kg(args)
         return
@@ -1110,7 +1087,11 @@ def _install(args: argparse.Namespace) -> None:
     # Quick project detection (lightweight — no full index needed)
     has_config = (root / "opencontext.yaml").exists()
     has_git = (root / ".git").exists()
-    has_pytest = (root / "pyproject.toml").exists() or (root / "pytest.ini").exists() or (root / "setup.cfg").exists()
+    has_pytest = (
+        (root / "pyproject.toml").exists()
+        or (root / "pytest.ini").exists()
+        or (root / "setup.cfg").exists()
+    )
     has_package_json = (root / "package.json").exists()
 
     console.print(f"  [bold]Project:[/]  {root.name or '.'}")
@@ -1139,8 +1120,6 @@ def _install(args: argparse.Namespace) -> None:
         if not proceed:
             console.print("[yellow]Setup cancelled.[/]")
             return
-
-    template = "python" if has_pytest else ("node" if has_package_json else "generic")
 
     # ── Step-by-step phases with Rich Status ──────────────────────────
     steps = [
@@ -1182,19 +1161,21 @@ def _install(args: argparse.Namespace) -> None:
                         storage_path=root / ".storage" / "opencontext",
                     )
                     manifest = runtime.index_project(root)
-                    results[phase_key] = f"✓ ({len(manifest.files)} files, {len(manifest.symbols)} symbols)"
+                    results[phase_key] = (
+                        f"✓ ({len(manifest.files)} files, {len(manifest.symbols)} symbols)"
+                    )
 
                 elif phase_key == "sdd":
                     from opencontext_core.sdd_runtime import write_sdd_context
 
-                    context, files = write_sdd_context(
+                    _context, files = write_sdd_context(
                         root,
                         token_budget_per_phase=3000,
                         tdd_mode=tdd,
                         active_clients=["opencode"],
                         sdd_model_profile="hybrid",
                     )
-                    context_path = next((str(f) for f in files if f.name == "context.json"), "")
+                    _context_path = next((str(f) for f in files if f.name == "context.json"), "")
                     results[phase_key] = f"✓ (TDD: {tdd})"
 
                 elif phase_key == "agents":
@@ -1204,7 +1185,9 @@ def _install(args: argparse.Namespace) -> None:
                     )
 
                     generator = AgentIntegrationGenerator()
-                    agent_files = generator.generate(root, target=AgentTarget("opencode"), force=False)
+                    agent_files = generator.generate(
+                        root, target=AgentTarget("opencode"), force=False
+                    )
                     agents_dir = root / ".opencontext" / "agents"
                     agents_dir.mkdir(parents=True, exist_ok=True)
                     for client in ["opencode"]:
@@ -1268,7 +1251,8 @@ def _agent_contract_md(
         "",
         "## Before acting",
         "1. Read `.opencontext/sdd/context.json`.",
-        "2. Build a context pack: `opencontext pack . --query \"<task>\" --max-tokens 3000 --mode plan`.",
+        '2. Build a context pack: `opencontext pack . --query "<task>" --max-tokens 3000'
+        " --mode plan`.",
         "3. Preserve trace_id across all phases.",
         "4. Do not dump the full repository.",
         f"5. Respect TDD mode: `{tdd_mode}`.",
@@ -1396,6 +1380,7 @@ def _workflows(action: str, name: str | None) -> None:
         print(json.dumps(_workflow_pack_metadata(name), indent=2))
         return
     _scaffold_deprecated(f"workflows {action}", "opencontext harness list")
+
 
 def _packs(action: str, name: str | None = None, key: str | None = None) -> None:
     if action == "list":
@@ -2057,7 +2042,9 @@ def _cost(command: str) -> None:
     payload = ledger.report().model_dump(mode="json")
     payload["status"] = "deprecated"
     payload["view"] = command
-    payload["message"] = "'cost' is deprecated. Use 'opencontext verify --json' for token/gate info."
+    payload["message"] = (
+        "'cost' is deprecated. Use 'opencontext verify --json' for token/gate info."
+    )
     print(json.dumps(payload, indent=2))
 
 
@@ -2066,7 +2053,10 @@ def _harness_error_hint(error_msg: str, workflow: str | None) -> str:
     if "No such file or directory" in error_msg or "not found" in error_msg:
         return "Make sure the project root exists and is accessible."
     if "budget" in error_msg.lower() and "exceed" in error_msg.lower():
-        return "Try --budget-mode off to disable budget enforcement, or increase the budget in .opencontext/harness.yaml."
+        return (
+            "Try --budget-mode off to disable budget enforcement,"
+            " or increase the budget in .opencontext/harness.yaml."
+        )
     if "ModuleNotFoundError" in error_msg or "ImportError" in error_msg:
         return "Install missing dependencies with: pip install -e packages/opencontext_core"
     if "Permission denied" in error_msg:
@@ -2095,9 +2085,18 @@ def _harness(
 
     if command == "list":
         workflows = {
-            "sdd": {"phases": ["explore", "propose", "apply", "verify", "review", "archive"], "description": "Full SDD lifecycle"},
-            "explore-only": {"phases": ["explore"], "description": "Project indexing and context pack only"},
-            "apply-only": {"phases": ["apply", "verify", "archive"], "description": "Apply changes then verify and archive"},
+            "sdd": {
+                "phases": ["explore", "propose", "apply", "verify", "review", "archive"],
+                "description": "Full SDD lifecycle",
+            },
+            "explore-only": {
+                "phases": ["explore"],
+                "description": "Project indexing and context pack only",
+            },
+            "apply-only": {
+                "phases": ["apply", "verify", "archive"],
+                "description": "Apply changes then verify and archive",
+            },
         }
         if json_output:
             print(json.dumps(workflows, indent=2))
@@ -2129,22 +2128,28 @@ def _harness(
                 "workflow": result.workflow,
                 "task": result.task,
                 "budget_mode": budget_mode,
-                "final_status": result.status if hasattr(result.status, 'value') else str(result.status),
+                "final_status": (
+                    result.status.value if hasattr(result.status, "value") else str(result.status)
+                ),
                 "phases": [
                     {
-                        "phase": l.phase,
-                        "used_tokens": l.used_tokens,
-                        "budget_tokens": l.budget_tokens,
-                        "status": l.status if hasattr(l.status, 'value') else str(l.status),
-                        "message": l.message,
+                        "phase": ledger.phase,
+                        "used_tokens": ledger.used_tokens,
+                        "budget_tokens": ledger.budget_tokens,
+                        "status": (
+                            ledger.status.value
+                            if hasattr(ledger.status, "value")
+                            else str(ledger.status)
+                        ),
+                        "message": ledger.message,
                     }
-                    for l in result.ledgers
+                    for ledger in result.ledgers
                 ],
                 "gates": [
                     {
                         "id": g.id,
                         "phase": g.phase,
-                        "status": g.status if hasattr(g.status, 'value') else str(g.status),
+                        "status": g.status if hasattr(g.status, "value") else str(g.status),
                         "message": g.message,
                     }
                     for g in result.gates
@@ -2160,8 +2165,16 @@ def _harness(
                 print(f"  Task: {result.task}")
                 print(f"  Status: {result.status}")
                 print(f"  Phases: {len(result.ledgers)}")
-                for l in result.ledgers:
-                    print(f"    {l.phase}: {l.used_tokens}/{l.budget_tokens} tokens — {l.status}")
+                for ledger in result.ledgers:
+                    status_str = (
+                        ledger.status.value
+                        if hasattr(ledger.status, "value")
+                        else str(ledger.status)
+                    )
+                    print(
+                        f"    {ledger.phase}: {ledger.used_tokens}"
+                        f"/{ledger.budget_tokens} tokens — {status_str}"
+                    )
                 print(f"  Gates: {len(result.gates)}")
                 print(f"  Trace IDs: {len(result.trace_ids)}")
                 if result.warnings:
@@ -2237,7 +2250,10 @@ def _policy(command: str, diff_range: str) -> None:
         json.dumps(
             {
                 "status": "deprecated",
-                "message": "'policy diff' is deprecated. Use 'opencontext config show' to view policy settings.",
+                "message": (
+                    "'policy diff' is deprecated."
+                    " Use 'opencontext config show' to view policy settings."
+                ),
                 "range": diff_range,
                 "checks": [
                     "external provider enabled",
@@ -2782,9 +2798,6 @@ def _sdd_init(root: str, max_tokens: int) -> None:
     )
 
 
-
-
-
 def _sdd_deprecated(phase: str, root: str) -> None:
     """Emit deprecation warning pointing users to `harness run`."""
     workflow_map = {
@@ -2806,7 +2819,7 @@ def _sdd_deprecated(phase: str, root: str) -> None:
                     f"'sdd {phase}' is deprecated. "
                     f"Use 'harness run --workflow {suggested} --task \"<task>\"' instead."
                 ),
-                "hint": f"opencontext harness run --workflow {suggested} --task \"your task here\"",
+                "hint": f'opencontext harness run --workflow {suggested} --task "your task here"',
             },
             indent=2,
         )
@@ -2849,9 +2862,6 @@ def _sdd_apply(runtime: OpenContextRuntime, workflow: str, root: str) -> None:
 def _sdd_test(runtime: OpenContextRuntime, root: str) -> None:
     """Test: deprecated — use 'harness run'."""
     _sdd_deprecated("test", root)
-
-
-
 
 
 def _sdd_verify(runtime: OpenContextRuntime, root: str) -> None:
@@ -2905,9 +2915,7 @@ def _sdd_flow(
         sys.exit(1)
 
     run_dir = runner.root / ".opencontext" / "runs" / result.run_id
-    run_status = (
-        result.status.value if hasattr(result.status, "value") else str(result.status)
-    )
+    run_status = result.status.value if hasattr(result.status, "value") else str(result.status)
     is_failed = run_status in ("failed", GateStatus.FAILED)
     # Map harness status to CLI status: PASSED/WARNING → completed, FAILED → budget_exceeded
     cli_status = "completed" if not is_failed else "budget_exceeded"
@@ -2924,13 +2932,17 @@ def _sdd_flow(
                 "strict_tdd": sdd_context.strict_tdd,
                 "phases": [
                     {
-                        "phase": l.phase,
-                        "used_tokens": l.used_tokens,
-                        "budget_tokens": l.budget_tokens,
-                        "status": l.status if hasattr(l.status, "value") else str(l.status),
-                        "message": l.message,
+                        "phase": ledger.phase,
+                        "used_tokens": ledger.used_tokens,
+                        "budget_tokens": ledger.budget_tokens,
+                        "status": (
+                            ledger.status.value
+                            if hasattr(ledger.status, "value")
+                            else str(ledger.status)
+                        ),
+                        "message": ledger.message,
                     }
-                    for l in result.ledgers
+                    for ledger in result.ledgers
                 ],
                 "total_gates": len(result.gates),
                 "warnings": result.warnings,

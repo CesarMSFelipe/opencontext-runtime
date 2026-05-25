@@ -148,9 +148,7 @@ def check_mcp_config() -> CheckResult:
                 )
             except Exception:
                 return CheckResult("MCP Server", "warning", "MCP config exists but invalid")
-    return CheckResult(
-        "MCP Server", "warning", "Not configured — use 'opencontext install'"
-    )
+    return CheckResult("MCP Server", "warning", "Not configured — use 'opencontext install'")
 
 
 def check_plugins() -> CheckResult:
@@ -260,7 +258,6 @@ def check_harness_runner() -> CheckResult:
     try:
         from pathlib import Path
 
-        from opencontext_core.harness.models import BudgetMode
         from opencontext_core.harness.runner import HarnessRunner
 
         runner = HarnessRunner(root=Path.cwd())

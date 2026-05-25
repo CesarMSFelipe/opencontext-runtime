@@ -92,7 +92,9 @@ class BoundaryService:
             budget = (
                 BudgetMode.STRICT
                 if request.budget_mode == "strict"
-                else BudgetMode.WARN if request.budget_mode == "warn" else BudgetMode.OFF
+                else BudgetMode.WARN
+                if request.budget_mode == "warn"
+                else BudgetMode.OFF
             )
             runner = HarnessRunner(root=root)
             result = runner.run(
@@ -108,10 +110,14 @@ class BoundaryService:
                 message=f"Workflow completed: {result.status}",
                 phases=[
                     {
-                        "phase": l.phase,
-                        "status": l.status if hasattr(l.status, "value") else str(l.status),
+                        "phase": ledger.phase,
+                        "status": (
+                            ledger.status.value
+                            if hasattr(ledger.status, "value")
+                            else str(ledger.status)
+                        ),
                     }
-                    for l in result.ledgers
+                    for ledger in result.ledgers
                 ],
                 gates=[
                     {
@@ -126,7 +132,9 @@ class BoundaryService:
                     "workflow": result.workflow,
                     "task": result.task,
                     "final_status": (
-                        result.status.value if hasattr(result.status, "value") else str(result.status)
+                        result.status.value
+                        if hasattr(result.status, "value")
+                        else str(result.status)
                     ),
                     "total_ledgers": len(result.ledgers),
                     "total_gates": len(result.gates),

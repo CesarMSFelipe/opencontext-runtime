@@ -55,7 +55,9 @@ def add_ci_check_parser(subparsers: Any) -> None:
     """Add ci-check command parsers."""
     check_parser = subparsers.add_parser("ci-check", help="CI check management.")
     check_sub = check_parser.add_subparsers(dest="ci_check_command", required=True)
-    check_init = check_sub.add_parser("init", help="Initialize checks directory and ContextBench workflow.")
+    check_init = check_sub.add_parser(
+        "init", help="Initialize checks directory and ContextBench workflow."
+    )
     check_init.add_argument(
         "--no-workflow", action="store_true", help="Skip GitHub Actions workflow generation."
     )
@@ -66,10 +68,10 @@ def add_ci_check_parser(subparsers: Any) -> None:
     check_create = check_sub.add_parser("create", help="Create a new check template.")
     check_create.add_argument("name", help="Check name.")
     check_create.add_argument("--description", default="", help="Check description.")
-    check_gh = check_sub.add_parser("github-actions", help="Generate ContextBench GitHub Actions workflow.")
-    check_gh.add_argument(
-        "--force", action="store_true", help="Overwrite existing workflow file."
+    check_gh = check_sub.add_parser(
+        "github-actions", help="Generate ContextBench GitHub Actions workflow."
     )
+    check_gh.add_argument("--force", action="store_true", help="Overwrite existing workflow file.")
 
 
 def handle_ci_check(args: Any) -> None:
@@ -92,10 +94,7 @@ def handle_ci_check(args: Any) -> None:
         force = getattr(args, "force", False)
         workflow_path = Path(".github/workflows/opencontext-contextbench.yml")
         if workflow_path.exists() and not force:
-            console.warning(
-                f"Workflow already exists: {workflow_path}. "
-                "Use --force to overwrite."
-            )
+            console.warning(f"Workflow already exists: {workflow_path}. Use --force to overwrite.")
             return
         _write_contextbench_workflow(workflow_path)
         console.success(f"Generated ContextBench workflow: {workflow_path}")

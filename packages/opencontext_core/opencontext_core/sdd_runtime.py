@@ -141,9 +141,8 @@ def build_sdd_context(
     }
     instructions = [
         "Read `.opencontext/sdd/context.json` at the start of every task.",
-        "Query the knowledge graph (`opencontext kg query \"<task>\"`) "
-        "before reading source files.",
-        "Use `opencontext pack . --query \"<task>\" --max-tokens <budget> --mode plan` "
+        'Query the knowledge graph (`opencontext kg query "<task>"`) before reading source files.',
+        'Use `opencontext pack . --query "<task>" --max-tokens <budget> --mode plan` '
         "instead of reading broad file sets.",
         "Keep each SDD phase under the configured token budget unless explicitly overridden.",
         "During verify, run focused tests first, then broader lint/type checks when available.",
