@@ -57,20 +57,43 @@ Two pre-configured workflows:
     - trace.sdd_persist
 ```
 
-### 4. CLI Command (`packages/opencontext_cli/opencontext_cli/main.py`)
+### 4. CLI Commands
 
-New `sdd` command with subcommands:
+#### `sdd` subcommands (DEPRECATED)
+
+The `sdd` subcommand was the initial SDD interface. These are now **deprecated** in favor of the unified harness runner:
 
 ```bash
-opencontext sdd explore <query>      # Discover context
-opencontext sdd propose <query>      # Create proposal
-opencontext sdd apply <workflow>     # Execute workflow
-opencontext sdd test                  # Validate safety
-opencontext sdd verify                # Security verification
-opencontext sdd review                # Final review
-opencontext sdd archive               # Persist results
-opencontext sdd up-code               # Generate code updates
-opencontext sdd flow <query>          # Run complete pipeline
+opencontext sdd explore <query>      # [DEPRECATED] Use: harness run --workflow explore-only --task "<query>"
+opencontext sdd propose <query>      # [DEPRECATED] Use: harness run --workflow sdd --task "<query>"
+opencontext sdd apply <workflow>     # [DEPRECATED] Use: harness run --workflow sdd --task "<task>"
+opencontext sdd test                  # [DEPRECATED] Use: harness run
+opencontext sdd verify                # [DEPRECATED] Use: harness run --workflow sdd --task "<task>"
+opencontext sdd review                # [DEPRECATED] Use: harness run --workflow sdd --task "<task>"
+opencontext sdd archive               # [DEPRECATED] Use: harness run
+opencontext sdd up-code               # [DEPRECATED] Use: harness run --workflow sdd --task "<task>"
+opencontext sdd flow <query>          # [DEPRECATED] Use: harness run --workflow sdd --task "<query>"
+```
+
+#### `harness run` (current)
+
+The recommended entry point. Provides governance, budget enforcement, and artifact persistence:
+
+```bash
+# Full SDD lifecycle (6 phases)
+opencontext harness run --workflow sdd --task "Implement OAuth2"
+
+# Explore only (index + context pack)
+opencontext harness run --workflow explore-only --task "How does authentication work?"
+
+# Apply only (apply → verify → archive)
+opencontext harness run --workflow apply-only --task "my change"
+
+# List available workflows
+opencontext harness list
+
+# JSON output for CI
+opencontext harness run --workflow sdd --task "my task" --json
 ```
 
 ### 5. API Endpoint (`packages/opencontext_api/opencontext_api/main.py`)
@@ -157,25 +180,31 @@ New test coverage:
 ### Basic SDD Flow
 
 ```bash
-# Run complete pipeline
-opencontext sdd flow "Implement OAuth2 authentication" --max-tokens 8000
+# Run complete pipeline via harness runner (recommended)
+opencontext harness run --workflow sdd --task "Implement OAuth2 authentication" --budget-mode warn
 ```
 
 Output:
-```json
-{
-  "status": "completed",
-  "flow": "sdd",
-  "query": "Implement OAuth2 authentication",
-  "steps": [
-    {"phase": "explore", "included": 15},
-    {"phase": "propose", "trace_id": "abc123"},
-    {"phase": "apply", "answer": "..."},
-    {"phase": "verify", "severity": "none"},
-    {"phase": "review", "files_reviewed": 42}
-  ],
-  "final_trace": "xyz789"
-}
+```
+Harness Run: sdd-a1b2c3d4e5f6
+  Workflow: sdd
+  Task: Implement OAuth2 authentication
+  Status: passed
+  Phases: 6
+    explore: 599/6000 tokens — passed
+    propose: 0/6000 tokens — passed
+    apply: 0/6000 tokens — passed
+    verify: 0/4000 tokens — passed
+    review: 0/4000 tokens — passed
+    archive: 0/2000 tokens — passed
+  Gates: 10
+  Trace IDs: 0
+```
+
+For CI-friendly JSON output:
+
+```bash
+opencontext harness run --workflow sdd --task "my task" --json
 ```
 
 ### API Integration

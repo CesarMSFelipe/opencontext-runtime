@@ -1,0 +1,36 @@
+{
+  "name": "opencontext",
+  "version": "0.2.1-beta",
+  "description": "Context Engineering for AI Agents — secure, zero-trust, token-efficient context runtime",
+  "keywords": [
+    "ai",
+    "context-engineering",
+    "llm",
+    "security",
+    "prompt-engineering"
+  ],
+  "homepage": "https://github.com/CesarMSFelipe/OpenContext-Runtime",
+  "bugs": {
+    "url": "https://github.com/CesarMSFelipe/OpenContext-Runtime/issues"
+  },
+  "license": "MIT",
+  "author": "OpenContext Runtime maintainers",
+  "bin": {
+    "opencontext": "./bin/opencontext.js"
+  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node ./bin/install-python.js",
+    "preuninstall": "node ./bin/uninstall-python.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ]
+}

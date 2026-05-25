@@ -57,7 +57,7 @@ def handle_update(args: Any) -> None:
 
     if check.is_outdated:
         print()
-        print(f"  Update available: {check.current_version} → {check.latest_version}")
+        print(f"  Update available: {check.current_version} -> {check.latest_version}")
         print(_format_release_notes(check))
         print()
         print("  Run 'opencontext upgrade' to install the latest version.")
@@ -77,7 +77,7 @@ def handle_upgrade(args: Any) -> None:
         print(f"  ✓ OpenContext {check.current_version} is already up to date.")
         return
 
-    print(f"  Upgrading {check.current_version} → {check.latest_version}...")
+    print(f"  Upgrading {check.current_version} -> {check.latest_version}...")
     result = UpdateChecker.upgrade()
     print()
     print(f"  {result['status']}: {result['message']}")

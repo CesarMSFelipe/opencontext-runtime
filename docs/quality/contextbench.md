@@ -22,6 +22,24 @@ opencontext eval contextbench examples/evals/contextbench.yaml \
 
 The command exits with a non-zero status when a gate fails.
 
+## CI Integration
+
+ContextBench checks can run automatically in CI via the generated GitHub Actions workflow:
+
+```bash
+# Initialize checks + generate ContextBench workflow
+opencontext ci-check init
+
+# Or generate the workflow independently
+opencontext ci-check github-actions
+```
+
+This creates `.github/workflows/opencontext-contextbench.yml` that runs
+`opencontext ci-check run --json` on every push and pull request, uploads the
+report as an artifact, and fails the build if any checks fail.
+
+See [CI Checks](../guides/ci-checks.md) for defining custom check rules.
+
 ## Case format
 
 ```yaml

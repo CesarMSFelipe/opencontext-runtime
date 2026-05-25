@@ -10,36 +10,26 @@ from opencontext_cli.main import (
     _check,
     _checkpoint,
     _ddev,
-    _debug,
     _doctor,
     _drupal,
     _eval,
-    _evidence,
-    _governance,
     _init,
-    _orchestrate,
     _pack,
     _pack_diff,
     _packs,
-    _propose,
     _provider_simulate,
-    _run,
     _security,
     _tokens,
-    _validate,
     _watch,
 )
-from opencontext_core.config import SecurityMode
 from opencontext_core.runtime import OpenContextRuntime
 
 
-def test_check_scaffold_creates_files(tmp_path: Path, monkeypatch, capsys) -> None:
-    monkeypatch.chdir(tmp_path)
+def test_check_deprecation(capsys) -> None:
     _check("run", "all")
-    output = capsys.readouterr().out
-    paths = json.loads(output)
-    assert len(paths) == 5
-    assert any("security" in path for path in paths)
+    data = json.loads(capsys.readouterr().out)
+    assert data["status"] == "removed"
+    assert "opencontext verify" in data["hint"]
 
 
 def test_checkpoint_create_outputs_hashes(capsys) -> None:
@@ -52,8 +42,7 @@ def test_checkpoint_create_outputs_hashes(capsys) -> None:
 
 def test_security_scan_outputs_warning(capsys) -> None:
     _security("scan")
-    output = capsys.readouterr().out
-    data = json.loads(output)
+    data = json.loads(capsys.readouterr().out)
     assert data["warnings"]
 
 
@@ -90,7 +79,6 @@ def test_doctor_tokens_suggest_ignore(tmp_path: Path, capsys) -> None:
     runtime = OpenContextRuntime(storage_path=tmp_path / ".storage/opencontext")
     _doctor(runtime, "tokens", suggest_ignore=True)
     output = capsys.readouterr().out
-    # Doctor now outputs formatted text; verify it mentions the token report
     assert "Token report" in output or "tokens" in output.lower()
 
 
@@ -112,26 +100,6 @@ def test_ddev_init_scaffolds_wrapper(tmp_path: Path, monkeypatch, capsys) -> Non
     assert (tmp_path / ".opencontext/workflows/drupal-review.yaml").exists()
 
 
-def test_agentic_scaffold_commands_report_safe_policies(capsys) -> None:
-    _orchestrate("requirements.md", SecurityMode.PRIVATE_PROJECT)
-    orchestrate = json.loads(capsys.readouterr().out)
-    assert orchestrate["policy"]["safe_commands"]["decision"] == "ask"
-    assert orchestrate["policy"]["write_file"]["decision"] == "deny"
-
-    _debug("var/log/error.log", "safe", SecurityMode.PRIVATE_PROJECT)
-    debug = json.loads(capsys.readouterr().out)
-    assert debug["network"]["allowed"] is False
-
-    _validate("drupal", SecurityMode.PRIVATE_PROJECT)
-    validate = json.loads(capsys.readouterr().out)
-    assert validate["run_tests"]["decision"] == "ask"
-
-    _propose("patch", "Fix sk-abcdefghijklmnopqrstuvwxyz123456", SecurityMode.PRIVATE_PROJECT)
-    propose = json.loads(capsys.readouterr().out)
-    assert propose["file_writes_performed"] is False
-    assert "sk-abcdefghijklmnopqrstuvwxyz123456" not in propose["task"]
-
-
 def test_more_required_scaffolds(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "workflow-packs/example").mkdir(parents=True)
@@ -143,11 +111,9 @@ def test_more_required_scaffolds(tmp_path: Path, monkeypatch, capsys) -> None:
     assert json.loads(capsys.readouterr().out)["status"] == "available"
     _drupal("tests", "plan")
     assert json.loads(capsys.readouterr().out)["profile"] == "drupal"
-    _run("architect", "Design access boundaries", None)
-    assert json.loads(capsys.readouterr().out)["mode"] == "architect"
 
 
-def test_provider_governance_and_evidence_scaffolds(tmp_path: Path, capsys) -> None:
+def test_provider_simulate_denies_confidential(tmp_path: Path, capsys) -> None:
     project = tmp_path / "project"
     project.mkdir()
     config_path = write_config(tmp_path, project)
@@ -156,14 +122,6 @@ def test_provider_governance_and_evidence_scaffolds(tmp_path: Path, capsys) -> N
     _provider_simulate("openai", "confidential", runtime)
     provider = json.loads(capsys.readouterr().out)
     assert provider["decision"]["allowed"] is False
-
-    _governance("report", runtime)
-    governance = json.loads(capsys.readouterr().out)
-    assert governance["external_providers_enabled"] is False
-
-    _evidence("pack", runtime)
-    evidence = json.loads(capsys.readouterr().out)
-    assert evidence["raw_secrets_included"] is False
 
 
 def test_pack_output_file_is_redacted(tmp_path: Path, capsys) -> None:

@@ -70,7 +70,23 @@ Review this code for security issues:
 
 ## CI Integration
 
-Add to your CI pipeline:
+Generate a GitHub Actions workflow automatically:
+
+```bash
+opencontext ci-check github-actions
+```
+
+Or include it during initialization:
+
+```bash
+opencontext ci-check init
+```
+
+This creates `.github/workflows/opencontext-contextbench.yml` that runs checks
+on every push and pull request, uploads the JSON report as an artifact, and
+fails the build on check failures.
+
+Manual pipeline example:
 
 ```yaml
 # .github/workflows/checks.yml
@@ -82,7 +98,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: pip install opencontext-cli
-      - run: opencontext ci-check run
+      - run: opencontext ci-check init --no-workflow
+      - run: opencontext ci-check run --json > report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: check-report
+          path: report.json
 ```
 
 ## Programmatic Usage

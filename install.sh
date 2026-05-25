@@ -7,6 +7,42 @@ set -euo pipefail
 OPENCONTEXT_VERSION="0.1.0"
 REPO_URL="https://github.com/CesarMSFelipe/OpenContext-Runtime"
 
+# Parse flags
+YES_MODE=false
+TEMP_DIR=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --yes|-y)
+            YES_MODE=true
+            shift
+            ;;
+        --help|-h)
+            echo "OpenContext Runtime Installer v${OPENCONTEXT_VERSION}"
+            echo ""
+            echo "Usage: bash install.sh [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  -y, --yes    Non-interactive mode (skip prompts)"
+            echo "  -h, --help   Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: bash install.sh [--yes]"
+            exit 1
+            ;;
+    esac
+done
+
+# Cleanup handler — removes temp dir on exit
+cleanup() {
+    if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then
+        rm -rf "$TEMP_DIR"
+    fi
+}
+trap cleanup EXIT
+
 check_python() {
     PYTHON_CMD="${PYTHON_CMD:-python3}"
     if ! command -v "$PYTHON_CMD" &>/dev/null; then
@@ -72,26 +108,21 @@ install_opencontext() {
             exit 1
         fi
 
-        local temp_dir
-        temp_dir=$(mktemp -d)
+        TEMP_DIR=$(mktemp -d)
 
-        git clone --depth 1 "$REPO_URL.git" "$temp_dir/opencontext" 2>/dev/null || {
+        git clone --depth 1 "$REPO_URL.git" "$TEMP_DIR/opencontext" 2>/dev/null || {
             echo "Error: Could not clone repository."
             echo ""
             echo "Manual installation:"
             echo "  git clone $REPO_URL.git"
             echo "  cd OpenContext-Runtime"
             echo "  pip install -e packages/opencontext_core -e packages/opencontext_cli"
-            rm -rf "$temp_dir"
             exit 1
         }
 
-        cd "$temp_dir/opencontext"
+        cd "$TEMP_DIR/opencontext"
         "$PYTHON_CMD" -m pip install -e packages/opencontext_core -e packages/opencontext_cli --quiet
         echo "✓ Installed from source"
-        echo ""
-        echo "Note: Source install is active. To update:"
-        echo "  cd $temp_dir/opencontext && git pull && pip install -e packages/opencontext_core -e packages/opencontext_cli"
     fi
 
     # Check if opencontext is in PATH
@@ -110,20 +141,14 @@ install_opencontext() {
     echo ""
     echo "Quick start:"
     echo "  1. cd your-project"
-    echo "  2. opencontext onboard"
-    echo "  3. opencontext index ."
-    echo "  4. opencontext pack . --query 'Explain this code'"
+    echo "  2. opencontext install"
     echo ""
-    echo "Or use the interactive TUI:"
-    echo "  opencontext tui"
+    echo "This will auto-detect your project, configure SDD/TDD, index your"
+    echo "code, and set up agent integrations — all in one step."
     echo ""
     echo "Get help:"
     echo "  opencontext --help"
     echo "  opencontext --version"
-    echo ""
-    echo "For agent integration:"
-    echo "  opencontext install              # Auto-detect agents"
-    echo "  opencontext install --target claude,cursor"
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
 }

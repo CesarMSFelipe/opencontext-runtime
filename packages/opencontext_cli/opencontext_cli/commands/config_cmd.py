@@ -79,7 +79,13 @@ def handle_config(args: Any) -> None:
     command = args.config_command
 
     if command == "wizard":
-        run_wizard(non_interactive=getattr(args, "non_interactive", False))
+        use_tui = not getattr(args, "non_interactive", False)
+        if use_tui:
+            from opencontext_core.wizard import run_wizard_menu
+
+            run_wizard_menu()
+        else:
+            run_wizard(non_interactive=True)
     elif command == "show":
         show_config()
     elif command == "reset":
@@ -100,56 +106,131 @@ def handle_config(args: Any) -> None:
         _config_cleanup(args.keep_days)
 
 
+# ── Dot-notation config paths ──────────────────────────────────────────────
+
+# Schema of configurable paths: "path" -> (type, description)
+CONFIG_PATHS: dict[str, tuple[type, str]] = {
+    # Flat keys
+    "security_mode": (str, "Security mode: private_project, enterprise, or air-gapped"),
+    "default_token_budget": (int, "Default token budget per operation"),
+    "max_input_tokens": (int, "Maximum input tokens"),
+    "reserve_output_tokens": (int, "Reserved output tokens"),
+    "check_updates": (bool, "Check for updates automatically"),
+    "auto_optimize": (bool, "Auto-optimize token budgets based on usage"),
+    "first_run": (bool, "Whether this is the first run"),
+    "default_provider": (str, "Default LLM provider"),
+    "default_model": (str, "Default LLM model"),
+    # Nested: features.*
+    "features.knowledge_graph": (bool, "Knowledge Graph (code indexing & search)"),
+    "features.call_graph": (bool, "Call Graph (function call analysis)"),
+    "features.learning_system": (bool, "Learning System (auto-optimize)"),
+    "features.governance": (bool, "Governance (audit trails & policies)"),
+    "features.mcp_server": (bool, "MCP Server (agent integration)"),
+    "features.git_integration": (bool, "Git Integration"),
+    "features.embeddings": (bool, "Embeddings (semantic search)"),
+    "features.semantic_search": (bool, "Semantic Search"),
+    # Nested: sdd.*
+    "sdd.tdd_mode": (str, "TDD mode: ask, strict, or off"),
+    "sdd.sdd_model_profile": (str, "SDD model profile: default, cheap, hybrid, premium"),
+    "sdd.orchestrator_profile": (
+        str,
+        "Orchestrator profile: solo-compact, multi-phase, subagent-native",
+    ),
+    # Nested: agents.*
+    "agents.default_client": (str, "Default agent client"),
+    "agents.active_clients": (list, "Active agent clients (comma-separated)"),
+}
+
+
+def _resolve_config_path(prefs: Any, dotted: str) -> tuple[Any, str] | None:
+    """Resolve a dotted path to (parent_object, attr_name) or None if invalid.
+
+    Example: "features.knowledge_graph" -> (prefs.features, "knowledge_graph")
+    """
+    parts = dotted.split(".")
+    obj = prefs
+    for _i, part in enumerate(parts[:-1]):
+        if hasattr(obj, part):
+            obj = getattr(obj, part)
+        else:
+            return None
+    return (obj, parts[-1])
+
+
+def _get_all_config_paths() -> list[str]:
+    """Return all available config paths sorted."""
+    return sorted(CONFIG_PATHS.keys())
+
+
+def _coerce_value(value: str, target_type: type) -> object:
+    """Coerce a string value to the target type."""
+    if target_type is bool:
+        return value.lower() in ("true", "1", "yes", "on")
+    elif target_type is int:
+        return int(value)
+    elif target_type is list:
+        import json
+
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+        # Fallback: comma-separated
+        return [item.strip() for item in value.split(",") if item.strip()]
+    else:
+        return value
+
+
 def _config_set(key: str, value: str) -> None:
-    """Set a config value by key."""
+    """Set a config value using dot notation."""
 
     store = UserConfigStore()
     prefs = store.load()
 
-    # Simple key-value mapping
-    key_map: dict[str, tuple[str, type]] = {
-        "security_mode": ("security_mode", str),
-        "token_budget": ("default_token_budget", int),
-        "max_input_tokens": ("max_input_tokens", int),
-        "check_updates": ("check_updates", bool),
-        "auto_optimize": ("learning_auto_optimize", bool),
-    }
-
-    if key in key_map:
-        attr_name, attr_type = key_map[key]
-        if attr_type is bool:
-            parsed = value.lower() in ("true", "1", "yes", "on")
-        elif attr_type is int:
-            parsed = int(value)
-        else:
-            parsed = value
-        setattr(prefs, attr_name, parsed)
-        store.save(prefs)
-        print(f"Set {key} = {parsed}")
+    if key in CONFIG_PATHS:
+        _target_type, _description = CONFIG_PATHS[key]
+        resolved = _resolve_config_path(prefs, key)
+        if resolved is None:
+            print(f"Error: Cannot resolve path '{key}'")
+            return
+        parent, attr = resolved
+        try:
+            parsed = _coerce_value(value, _target_type)
+            setattr(parent, attr, parsed)
+            store.save(prefs)
+            print(f"Set {key} = {parsed}")
+        except (ValueError, TypeError) as exc:
+            print(f"Error: Cannot set '{key}' to '{value}': {exc}")
+            print(f"Expected type: {_target_type.__name__}")
     else:
         print(f"Unknown key: {key}")
-        print(f"Available: {', '.join(key_map.keys())}")
+        print(f"Available paths ({len(CONFIG_PATHS)}):")
+        for path, (typ, desc) in sorted(CONFIG_PATHS.items()):
+            print(f"  {path}  ({typ.__name__})  {desc}")
 
 
 def _config_get(key: str) -> None:
-    """Get a config value by key."""
+    """Get a config value by dot-notation key."""
 
     store = UserConfigStore()
     prefs = store.load()
 
-    key_map = {
-        "security_mode": prefs.security_mode,
-        "token_budget": prefs.default_token_budget,
-        "max_input_tokens": prefs.max_input_tokens,
-        "check_updates": prefs.check_updates,
-        "auto_optimize": prefs.learning_auto_optimize,
-        "first_run": prefs.first_run,
-    }
-
-    if key in key_map:
-        print(f"{key} = {key_map[key]}")
+    if key in CONFIG_PATHS:
+        _target_type, _description = CONFIG_PATHS[key]
+        resolved = _resolve_config_path(prefs, key)
+        if resolved is None:
+            print(f"Error: Cannot resolve path '{key}'")
+            return
+        parent, attr = resolved
+        value = getattr(parent, attr, "<not set>")
+        print(f"{key} = {value}")
     else:
         print(f"Unknown key: {key}")
+        print(f"Available paths ({len(CONFIG_PATHS)}):")
+        for path, (typ, desc) in sorted(CONFIG_PATHS.items()):
+            print(f"  {path}  ({typ.__name__})  {desc}")
 
 
 def _config_backup() -> None:

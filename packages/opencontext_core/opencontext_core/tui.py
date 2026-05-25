@@ -283,7 +283,7 @@ class OpenContextTUI:
             return
 
         print(f"\nRunning SDD flow for: {query}")
-        print("Phases: explore → propose → spec → design → tasks → apply → verify → archive")
+        print("Phases: explore -> propose -> spec -> design -> tasks -> apply -> verify -> archive")
         print("(Scaffold mode - requires sub-agent support)")
 
     def _do_doctor(self) -> None:

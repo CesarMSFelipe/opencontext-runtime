@@ -1,234 +1,234 @@
 # Specification-Driven Development (SDD) Workflow
 
-The SDD workflow is OpenContext's 8-phase specification-driven development lifecycle. It moves from exploration through specification, design, implementation, and verification, with full traceability via artifact stores and DAG state tracking.
+The SDD workflow is OpenContext's 6-phase specification-driven development lifecycle, powered by the **harness runner**. It moves from exploration through proposal, implementation, verification, and review, with full traceability and governance via phase gates.
 
 ## Overview
 
-SDD is designed to be **technology-agnostic** and **agent-composable**. Each phase can run independently or as part of the full flow. Artifacts persist across phases through configurable backends (engram, openspec, hybrid).
+SDD is designed to be **technology-agnostic**, **provider-neutral**, and **agent-composable**. The harness runner executes phases in sequence, evaluates gates (token budget, artifact persistence, project index, etc.), and persists results to `.opencontext/runs/<run_id>/`.
 
 ### Key Principles
 
-1. **Specification-First**: Define intent, scope, and spec before implementation
-2. **Traceable**: Every phase produces artifacts linked by DAG state
-3. **Composable**: Each phase can be used independently or chained
-4. **Auditable**: Full provenance via artifact stores and trace IDs
+1. **Specification-First**: Define intent, scope, and approach before implementation
+2. **Governed**: Each phase passes through gates (budget, persistence, security)
+3. **Traceable**: Every run produces ledgers, gates, and artifacts
+4. **Provider-Neutral**: No API calls — works offline with mock provider
 
-## The SDD Workflow Phases
+## The Harness Workflow Phases
 
-The SDD workflow consists of eight phases:
+The harness runner executes six phases:
 
 ```
-Explore → Propose → Spec → Design → Tasks → Apply → Verify → Archive
+Explore → Propose → Apply → Verify → Review → Archive
 ```
 
 ### 1. Explore
 
-**Purpose**: Investigate the codebase and think through ideas before committing to a change.
+**Purpose**: Index the project and build a context pack for the task.
 
-- Reads relevant source files, symbol definitions, and call graphs
-- Identifies affected areas and potential approaches
-- Produces a lightweight exploration summary
+- Reads project structure, files, and symbols
+- Builds a compact context pack within the token budget
+- Checks: project index exists, context pack created, token budget
 
 **CLI**:
 ```bash
-opencontext sdd explore "How does authentication work?" --root . --max-tokens 8000
+opencontext harness run --workflow explore-only --task "How does authentication work?"
 ```
 
-**Produces**: Exploration summary with code references and identified scope.
+**Produces**: Indexed manifest, context pack, and token ledger.
 
 ### 2. Propose
 
-**Purpose**: Create a change proposal with intent, scope, and approach.
+**Purpose**: Create a structured SDD change proposal from the exploration results.
 
 - Defines what will change and why
-- Outlines the approach and expected impact
-- Flags risks and dependencies
+- Outlines the approach and scope
+- Persists proposal to `proposal.json`
 
 **CLI**:
 ```bash
-opencontext sdd propose "Implement OAuth2 support" --root .
+opencontext harness run --workflow sdd --task "Implement OAuth2 support"
 ```
 
-**Produces**: Change proposal document with scope, approach, and risk assessment.
+**Produces**: `proposal.json` with task, scope, and approach metadata.
 
-### 3. Spec
+### 3. Apply
 
-**Purpose**: Write detailed specifications with requirements and scenarios.
+**Purpose**: Apply changes as defined in the proposal.
 
-- Translates proposal into concrete requirements
-- Defines acceptance criteria and edge cases
-- Covers functional and non-functional requirements
+- Creates an apply manifest tracking what was applied
+- Records change metadata for auditability
 
-**CLI**:
+**CLI**: Part of the full SDD workflow (`--workflow sdd`).
+
+**Produces**: `apply-manifest.json` with change summary.
+
+### 4. Verify
+
+**Purpose**: Run tests and validate the implementation.
+
+- Executes `pytest` in the project root
+- Captures test output, exit code, pass/fail counts
+- Reports warnings on test failures
+
+**CLI**: Part of the full SDD workflow (`--workflow sdd`).
+
+**Produces**: `verify-report.json` with test results and exit code.
+
+### 5. Review
+
+**Purpose**: Aggregate phase results and produce a review summary.
+
+- Collects ledgers, gates, artifacts, and warnings from all prior phases
+- Reports gate pass/fail counts and warnings
+
+**CLI**: Part of the full SDD workflow (`--workflow sdd`).
+
+**Produces**: `review.json` with aggregated phase data and gate statistics.
+
+### 6. Archive
+
+**Purpose**: Persist run artifacts and verify persistence.
+
+- Confirms `run.json` was saved to disk
+- Finalizes the run directory
+
+**CLI**: Part of the full SDD workflow (`--workflow sdd`).
+
+**Produces**: Archived run directory under `.opencontext/runs/<run_id>/`.
+
+## Available Workflows
+
 ```bash
-opencontext sdd spec --root .
+opencontext harness list
 ```
 
-**Produces**: Delta spec document with requirements, scenarios, and acceptance criteria.
+| Workflow | Phases | Description |
+|----------|--------|-------------|
+| `sdd` | explore → propose → apply → verify → review → archive | Full SDD lifecycle |
+| `explore-only` | explore | Project indexing and context pack |
+| `apply-only` | apply → verify → archive | Apply then verify and archive |
 
-### 4. Design
+## Budget Modes
 
-**Purpose**: Create the technical design and architecture approach.
+The harness supports three token budget enforcement modes:
 
-- Defines component boundaries, interfaces, and data flow
-- Covers module placement, API contracts, and migration strategy
-- Addresses cross-cutting concerns (security, performance, observability)
+| Mode | Behavior |
+|------|----------|
+| `off` | No budget enforcement |
+| `warn` | Log warnings when tokens exceed budget (default) |
+| `strict` | Fail the run and exit with code 1 on overage |
 
-**CLI**:
 ```bash
-opencontext sdd design --root .
+opencontext harness run --workflow sdd --task "my task" --budget-mode strict
 ```
-
-**Produces**: Technical design document with architecture decisions, interface definitions, and trade-offs.
-
-### 5. Tasks
-
-**Purpose**: Break the change into implementation tasks.
-
-- Decomposes spec and design into actionable work units
-- Identifies file-level changes and test requirements
-- Orders tasks by dependency
-
-**CLI**:
-```bash
-opencontext sdd tasks --root .
-```
-
-**Produces**: Task list with file-level change descriptions and dependencies.
-
-### 6. Apply
-
-**Purpose**: Implement code changes from task definitions.
-
-- Executes the planned tasks against the codebase
-- Integrates with the workflow engine for guided multi-step execution
-- Supports custom workflows via `--workflow` flag
-
-**CLI**:
-```bash
-opencontext sdd apply --workflow sdd --root .
-```
-
-**Produces**: Applied changes with execution results and trace ID.
-
-### 7. Verify
-
-**Purpose**: Validate that the implementation matches specs, design, and tasks.
-
-- Runs tests and compares results against acceptance criteria
-- Checks that all requirements from the spec are addressed
-- Reports coverage gaps or regressions
-
-**CLI**:
-```bash
-opencontext sdd verify --root .
-```
-
-**Produces**: Verification report with pass/fail status per requirement.
-
-### 8. Archive
-
-**Purpose**: Archive completed change artifacts and sync delta specs.
-
-- Persists all phase artifacts to the configured artifact store
-- Updates baseline specs with delta changes
-- Cleans up temporary state
-
-**CLI**:
-```bash
-opencontext sdd archive --root .
-```
-
-**Produces**: Archived artifact set with trace ID for future reference.
 
 ## Complete SDD Flow
 
-Run all eight phases in sequence:
+Run all six phases in sequence:
 
 ```bash
-opencontext sdd flow "Implement OAuth2 authentication" --root . --max-tokens 8000
+opencontext harness run --workflow sdd --task "Implement OAuth2 authentication" --budget-mode warn
 ```
 
-This executes the full pipeline:
-1. Explore → 2. Propose → 3. Spec → 4. Design → 5. Tasks → 6. Apply → 7. Verify → 8. Archive
+Output:
+```
+Harness Run: sdd-a1b2c3d4e5f6
+  Workflow: sdd
+  Task: Implement OAuth2 authentication
+  Status: passed
+  Phases: 6
+    explore: 599/6000 tokens — passed
+    propose: 0/6000 tokens — passed
+    apply: 0/6000 tokens — passed
+    verify: 0/4000 tokens — passed
+    review: 0/4000 tokens — passed
+    archive: 0/2000 tokens — passed
+  Gates: 10
+  Trace IDs: 0
+```
 
-## Phase Dependencies
+For JSON output (CI-friendly):
+```bash
+opencontext harness run --workflow sdd --task "my task" --json
+```
 
-The orchestrator enforces dependency ordering: each phase requires its predecessors to complete before it can run. The dependency graph is:
+## Run Artifacts
+
+Each harness run creates a directory under `.opencontext/runs/<run_id>/`:
+
+| File | Contents |
+|------|----------|
+| `run.json` | Run metadata (id, workflow, status, created_at) |
+| `ledger.json` | Per-phase token ledger |
+| `gates.json` | Gate evaluation results |
+| `artifacts.json` | Artifacts created during the run |
+| `decisions.json` | Decisions recorded during the run |
+| `proposal.json` | Change proposal (propose phase) |
+| `apply-manifest.json` | Apply manifest (apply phase) |
+| `verify-report.json` | Test results (verify phase) |
+| `review.json` | Aggregated review (review phase) |
+
+## Health Checks
+
+Verify harness and adapter health:
+
+```bash
+opencontext verify
+```
+
+Relevant checks include:
+- **Harness Phases**: 6/6 phases available
+- **Harness Runner**: Runner instantiatable and run_id generated
+- **Adapters**: Core adapters ready (local, python, aider)
+- **Boundary Service**: Service accepts 6 adapter targets
+
+## Migration from Legacy SDD Commands
+
+The individual `sdd explore`, `sdd propose`, `sdd apply`, `sdd verify`, `sdd review`, `sdd archive`, and `sdd up-code` commands are **deprecated** in favor of the unified harness runner:
+
+| Old command | New command |
+|-------------|-------------|
+| `sdd explore "query"` | `harness run --workflow explore-only --task "query"` |
+| `sdd propose "query"` | `harness run --workflow sdd --task "query"` |
+| `sdd apply --workflow sdd` | `harness run --workflow sdd --task "task"` |
+| `sdd verify` | `harness run --workflow sdd --task "task"` |
+| `sdd review` | `harness run --workflow sdd --task "task"` |
+| `sdd archive` | `harness run --workflow explore-only --task "task"` |
+| `sdd flow "query"` | `harness run --workflow sdd --task "query"` |
+
+## Phase Dependencies (Orchestrator-Level)
+
+The SDD orchestrator enforces dependency ordering at the skill/agent level:
 
 - `explore`: no dependencies
 - `propose`: depends on `explore`
-- `spec`: depends on `propose`
-- `design`: depends on `propose`
-- `tasks`: depends on `spec` + `design`
-- `apply`: depends on `tasks`
+- `apply`: depends on `propose`
 - `verify`: depends on `apply`
+- `review`: depends on all prior phases
 - `archive`: depends on `verify`
-
-## Artifact Stores
-
-SDD supports multiple persistence backends configured via `opencontext.yaml`:
-
-| Mode | Backend | Use Case |
-|------|---------|----------|
-| `none` | NoneStore | Stateless / single-session |
-| `engram` | EngramStore | Topic-keyed memory persistence |
-| `openspec` | OpenSpecStore | File-based OpenSpec format |
-| `hybrid` | HybridStore | Both engram + openspec |
-
-Configured under `sdd.artifact_store.mode` in `opencontext.yaml`.
-
-## Per-Phase Model Assignment
-
-Each SDD phase can use a different LLM model via `SDDProfile`. Configured in `opencontext.yaml`:
-
-```yaml
-sdd:
-  profiles:
-    default:
-      explore: { provider: openrouter, model: openrouter/auto }
-      propose: { provider: anthropic, model: claude-sonnet-4-20250514 }
-      spec:     { provider: anthropic, model: claude-sonnet-4-20250514 }
-      design:   { provider: anthropic, model: claude-sonnet-4-20250514 }
-      tasks:    { provider: openrouter, model: openrouter/auto }
-      apply:    { provider: openrouter, model: openrouter/auto }
-      verify:   { provider: anthropic, model: claude-sonnet-4-20250514 }
-      archive:  { provider: mock, model: mock-llm }
-```
-
-## SDD Profile Manager
-
-The `SDDProfileManager` manages named profiles for different scenarios:
-
-```bash
-# List available profiles
-opencontext sdd profile list
-
-# Set active profile
-opencontext sdd profile set my-profile
-```
 
 ## Technology Agnosticism
 
-The SDD workflow works identically across all technology stacks:
+The harness workflow works identically across all technology stacks:
 
 ### Python/Django
 ```bash
-opencontext sdd flow "Create user registration endpoint"
+opencontext harness run --workflow sdd --task "Create user registration endpoint"
 ```
 
 ### Node.js/Express
 ```bash
-opencontext sdd flow "Add JWT authentication middleware"
+opencontext harness run --workflow sdd --task "Add JWT authentication middleware"
 ```
 
 ### React/TypeScript
 ```bash
-opencontext sdd flow "Implement login form with validation"
+opencontext harness run --workflow sdd --task "Implement login form with validation"
 ```
 
 ## See Also
 
-- [SDD Orchestrator Architecture](../concepts/architecture.md)
+- [Harness Runner Architecture](../concepts/architecture.md)
 - [Custom Workflows](./custom-workflows.md)
-- [Provider Policies](../configuration/provider-policy.md)
+- [CLI Reference](../getting-started/cli-installation.md)
+- [Health Checks](../operations/health-checks.md)

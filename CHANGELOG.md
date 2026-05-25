@@ -7,16 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.1-beta] - 2026-05-22
 
+### Added
+- **Harness runner governance**: Budget enforcement (off/warn/strict) for all workflow phases
+- **Phase gates**: Gate evaluation per phase (project index, context pack, budget, persistence)
+- **Run artifact persistence**: Runs saved to `.opencontext/runs/<run_id>/` with ledgers, gates, artifacts, proposals, apply manifests, verify reports, and reviews
+- **Per-phase budget limits**: Explore 6K, propose 6K, apply 6K, verify 4K, review 4K, archive 2K
+- **Explore-only workflow**: Lightweight `harness run --workflow explore-only` for indexing + context pack
+- **JSON output mode**: `harness run --json` for CI integration
+- **Health checks**: `opencontext verify` now reports 6/6 harness phases, runner status, adapter status, boundary service status
+
+### Changed
+- **SDD commands deprecated**: `opencontext sdd explore`, `propose`, `apply`, `test`, `verify`, `review`, `archive`, `up-code`, and `flow` now emit deprecation warnings and delegate to `harness run`
+- **`sdd flow` delegates to HarnessRunner**: Invokes `harness run --workflow sdd` with TDD context setup
+- **Help text**: All deprecated SDD subcommands marked with `[DEPRECATED]` and migration hint in `--help`
+
 ### Fixed
 - **publish.yml**: Switch from PyPI API token to Trusted Publishing for secure automated releases
 - **Version bumps**: All 5 packages synced to 0.2.1b0 for pre-release consistency
 
 ### Docs
-- README: fix test badge count, expand SDD section to 8 real phases, update Implementation Status with v0.2.0 features
-- docs/roadmap.md: expanded from 13→45 lines reflecting v0.2.0 status and next milestones
-- docs/workflows/sdd-workflow.md: complete rewrite matching actual 8-phase orchestrator
-- docs/workflows/sdd-implementation-summary.md: fix 7→8 phase references
-- docs/configuration/plugins.md, docs/guides/pypi-publishing.md: version references 0.1.0→0.2.0
+- README: SDD section rewritten for harness runner (6 governance phases, token budgets, health checks)
+- docs/workflows/sdd-workflow.md: complete rewrite matching harness runner architecture (6 phases, gates, artifact structure, migration table)
+- docs/workflows/sdd-implementation-summary.md: updated CLI commands, workflow composition, and references to use `harness run`
+- docs/product/community-sdd-tdd-gap-analysis.md: updated `sdd flow` references to `harness run`
+- docs/getting-started/getting-started-guide.md: updated SDD workflow section for harness commands
 
 ## [0.2.0] - 2026-05-22
 
@@ -55,7 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation updated for all new features
 
 [0.2.0]: https://github.com/CesarMSFelipe/OpenContext-Runtime/releases/tag/v0.2.0
-[0.1.0]: https://github.com/CesarMSFelipe/OpenContext-Runtime/releases/tag/v0.1.0
+
+## [0.1.0] - 2026-05-22
 
 ### Added
 - Core context engineering runtime with token-efficient packing

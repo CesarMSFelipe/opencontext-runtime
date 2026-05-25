@@ -8,9 +8,8 @@ First-party profile registry exists in `packages/opencontext_profiles`. CLI temp
 
 ## Related Commands
 ```bash
-opencontext init --template drupal
 opencontext init --template python
-opencontext validate --profile drupal
+opencontext init --template python
 ```
 
 ## Implemented Code
