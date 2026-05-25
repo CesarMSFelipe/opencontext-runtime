@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from opencontext_core.compat import StrEnum
@@ -95,5 +95,5 @@ class HarnessRunResult:
     trace_ids: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     created_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )

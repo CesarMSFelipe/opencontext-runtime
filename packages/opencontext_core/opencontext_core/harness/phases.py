@@ -6,7 +6,7 @@ import json
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,9 +15,7 @@ from opencontext_core.harness.gates import (
     ArtifactPersistedGate,
     ContextPackCreatedGate,
     ProjectIndexExistsGate,
-    SecurityScanPassedGate,
     TokenBudgetGate,
-    TraceIdCreatedGate,
 )
 from opencontext_core.harness.models import (
     BudgetMode,
@@ -164,7 +162,7 @@ class ProposePhase(HarnessPhase):
         proposal = {
             "run_id": state.run_id,
             "task": state.task,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "status": "draft",
             "summary": f"SDD proposal: {state.task}",
             "scope": {
@@ -234,7 +232,7 @@ class ApplyPhase(HarnessPhase):
         apply_manifest = {
             "run_id": state.run_id,
             "task": state.task,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "status": "applied",
             "changes": [],
             "summary": f"Applied changes for: {state.task}",
@@ -293,7 +291,7 @@ class VerifyPhase(HarnessPhase):
         verify_report = {
             "run_id": state.run_id,
             "task": state.task,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "test_result": test_result,
             "summary": (
                 "All checks passed"
@@ -412,7 +410,7 @@ class ReviewPhase(HarnessPhase):
         review = {
             "run_id": state.run_id,
             "task": state.task,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "status": "completed",
             "phases_completed": len(set(l.phase for l in state.ledgers)),
             "total_gates": len(state.gates),
