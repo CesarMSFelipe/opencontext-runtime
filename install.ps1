@@ -3,7 +3,8 @@
 
 param(
     [string]$Version = "0.1.0",
-    [string]$RepoUrl = "https://github.com/CesarMSFelipe/OpenContext-Runtime"
+    [string]$RepoUrl = "https://github.com/CesarMSFelipe/OpenContext-Runtime",
+    [switch]$Yes = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,8 +58,10 @@ function Install-OpenContext {
     Write-Host "Installing OpenContext packages..." -ForegroundColor Cyan
     Write-Host ""
 
-    # Try pip install first
+    $tempDir = $null
+
     try {
+        # Try pip install first
         & $pythonCmd -m pip install opencontext-core opencontext-cli --quiet 2>$null
         Write-Host "✓ Installed from PyPI" -ForegroundColor Green
     } catch {
@@ -88,6 +91,11 @@ function Install-OpenContext {
             Write-Host "Error: Could not install from source." -ForegroundColor Red
             exit 1
         }
+    } finally {
+        # Clean up temp directory if it was created
+        if ($tempDir -and (Test-Path $tempDir)) {
+            Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
+        }
     }
 
     # Check if opencontext is in PATH
@@ -106,9 +114,10 @@ function Install-OpenContext {
     Write-Host ""
     Write-Host "Quick start:" -ForegroundColor White
     Write-Host "  1. cd your-project" -ForegroundColor Gray
-    Write-Host "  2. opencontext onboard" -ForegroundColor Gray
-    Write-Host "  3. opencontext index ." -ForegroundColor Gray
-    Write-Host "  4. opencontext pack . --query 'Explain this code'" -ForegroundColor Gray
+    Write-Host "  2. opencontext install" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "This will auto-detect your project, configure SDD/TDD, index your" -ForegroundColor Gray
+    Write-Host "code, and set up agent integrations — all in one step." -ForegroundColor Gray
     Write-Host ""
     Write-Host "Get help:" -ForegroundColor White
     Write-Host "  opencontext --help" -ForegroundColor Gray
