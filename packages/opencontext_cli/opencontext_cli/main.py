@@ -1104,10 +1104,11 @@ def _template_config(template: str) -> dict[str, Any]:
 
 
 def _install(args: argparse.Namespace) -> None:
-    """Quick project setup wizard with auto-detection."""
+    """Quick project setup wizard with auto-detection and step-by-step progress."""
 
     from opencontext_core.dx.console_styles import console
     from rich.prompt import Confirm
+    from rich.status import Status
 
     root = Path(args.root)
 
@@ -1149,18 +1150,161 @@ def _install(args: argparse.Namespace) -> None:
             return
 
     template = "python" if has_pytest else ("node" if has_package_json else "generic")
-    _onboard(
-        root=str(root),
-        template=template if template in _technology_template_names() else "generic",
-        mode="private_project",
-        setup_mcp=True,
-        agent="opencode",
-        tdd=tdd,
-        sdd_profile="hybrid",
-        orchestrator_profile="multi-phase",
-        token_budget_per_phase=None,
-        force_agent_files=False,
-    )
+
+    # ── Step-by-step phases with Rich Status ──────────────────────────
+    steps = [
+        ("Creating workspace and config...", "workspace"),
+        ("Indexing project and building knowledge graph...", "index"),
+        ("Setting up SDD/TDD context...", "sdd"),
+        ("Configuring agent integrations...", "agents"),
+        ("Setting up harness workflow...", "harness"),
+    ]
+
+    results: dict[str, str] = {}
+
+    for phase_label, phase_key in steps:
+        with Status(phase_label, console=console, spinner="dots") as status:
+            try:
+                if phase_key == "workspace":
+                    from opencontext_core.workspace.layout import ensure_workspace
+                    from opencontext_core.user_prefs import UserConfigStore
+
+                    ensure_workspace(root)
+                    store = UserConfigStore()
+                    prefs = store.load()
+                    prefs.security_mode = "private_project"
+                    prefs.sdd.tdd_mode = tdd
+                    prefs.sdd.sdd_model_profile = "hybrid"
+                    prefs.sdd.orchestrator_profile = "multi-phase"
+                    prefs.agents.active_clients = ["opencode"]
+                    prefs.agents.default_client = "opencode"
+                    prefs.setup_completed = True
+                    store.save(prefs)
+                    results[phase_key] = "✓"
+
+                elif phase_key == "index":
+                    from opencontext_core.runtime import OpenContextRuntime
+
+                    config_path = root / "opencontext.yaml"
+                    runtime = OpenContextRuntime(
+                        config_path=str(config_path) if config_path.exists() else None,
+                        storage_path=root / ".storage" / "opencontext",
+                    )
+                    manifest = runtime.index_project(root)
+                    results[phase_key] = f"✓ ({len(manifest.files)} files, {len(manifest.symbols)} symbols)"
+
+                elif phase_key == "sdd":
+                    from opencontext_core.sdd_runtime import write_sdd_context
+
+                    context, files = write_sdd_context(
+                        root,
+                        token_budget_per_phase=3000,
+                        tdd_mode=tdd,
+                        active_clients=["opencode"],
+                        sdd_model_profile="hybrid",
+                    )
+                    context_path = next((str(f) for f in files if f.name == "context.json"), "")
+                    results[phase_key] = f"✓ (TDD: {tdd})"
+
+                elif phase_key == "agents":
+                    from opencontext_core.adapters.agent_manifest import (
+                        AgentIntegrationGenerator,
+                        AgentTarget,
+                    )
+
+                    generator = AgentIntegrationGenerator()
+                    agent_files = generator.generate(root, target=AgentTarget("opencode"), force=False)
+                    agents_dir = root / ".opencontext" / "agents"
+                    agents_dir.mkdir(parents=True, exist_ok=True)
+                    for client in ["opencode"]:
+                        agent_path = agents_dir / f"{client}.md"
+                        if not agent_path.exists():
+                            agent_path.write_text(
+                                _agent_contract_md(client, tdd, "hybrid", "multi-phase"),
+                                encoding="utf-8",
+                            )
+                    results[phase_key] = f"✓ ({len(agent_files)} files)"
+
+                elif phase_key == "harness":
+                    from opencontext_core.onboarding.service import (
+                        OnboardingOptions,
+                        OnboardingService,
+                    )
+
+                    service = OnboardingService()
+                    service._write_harness_yaml(
+                        root / ".opencontext" / "harness.yaml",
+                        OnboardingOptions(root=root),
+                        3000,
+                    )
+                    results[phase_key] = "✓"
+
+                status.update(phase_label)
+            except Exception as exc:
+                results[phase_key] = f"✗ ({exc})"
+                console.print(f"  [red]✗ {phase_label}: {exc}[/]")
+
+    # ── Summary ────────────────────────────────────────────────────────
+    console.print()
+    console.rule("[bold]Install Complete[/]", style="green")
+    for phase_label, phase_key in steps:
+        result = results.get(phase_key, "?")
+        if result.startswith("✓"):
+            console.print(f"  [green]{result}[/]  {phase_label}")
+        elif result.startswith("✗"):
+            console.print(f"  [red]{result}[/]  {phase_label}")
+        else:
+            console.print(f"  [yellow]?[/]  {phase_label}: {result}")
+
+    console.print()
+    console.print("[bold]Next steps:[/]")
+    console.print("  [cyan]opencontext harness run --workflow sdd --task 'Your task'[/]")
+    console.print("  [cyan]opencontext config wizard[/]")
+    console.print("  [cyan]opencontext pack . --query 'Explain this code' --copy[/]")
+    console.print()
+    console.print("[dim]For help: opencontext --help[/]")
+
+
+def _agent_contract_md(
+    client: str,
+    tdd_mode: str = "ask",
+    sdd_model_profile: str = "hybrid",
+    orchestrator_profile: str = "multi-phase",
+) -> str:
+    """Generate .opencontext/agents/<client>.md contract file."""
+    lines = [
+        f"# OpenContext Agent Contract: {client}",
+        "",
+        "## Before acting",
+        "1. Read `.opencontext/sdd/context.json`.",
+        "2. Build a context pack: `opencontext pack . --query \"<task>\" --max-tokens 3000 --mode plan`.",
+        "3. Preserve trace_id across all phases.",
+        "4. Do not dump the full repository.",
+        f"5. Respect TDD mode: `{tdd_mode}`.",
+        "6. Respect token budget per phase.",
+        "7. Write outputs to `.opencontext/runs/<run_id>/artifacts/`.",
+        "",
+        "## Orchestrator profile",
+        f"- Type: `{orchestrator_profile}`",
+        f"- SDD model profile: `{sdd_model_profile}`",
+        f"- Active clients: {client}",
+        "",
+        "## Allowed actions",
+        "- Read files needed for the current phase",
+        "- Use opencontext CLI for context packs, knowledge graph, and memory",
+        "- Write to `.opencontext/runs/<run_id>/` for artifacts",
+        "",
+        "## Forbidden actions",
+        "- Do not disable security redaction",
+        "- Do not enable external providers without policy approval",
+        "- Do not write to `.env`, `secrets/`, `vendor/`",
+        "",
+        "## Required output",
+        "- Every phase must produce a trace_id and artifact",
+        "- Archive phase must persist memory and graph deltas",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def _index(runtime: OpenContextRuntime, root: str, incremental: bool = False) -> None:

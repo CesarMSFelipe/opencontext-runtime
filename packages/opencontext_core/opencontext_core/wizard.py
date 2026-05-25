@@ -7,6 +7,7 @@ providers, and plugins. Uses rich for a modern interactive TUI.
 from __future__ import annotations
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
@@ -21,6 +22,68 @@ from opencontext_core.user_prefs import (
 )
 
 console = Console()
+
+
+# ── TUI Menu ────────────────────────────────────────────────────────────────
+
+
+def run_wizard_menu() -> None:
+    """Show interactive menu and delegate to the selected section."""
+
+    while True:
+        console.clear()
+        menu = Panel(
+            "\n".join(
+                [
+                    "[bold]OpenContext Configuration[/bold]",
+                    "",
+                    "  [cyan]1[/]  Full configuration wizard",
+                    "  [cyan]2[/]  Security & privacy",
+                    "  [cyan]3[/]  Features",
+                    "  [cyan]4[/]  Token budgets",
+                    "  [cyan]5[/]  Agent integrations",
+                    "  [cyan]6[/]  Plugins",
+                    "  [cyan]7[/]  Show current config",
+                    "  [cyan]8[/]  Reset to defaults",
+                    "  [cyan]q[/]  Quit",
+                    "",
+                    "[dim]j/k: navigate • enter: select • q: quit[/]",
+                ]
+            ),
+            title="OpenContext Config",
+            border_style="cyan",
+            padding=(1, 2),
+        )
+        console.print(menu)
+        console.print()
+
+        choice = Prompt.ask(
+            "Select option",
+            choices=["1", "2", "3", "4", "5", "6", "7", "8", "q"],
+            default="1",
+        )
+
+        if choice == "1":
+            run_wizard()
+        elif choice == "2":
+            reconfigure("security")
+        elif choice == "3":
+            reconfigure("features")
+        elif choice == "4":
+            reconfigure("tokens")
+        elif choice == "5":
+            reconfigure("agents")
+        elif choice == "6":
+            reconfigure("plugins")
+        elif choice == "7":
+            show_config()
+            console.print("\n[dim]Press Enter to return to menu...[/]")
+            input()
+        elif choice == "8":
+            reset_config()
+        elif choice == "q":
+            console.print("[dim]Goodbye.[/]")
+            break
 
 
 def _ask_bool(question: str, default: bool = True) -> bool:

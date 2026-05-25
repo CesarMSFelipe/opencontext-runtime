@@ -79,7 +79,12 @@ def handle_config(args: Any) -> None:
     command = args.config_command
 
     if command == "wizard":
-        run_wizard(non_interactive=getattr(args, "non_interactive", False))
+        use_tui = not getattr(args, "non_interactive", False)
+        if use_tui:
+            from opencontext_core.wizard import run_wizard_menu
+            run_wizard_menu()
+        else:
+            run_wizard(non_interactive=True)
     elif command == "show":
         show_config()
     elif command == "reset":
