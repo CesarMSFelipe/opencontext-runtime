@@ -13,6 +13,7 @@ from typing import Any, NoReturn
 import yaml
 
 from opencontext_cli.commands.ci_check_cmd import add_ci_check_parser, handle_ci_check
+from opencontext_core.update import UpdateChecker
 from opencontext_cli.commands.config_cmd import add_config_parser, handle_config
 from opencontext_cli.commands.git_cmd import add_git_parser, handle_git
 from opencontext_cli.commands.hints_cmd import add_hints_parser, handle_hints
@@ -97,6 +98,7 @@ from opencontext_core.runtime import OpenContextRuntime
 from opencontext_core.safety.prompt_injection import render_untrusted_context
 from opencontext_core.safety.provider_policy import ProviderPolicyEnforcer
 from opencontext_core.safety.redaction import SinkGuard
+from opencontext_core.sdd_runtime import build_sdd_context, write_sdd_context
 from opencontext_core.workflow_packs.signing import WorkflowPackSigner, WorkflowPackVerifier
 from opencontext_core.workspace.layout import ensure_workspace
 
@@ -142,7 +144,7 @@ def _technology_template_names() -> tuple[str, ...]:
 TECHNOLOGY_TEMPLATE_NAMES = _technology_template_names()
 
 
-__version__ = "0.1.0"
+__version__ = "0.2.1b0"
 
 
 def main() -> None:
@@ -155,6 +157,7 @@ def main() -> None:
         return
     try:
         _dispatch(args)
+        _notify_outdated(args)
     except OpenContextError as exc:
         print(f"Error: {exc}", file=__import__("sys").stderr)
         _print_suggestion(args.command if hasattr(args, "command") else "")
@@ -186,6 +189,26 @@ def _print_suggestion(command: str) -> None:
         print("Run 'opencontext --help' for usage information.")
 
 
+def _notify_outdated(args: argparse.Namespace) -> None:
+    """Non-blocking version check notification.
+
+    Prints a single-line update hint to stderr after a command finishes,
+    but only when the terminal is interactive and output is not JSON.
+    Respects the 24-hour cache from UpdateChecker.
+    """
+    if not sys.stdout.isatty():
+        return
+    if getattr(args, "json", False):
+        return
+    check = UpdateChecker.check()
+    if check.is_outdated and check.latest_version != check.current_version:
+        print(
+            f"Update available: {check.current_version} -> {check.latest_version}. "
+            f"Run 'opencontext upgrade'",
+            file=sys.stderr,
+        )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="opencontext")
     parser.add_argument(
@@ -208,6 +231,20 @@ def _build_parser() -> argparse.ArgumentParser:
         default="generic",
         help="Secure starter template to scaffold.",
     )
+    install_parser = subparsers.add_parser(
+        "install",
+        help="Quick project setup wizard — detect, configure, and go.",
+        description=(
+            "Streamlined setup for your project. Auto-detects your technology stack, "
+            "configures SDD/TDD, project index, knowledge graph, and agent integrations. "
+            "Run this after installing OpenContext to get started fast.\n\n"
+            "  opencontext install           Interactive wizard\n"
+            "  opencontext install --yes      Non-interactive, all defaults\n"
+        ),
+    )
+    install_parser.add_argument("root", nargs="?", default=".", help="Project root.")
+    install_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmations.")
+
     onboard_parser = subparsers.add_parser("onboard", help="Guided secure local setup.")
     onboard_parser.add_argument("root", nargs="?", default=".", help="Project root.")
     onboard_parser.add_argument("--non-interactive", action="store_true")
@@ -222,7 +259,41 @@ def _build_parser() -> argparse.ArgumentParser:
     onboard_parser.add_argument(
         "--setup-mcp", action="store_true", help="Auto-configure MCP for OpenCode."
     )
-    doctor_parser = subparsers.add_parser("doctor", help="Run runtime health checks.")
+    onboard_parser.add_argument(
+        "--agent",
+        default=None,
+        help="Comma-separated agent clients to configure (e.g. opencode,cursor).",
+    )
+    onboard_parser.add_argument(
+        "--tdd",
+        choices=["ask", "strict", "off"],
+        default="ask",
+        help="TDD mode for SDD agents.",
+    )
+    onboard_parser.add_argument(
+        "--sdd-profile",
+        choices=["default", "cheap", "hybrid", "premium"],
+        default="hybrid",
+        help="SDD model profile (which models to use per phase).",
+    )
+    onboard_parser.add_argument(
+        "--orchestrator-profile",
+        choices=["solo-compact", "multi-phase", "subagent-native"],
+        default="multi-phase",
+        help="Orchestration strategy for SDD agents.",
+    )
+    onboard_parser.add_argument(
+        "--token-budget-per-phase",
+        type=int,
+        default=None,
+        help="Uniform token budget per SDD phase (overrides profile defaults).",
+    )
+    onboard_parser.add_argument(
+        "--force-agent-files",
+        action="store_true",
+        help="Overwrite existing agent instruction files.",
+    )
+    doctor_parser = subparsers.add_parser("doctor", help="Run deep runtime diagnostics.")
     doctor_parser.add_argument(
         "scope",
         nargs="?",
@@ -436,66 +507,101 @@ def _build_parser() -> argparse.ArgumentParser:
     security_sub.add_parser("report")
     security_policy = security_sub.add_parser("policy")
     security_policy.add_argument("action", choices=["inspect"])
-    ddev_parser = subparsers.add_parser("ddev", help="DDEV integration scaffolds.")
-    ddev_sub = ddev_parser.add_subparsers(dest="ddev_command", required=True)
-    ddev_sub.add_parser("init", help="Create DDEV OpenContext command wrapper.")
-
-    run_parser = subparsers.add_parser("run", help="Controlled workflow run scaffolds.")
-    run_sub = run_parser.add_subparsers(dest="run_command", required=True)
-    run_architect = run_sub.add_parser("architect", help="Architect mode scaffold.")
-    run_architect.add_argument("--task", required=True)
-    run_audit = run_sub.add_parser("audit", help="Audit mode scaffold.")
-    run_audit.add_argument("--target", default=".")
-    run_receipt = run_sub.add_parser("receipt", help="Run receipt scaffold.")
-    run_receipt.add_argument("target", nargs="?", default="last")
+    run_parser = subparsers.add_parser(
+        "run",
+        help=argparse.SUPPRESS,
+    )
+    run_parser.add_argument("--task", default="", help="[Ignored] Use harness run instead.")
 
     orchestrate_parser = subparsers.add_parser(
-        "orchestrate", help="Permissioned orchestration scaffold."
+        "orchestrate",
+        help=argparse.SUPPRESS,
     )
-    orchestrate_parser.add_argument("--requirements", required=True)
+    orchestrate_parser.add_argument("--requirements", default="", help="[Ignored] Use harness run instead.")
 
-    debug_parser = subparsers.add_parser("debug", help="Safe debug scaffold.")
-    debug_parser.add_argument("--log", required=True)
-    debug_parser.add_argument("--mode", default="safe")
-
-    validate_parser = subparsers.add_parser("validate", help="Validation scaffold.")
+    validate_parser = subparsers.add_parser(
+        "validate",
+        help=argparse.SUPPRESS,
+    )
     validate_parser.add_argument("--profile", default="generic")
 
-    propose_parser = subparsers.add_parser("propose", help="Proposal-only action scaffolds.")
+    propose_parser = subparsers.add_parser(
+        "propose",
+        help=argparse.SUPPRESS,
+    )
     propose_sub = propose_parser.add_subparsers(dest="propose_command", required=True)
-    propose_patch = propose_sub.add_parser("patch", help="Prepare a patch proposal only.")
+    propose_patch = propose_sub.add_parser("patch", help="[DEPRECATED] Use harness run instead.")
     propose_patch.add_argument("--task", required=True)
 
     refacil_parser = subparsers.add_parser(
-        "sdd", help="Specification-Driven Development (SDD) context engineering flow."
+        "sdd",
+        help=argparse.SUPPRESS,
     )
     refacil_sub = refacil_parser.add_subparsers(dest="sdd_command", required=True)
+    refacil_init = refacil_sub.add_parser("init", help="Detect local SDD/TDD capabilities.")
+    refacil_init.add_argument("--root", default=".", help="Project root.")
+    refacil_init.add_argument(
+        "--max-tokens", type=int, default=3000, help="Per-phase token budget."
+    )
     refacil_explore = refacil_sub.add_parser(
-        "explore", help="Explore and retrieve relevant context."
+        "explore",
+        help="[DEPRECATED] Use 'harness run --workflow explore-only'.",
     )
     refacil_explore.add_argument("query", help="Query for context exploration.")
     refacil_explore.add_argument("--root", default=".", help="Project root.")
     refacil_explore.add_argument("--max-tokens", type=int, default=6000, help="Token budget.")
-    refacil_propose = refacil_sub.add_parser("propose", help="Create a context pack proposal.")
+    refacil_propose = refacil_sub.add_parser(
+        "propose",
+        help="[DEPRECATED] Use 'harness run --workflow sdd'.",
+    )
     refacil_propose.add_argument("query", help="Query for proposal.")
     refacil_propose.add_argument("--root", default=".", help="Project root.")
     refacil_propose.add_argument("--max-tokens", type=int, default=6000, help="Token budget.")
-    refacil_apply = refacil_sub.add_parser("apply", help="Execute workflow run (SDD style).")
-    refacil_apply.add_argument("workflow", choices=["sdd", "sdd_apply"], help="Workflow to run.")
+    refacil_apply = refacil_sub.add_parser(
+        "apply",
+        help="[DEPRECATED] Use 'harness run --workflow sdd'.",
+    )
+    refacil_apply.add_argument(
+        "workflow", choices=["sdd", "sdd_apply"], help="[Legacy] Workflow to run."
+    )
     refacil_apply.add_argument("--root", default=".", help="Project root.")
-    refacil_test = refacil_sub.add_parser("test", help="Test proposed context pack.")
+    refacil_test = refacil_sub.add_parser(
+        "test",
+        help="[DEPRECATED] Use 'harness run'.",
+    )
     refacil_test.add_argument("--root", default=".", help="Project root.")
-    refacil_verify = refacil_sub.add_parser("verify", help="Verify context pack safety.")
+    refacil_verify = refacil_sub.add_parser(
+        "verify",
+        help="[DEPRECATED] Use 'harness run --workflow sdd'.",
+    )
     refacil_verify.add_argument("--root", default=".", help="Project root.")
-    refacil_review = refacil_sub.add_parser("review", help="Review proposal before deployment.")
+    refacil_review = refacil_sub.add_parser(
+        "review",
+        help="[DEPRECATED] Use 'harness run --workflow sdd'.",
+    )
     refacil_review.add_argument("--root", default=".", help="Project root.")
-    refacil_sub.add_parser("archive", help="Archive context pack.")
-    refacil_up_code = refacil_sub.add_parser("up-code", help="Update code from proposal.")
+    refacil_sub.add_parser(
+        "archive",
+        help="[DEPRECATED] Use 'harness run'.",
+    )
+    refacil_up_code = refacil_sub.add_parser(
+        "up-code",
+        help="[DEPRECATED] Use 'harness run --workflow sdd'.",
+    )
     refacil_up_code.add_argument("--root", default=".", help="Project root.")
-    refacil_flow = refacil_sub.add_parser("flow", help="Run complete SDD flow.")
+    refacil_flow = refacil_sub.add_parser(
+        "flow",
+        help="[DEPRECATED] Use 'harness run --workflow sdd'.",
+    )
     refacil_flow.add_argument("query", help="Task query.")
     refacil_flow.add_argument("--root", default=".", help="Project root.")
     refacil_flow.add_argument("--max-tokens", type=int, default=6000, help="Token budget.")
+    refacil_flow.add_argument(
+        "--budget-mode",
+        choices=["off", "warn", "strict"],
+        default="warn",
+        help="Token budget enforcement mode.",
+    )
 
     provider_parser = subparsers.add_parser("provider", help="Provider policy tools.")
     provider_sub = provider_parser.add_subparsers(dest="provider_command", required=True)
@@ -504,11 +610,17 @@ def _build_parser() -> argparse.ArgumentParser:
     provider_simulate.add_argument("--classification", default="internal")
     provider_simulate.add_argument("--mode", choices=[m.value for m in SecurityMode], default=None)
 
-    governance_parser = subparsers.add_parser("governance", help="Governance report scaffolds.")
+    governance_parser = subparsers.add_parser(
+        "governance",
+        help=argparse.SUPPRESS,
+    )
     governance_sub = governance_parser.add_subparsers(dest="governance_command", required=True)
     governance_sub.add_parser("report")
 
-    evidence_parser = subparsers.add_parser("evidence", help="Evidence pack scaffolds.")
+    evidence_parser = subparsers.add_parser(
+        "evidence",
+        help=argparse.SUPPRESS,
+    )
     evidence_sub = evidence_parser.add_subparsers(dest="evidence_command", required=True)
     evidence_pack = evidence_sub.add_parser("pack")
     evidence_pack.add_argument(
@@ -551,6 +663,59 @@ def _build_parser() -> argparse.ArgumentParser:
     cost_sub.add_parser("report")
     cost_sub.add_parser("last")
     cost_sub.add_parser("by-workflow")
+
+    harness_parser = subparsers.add_parser(
+        "harness",
+        help="Run OpenContext harness workflows.",
+        description=(
+            "Execute SDD or custom harness workflows with phase governance, "
+            "token budget enforcement, and gate evaluation. The harness runs "
+            "phases (explore → propose → apply → verify → review → archive) "
+            "and persists results to .opencontext/runs/<run_id>/."
+        ),
+    )
+    harness_sub = harness_parser.add_subparsers(dest="harness_command", required=True)
+    harness_run = harness_sub.add_parser(
+        "run",
+        help="Execute a harness workflow.",
+        description=(
+            "Run a harness workflow with the given task. Available workflows:\n"
+            "  sdd           Full SDD: explore → propose → apply → verify → review → archive\n"
+            "  explore-only  Single phase: explore (index + context pack)\n"
+            "  apply-only    Apply + verify + archive\n\n"
+            "Results are saved to .opencontext/runs/<run_id>/ and printed to stdout."
+        ),
+    )
+    harness_run.add_argument(
+        "--workflow",
+        required=True,
+        choices=["sdd", "explore-only", "apply-only"],
+        help="Workflow to run (sdd, explore-only, or apply-only).",
+    )
+    harness_run.add_argument(
+        "--task",
+        required=True,
+        help="Task description for this run (e.g. 'explore auth module', 'implement login').",
+    )
+    harness_run.add_argument(
+        "--root",
+        default=".",
+        help="Project root directory (default: current directory).",
+    )
+    harness_run.add_argument(
+        "--budget-mode",
+        choices=["off", "warn", "strict"],
+        default="warn",
+        help="Token budget enforcement: off=no limit, warn=log overages, strict=fail on overage.",
+    )
+    harness_run.add_argument("--json", action="store_true", help="Output results as JSON.")
+
+    harness_list = harness_sub.add_parser(
+        "list",
+        help="List available workflows and their phases.",
+        description="Show all registered harness workflows and the phases each runs.",
+    )
+    harness_list.add_argument("--json", action="store_true", help="Output as JSON.")
 
     workflow_parser = subparsers.add_parser("workflow", help="Workflow diagnostics.")
     workflow_sub = workflow_parser.add_subparsers(dest="workflow_command", required=True)
@@ -656,14 +821,6 @@ def _build_parser() -> argparse.ArgumentParser:
     packs_verify.add_argument("name")
     packs_verify.add_argument("--key", required=True)
 
-    drupal_parser = subparsers.add_parser("drupal", help="Drupal workflow scaffolds.")
-    drupal_sub = drupal_parser.add_subparsers(dest="drupal_command", required=True)
-    drupal_tests = drupal_sub.add_parser("tests")
-    drupal_tests_sub = drupal_tests.add_subparsers(dest="drupal_tests_command", required=True)
-    drupal_tests_sub.add_parser("plan")
-    drupal_tests_pack = drupal_tests_sub.add_parser("pack")
-    drupal_tests_pack.add_argument("--missing", action="store_true")
-
     # Status command
     status_parser = subparsers.add_parser("status", help="Show project status.")
     status_parser.add_argument("root", nargs="?", default=".", help="Project root.")
@@ -688,8 +845,22 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command == "init":
         _init(args.config, args.template)
         return
+    if command == "install":
+        _install(args)
+        return
     if command == "onboard":
-        _onboard(args.root, args.template, args.mode, getattr(args, "setup_mcp", False))
+        _onboard(
+            args.root,
+            args.template,
+            args.mode,
+            getattr(args, "setup_mcp", False),
+            agent=getattr(args, "agent", None),
+            tdd=getattr(args, "tdd", "ask"),
+            sdd_profile=getattr(args, "sdd_profile", "hybrid"),
+            orchestrator_profile=getattr(args, "orchestrator_profile", "multi-phase"),
+            token_budget_per_phase=getattr(args, "token_budget_per_phase", None),
+            force_agent_files=getattr(args, "force_agent_files", False),
+        )
         return
     if command == "instructions":
         _instructions(args.instructions_command)
@@ -748,6 +919,16 @@ def _dispatch(args: argparse.Namespace) -> None:
         return
     if command == "cost":
         _cost(args.cost_command)
+        return
+    if command == "harness":
+        _harness(
+            args.harness_command,
+            getattr(args, "workflow", None),
+            getattr(args, "task", None),
+            getattr(args, "root", "."),
+            getattr(args, "budget_mode", "warn"),
+            getattr(args, "json", False),
+        )
         return
     if command == "workflow":
         _workflow(args.workflow_command, args.name)
@@ -955,6 +1136,66 @@ def _template_config(template: str) -> dict[str, Any]:
     return config_data
 
 
+def _install(args: argparse.Namespace) -> None:
+    """Quick project setup wizard with auto-detection."""
+
+    from opencontext_core.dx.console_styles import console
+    from rich.prompt import Confirm
+
+    root = Path(args.root)
+
+    console.header("OpenContext Install")
+    console.print("Detecting your project...")
+    console.print()
+
+    # Quick project detection (lightweight — no full index needed)
+    has_config = (root / "opencontext.yaml").exists()
+    has_git = (root / ".git").exists()
+    has_pytest = (root / "pyproject.toml").exists() or (root / "pytest.ini").exists() or (root / "setup.cfg").exists()
+    has_package_json = (root / "package.json").exists()
+
+    console.print(f"  [bold]Project:[/]  {root.name or '.'}")
+    console.print(f"  [bold]Config:[/]   {'exists' if has_config else 'not yet created'}")
+    console.print(f"  [bold]Git:[/]     {'yes' if has_git else 'no'}")
+    detected = []
+    if has_pytest:
+        detected.append("Python (pytest)")
+    if has_package_json:
+        detected.append("Node.js")
+    if detected:
+        console.print(f"  [bold]Stack:[/]   {', '.join(detected)}")
+    console.print()
+
+    # Suggest defaults
+    tdd = "strict" if has_pytest else "ask"
+    console.print("  Will configure:")
+    console.print(f"    • Project index + knowledge graph")
+    console.print(f"    • SDD/TDD (mode: {tdd})")
+    console.print(f"    • Agent integration (opencode)")
+    console.print(f"    • Harness workflow")
+    console.print()
+
+    if not args.yes:
+        proceed = Confirm.ask("Proceed with setup?", default=True)
+        if not proceed:
+            console.print("[yellow]Setup cancelled.[/]")
+            return
+
+    template = "python" if has_pytest else ("node" if has_package_json else "generic")
+    _onboard(
+        root=str(root),
+        template=template if template in _technology_template_names() else "generic",
+        mode="private_project",
+        setup_mcp=True,
+        agent="opencode",
+        tdd=tdd,
+        sdd_profile="hybrid",
+        orchestrator_profile="multi-phase",
+        token_budget_per_phase=None,
+        force_agent_files=False,
+    )
+
+
 def _index(runtime: OpenContextRuntime, root: str, incremental: bool = False) -> None:
     manifest = runtime.index_project(root)
     print(f"Indexed project: {manifest.project_name}")
@@ -972,82 +1213,66 @@ def _watch(root: str) -> None:
 
 
 def _onboard(
-    root: str, template: str = "generic", mode: str = "private_project", setup_mcp: bool = False
+    root: str,
+    template: str = "generic",
+    mode: str = "private_project",
+    setup_mcp: bool = False,
+    agent: str | None = None,
+    tdd: str = "ask",
+    sdd_profile: str = "hybrid",
+    orchestrator_profile: str = "multi-phase",
+    token_budget_per_phase: int | None = None,
+    force_agent_files: bool = False,
 ) -> None:
     from opencontext_core.dx.console_styles import console
+    from opencontext_core.onboarding.service import OnboardingService, OnboardingOptions
 
     project_root = Path(root)
-    created = ensure_workspace(project_root)
-    config_path = project_root / "opencontext.yaml"
-    if not config_path.exists():
-        config_data = _template_config(template)
-        security = config_data.get("security")
-        if isinstance(security, dict):
-            security["mode"] = mode
-        config_path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
+    options = OnboardingOptions(
+        root=project_root,
+        template=template,
+        security_mode=mode,
+        active_clients=[c.strip() for c in (agent or "opencode").split(",") if c.strip()],
+        tdd_mode=tdd,
+        sdd_model_profile=sdd_profile,
+        orchestrator_profile=orchestrator_profile,
+        setup_mcp=setup_mcp,
+        force_agent_files=force_agent_files,
+        token_budget_per_phase=token_budget_per_phase,
+    )
+
+    result = OnboardingService().run(options)
 
     console.header("OpenContext Onboard Complete")
-    console.print(f"[bold]Project:[/] {project_root.resolve()}")
+    console.print(f"[bold]Project:[/] {result.root}")
     console.print(f"[bold]Template:[/] {template}")
     console.print(f"[bold]Security mode:[/] {mode}")
-    console.print(f"[bold]Config:[/] {config_path}")
+    console.print(f"[bold]Config:[/] {result.config_path}")
+    console.print(f"[bold]Active clients:[/] {', '.join(result.active_clients)}")
+    console.print(f"[bold]TDD mode:[/] {tdd}")
+    console.print(f"[bold]SDD profile:[/] {sdd_profile}")
+    console.print(f"[bold]Orchestrator profile:[/] {orchestrator_profile}")
     console.print("")
-    console.section("Secure Defaults")
-    console.success("Tools: OFF")
-    console.success("MCP: OFF")
-    console.success("External providers: OFF")
-    console.success("Secret redaction: ON")
-    if created:
-        console.print("")
-        console.section("Created Directories")
-        for path in created:
-            console.success(str(path))
-
-    # Auto-index the project
-    console.print("")
-    console.info("Indexing project for knowledge graph...")
-    try:
-        runtime = _runtime(str(config_path))
-        manifest = runtime.index_project(project_root)
-        console.success(f"Indexed {len(manifest.files)} files, {len(manifest.symbols)} symbols")
-        kg_stats = manifest.metadata.get("knowledge_graph", {})
-        if kg_stats.get("nodes", 0) > 0:
-            console.success(
-                f"Knowledge graph: {kg_stats['nodes']} nodes, {kg_stats.get('edges', 0)} edges"
-            )
-    except Exception as exc:
-        console.warning(f"Auto-index skipped: {exc}")
-
-    # Setup MCP integration if requested
-    if setup_mcp:
-        console.print("")
-        console.info("Setting up MCP integration...")
-        _setup_mcp_for_opencode()
+    console.section("Created Resources")
+    console.success(f"Indexed {result.indexed_files} files, {result.indexed_symbols} symbols")
+    if result.knowledge_graph_nodes > 0:
+        console.success(
+            f"Knowledge graph: {result.knowledge_graph_nodes} nodes, "
+            f"{result.knowledge_graph_edges} edges"
+        )
+    console.success(f"SDD context: {result.sdd_context_path}")
+    console.success(f"Harness config: {result.harness_config_path}")
+    for path in result.generated_agent_files:
+        console.success(f"Agent file: {path}")
+    if result.mcp_configured:
         console.success("MCP configured for OpenCode")
-
-    # Check first-run and suggest wizard
-    from opencontext_core.user_prefs import UserConfigStore
-
-    store = UserConfigStore()
-    if store.is_first_run():
-        console.print("")
-        console.section("First-Time Setup")
-        console.info("Welcome! Run the configuration wizard to customize your setup:")
-        console.print("     [bold]opencontext config wizard[/]")
+    for warning in result.warnings:
+        console.warning(warning)
 
     console.print("")
     console.section("Next Steps")
-    console.print("  [bold]1.[/] Configure your preferences:")
-    console.print("     [bold]opencontext config wizard[/]")
-    console.print("")
-    console.print("  [bold]2.[/] Generate a context pack:")
-    console.print(f"     [bold]opencontext pack {root} --query 'Explain this code'[/]")
-    console.print("")
-    console.print("  [bold]3.[/] Manage plugins:")
-    console.print("     [bold]opencontext plugin list[/]")
-    console.print("")
-    console.print("  [bold]4.[/] Or use the interactive TUI:")
-    console.print("     [bold]opencontext tui[/]")
+    console.print("  [bold]opencontext harness run --workflow sdd --task 'Your task'[/]")
+    console.print("  [bold]opencontext pack . --query 'Explain this code'[/]")
     console.print("")
     console.info("For help: opencontext --help")
 
@@ -1068,23 +1293,7 @@ def _workflows(action: str, name: str | None) -> None:
     if action == "inspect":
         print(json.dumps(_workflow_pack_metadata(name), indent=2))
         return
-    print(
-        json.dumps(
-            {
-                "status": "scaffold",
-                "name": name,
-                "message": "Workflow pack execution is scaffolded in v0.1.",
-                "safe_defaults": {
-                    "shell": "deny",
-                    "write_file": "deny",
-                    "network": "deny",
-                    "mcp": "deny",
-                },
-            },
-            indent=2,
-        )
-    )
-
+    _scaffold_deprecated(f"workflows {action}", "opencontext harness list")
 
 def _packs(action: str, name: str | None = None, key: str | None = None) -> None:
     if action == "list":
@@ -1111,16 +1320,7 @@ def _packs(action: str, name: str | None = None, key: str | None = None) -> None
             )
         )
         return
-    print(
-        json.dumps(
-            {
-                "status": "scaffold",
-                "sources": ["workflow-packs/", ".opencontext/workflows/"],
-                "security_rule": "External packs cannot silently weaken security policies.",
-            },
-            indent=2,
-        )
-    )
+    _scaffold_deprecated("packs sync", "opencontext harness list")
 
 
 def _workflow_pack_names() -> list[str]:
@@ -1447,6 +1647,93 @@ def _copy_to_clipboard(text: str) -> bool:
     return False
 
 
+def _security(
+    action: str,
+    root: str = ".",
+    policy_action: str | None = None,
+    output_path: str | None = None,
+) -> None:
+    if action == "scan":
+        rendered = scan_project(root).model_dump_json(indent=2)
+        if output_path is not None:
+            path = Path(output_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(rendered, encoding="utf-8")
+            print(f"Wrote security scan: {path}")
+            return
+        print(rendered)
+        return
+    _scaffold_deprecated(f"security {action}", "opencontext verify")
+
+
+def _governance(action: str, runtime: OpenContextRuntime) -> None:
+    _scaffold_deprecated("governance", "opencontext check")
+
+
+def _evidence(action: str, runtime: OpenContextRuntime, output_mode: str = "report") -> None:
+    _scaffold_deprecated("evidence", "opencontext release evidence")
+
+
+def _run(action: str, task: str | None, target: str | None) -> None:
+    _scaffold_deprecated(f"run {action}", "opencontext harness run")
+
+
+def _orchestrate(requirements: str, security_mode: SecurityMode) -> None:
+    _scaffold_deprecated("orchestrate", "opencontext harness run --workflow sdd")
+
+
+def _debug(log_path: str, mode: str, security_mode: SecurityMode) -> None:
+    _scaffold_deprecated("debug", "opencontext harness run")
+
+
+def _validate(profile: str, security_mode: SecurityMode) -> None:
+    _scaffold_deprecated("validate", "opencontext verify")
+
+
+def _propose(action: str, task: str, security_mode: SecurityMode) -> None:
+    _scaffold_deprecated(f"propose {action}", "opencontext harness run --workflow sdd")
+
+
+def _provider_simulate(
+    provider: str,
+    classification: str,
+    runtime: OpenContextRuntime,
+    mode: str | None = None,
+) -> None:
+    try:
+        data_classification = DataClassification(classification)
+    except ValueError as exc:
+        raise OpenContextError(f"Unknown data classification: {classification}") from exc
+    security = runtime.config.security
+    if mode is not None:
+        try:
+            security_mode = SecurityMode(mode)
+        except ValueError as exc:
+            raise OpenContextError(f"Unknown security mode: {mode}") from exc
+        security = security.model_copy(update={"mode": security_mode})
+    item = ContextItem(
+        id="provider-simulation",
+        content="simulation only",
+        source="@provider_simulation",
+        source_type="policy",
+        priority=ContextPriority.P0,
+        tokens=2,
+        score=1.0,
+        classification=data_classification,
+        trusted=True,
+        metadata={"redacted": True},
+        redacted=True,
+    )
+    decision = ProviderPolicyEnforcer(
+        runtime.config.provider_policies,
+        security,
+    ).check(
+        provider,
+        [item],
+    )
+    print(json.dumps({"decision": decision.model_dump(mode="json")}, indent=2))
+
+
 def _agent_context(
     query: str,
     target: str = "generic",
@@ -1548,365 +1835,13 @@ def _setup_mcp_for_opencode() -> None:
 
 
 def _check(action: str, name: str) -> None:
-    if action != "run":
-        _unreachable(action)
-    checks = ensure_checks(Path("."))
-    if name == "all":
-        print(json.dumps([str(path) for path in checks], indent=2))
-        return
-    print(f"Check scaffold executed: {name}")
-
-
-def _security(
-    action: str,
-    root: str = ".",
-    policy_action: str | None = None,
-    output_path: str | None = None,
-) -> None:
-    if action == "scan":
-        rendered = scan_project(root).model_dump_json(indent=2)
-        if output_path is not None:
-            path = Path(output_path)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(rendered, encoding="utf-8")
-            print(f"Wrote security scan: {path}")
-            return
-        print(rendered)
-        return
-    if action == "report":
-        print(json.dumps({"status": "scaffold", "safe_defaults": True}, indent=2))
-        return
-    print(
-        json.dumps(
-            {
-                "policy": policy_action or "inspect",
-                "status": "scaffold",
-                "defaults": {
-                    "external_providers": "deny",
-                    "native_tools": "deny",
-                    "mcp": "deny",
-                    "write_file": "deny",
-                    "network": "deny",
-                },
-            },
-            indent=2,
-        )
-    )
-
-
-def _run(action: str, task: str | None, target: str | None) -> None:
-    payload: dict[str, Any]
-    if action == "architect":
-        payload = {
-            "status": "scaffold",
-            "mode": "architect",
-            "task": SinkGuard().redact(task or "")[0],
-            "output": "architecture plan and ADR suggestions",
-            "file_writes": "deny",
-        }
-    elif action == "audit":
-        payload = {
-            "status": "scaffold",
-            "mode": "audit",
-            "target": target or ".",
-            "external_provider": "deny by default",
-            "raw_secret_output": "deny",
-        }
-    elif action == "receipt":
-        receipt = RunReceiptGenerator().generate(
-            workflow_id="scaffold",
-            policy="safe-default-policy",
-            context_pack="",
-            prompt="",
-            provider="mock",
-            model="mock-llm",
-            trace_id=target or "last",
-            input_tokens=0,
-            output_tokens=0,
-        )
-        payload = {"status": "scaffold", "receipt": receipt.model_dump(mode="json")}
-    else:
-        _unreachable(action)
-    print(json.dumps(payload, indent=2))
-
-
-def _orchestrate(requirements: str, security_mode: SecurityMode) -> None:
-    read_decision = _action_decision(ActionType.READ_FILE, security_mode)
-    safe_command_decision = _action_decision(ActionType.RUN_SAFE_COMMAND, security_mode)
-    write_decision = _action_decision(ActionType.WRITE_FILE, security_mode)
-    print(
-        json.dumps(
-            {
-                "status": "scaffold",
-                "mode": "orchestrate",
-                "requirements": requirements,
-                "requirements_fingerprint": fingerprint(requirements),
-                "lifecycle": [
-                    "plan",
-                    "context_pack",
-                    "approval_gate",
-                    "safe_validation",
-                    "report",
-                ],
-                "policy": {
-                    "read_requirements": read_decision,
-                    "safe_commands": safe_command_decision,
-                    "write_file": write_decision,
-                },
-            },
-            indent=2,
-        )
-    )
-
-
-def _debug(log_path: str, mode: str, security_mode: SecurityMode) -> None:
-    print(
-        json.dumps(
-            {
-                "status": "scaffold",
-                "mode": mode,
-                "log": log_path,
-                "read_log": _action_decision(ActionType.READ_FILE, security_mode),
-                "run_tests": _action_decision(ActionType.RUN_TEST, security_mode),
-                "network": _action_decision(ActionType.NETWORK, security_mode),
-                "note": "No commands are executed by this scaffold.",
-            },
-            indent=2,
-        )
-    )
-
-
-def _validate(profile: str, security_mode: SecurityMode) -> None:
-    print(
-        json.dumps(
-            {
-                "status": "scaffold",
-                "profile": profile,
-                "checks": ["security", "context-leakage", "token-budget", "architecture"],
-                "run_tests": _action_decision(ActionType.RUN_TEST, security_mode),
-                "run_linter": _action_decision(ActionType.RUN_LINTER, security_mode),
-                "report": "validation report scaffold",
-            },
-            indent=2,
-        )
-    )
-
-
-def _propose(action: str, task: str, security_mode: SecurityMode) -> None:
-    if action != "patch":
-        _unreachable(action)
-    print(
-        json.dumps(
-            {
-                "status": "scaffold",
-                "type": "patch proposal",
-                "task": SinkGuard().redact(task)[0],
-                "file_writes_performed": False,
-                "write_policy": _action_decision(ActionType.WRITE_FILE, security_mode),
-                "export_policy": _action_decision(ActionType.EXPORT_CONTEXT, security_mode),
-                "sections": ["files affected", "risk", "tests to run", "context used"],
-            },
-            indent=2,
-        )
-    )
-
-
-def _provider_simulate(
-    provider: str,
-    classification: str,
-    runtime: OpenContextRuntime,
-    mode: str | None = None,
-) -> None:
-    try:
-        data_classification = DataClassification(classification)
-    except ValueError as exc:
-        raise OpenContextError(f"Unknown data classification: {classification}") from exc
-    security = runtime.config.security
-    if mode is not None:
-        try:
-            security_mode = SecurityMode(mode)
-        except ValueError as exc:
-            raise OpenContextError(f"Unknown security mode: {mode}") from exc
-        security = security.model_copy(update={"mode": security_mode})
-    item = ContextItem(
-        id="provider-simulation",
-        content="simulation only",
-        source="@provider_simulation",
-        source_type="policy",
-        priority=ContextPriority.P0,
-        tokens=2,
-        score=1.0,
-        classification=data_classification,
-        trusted=True,
-        metadata={"redacted": True},
-        redacted=True,
-    )
-    model_config = runtime.config.models.default
-    decision = ProviderPolicyEnforcer(
-        runtime.config.provider_policies,
-        security,
-    ).check(
-        provider,
-        [item],
-        provider_metadata={
-            "private_endpoint": model_config.private_endpoint,
-            "training_opt_in": model_config.training_opt_in,
-            "zero_data_retention": model_config.zero_data_retention,
-        },
-    )
-    print(
-        json.dumps(
-            {
-                "provider": provider,
-                "classification": classification,
-                "mode": security.mode.value,
-                "decision": decision.model_dump(mode="json"),
-            },
-            indent=2,
-        )
-    )
-
-
-def _graph(
-    graph_command: str,
-    tunnel_command: str | None,
-    project: str | None,
-    target_project: str | None,
-    edges_json: str | None,
-    source_project: str | None,
-    root: str | None,
-) -> None:
-    """Handle graph command family."""
-    from opencontext_core.indexing.project_indexer import ProjectIndexer
-
-    if graph_command != "tunnel":
-        raise OpenContextError(f"Unknown graph subcommand: {graph_command}")
-
-    store = GraphTunnelStore()
-
-    if tunnel_command == "list":
-        tunnels = store.list_tunnels(project)
-        print(json.dumps([t.model_dump(mode="json") for t in tunnels], indent=2))
-        return
-
-    if tunnel_command == "add":
-        if not target_project or not edges_json:
-            raise OpenContextError("--target-project and --edges-json are required")
-        import json as _json
-
-        try:
-            edges_data = _json.loads(edges_json)
-            edges = [
-                CrossProjectEdge(
-                    source_path=e["source_path"],
-                    target_project=target_project,
-                    target_path=e["target_path"],
-                    kind=e["kind"],
-                    line=e.get("line", 0),
-                )
-                for e in edges_data
-            ]
-        except Exception as exc:
-            raise OpenContextError(f"Invalid edges JSON: {exc}") from exc
-
-        from opencontext_core.config import load_config
-
-        config = load_config()
-        source_proj = config.project.name
-        tunnel = GraphTunnel(
-            source_project=source_proj,
-            target_project=target_project,
-            edges=edges,
-            created_at=datetime.now(UTC),
-            discovered=False,
-        )
-        store.save_tunnel(tunnel)
-        print(json.dumps({"status": "added", "tunnel": tunnel.model_dump(mode="json")}, indent=2))
-        return
-
-    if tunnel_command == "remove":
-        if not source_project or not target_project:
-            raise OpenContextError("--source-project and --target-project are required")
-        removed = store.delete_tunnel(source_project, target_project)
-        print(json.dumps({"removed": removed}, indent=2))
-        return
-
-    if tunnel_command == "discover":
-        from pathlib import Path
-
-        root_path = Path(root or ".")
-        config = load_config()
-        indexer = ProjectIndexer(
-            config.project_index,
-            config.project.name,
-        )
-        manifest = indexer.build_manifest(root_path)
-        new_tunnels = discover_tunnels_from_manifest(manifest, store, root_path.parent)
-        print(
-            json.dumps(
-                {
-                    "discovered": len(new_tunnels),
-                    "tunnels": [t.model_dump(mode="json") for t in new_tunnels],
-                },
-                indent=2,
-            )
-        )
-        return
-
-    raise OpenContextError(f"Unknown tunnel command: {tunnel_command}")
-
-
-def _governance(action: str, runtime: OpenContextRuntime) -> None:
-    if action != "report":
-        _unreachable(action)
-    print(
-        json.dumps(
-            {
-                "status": "scaffold",
-                "security_mode": runtime.config.security.mode.value,
-                "external_providers_enabled": runtime.config.security.external_providers_enabled,
-                "native_tools_enabled": runtime.config.tools.native.enabled,
-                "mcp_enabled": runtime.config.tools.mcp.enabled,
-                "semantic_cache_enabled": runtime.config.cache.semantic.enabled,
-                "workflow_packs": _workflow_pack_names(),
-            },
-            indent=2,
-        )
-    )
-
-
-def _evidence(action: str, runtime: OpenContextRuntime, output_mode: str = "report") -> None:
-    if action != "pack":
-        _unreachable(action)
-    payload = {
-        "status": "scaffold",
-        "output_mode": output_mode,
-        "raw_prompts_included": False,
-        "raw_secrets_included": False,
-        "trace_policy": "sanitized",
-        "security_mode": runtime.config.security.mode.value,
-        "reports": ["governance", "security", "token-efficiency", "memory"],
-    }
-    content = json.dumps(payload, indent=2)
-    result = OutputBudgetController(
-        OutputMode(runtime.config.output.mode),
-        runtime.config.output.max_output_tokens,
-        runtime.config.output.preserve,
-    ).apply(content, mode=output_mode)
-    print(result.content)
+    _scaffold_deprecated(f"check {action}", "opencontext verify")
 
 
 def _prompt(args: argparse.Namespace, config_path: str) -> None:
     if args.prompt_command == "audit":
         path = Path(args.path)
         findings = _audit_prompt_path(path)
-        payload = {
-            "status": "blocked" if findings and args.fail_on_secrets else "complete",
-            "path": str(path),
-            "findings": [finding.model_dump(mode="json") for finding in findings],
-            "public_assumption": "prompts must be safe if disclosed",
-        }
-        print(json.dumps(payload, indent=2))
         if findings and args.fail_on_secrets:
             raise SystemExit(1)
         return
@@ -2044,24 +1979,140 @@ def _cache(args: argparse.Namespace, config_path: str) -> None:
 
 def _cost(command: str) -> None:
     ledger = CostLedger()
-    ledger.record(CostEntry(workflow="scaffold", input_tokens=0, output_tokens=0))
+    ledger.record(CostEntry(workflow=command, input_tokens=0, output_tokens=0))
     payload = ledger.report().model_dump(mode="json")
-    payload["status"] = "scaffold"
+    payload["status"] = "deprecated"
     payload["view"] = command
+    payload["message"] = "'cost' is deprecated. Use 'opencontext verify --json' for token/gate info."
     print(json.dumps(payload, indent=2))
+
+
+def _harness_error_hint(error_msg: str, workflow: str | None) -> str:
+    """Provide actionable hints for common harness errors."""
+    if "No such file or directory" in error_msg or "not found" in error_msg:
+        return "Make sure the project root exists and is accessible."
+    if "budget" in error_msg.lower() and "exceed" in error_msg.lower():
+        return "Try --budget-mode off to disable budget enforcement, or increase the budget in .opencontext/harness.yaml."
+    if "ModuleNotFoundError" in error_msg or "ImportError" in error_msg:
+        return "Install missing dependencies with: pip install -e packages/opencontext_core"
+    if "Permission denied" in error_msg:
+        return "Check file permissions on the project root."
+    if workflow and workflow not in ("sdd", "explore-only", "apply-only"):
+        return f"Unknown workflow '{workflow}'. Available: sdd, explore-only, apply-only."
+    return ""
+
+
+def _harness(
+    command: str,
+    workflow: str | None,
+    task: str | None,
+    root: str = ".",
+    budget_mode: str = "warn",
+    json_output: bool = False,
+) -> None:
+    """Handle harness commands (run, etc.)."""
+    from opencontext_core.harness.models import BudgetMode
+    from opencontext_core.harness.runner import HarnessRunner
+
+    if command == "run":
+        if not workflow or not task:
+            print(json.dumps({"status": "error", "message": "--workflow and --task are required"}))
+            return
+
+    if command == "list":
+        workflows = {
+            "sdd": {"phases": ["explore", "propose", "apply", "verify", "review", "archive"], "description": "Full SDD lifecycle"},
+            "explore-only": {"phases": ["explore"], "description": "Project indexing and context pack only"},
+            "apply-only": {"phases": ["apply", "verify", "archive"], "description": "Apply changes then verify and archive"},
+        }
+        if json_output:
+            print(json.dumps(workflows, indent=2))
+        else:
+            print("Available Harness Workflows")
+            print("=" * 50)
+            for name, info in workflows.items():
+                print(f"\n  {name}")
+                print(f"    {info['description']}")
+                print(f"    Phases: {' → '.join(info['phases'])}")
+            print()
+        return
+
+    if command == "run":
+        if not workflow or not task:
+            print(json.dumps({"status": "error", "message": "--workflow and --task are required"}))
+            return
+
+        try:
+            runner = HarnessRunner(root=Path(root))
+            result = runner.run(
+                workflow=workflow,
+                task=task,
+                budget_mode=BudgetMode(budget_mode),
+            )
+            output = {
+                "status": "completed",
+                "run_id": result.run_id,
+                "workflow": result.workflow,
+                "task": result.task,
+                "budget_mode": budget_mode,
+                "final_status": result.status if hasattr(result.status, 'value') else str(result.status),
+                "phases": [
+                    {
+                        "phase": l.phase,
+                        "used_tokens": l.used_tokens,
+                        "budget_tokens": l.budget_tokens,
+                        "status": l.status if hasattr(l.status, 'value') else str(l.status),
+                        "message": l.message,
+                    }
+                    for l in result.ledgers
+                ],
+                "gates": [
+                    {
+                        "id": g.id,
+                        "phase": g.phase,
+                        "status": g.status if hasattr(g.status, 'value') else str(g.status),
+                        "message": g.message,
+                    }
+                    for g in result.gates
+                ],
+                "trace_ids": result.trace_ids,
+                "warnings": result.warnings,
+            }
+            if json_output:
+                print(json.dumps(output, indent=2))
+            else:
+                print(f"Harness Run: {result.run_id}")
+                print(f"  Workflow: {result.workflow}")
+                print(f"  Task: {result.task}")
+                print(f"  Status: {result.status}")
+                print(f"  Phases: {len(result.ledgers)}")
+                for l in result.ledgers:
+                    print(f"    {l.phase}: {l.used_tokens}/{l.budget_tokens} tokens — {l.status}")
+                print(f"  Gates: {len(result.gates)}")
+                print(f"  Trace IDs: {len(result.trace_ids)}")
+                if result.warnings:
+                    for w in result.warnings:
+                        print(f"  ⚠ {w}")
+
+            if budget_mode == "strict" and result.status in ("failed",):
+                sys.exit(1)
+        except Exception as exc:
+            error_msg = str(exc)
+            hint = _harness_error_hint(error_msg, workflow)
+            output = {"status": "error", "message": error_msg, "hint": hint}
+            if json_output:
+                print(json.dumps(output, indent=2))
+            else:
+                print(f"Error: {error_msg}")
+                if hint:
+                    print(f"Hint: {hint}")
+                print("Run 'opencontext harness run --help' for usage.")
+    else:
+        print(json.dumps({"status": "error", "message": f"Unknown harness command: {command}"}))
 
 
 def _workflow(command: str, name: str) -> None:
-    payload = {
-        "status": "scaffold",
-        "workflow": name,
-        "command": command,
-        "provider_calls": 0,
-        "estimated_tokens": {"input": 0, "output": 0},
-        "approval_points": ["provider_use", "tool_call", "egress"],
-        "security_risks": [],
-    }
-    print(json.dumps(payload, indent=2))
+    _scaffold_deprecated(f"workflow {command}", "opencontext harness list")
 
 
 def _playbooks(command: str, name: str | None) -> None:
@@ -2111,7 +2162,8 @@ def _policy(command: str, diff_range: str) -> None:
     print(
         json.dumps(
             {
-                "status": "scaffold",
+                "status": "deprecated",
+                "message": "'policy diff' is deprecated. Use 'opencontext config show' to view policy settings.",
                 "range": diff_range,
                 "checks": [
                     "external provider enabled",
@@ -2164,16 +2216,7 @@ def _quality(command: str, query: str, target: str) -> None:
             report = ContextQualityEvaluator().evaluate_trace(trace)
             print(report.model_dump_json(indent=2))
             return
-    print(
-        json.dumps(
-            {
-                "status": "scaffold",
-                "target": target,
-                "checks": ["citations", "policy", "leakage", "output_budget"],
-            },
-            indent=2,
-        )
-    )
+    _scaffold_deprecated(f"quality {command}", "opencontext verify")
 
 
 def _report(command: str) -> None:
@@ -2595,15 +2638,7 @@ def _memory(args: argparse.Namespace) -> None:
 
 def _context_dag(args: argparse.Namespace) -> None:
     """Handle context-dag subcommands."""
-    if args.context_dag_command == "build":
-        # Scaffold context DAG build
-        print("Context DAG build: scaffolded")
-        return
-    if args.context_dag_command == "inspect":
-        # Scaffold context DAG inspect
-        print("Context DAG inspect: scaffolded")
-        return
-    _unreachable(args.context_dag_command)
+    _scaffold_deprecated("context-dag", "opencontext pack")
 
 
 def _sdd(args: argparse.Namespace) -> None:
@@ -2613,6 +2648,9 @@ def _sdd(args: argparse.Namespace) -> None:
     technology stacks. Integrates with OpenContext's agent-agnostic workflow engine.
     """
     runtime = _runtime(args.config)
+    if args.sdd_command == "init":
+        _sdd_init(args.root, args.max_tokens)
+        return
     if args.sdd_command == "explore":
         _sdd_explore(runtime, args.query, args.root, args.max_tokens)
         return
@@ -2638,206 +2676,198 @@ def _sdd(args: argparse.Namespace) -> None:
         _sdd_up_code(runtime, args.root)
         return
     if args.sdd_command == "flow":
-        _sdd_flow(runtime, args.query, args.root, args.max_tokens)
+        _sdd_flow(
+            runtime,
+            args.query,
+            args.root,
+            args.max_tokens,
+            budget_mode=getattr(args, "budget_mode", "warn"),
+        )
         return
     _unreachable(args.sdd_command)
 
 
-def _sdd_explore(runtime: OpenContextRuntime, query: str, root: str, max_tokens: int) -> None:
-    """Explore: retrieve and rank candidate contexts."""
-    runtime.index_project(root)
-    pack = runtime.build_context_pack(query, max_tokens)
+def _sdd_init(root: str, max_tokens: int) -> None:
+    """Initialize project-local SDD/TDD context artifacts."""
+
+    context, written = write_sdd_context(root, token_budget_per_phase=max_tokens)
     print(
         json.dumps(
             {
-                "status": "explored",
-                "query": query,
-                "included_count": len(pack["pack"]["included"]),
-                "omitted_count": len(pack["pack"]["omitted"]),
-                "used_tokens": pack["pack"]["used_tokens"],
-                "available_tokens": pack["pack"]["available_tokens"],
-                "sources": pack["pack"]["included"],
+                "status": "initialized",
+                "strict_tdd": context.strict_tdd,
+                "phases": context.phases,
+                "test_capabilities": [
+                    capability.model_dump(mode="json") for capability in context.test_capabilities
+                ],
+                "token_budget_per_phase": context.token_budget_per_phase,
+                "files": [str(path) for path in written],
             },
             indent=2,
         )
     )
+
+
+
+
+
+def _sdd_deprecated(phase: str, root: str) -> None:
+    """Emit deprecation warning pointing users to `harness run`."""
+    workflow_map = {
+        "explore": "explore-only",
+        "test": "explore-only",
+        "propose": "sdd",
+        "apply": "sdd",
+        "verify": "sdd",
+        "review": "sdd",
+        "archive": "explore-only",
+        "up-code": "sdd",
+    }
+    suggested = workflow_map.get(phase, "sdd")
+    print(
+        json.dumps(
+            {
+                "status": "deprecated",
+                "message": (
+                    f"'sdd {phase}' is deprecated. "
+                    f"Use 'harness run --workflow {suggested} --task \"<task>\"' instead."
+                ),
+                "hint": f"opencontext harness run --workflow {suggested} --task \"your task here\"",
+            },
+            indent=2,
+        )
+    )
+
+
+def _scaffold_deprecated(command: str, replacement: str) -> None:
+    """Emit deprecation for a scaffold command pointing users to the real alternative."""
+    print(
+        json.dumps(
+            {
+                "status": "removed",
+                "command": command,
+                "message": (
+                    f"'{command}' was a scaffold placeholder and has been removed. "
+                    f"Use '{replacement}' instead."
+                ),
+                "hint": replacement,
+            },
+            indent=2,
+        )
+    )
+
+
+def _sdd_explore(runtime: OpenContextRuntime, query: str, root: str, max_tokens: int) -> None:
+    """Explore: deprecated — use 'harness run --workflow explore-only'."""
+    _sdd_deprecated("explore", root)
 
 
 def _sdd_propose(runtime: OpenContextRuntime, query: str, root: str, max_tokens: int) -> None:
-    """Propose: create a context pack proposal."""
-    prepared = runtime.prepare_context(query, root=root, max_tokens=max_tokens, refresh_index=False)
-    print(
-        json.dumps(
-            {
-                "status": "proposed",
-                "query": prepared["query"],
-                "trace_id": prepared["trace_id"],
-                "included_sources": prepared["included_sources"],
-                "omitted_sources": prepared["omitted_sources"],
-                "token_usage": prepared["token_usage"],
-            },
-            indent=2,
-        )
-    )
+    """Propose: deprecated — use 'harness run --workflow sdd'."""
+    _sdd_deprecated("propose", root)
 
 
 def _sdd_apply(runtime: OpenContextRuntime, workflow: str, root: str) -> None:
-    """Apply: execute the workflow run."""
-    result = runtime.ask(f"Execute {workflow} workflow", workflow_name=workflow)
-    print(
-        json.dumps(
-            {
-                "status": "applied",
-                "workflow": workflow,
-                "answer": result.answer,
-                "trace_id": result.trace_id,
-                "token_usage": result.token_usage,
-            },
-            indent=2,
-        )
-    )
+    """Apply: deprecated — use 'harness run --workflow sdd'."""
+    _sdd_deprecated("apply", root)
 
 
 def _sdd_test(runtime: OpenContextRuntime, root: str) -> None:
-    """Test: validate context pack safety."""
-    from opencontext_core.safety.firewall import ContextFirewall
+    """Test: deprecated — use 'harness run'."""
+    _sdd_deprecated("test", root)
 
-    firewall = ContextFirewall(runtime.config)
-    decision = firewall.check_context_export([], sink="test")
-    print(
-        json.dumps(
-            {
-                "status": "tested",
-                "allowed": decision.allowed,
-                "reason": decision.reason,
-                "mode": runtime.config.security.mode.value,
-            },
-            indent=2,
-        )
-    )
+
+
 
 
 def _sdd_verify(runtime: OpenContextRuntime, root: str) -> None:
-    """Verify: comprehensive safety verification."""
-    from opencontext_core.dx.security_reports import scan_project
-
-    scan = scan_project(root)
-    print(
-        json.dumps(
-            {
-                "status": "verified",
-                "severity": scan.severity.value,
-                "findings": [f.model_dump() for f in scan.findings],
-                "passed": scan.severity.value == "none",
-            },
-            indent=2,
-        )
-    )
+    """Verify: deprecated — use 'harness run --workflow sdd'."""
+    _sdd_deprecated("verify", root)
 
 
 def _sdd_review(runtime: OpenContextRuntime, root: str) -> None:
-    """Review: check for high-risk items."""
-    manifest = runtime.load_manifest()
-    high_risk_files = [
-        f.path
-        for f in manifest.files
-        if any(s in f.path for s in ["secret", "key", "credential", "token", "password"])
-    ]
-    print(
-        json.dumps(
-            {
-                "status": "reviewed",
-                "high_risk_files": high_risk_files,
-                "total_files": len(manifest.files),
-                "approved": len(high_risk_files) == 0,
-            },
-            indent=2,
-        )
-    )
+    """Review: deprecated — use 'harness run --workflow sdd'."""
+    _sdd_deprecated("review", root)
 
 
 def _sdd_archive(runtime: OpenContextRuntime, root: str) -> None:
-    """Archive: persist and clean up."""
-    trace = runtime.latest_trace()
-    print(
-        json.dumps(
-            {
-                "status": "archived",
-                "trace_id": trace.run_id,
-                "workflow": trace.workflow_name,
-                "archived_at": trace.created_at.isoformat(),
-            },
-            indent=2,
-        )
-    )
+    """Archive: deprecated — use 'harness run --workflow explore-only'."""
+    _sdd_deprecated("archive", root)
 
 
 def _sdd_up_code(runtime: OpenContextRuntime, root: str) -> None:
-    """Up-code: generate code update from proposal."""
-    from opencontext_core.operating_model import RunReceiptGenerator
+    """Up-code: deprecated — use 'harness run --workflow sdd'."""
+    _sdd_deprecated("up-code", root)
 
-    receipt = RunReceiptGenerator().generate(
-        workflow_id="up-code",
-        policy="safe-update",
-        context_pack="",
-        prompt="",
-        provider="mock",
-        model="mock-llm",
-        trace_id="last",
-        input_tokens=0,
-        output_tokens=0,
-    )
-    print(
-        json.dumps(
-            {
-                "status": "up-coded",
-                "receipt": receipt.model_dump(),
-                "changes": "ready for review",
-            },
-            indent=2,
+
+def _sdd_flow(
+    runtime: OpenContextRuntime,
+    query: str,
+    root: str,
+    max_tokens: int,
+    budget_mode: str = "warn",
+) -> None:
+    """Run complete SDD flow via the harness runner.
+
+    Sets up SDD/TDD context, then delegates to HarnessRunner for
+    phase governance, budget enforcement, and artifact persistence.
+    """
+    from opencontext_core.harness.models import BudgetMode, GateStatus
+    from opencontext_core.harness.runner import HarnessRunner
+
+    # SDD context setup (TDD detection, test capabilities)
+    sdd_context = build_sdd_context(root, token_budget_per_phase=max_tokens)
+    runner = HarnessRunner(root=Path(root))
+    resolved_budget_mode = BudgetMode(budget_mode)
+
+    try:
+        result = runner.run(
+            workflow="sdd",
+            task=query,
+            budget_mode=resolved_budget_mode,
         )
+    except Exception as exc:
+        print(json.dumps({"status": "error", "message": str(exc)}, indent=2))
+        sys.exit(1)
+
+    run_dir = runner.root / ".opencontext" / "runs" / result.run_id
+    run_status = (
+        result.status.value if hasattr(result.status, "value") else str(result.status)
     )
-
-
-def _sdd_flow(runtime: OpenContextRuntime, query: str, root: str, max_tokens: int) -> None:
-    """Run complete SDD flow: explore → propose → apply → test → verify → review."""
-    steps = []
-
-    # Step 1: Explore
-    runtime.index_project(root)
-    pack = runtime.build_context_pack(query, max_tokens)
-    steps.append({"phase": "explore", "included": len(pack["pack"]["included"])})
-
-    # Step 2: Propose
-    prepared = runtime.prepare_context(query, root=root, max_tokens=max_tokens, refresh_index=False)
-    steps.append({"phase": "propose", "trace_id": prepared["trace_id"]})
-
-    # Step 3: Apply (run workflow)
-    result = runtime.ask(f"Execute SDD workflow for: {query}", workflow_name="sdd")
-    steps.append({"phase": "apply", "answer": result.answer[:100]})
-
-    # Step 4: Verify
-    from opencontext_core.dx.security_reports import scan_project
-
-    scan = scan_project(root)
-    steps.append({"phase": "verify", "severity": scan.severity.value})
-
-    # Step 5: Review
-    manifest = runtime.load_manifest()
-    steps.append({"phase": "review", "files_reviewed": len(manifest.files)})
+    is_failed = run_status in ("failed", GateStatus.FAILED)
+    # Map harness status to CLI status: PASSED/WARNING → completed, FAILED → budget_exceeded
+    cli_status = "completed" if not is_failed else "budget_exceeded"
 
     print(
         json.dumps(
             {
-                "status": "completed",
+                "status": cli_status,
+                "run_id": result.run_id,
+                "run_dir": str(run_dir),
                 "flow": "sdd",
                 "query": query,
-                "steps": steps,
-                "final_trace": result.trace_id,
+                "budget_mode": budget_mode,
+                "strict_tdd": sdd_context.strict_tdd,
+                "phases": [
+                    {
+                        "phase": l.phase,
+                        "used_tokens": l.used_tokens,
+                        "budget_tokens": l.budget_tokens,
+                        "status": l.status if hasattr(l.status, "value") else str(l.status),
+                        "message": l.message,
+                    }
+                    for l in result.ledgers
+                ],
+                "total_gates": len(result.gates),
+                "warnings": result.warnings,
+                "run_status": run_status,
             },
             indent=2,
         )
     )
+
+    if is_failed and budget_mode == "strict":
+        sys.exit(1)
 
 
 def _render_data(data: Any, output_format: str = "json") -> str:
