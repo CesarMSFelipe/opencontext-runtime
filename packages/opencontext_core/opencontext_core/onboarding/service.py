@@ -176,7 +176,7 @@ class OnboardingService:
         # 9. Setup MCP if requested
         if options.setup_mcp:
             try:
-                from opencontext_core.mcp_stdio import setup_mcp_for_opencode  # type: ignore[attr-defined]
+                from opencontext_core.mcp_stdio import setup_mcp_for_opencode  # type: ignore[attr-defined]  # noqa: I001
 
                 setup_mcp_for_opencode()
                 result.mcp_configured = True
