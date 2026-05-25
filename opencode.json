@@ -1,0 +1,8 @@
+{
+  "instructions": [
+    "AGENTS.md",
+    ".opencontext/sdd/context.json",
+    ".opencontext/project.md",
+    ".opencontext/architecture.md"
+  ]
+}
