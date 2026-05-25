@@ -195,10 +195,17 @@ opencontext git history src/auth.py
 
 ### SDD Workflow
 
-Run Spec-Driven Development workflows:
+Run Spec-Driven Development workflows via the harness runner:
 
 ```bash
-opencontext sdd flow "Implement feature X"
+# Full SDD lifecycle (6 phases)
+opencontext harness run --workflow sdd --task "Implement feature X"
+
+# Explore only
+opencontext harness run --workflow explore-only --task "How does auth work?"
+
+# List available workflows
+opencontext harness list
 ```
 
 ### Graph Visualization

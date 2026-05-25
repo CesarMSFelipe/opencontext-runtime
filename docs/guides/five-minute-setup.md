@@ -42,22 +42,19 @@ opencontext verify                   # Check everything works
 
 ```bash
 cd my-project
-opencontext init
-opencontext onboard .
+opencontext install
 ```
 
-`onboard` now automatically indexes your project for the knowledge graph —
-no separate `index` step needed.
+`opencontext install` works on **Linux, macOS, and Windows** (via PowerShell). It auto-detects
+your project stack and configures SDD/TDD, project index, knowledge graph, and agent integrations
+in one step. Use `opencontext install --yes` for non-interactive setup.
 
-Use a profile template only when you already know the stack:
+If you prefer more control, use the individual commands:
 
 ```bash
-opencontext init --template python
-opencontext init --template node
-opencontext init --template drupal
+opencontext init --template python    # Choose a stack template
+opencontext onboard .                 # Full guided onboarding
 ```
-
-Profiles add stack knowledge. They do not weaken core security defaults.
 
 ## 4. Check Safety
 
@@ -105,16 +102,15 @@ opencontext ask "Where is authentication implemented?"
 The default mock provider is deterministic and local. Real provider adapters
 must be enabled explicitly by policy.
 
-## Optional: Stack-Specific Commands
+## Optional: ContextBench CI
 
 ```bash
-opencontext validate --profile python
-opencontext validate --profile node
-opencontext validate --profile drupal
+opencontext ci-check init
+opencontext ci-check run
 ```
 
-Validation commands are scaffolded in v0.1. Tests, linters, shell commands,
-network tools, writes, and MCP remain blocked or approval-gated by policy.
+Initialize and run automated code quality checks locally or in CI.
+See [CI Checks](ci-checks.md) for details.
 
 ## Mental Model
 

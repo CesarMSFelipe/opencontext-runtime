@@ -23,8 +23,8 @@ pip install -e packages/opencontext_cli
 ## Typical Usage
 
 ```bash
-opencontext onboard
-opencontext index .
+opencontext install             # Auto-detect & configure project (cross-platform)
+opencontext index .             # Index project code
 opencontext pack . --query "Review authentication" --mode plan --copy
 ```
 

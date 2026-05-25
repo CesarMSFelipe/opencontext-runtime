@@ -11,9 +11,13 @@ Zero-key mode works through the deterministic `mock` provider and local context 
 ```bash
 pip install opencontext-core opencontext-cli
 cd your-project
-opencontext onboard
+opencontext install
 opencontext pack . --query "Review authentication" --mode plan --copy
 ```
+
+`opencontext install` works on **Linux, macOS, and Windows** (via PowerShell). It auto-detects
+your project stack and configures SDD/TDD, project index, knowledge graph, and agent integrations
+in one step. Use `opencontext install --yes` for non-interactive setup.
 
 This is enough for a first run. It creates local harness files, indexes the project, builds a
 compact context pack, redacts secrets, records token accounting, and keeps a trace id for audit.
@@ -21,7 +25,7 @@ compact context pack, redacts secrets, records token accounting, and keeps a tra
 ## Commands
 ```bash
 cd your-project
-opencontext onboard
+opencontext install
 opencontext doctor
 opencontext index .
 opencontext pack . --query "Review authentication" --mode plan --copy
