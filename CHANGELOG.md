@@ -5,6 +5,43 @@ All notable changes to OpenContext Runtime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-25
+
+### Added
+
+- **Harness Runner**: Full workflow execution engine with phase governance, token budget enforcement (off/warn/strict), and gate evaluation. Pre-built workflows: `sdd`, `explore-only`, `apply-only`. Results persisted to `.opencontext/runs/<run_id>/`.
+- **SDD Context Builder**: Auto-detects TDD capabilities from project structure and generates `.opencontext/sdd/context.json` with per-phase token budgets and orchestrator profiles.
+- **Onboarding Service**: One-command project setup via `opencontext install`. Sets up workspace, indexes the knowledge graph, configures SDD/TDD context, generates agent contracts, and installs harness workflows.
+- **Config Wizard TUI**: `opencontext config wizard` now opens an interactive Rich menu with options for full configuration, security settings, feature toggles, token budgets, agent integrations, and plugins.
+- **Agent Registry**: Manages AI client integrations (OpenCode, Cursor, Claude Code, Aider, etc.) with auto-detection and install capabilities.
+- **New Adapters**: `AiderAdapter` for Aider AI integration and `LocalAdapter` for direct local subprocess execution (no API dependencies).
+- **Agent Manifest Generation**: Auto-generates `.opencontext/agents/<client>.md` contract files with TDD context and harness instructions per agent.
+- **Homebrew and npm/pnpm Installation**: Added installation methods for macOS (Homebrew) and Node.js (npm/pnpm) environments.
+- **Enhanced CLI**: First-run detection, inline hints after commands, `--yes` flag for non-interactive setup, and step-by-step install progress with Rich Status spinners.
+- **Config Set/Get Expanded**: Dot-notation paths for nested settings (e.g., `features.knowledge_graph`, `sdd.tdd_mode`, `agents.active_clients`).
+
+### Changed
+
+- **`onboard` renamed to `install`**: All references updated across code, docs, and CLI. `opencontext onboard` still works for backward compatibility but redirects to `install`.
+- **`==SUPPRESS==` bug fixed**: Replaced `argparse.SUPPRESS` with custom `_DeprecationAwareParser` to fix Python 3.12 `--help` output bug.
+- **Deprecated commands show clear errors**: `run`, `orchestrate`, `validate`, `propose`, `governance`, `evidence` now return exit code 2 with migration hints instead of dispatching to removed handlers.
+- **SDD commands deprecated**: `opencontext sdd explore`, `propose`, `apply`, `test`, `verify`, `review`, `archive`, `up-code`, and `flow` emit deprecation warnings and delegate to `harness run`.
+- **ASCII-safe CLI output**: Replaced Unicode arrows (`→`) with ASCII (`->`) in all `print()` and argparse output for Windows terminal compatibility.
+
+### Fixed
+
+- **Ruff lint violations**: All 44 violations across packages resolved (undefined names, unused variables, ambiguous variable names, line too long, unused imports).
+- **Ruff format**: All packages and tests reformatted for consistency.
+- **Mypy type errors**: Fixed generic list type annotation and conditional import.
+- **Test suite**: 611 tests passing, 0 failures. New test coverage for harness, onboarding, adapters, CLI smoke, agent registry, and graph tunnel.
+
+### Docs
+
+- README restructured for quick adoption with clear value proposition and installation paths.
+- Updated guides: `getting-started-guide.md`, `five-minute-setup.md` with `install` references.
+- SDD workflow documentation updated for harness runner architecture.
+- Added installation experience and SDD/TDD gap analysis.
+
 ## [0.2.1-beta] - 2026-05-22
 
 ### Added

@@ -597,10 +597,10 @@ class SimpleProxyServer:
             return
         self._thread = threading.Thread(target=self.start, daemon=True)
         self._thread.start()
-        # Wait briefly for server to start
+        # Wait briefly for server to start (Windows CI needs longer)
         import time as _time
 
-        _time.sleep(0.1)
+        _time.sleep(0.3)
 
     def stop(self) -> None:
         """Stop the proxy server."""

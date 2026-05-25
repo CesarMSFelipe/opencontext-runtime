@@ -182,6 +182,13 @@ class TestProxyServer:
         # Use a random high port
         server = SimpleProxyServer(host="127.0.0.1", port=19200, firewall=fw)
         server.start_background()
+        # Retry for Windows CI thread startup delay
+        for _ in range(10):
+            if server.is_running:
+                break
+            import time
+
+            time.sleep(0.1)
         assert server.is_running
         server.stop()
         assert not server.is_running
