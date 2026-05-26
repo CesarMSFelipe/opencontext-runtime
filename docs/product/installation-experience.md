@@ -2,9 +2,15 @@
 
 At install time, the user chooses the AI clients they actually use, picks the desired SDD/TDD behavior, and finishes with the system ready to work. OpenContext optimizes for minimal tokens through the local knowledge graph, context packs, memory, and per-phase budgets.
 
+Running `opencontext` with no arguments launches an interactive TUI menu with 10 options.
+
 ## Target UX
 
 ```bash
+# Quick launch — TUI menu
+opencontext
+
+# Direct setup
 opencontext setup --preset full --agent opencode --agent cursor --tdd ask --root . --max-tokens 3000
 ```
 
@@ -18,6 +24,16 @@ After the setup wizard finishes, the project should already have:
 - token budgets per SDD phase.
 
 No second install/configuration step should be required.
+
+## Re-run detection
+
+If `opencontext install` detects that the project is already set up (`.opencontext/sdd/context.json` exists),
+it asks "Re-run setup?" defaulting to No. This prevents accidental reconfiguration.
+
+## Smart config default
+
+`opencontext config` without a subcommand runs the interactive wizard directly instead of erroring.
+`opencontext config wizard` also works for explicit invocation.
 
 ## TDD Modes
 
