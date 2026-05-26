@@ -1,6 +1,6 @@
-# Installation Experience: OpenContext vs Gentle-AI Pattern
+# Installation Experience
 
-OpenContext should feel similar to Gentle-AI at install time: the user chooses the AI clients they actually use, picks the desired SDD/TDD behavior, and finishes with the system ready to work. The difference is that OpenContext optimizes for minimal tokens through the local knowledge graph, context packs, memory, and per-phase budgets.
+At install time, the user chooses the AI clients they actually use, picks the desired SDD/TDD behavior, and finishes with the system ready to work. OpenContext optimizes for minimal tokens through the local knowledge graph, context packs, memory, and per-phase budgets.
 
 ## Target UX
 
