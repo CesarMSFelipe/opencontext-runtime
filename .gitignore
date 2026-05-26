@@ -44,3 +44,6 @@ run-self-improvement.sh
 .DS_Store
 Thumbs.db
 .kilo/*
+
+# External skill registry cache (generated, not project-owned)
+.atl/

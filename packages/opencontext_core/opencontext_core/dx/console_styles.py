@@ -55,6 +55,21 @@ class BrandConsole:
     def __init__(self) -> None:
         self._console = Console() if RICH_AVAILABLE else None
 
+    def __getattr__(self, name: str) -> Any:
+        """Delegate unknown attributes to the underlying rich console."""
+        if self._console and hasattr(self._console, name):
+            return getattr(self._console, name)
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+
+    def __enter__(self) -> BrandConsole:
+        if self._console:
+            self._console.__enter__()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self._console:
+            self._console.__exit__(exc_type, exc_val, exc_tb)
+
     @property
     def available(self) -> bool:
         return self._console is not None

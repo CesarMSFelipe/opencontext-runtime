@@ -94,7 +94,7 @@ prepared = runtime.prepare_context("Review authentication", max_tokens=6000)
 OpenContext is a **context engineering runtime** for AI agents. It provides:
 
 - **Code knowledge graph** — SQLite+FTS5 with call graph analysis, impact analysis, and framework route detection (19+ languages)
-- **Spec-Driven Development (SDD)** — 6-phase harness (explore → propose → apply → verify → review → archive) with per-phase model assignment and token budgets
+- **Spec-Driven Development (SDD)** — 8-phase harness (explore → propose → spec → design → tasks → apply → verify → archive) with per-phase model assignment and token budgets
 - **Agent installer** — 13+ AI coding agents (Claude Code, OpenCode, Cursor, Codex, Windsurf, VS Code Copilot, Kilo Code, and more)
 - **Safety layer** — secret redaction, provider policy enforcement, prompt injection boundaries, output exfiltration scanning
 - **Local memory** — progressive disclosure with pinned facts, temporal context, search, and garbage collection
@@ -108,6 +108,16 @@ What it is **not**: a chatbot, UI, vector database, RAG wrapper, or provider SDK
 ---
 
 ## CLI Reference
+
+### Main Menu
+
+```bash
+opencontext                    # Launch interactive TUI menu (10 options)
+```
+
+Running `opencontext` with no subcommand opens an interactive menu with:
+Install, Upgrade, Sync, Configure Models, Create Agent,
+Plugins, SDD Profiles, Backups, and Uninstall.
 
 ### Setup & Indexing
 
@@ -180,9 +190,10 @@ opencontext agent-context "Review auth" --target cursor --copy  # One-off block
 
 ```bash
 opencontext update              # Check for updates
-opencontext upgrade             # Install latest version
+opencontext upgrade             # Upgrade all OpenContext packages (table output)
 ```
 
+`opencontext upgrade` upgrades all OpenContext packages (core, cli, api, profiles) at once.
 OpenContext auto-checks for updates and notifies you after commands when a newer version is available.
 
 ---

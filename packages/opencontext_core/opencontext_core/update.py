@@ -42,6 +42,12 @@ class UpdateState:
 
 
 PACKAGE_NAME = "opencontext-core"
+ALL_PACKAGES: list[str] = [
+    "opencontext-core",
+    "opencontext-cli",
+    "opencontext-api",
+    "opencontext-profiles",
+]
 PYPI_JSON_URL = f"https://pypi.org/pypi/{PACKAGE_NAME}/json"
 CACHE_DURATION = timedelta(hours=24)
 
@@ -183,6 +189,61 @@ class UpdateChecker:
             return {"status": "failed", "message": "pip upgrade timed out"}
         except FileNotFoundError:
             return {"status": "failed", "message": "pip not found"}
+
+    @classmethod
+    def upgrade_all(cls) -> list[dict[str, Any]]:
+        """Upgrade ALL OpenContext packages.
+
+        Iterates through all OpenContext packages and runs
+        pip install --upgrade for each. Collects per-package results
+        so a single failure doesn't block the rest.
+
+        Returns:
+            List of per-package upgrade results.
+        """
+        results: list[dict[str, Any]] = []
+        for package in ALL_PACKAGES:
+            try:
+                result = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--upgrade", package],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if result.returncode == 0:
+                    results.append(
+                        {
+                            "package": package,
+                            "status": "upgraded",
+                            "message": f"{package} upgraded",
+                        }
+                    )
+                else:
+                    results.append(
+                        {
+                            "package": package,
+                            "status": "failed",
+                            "message": result.stderr.strip() or f"{package} upgrade failed",
+                        }
+                    )
+            except subprocess.TimeoutExpired:
+                results.append(
+                    {
+                        "package": package,
+                        "status": "failed",
+                        "message": f"{package} upgrade timed out",
+                    }
+                )
+            except FileNotFoundError:
+                results.append(
+                    {
+                        "package": package,
+                        "status": "failed",
+                        "message": "pip not found",
+                    }
+                )
+        StateStore.mark_synced()
+        return results
 
     @classmethod
     def skip_version(cls, version: str) -> None:

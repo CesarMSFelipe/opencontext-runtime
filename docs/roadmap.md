@@ -1,8 +1,8 @@
 # Roadmap
 
-## Current Status (v0.2.0)
+## Current Status (v0.4.0b0)
 
-OpenContext Runtime v0.2.0 delivers a complete context engineering platform with:
+OpenContext Runtime v0.4.0b0 delivers a complete context engineering platform with:
 
 - **SDD Orchestrator**: Full 8-phase lifecycle (explore → propose → spec → design → tasks → apply → verify → archive) with DAG state tracking, artifact stores (engram/openspec/hybrid), and per-phase model assignment via `SDDProfile`
 - **Agent system**: Runtime agent orchestrator with pluggable skill-based agents and subagent spawning
@@ -10,7 +10,10 @@ OpenContext Runtime v0.2.0 delivers a complete context engineering platform with
 - **Learning system**: Memory usability layer with context-aware retrieval and semantic reranking
 - **Quality gates**: 7 built-in CI checks (security, quality, docs, performance, accessibility, dependencies, type safety)
 - **Indexing pipeline**: Knowledge graph with SQLite+FTS5, call graph analysis, impact analysis, and framework route detection (19+ languages)
-- **Interactive setup wizard**: Guided profiles (minimal, full, agents-only, mcp-only) with post-install verification
+- **Interactive TUI menu**: 10-option main menu when `opencontext` is run without subcommand — Install, Upgrade, Sync, Configure Models, Create Agent, Plugins, SDD Profiles, Backups, Uninstall
+- **Smart config discovery**: `opencontext.yaml` auto-discovered up to 10 parent directories; `opencontext config` without args launches wizard
+- **Unified upgrade**: Single `opencontext upgrade` upgrades all OpenContext packages with per-package status table
+- **Install script improvements**: pipx detection, PyPI-first path, source fallback, post-install verification
 - **Security layer**: Secret redaction, provider policy enforcement, context firewall, prompt injection boundaries, air-gapped mode
 - **Observability**: OTel-compatible tracing pipeline with metrics and logging
 - **Context quality evaluation**: 5-dimension benchmark suite with ContextBench

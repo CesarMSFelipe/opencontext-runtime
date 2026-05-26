@@ -81,15 +81,26 @@ check_pip() {
 
 # Detect PEP 668 externally-managed environment
 is_externally_managed() {
-    # Check for PEP 668 marker file or pip error code
-    if [ -f "$($PYTHON_CMD -c 'import sys; print(sys.prefix)')/EXTERNALLY-MANAGED" ] 2>/dev/null; then
+    # 1. Check for PEP 668 marker file in stdlib path
+    local stdlib_path
+    stdlib_path=$("$PYTHON_CMD" -c 'import sysconfig; print(sysconfig.get_path("stdlib"))' 2>/dev/null)
+    if [ -n "$stdlib_path" ] && [ -f "$stdlib_path/EXTERNALLY-MANAGED" ]; then
         return 0
     fi
-    # Also check via pip dry-run (Ubuntu/Debian may not create the marker file)
-    if ! "$PYTHON_CMD" -m pip install --dry-run pip 2>/dev/null | grep -q "externally-managed"; then
-        return 1
+
+    # 2. Check common system paths as fallback
+    for path in "/usr/lib/python3"* "/usr/local/lib/python3"*; do
+        if [ -f "$path/EXTERNALLY-MANAGED" ]; then
+            return 0
+        fi
+    done
+
+    # 3. Try a pip dry-run (most reliable way to know if pip will block us)
+    if "$PYTHON_CMD" -m pip install --dry-run pip 2>&1 | grep -qiE "externally-managed|break-system-packages"; then
+        return 0
     fi
-    return 0
+
+    return 1
 }
 
 create_venv() {
@@ -97,6 +108,29 @@ create_venv() {
     echo "Creating virtual environment at $VENV_DIR ..."
     "$PYTHON_CMD" -m venv "$VENV_DIR"
     echo "✓ Virtual environment created"
+}
+
+_add_venv_to_path() {
+    local venv_bin="$1"
+    local added=false
+    for profile in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+        if [ -f "$profile" ]; then
+            if ! grep -q "$venv_bin" "$profile" 2>/dev/null; then
+                echo "" >> "$profile"
+                echo "# OpenContext Runtime" >> "$profile"
+                echo "export PATH=\"$venv_bin:\$PATH\"" >> "$profile"
+                added=true
+                echo "✓ Added to PATH in $(basename "$profile")"
+            fi
+        fi
+    done
+    if [ "$added" = false ]; then
+        echo ""
+        echo "⚠ Could not auto-configure PATH."
+        echo "  Add this to your shell profile manually:"
+        echo "    export PATH=\"$venv_bin:\$PATH\""
+        echo ""
+    fi
 }
 
 # Determine pip command to use (system or venv)
@@ -121,12 +155,85 @@ get_python_cmd() {
     fi
 }
 
+detect_pipx() {
+    if command -v pipx &>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+install_via_pipx() {
+    echo "  Installing via pipx..."
+    pipx install opencontext-cli || return 1
+    return 0
+}
+
+install_via_pip() {
+    local pip_cmd="$1"
+    echo "  Installing via pip..."
+    $pip_cmd install --upgrade opencontext-cli --quiet 2>/dev/null || return 1
+    return 0
+}
+
+install_from_source() {
+    local pip_cmd="$1"
+    echo "  Installing from source (latest main)..."
+
+    if ! command -v git &>/dev/null; then
+        echo "Error: git is required for source installation."
+        echo ""
+        echo "Try: pip install opencontext-cli"
+        exit 1
+    fi
+
+    TEMP_DIR=$(mktemp -d)
+    git clone --depth 1 "$REPO_URL.git" "$TEMP_DIR/opencontext" 2>/dev/null || {
+        echo "Error: Could not clone repository."
+        echo "Try: pip install opencontext-cli"
+        exit 1
+    }
+
+    (cd "$TEMP_DIR/opencontext" && $pip_cmd install -e packages/opencontext_core -e packages/opencontext_cli --quiet) || {
+        echo "Error: Source installation failed."
+        exit 1
+    }
+    echo "✓ Installed from source"
+}
+
+verify_install() {
+    if command -v opencontext &>/dev/null; then
+        local version
+        version=$(opencontext --version 2>/dev/null || true)
+        echo "✓ Verified: $version"
+    else
+        echo "⚠ 'opencontext' not found in PATH."
+        echo "  If using a venv, activate it or add it to PATH."
+    fi
+}
+
 install_opencontext() {
     echo ""
     echo "╔══════════════════════════════════════════════════════════════╗"
     echo "║          OpenContext Runtime Installer v${OPENCONTEXT_VERSION}          ║"
     echo "╚══════════════════════════════════════════════════════════════╝"
     echo ""
+
+    # pipx is the cleanest path — suggest it first
+    if detect_pipx; then
+        echo "✓ pipx detected"
+        echo "  Run: pipx install opencontext-cli"
+        echo "  (or continue with this installer for the full setup)"
+        echo ""
+        if [ "$YES_MODE" = false ]; then
+            read -rp "Install via pipx instead? [y/N] " use_pipx
+            case "$use_pipx" in
+                [Yy]*)
+                    install_via_pipx && { verify_install; show_finish; return; }
+                    echo "  pipx install failed, falling back to pip..."
+                    ;;
+            esac
+        fi
+    fi
 
     check_python
     check_pip
@@ -136,6 +243,13 @@ install_opencontext() {
 
     echo ""
 
+    # Detect if we are running from within the OpenContext source tree
+    IS_LOCAL=false
+    if [ -f "packages/opencontext_core/pyproject.toml" ] && [ -f "packages/opencontext_cli/pyproject.toml" ]; then
+        IS_LOCAL=true
+        echo "✓ Running from local source tree"
+    fi
+
     # Check if we need a virtual environment (PEP 668)
     if is_externally_managed; then
         echo "⚠ Externally-managed Python environment detected (PEP 668)."
@@ -143,7 +257,7 @@ install_opencontext() {
         echo ""
 
         if [ ! -d "$VENV_DIR" ]; then
-            if [ "$YES_MODE" = true ]; then
+            if [ "$YES_MODE" = true ] || [ "$IS_LOCAL" = true ]; then
                 create_venv
             else
                 read -rp "Create virtual environment at $VENV_DIR? [Y/n] " answer
@@ -152,9 +266,8 @@ install_opencontext() {
                         echo "Installation cancelled."
                         echo ""
                         echo "Alternatives:"
-                        echo "  1. Use pipx:  pipx install opencontext-cli"
-                        echo "  2. Use --break-system-packages (not recommended)"
-                        echo "  3. Run with --yes to auto-create the venv"
+                        echo "  1. pipx install opencontext-cli"
+                        echo "  2. Run with --yes to auto-create venv"
                         exit 0
                         ;;
                     *)
@@ -164,7 +277,6 @@ install_opencontext() {
             fi
         fi
 
-        # Re-resolve commands after venv creation
         PIP_CMD=$(get_pip_cmd)
         PY_CMD=$(get_python_cmd)
     fi
@@ -173,61 +285,48 @@ install_opencontext() {
     echo "Installing OpenContext packages..."
     echo ""
 
-    # Try pip install first (when published)
-    if $PIP_CMD install opencontext-core opencontext-cli --quiet 2>/dev/null; then
-        echo "✓ Installed from PyPI"
+    if [ "$IS_LOCAL" = true ]; then
+        echo "Installing from current directory..."
+        $PIP_CMD install -e packages/opencontext_core -e packages/opencontext_cli --quiet
+        echo "✓ Installed from local source"
     else
-        echo "PyPI packages not found. Installing from source..."
-        echo "This requires git."
+        # Try PyPI first (fast path), fall back to source
+        if install_via_pip "$PIP_CMD"; then
+            echo "✓ Installed from PyPI"
+        else
+            echo "  PyPI install unavailable, falling back to source..."
+            install_from_source "$PIP_CMD"
+        fi
+    fi
 
-        if ! command -v git &>/dev/null; then
-            echo "Error: git is required for source installation."
-            echo ""
-            echo "Manual installation:"
-            echo "  git clone $REPO_URL.git"
-            echo "  cd OpenContext-Runtime"
-            echo "  pip install -e packages/opencontext_core -e packages/opencontext_cli"
-            exit 1
+    # Ensure opencontext command is available from venv
+    if [ -d "$VENV_DIR" ]; then
+        VENV_BIN=""
+        if [ -d "$VENV_DIR/bin" ]; then
+            VENV_BIN="$VENV_DIR/bin"
+        elif [ -d "$VENV_DIR/Scripts" ]; then
+            VENV_BIN="$VENV_DIR/Scripts"
         fi
 
-        TEMP_DIR=$(mktemp -d)
-
-        git clone --depth 1 "$REPO_URL.git" "$TEMP_DIR/opencontext" 2>/dev/null || {
-            echo "Error: Could not clone repository."
-            echo ""
-            echo "Manual installation:"
-            echo "  git clone $REPO_URL.git"
-            echo "  cd OpenContext-Runtime"
-            echo "  pip install -e packages/opencontext_core -e packages/opencontext_cli"
-            exit 1
-        }
-
-        cd "$TEMP_DIR/opencontext"
-        $PIP_CMD install -e packages/opencontext_core -e packages/opencontext_cli --quiet
-        echo "✓ Installed from source"
+        if [ -n "$VENV_BIN" ] && [ -f "$VENV_BIN/opencontext" ]; then
+            _add_venv_to_path "$VENV_BIN"
+        fi
     fi
 
-    # Create wrapper script in ~/.local/bin if using venv
-    if [ -d "$VENV_DIR" ]; then
-        mkdir -p "$BIN_DIR"
-        VENV_PYTHON=$(get_python_cmd)
-        cat > "$BIN_DIR/opencontext" <<EOF
-#!/usr/bin/env bash
-exec $VENV_PYTHON -m opencontext_cli "\$@"
-EOF
-        chmod +x "$BIN_DIR/opencontext"
-        echo "✓ Created wrapper: $BIN_DIR/opencontext"
-    fi
-
-    # Check if opencontext is in PATH
-    if ! command -v opencontext &>/dev/null; then
+    # Remind user to reload shell if PATH was just updated
+    if [ -d "$VENV_DIR" ] && ! command -v opencontext &>/dev/null; then
         echo ""
-        echo "⚠ 'opencontext' is not in your PATH."
-        echo "  Add this to your shell profile:"
-        echo "    export PATH=\"\$PATH:$BIN_DIR\""
+        echo "ℹ PATH updated. Run one of these to use 'opencontext' now:"
+        echo "    source ~/.bashrc     # or ~/.zshrc"
+        echo "    # or start a new terminal session"
         echo ""
     fi
 
+    verify_install
+    show_finish
+}
+
+show_finish() {
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
     echo ""
