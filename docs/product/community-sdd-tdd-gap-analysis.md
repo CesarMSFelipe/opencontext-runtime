@@ -1,19 +1,19 @@
 # Community SDD/TDD + Multi-Agent Gap Analysis
 
-OpenContext Runtime is not a clone of Gentle-AI: Gentle-AI is an ecosystem configurator for end-user coding agents, while OpenContext is the project-local context runtime, knowledge graph, safety layer, and measurable harness those agents can use. The product goal is parity where it matters for community outcomes: compact context, reliable SDD/TDD loops, safe delegation, and verifiable token savings.
+OpenContext Runtime is the project-local context runtime, knowledge graph, safety layer, and measurable harness for coding agents. The product goal is compact context, reliable SDD/TDD loops, safe delegation, and verifiable token savings.
 
 ## Capability matrix
 
-| Area | Gentle-AI pattern | OpenContext status | Product direction |
-|---|---|---|---|
-| Code graph | Agent ecosystem relies on context tooling | Implemented: SQLite/FTS5 knowledge graph, MCP tools, callers/callees/impact, route detection | Keep as primary differentiator; every SDD/TDD phase should request graph-grounded context first |
-| Agent support | Broad global agent config across Claude Code, OpenCode, Kilo, Gemini, Cursor, VS Code Copilot, Codex, Windsurf, Antigravity, Kimi, Kiro, Qwen | Global installer supports 13+ agents; project-local `agent init` now covers the same community target set | Continue adding agent-native paths without moving SDK/provider code into core |
-| SDD lifecycle | Phase agents: init/explore/propose/spec/design/tasks/apply/verify/archive/onboard | Core DAG supports explore → propose → spec → design → tasks → apply → verify → archive | Add SDD init/onboard commands as first-class runtime workflows if they are not only installer artifacts |
-| TDD discipline | Strict TDD as project capability and phase rule | Tests and validation docs exist; agent instructions now explicitly require closest failing test before implementation when harness exists | Add automatic testing-capability detection to SDD init artifacts and phase prompts |
-| Multi-agent orchestration | Thin orchestrator delegates isolated phases; per-phase model routing in capable agents | Core has delegation primitives, DAG state, token manager, and artifact stores; some execution paths remain scaffolded | Convert scaffolded execution into honest planner + adapters with traceable receipts before enabling real tool calls |
-| Harness | Preflight, permissions, backups, rollback, golden tests | Controlled harness, quality gates, action policy, traces, ContextBench, backups/update/plugin systems exist | Expose a single `opencontext harness run` UX that prints exact gates, tests, token budgets, and artifacts |
-| Token efficiency | Per-phase model/profile selection and compact memories | Repo-map-first packing, context budgets, omission reasons, cache-aware prompt docs, ContextBench token-reduction gates | Make token ledger visible per SDD phase and fail when a phase exceeds configured budgets |
-| Community usability | Installers, docs, quickstart, presets | README/docs are broad; project-local agent files concise | Add a one-page “best SDD with TDD” quickstart and reproducible demo benchmark |
+| Area | OpenContext status | Product direction |
+|---|---|---|
+| Code graph | Implemented: SQLite/FTS5 knowledge graph, MCP tools, callers/callees/impact, route detection | Keep as primary differentiator; every SDD/TDD phase should request graph-grounded context first |
+| Agent support | Global installer supports 13+ agents; project-local `agent init` now covers the same community target set | Continue adding agent-native paths without moving SDK/provider code into core |
+| SDD lifecycle | Core DAG supports explore → propose → spec → design → tasks → apply → verify → archive | Add SDD init/onboard commands as first-class runtime workflows if they are not only installer artifacts |
+| TDD discipline | Tests and validation docs exist; agent instructions now explicitly require closest failing test before implementation when harness exists | Add automatic testing-capability detection to SDD init artifacts and phase prompts |
+| Multi-agent orchestration | Core has delegation primitives, DAG state, token manager, and artifact stores; some execution paths remain scaffolded | Convert scaffolded execution into honest planner + adapters with traceable receipts before enabling real tool calls |
+| Harness | Preflight, permissions, backups, rollback, golden tests | Controlled harness, quality gates, action policy, traces, ContextBench, backups/update/plugin systems exist |
+| Token efficiency | Repo-map-first packing, context budgets, omission reasons, cache-aware prompt docs, ContextBench token-reduction gates | Make token ledger visible per SDD phase and fail when a phase exceeds configured budgets |
+| Community usability | Installers, docs, quickstart, presets | README/docs are broad; project-local agent files concise |
 
 ## Minimum community-ready loop
 
@@ -43,4 +43,4 @@ OpenContext Runtime is not a clone of Gentle-AI: Gentle-AI is an ecosystem confi
 
 ## Related product UX
 
-See [Installation Experience](installation-experience.md) for the Gentle-AI-style setup target: select agents, choose TDD mode, create SDD artifacts, configure clients, and index the graph in one wizard run.
+See [Installation Experience](installation-experience.md) for the setup target: select agents, choose TDD mode, create SDD artifacts, configure clients, and index the graph in one wizard run.

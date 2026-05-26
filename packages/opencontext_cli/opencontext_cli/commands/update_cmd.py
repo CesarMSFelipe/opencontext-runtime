@@ -70,17 +70,28 @@ def handle_update(args: Any) -> None:
 
 
 def handle_upgrade(args: Any) -> None:
-    """Check and upgrade."""
+    """Check and upgrade all OpenContext packages."""
 
-    check = UpdateChecker.check()
-    if not check.is_outdated:
-        print(f"  ✓ OpenContext {check.current_version} is already up to date.")
-        return
-
-    print(f"  Upgrading {check.current_version} -> {check.latest_version}...")
-    result = UpdateChecker.upgrade()
     print()
-    print(f"  {result['status']}: {result['message']}")
+    print("  Checking for OpenContext updates...")
+    print()
 
-    if result["status"] == "failed":
+    results = UpdateChecker.upgrade_all()
+
+    upgraded = [r for r in results if r["status"] == "upgraded"]
+    failed = [r for r in results if r["status"] == "failed"]
+
+    print(f"  {'Package':<25} {'Status':<12} {'Message'}")
+    print(f"  {'─' * 25} {'─' * 12} {'─' * 40}")
+    for r in results:
+        icon = "✓" if r["status"] == "upgraded" else "✗"
+        print(f"  {r['package']:<25} {icon + ' ' + r['status']:<12} {r['message']}")
+    print()
+
+    if upgraded:
+        print(f"  ✓ {len(upgraded)} package(s) upgraded.")
+    if failed:
+        print(f"  ✗ {len(failed)} package(s) failed.")
         sys.exit(1)
+    if not upgraded and not failed:
+        print("  ✓ All packages are up to date.")

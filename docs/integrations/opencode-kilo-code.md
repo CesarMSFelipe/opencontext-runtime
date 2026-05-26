@@ -14,7 +14,7 @@ opencontext agent init --target kilo-code
 
 For OpenCode this creates:
 - `~/.config/opencode/mcp.json` — MCP server config
-- `~/.config/opencode/agents/gentle-orchestrator.json` — SDD orchestrator profile
+- `~/.config/opencode/agents/sdd-orchestrator.json` — SDD orchestrator profile
 - `~/.config/opencode/AGENTS.md` — Instructions
 
 For Kilo Code:
@@ -54,7 +54,7 @@ opencontext config restore <id>
 
 ## SDD Orchestrator Profile
 
-The installed `gentle-orchestrator` agent profile gives OpenCode access to
+The installed `sdd-orchestrator` agent profile gives OpenCode access to
 the full SDD lifecycle via the knowledge graph MCP tools.
 
 ## MCP Tools (all 8)

@@ -254,13 +254,13 @@ class AgentInstaller:
             profile_dir.mkdir(parents=True, exist_ok=True)
 
             sdd_profile = {
-                "name": "gentle-orchestrator",
+                "name": "sdd-orchestrator",
                 "description": "OpenContext SDD orchestrator with knowledge graph",
                 "system_prompt": self._build_orchestrator_prompt(),
                 "tools": ["mcp__opencontext__*"],
             }
 
-            profile_path = profile_dir / "gentle-orchestrator.json"
+            profile_path = profile_dir / "sdd-orchestrator.json"
             profile_path.write_text(json.dumps(sdd_profile, indent=2), encoding="utf-8")
             files_created.append(str(profile_path))
 

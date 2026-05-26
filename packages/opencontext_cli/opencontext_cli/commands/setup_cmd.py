@@ -546,8 +546,8 @@ def _execute_plan(
         except ValueError:
             console.print(f"[yellow]⚠ Unknown project-local agent target: {selected_agent}[/]")
 
-    # Global client config (MCP + profile files) for selected clients, matching
-    # Gentle-AI's install-time activation model but using OpenContext's local KG.
+    # Global client config (MCP + profile files) for selected clients, using
+    # OpenContext's local knowledge graph.
     if "mcp-server" in plan.components or "knowledge-graph" in plan.components:
         global_targets = []
         for selected_agent in agents:

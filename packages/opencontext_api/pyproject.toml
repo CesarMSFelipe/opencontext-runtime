@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencontext-api"
-version = "0.3.0"
+version = "0.4.0b0"
 description = "FastAPI adapter for OpenContext Runtime"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -22,10 +22,12 @@ classifiers = [
   "Topic :: Security",
 ]
 dependencies = [
-  "fastapi>=0.110",
+  "fastapi>=0.110,<0.136.3",  # 0.136.3 has MAL-2026-4750
   "httpx>=0.27",
+  "idna>=3.15",
   "opencontext-core>=0.1.0",
   "opencontext-profiles>=0.1.0",
+  "starlette>=1.0.1",
 ]
 
 [project.urls]
