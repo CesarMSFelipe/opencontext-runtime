@@ -16,7 +16,6 @@ from opencontext_core.user_prefs import UserConfigStore
 from opencontext_core.wizard import (
     reconfigure,
     reset_config,
-    run_wizard,
     show_config,
 )
 
@@ -25,7 +24,7 @@ def add_config_parser(subparsers: Any) -> None:
     """Add config command parsers."""
 
     config_parser = subparsers.add_parser("config", help="Manage OpenContext configuration.")
-    config_sub = config_parser.add_subparsers(dest="config_command", required=True)
+    config_sub = config_parser.add_subparsers(dest="config_command")
 
     # Wizard
     wizard_parser = config_sub.add_parser("wizard", help="Run configuration wizard.")
@@ -76,7 +75,17 @@ def add_config_parser(subparsers: Any) -> None:
 def handle_config(args: Any) -> None:
     """Handle config commands."""
 
-    command = args.config_command
+    command = getattr(args, "config_command", None)
+
+    if command is None:
+        # No subcommand — run the interactive wizard by default
+        from opencontext_core.wizard import run_wizard, run_wizard_menu
+
+        try:
+            run_wizard_menu()
+        except Exception:
+            run_wizard(non_interactive=True)
+        return
 
     if command == "wizard":
         use_tui = not getattr(args, "non_interactive", False)
