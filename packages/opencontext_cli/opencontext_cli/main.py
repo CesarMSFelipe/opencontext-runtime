@@ -134,7 +134,17 @@ def _technology_template_names() -> tuple[str, ...]:
 TECHNOLOGY_TEMPLATE_NAMES = _technology_template_names()
 
 
-__version__ = "0.2.1b0"
+def _get_version() -> str:
+    """Get installed version via importlib.metadata, with fallback."""
+    try:
+        import importlib.metadata
+
+        return importlib.metadata.version("opencontext-cli")
+    except (importlib.metadata.PackageNotFoundError, ImportError):
+        return "0.0.0"
+
+
+__version__ = _get_version()
 
 
 def main() -> None:
@@ -242,7 +252,7 @@ def _build_parser() -> argparse.ArgumentParser:
         version=f"%(prog)s {__version__}",
         help="Show version and exit.",
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command")
 
     init_parser = subparsers.add_parser("init", help="Create a default OpenContext configuration.")
     init_parser.add_argument(
@@ -792,16 +802,43 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+_config_path_cache: str | None = None
+
+
 def _default_config_path() -> str:
-    if Path("opencontext.yaml").exists():
-        return "opencontext.yaml"
-    if Path("configs/opencontext.yaml").exists():
-        return "configs/opencontext.yaml"
-    return "opencontext.yaml"
+    """Find opencontext.yaml in current dir or parent dirs, up to 10 levels."""
+    global _config_path_cache
+    if _config_path_cache is not None:
+        return _config_path_cache
+
+    candidates = ("opencontext.yaml", "configs/opencontext.yaml")
+    current = Path.cwd().resolve()
+    for _ in range(10):
+        for candidate in candidates:
+            path = current / candidate
+            if path.exists():
+                result = str(path)
+                _config_path_cache = result
+                return result
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+    _config_path_cache = "opencontext.yaml"
+    return _config_path_cache
 
 
 def _dispatch(args: argparse.Namespace) -> None:
-    command = args.command
+    command = getattr(args, "command", None)
+
+    if command is None:
+        # No command — launch the main TUI menu
+        from opencontext_cli.commands.menu_cmd import run_main_menu
+
+        run_main_menu()
+        return
+
     if command == "init":
         _init(args.config, args.template)
         return
@@ -1081,9 +1118,22 @@ def _install(args: argparse.Namespace) -> None:
 
     root = Path(args.root)
 
+    # Check if already set up
+    already_setup = (root / ".opencontext").exists() and (
+        root / ".opencontext" / "sdd" / "context.json"
+    ).exists()
+
     console.header("OpenContext Install")
     console.print("Detecting your project...")
     console.print()
+
+    if already_setup and not args.yes:
+        console.print("[dim]OpenContext already configured for this project.[/]")
+        proceed = Confirm.ask("Re-run setup?", default=False)
+        if not proceed:
+            console.print("[green]Nothing to do. Your project is ready.[/]")
+            console.print("  Run [cyan]opencontext pack . --query 'Explain this'[/] to start.")
+            return
 
     # Quick project detection (lightweight — no full index needed)
     has_config = (root / "opencontext.yaml").exists()
@@ -1117,7 +1167,7 @@ def _install(args: argparse.Namespace) -> None:
     console.print()
 
     if not args.yes:
-        proceed = Confirm.ask("Proceed with setup?", default=True)
+        proceed = Confirm.ask("Proceed with setup?", default=not already_setup)
         if not proceed:
             console.print("[yellow]Setup cancelled.[/]")
             return
