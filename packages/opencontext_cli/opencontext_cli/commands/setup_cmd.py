@@ -569,6 +569,26 @@ def _execute_plan(
         active_clients=agents,
         sdd_model_profile=sdd_profile,
     )
+
+    # Generate the opencontext-agent lifecycle skill so hooks are active.
+    skill_source = (
+        __import__("pathlib").Path(__file__).resolve().parent.parent.parent
+        / "packages"
+        / "opencontext_core"
+        / "opencontext_core"
+        / "skills"
+        / "templates"
+        / "opencontext-agent"
+        / "SKILL.md"
+    )
+    skill_target = root_path / ".opencontext" / "skills" / "opencontext-agent" / "SKILL.md"
+    if skill_source.exists():
+        skill_target.parent.mkdir(parents=True, exist_ok=True)
+        skill_target.write_text(skill_source.read_text(encoding="utf-8"), encoding="utf-8")
+        skill_generated = True
+    else:
+        skill_generated = False
+
     try:
         manifest = OpenContextRuntime().index_project(root_path)
         index_status = {"files": len(manifest.files), "symbols": len(manifest.symbols)}
@@ -579,4 +599,6 @@ def _execute_plan(
     console.print(f"[green]✓ SDD/TDD artifacts:[/] {', '.join(str(p) for p in sdd_files)}")
     console.print(f"[green]✓ Strict TDD detected:[/] {sdd_context.strict_tdd}; mode: {tdd_mode}")
     console.print(f"[green]✓ Project-local agent files:[/] {len(generated_files)}")
+    if skill_generated:
+        console.print(f"[green]✓ Agent lifecycle skill:[/] {skill_target}")
     console.print(f"[green]✓ Knowledge graph index:[/] {index_status}")

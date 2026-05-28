@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -20,26 +22,66 @@ def add_sync_parser(subparsers: Any) -> None:
     sync_parser = subparsers.add_parser(
         "sync", help="Sync configuration and refresh managed assets."
     )
-    sync_parser.add_argument(
+    sync_sub = sync_parser.add_subparsers(dest="sync_command")
+
+    # sync issues
+    issues_parser = sync_sub.add_parser(
+        "issues",
+        help="Create/update GitHub Issues from a change's tasks.md file.",
+    )
+    issues_parser.add_argument(
+        "--change",
+        default=None,
+        help="SDD change name (reads openspec/changes/<change>/tasks.md).",
+    )
+    issues_parser.add_argument(
+        "--tasks-file",
+        default=None,
+        help="Explicit path to a tasks.md file.",
+    )
+    issues_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview issues without creating them.",
+    )
+    issues_parser.add_argument(
+        "--repo",
+        default=None,
+        help="GitHub repo (owner/name). Auto-detected from git remote if omitted.",
+    )
+
+    # sync config (default behavior, preserved as a subcommand)
+    config_parser = sync_sub.add_parser(
+        "config",
+        help="Sync configuration and refresh managed assets.",
+    )
+    config_parser.add_argument(
         "--component",
         choices=["knowledge-graph", "mcp", "plugins", "all"],
         default="all",
         help="Component to sync (default: all).",
     )
+    config_parser.add_argument("--agent", default="opencode")
+    config_parser.add_argument("--dry-run", action="store_true")
+
+    # Keep flat flags on sync itself for backward compat
     sync_parser.add_argument(
-        "--agent",
-        default="opencode",
-        help="Agent to sync (default: opencode).",
+        "--component",
+        choices=["knowledge-graph", "mcp", "plugins", "all"],
+        default="all",
     )
-    sync_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview changes without applying.",
-    )
+    sync_parser.add_argument("--agent", default="opencode")
+    sync_parser.add_argument("--dry-run", action="store_true")
 
 
 def handle_sync(args: Any) -> None:
     """Handle sync command."""
+
+    sync_cmd = getattr(args, "sync_command", None)
+
+    if sync_cmd == "issues":
+        _handle_sync_issues(args)
+        return
 
     component = getattr(args, "component", "all")
     agent = getattr(args, "agent", "opencode")
@@ -61,7 +103,6 @@ def handle_sync(args: Any) -> None:
     if component in ("all", "plugins"):
         checks.append(_sync_plugins(prefs, dry_run))
 
-    # Summary
     _show_sync_summary(checks)
 
     if dry_run:
@@ -74,6 +115,85 @@ def handle_sync(args: Any) -> None:
         console.print("[green]✓ Sync complete.[/]")
 
 
+# ── sync issues ───────────────────────────────────────────────────────────────
+
+
+def parse_tasks_from_md(path: Path) -> list[dict[str, str]]:
+    """Parse task items from a tasks.md file.
+
+    Reads lines matching '- [ ] ...' (open) and '- [x] ...' (closed).
+    Returns a list of dicts with 'title' and 'state' keys.
+    """
+    tasks: list[dict[str, str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if re.match(r"^- \[ \] ", stripped):
+            tasks.append({"title": stripped[6:].strip(), "state": "open"})
+        elif re.match(r"^- \[x\] ", stripped, re.IGNORECASE):
+            tasks.append({"title": stripped[6:].strip(), "state": "closed"})
+    return tasks
+
+
+def _resolve_tasks_file(args: Any) -> Path | None:
+    """Resolve tasks.md path from --change or --tasks-file args."""
+    if getattr(args, "tasks_file", None):
+        return Path(args.tasks_file)
+    change = getattr(args, "change", None)
+    if change:
+        return Path("openspec") / "changes" / change / "tasks.md"
+    return None
+
+
+def _handle_sync_issues(args: Any) -> None:
+    """Handle sync issues subcommand."""
+    tasks_file = _resolve_tasks_file(args)
+    dry_run = getattr(args, "dry_run", False)
+    repo = getattr(args, "repo", None)
+
+    if tasks_file is None:
+        console.print("[red]Error: specify --change <name> or --tasks-file <path>[/]")
+        return
+
+    if not tasks_file.exists():
+        console.print(f"[red]Tasks file not found: {tasks_file}[/]")
+        return
+
+    tasks = parse_tasks_from_md(tasks_file)
+    if not tasks:
+        console.print("[yellow]No task items found in tasks file.[/]")
+        return
+
+    console.print(f"Found [bold]{len(tasks)}[/] task(s) in {tasks_file}")
+
+    if dry_run:
+        console.print("[yellow]── Dry run — issues NOT created ──[/]")
+        for t in tasks:
+            icon = "○" if t["state"] == "open" else "✓"
+            console.print(f"  {icon} {t['title']}")
+        return
+
+    created = 0
+    skipped = 0
+    for task in tasks:
+        if task["state"] == "closed":
+            skipped += 1
+            continue
+        cmd = ["gh", "issue", "create", "--title", task["title"]]
+        if repo:
+            cmd += ["--repo", repo]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            created += 1
+            console.print(f"  [green]✓[/] {task['title']}")
+        else:
+            console.print(f"  [red]✗[/] {task['title']}: {result.stderr.strip()}")
+
+    console.print(f"[green]Created {created} issue(s)[/], skipped {skipped} closed task(s).")
+
+
+# ── sync config helpers ───────────────────────────────────────────────────────
+
+
 def _sync_kg(prefs: Any, dry_run: bool) -> dict[str, Any]:
     """Sync knowledge graph config."""
 
@@ -84,7 +204,6 @@ def _sync_kg(prefs: Any, dry_run: bool) -> dict[str, Any]:
         result["message"] = "Knowledge Graph not enabled"
         return result
 
-    # Check if MCP config references the right DB path
     expected_db = Path(".storage/opencontext/codegraph.db")
     if not expected_db.exists():
         result["status"] = "warning"
@@ -116,7 +235,6 @@ def _sync_mcp(prefs: Any, agent: str, dry_run: bool) -> dict[str, Any]:
         result["message"] = f"Would update: {mcp_path}"
         return result
 
-    # Write/update MCP config
     if agent == "opencode":
         try:
             from opencontext_cli.main import _setup_mcp_for_opencode
