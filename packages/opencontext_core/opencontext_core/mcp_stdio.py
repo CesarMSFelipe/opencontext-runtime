@@ -17,6 +17,31 @@ from opencontext_core.indexing.graph_db import GraphDatabase
 from opencontext_core.indexing.impact_analysis import ImpactAnalyzer
 from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 
+# Adaptive max_nodes tiers based on indexed file count
+_MAX_NODES_TIERS: list[tuple[int, int]] = [
+    (500, 10),
+    (2000, 20),
+    (10000, 40),
+    (25000, 50),
+]
+_MAX_NODES_FALLBACK: int = 20
+_MAX_NODES_MAX: int = 60
+
+
+def _compute_max_nodes(file_count: int) -> int:
+    """Compute max_nodes from indexed file count using tier table.
+
+    Args:
+        file_count: Number of indexed files.
+
+    Returns:
+        Scaled max_nodes value.
+    """
+    for threshold, value in _MAX_NODES_TIERS:
+        if file_count < threshold:
+            return value
+    return _MAX_NODES_MAX
+
 
 class MCPServer:
     """MCP server implementing stdio transport.
@@ -93,6 +118,14 @@ class MCPServer:
             "opencontext_status": {
                 "description": "Check index health and statistics",
                 "parameters": {},
+            },
+            "opencontext_trace": {
+                "description": "Find the shortest path between two symbols in the call graph",
+                "parameters": {
+                    "source": {"type": "string", "description": "Source symbol name"},
+                    "target": {"type": "string", "description": "Target symbol name"},
+                    "max_depth": {"type": "integer", "default": 10},
+                },
             },
         }
 
@@ -172,6 +205,7 @@ class MCPServer:
             "opencontext_node": self._handle_node,
             "opencontext_files": self._handle_files,
             "opencontext_status": self._handle_status,
+            "opencontext_trace": self._handle_trace,
         }
 
         handler = handlers.get(name)
@@ -209,6 +243,15 @@ class MCPServer:
         task = params.get("task", "")
         max_nodes = params.get("max_nodes", 20)
         format = params.get("format", "markdown")
+
+        # Adaptive scaling: when caller uses default (20), scale from stats
+        if max_nodes == 20:
+            try:
+                stats = self.db.get_stats()
+                file_count = stats.get("files", 0)
+                max_nodes = _compute_max_nodes(file_count)
+            except Exception:
+                max_nodes = _MAX_NODES_FALLBACK
 
         context = self.context_builder.build_context(
             task=task,
@@ -358,6 +401,33 @@ class MCPServer:
             "nodes": stats.get("nodes", 0),
             "edges": stats.get("edges", 0),
             "files": stats.get("files", 0),
+        }
+
+    def _handle_trace(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle call-path tracing tool."""
+
+        source = params.get("source", "")
+        target = params.get("target", "")
+        max_depth = params.get("max_depth", 10)
+
+        if not source or not target:
+            return {"error": "Both 'source' and 'target' are required"}
+
+        source_id = self._find_node(source)
+        target_id = self._find_node(target)
+
+        if source_id is None:
+            return {"error": f"Symbol not found: {source}", "code": "SYMBOL_NOT_FOUND"}
+        if target_id is None:
+            return {"error": f"Symbol not found: {target}", "code": "SYMBOL_NOT_FOUND"}
+
+        result = self.call_graph.find_path(source_id, target_id, max_depth=max_depth)
+
+        return {
+            "found": result.found,
+            "path": result.path,
+            "depth_exceeded": result.depth_exceeded,
+            "hops": result.hops,
         }
 
     def _find_node(self, symbol: str, file: str | None = None) -> int | None:
