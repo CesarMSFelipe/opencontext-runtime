@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from opencontext_core.state import ConfigBackupManager, BackupEntry
+from opencontext_core.state import BackupEntry, ConfigBackupManager
 
 
 @pytest.fixture(autouse=True)
@@ -82,7 +82,8 @@ def test_auto_backup_returns_none_when_nothing_to_backup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """auto_backup returns None when neither config file nor state file exists."""
-    from opencontext_core import user_prefs, state as state_module
+    from opencontext_core import state as state_module
+    from opencontext_core import user_prefs
 
     fake_config = tmp_path / "user-config.json"  # does not exist
     fake_state = tmp_path / "state.json"  # does not exist

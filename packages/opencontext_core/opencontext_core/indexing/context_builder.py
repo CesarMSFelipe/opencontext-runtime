@@ -1,4 +1,4 @@
-"""Context builder for AI tasks - CodeGraph-style context assembly.
+"""Context builder for AI tasks.
 
 Builds relevant code context for a given task/query using the knowledge graph.
 """

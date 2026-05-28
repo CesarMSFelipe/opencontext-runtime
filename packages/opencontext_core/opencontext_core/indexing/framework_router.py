@@ -2,36 +2,50 @@
 
 Supports Django, FastAPI, Flask, Express.js, and NestJS.
 """
+
 from __future__ import annotations
+
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+
 
 @dataclass
 class RouteDefinition:
     source_file: str
-    framework: str   # django | fastapi | flask | express | nestjs
-    method: str      # GET | POST | PUT | DELETE | ANY | *
+    framework: str  # django | fastapi | flask | express | nestjs
+    method: str  # GET | POST | PUT | DELETE | ANY | *
     path_pattern: str
-    handler: str     # function/class name detected
+    handler: str  # function/class name detected
     line: int = 0
 
-_SKIP_DIRS = frozenset({".git", "__pycache__", "node_modules", ".venv", "venv", ".tox", "dist", "build"})
+
+_SKIP_DIRS = frozenset(
+    {".git", "__pycache__", "node_modules", ".venv", "venv", ".tox", "dist", "build"}
+)
 _SOURCE_EXTENSIONS = frozenset({".py", ".ts", ".tsx", ".js", ".jsx"})
 
 _PATTERNS: list[tuple[re.Pattern, str, str]] = [
     # Django urlpatterns: path('route/', view_func)  or  url(r'^route/', view_func)
     (re.compile(r"(?:path|re_path|url)\s*\(\s*['\"]([^'\"]*)['\"].*?,\s*(\w+)"), "django", "ANY"),
     # FastAPI decorators: @app.get('/'), @router.post('/')
-    (re.compile(r"@(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*['\"]([^'\"]+)['\"]"), "fastapi", ""),
+    (
+        re.compile(r"@(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*['\"]([^'\"]+)['\"]"),
+        "fastapi",
+        "",
+    ),
     # Flask: @app.route('/'), @bp.route('/')
     (re.compile(r"@(?:app|bp|blueprint)\s*\.\s*route\s*\(\s*['\"]([^'\"]+)['\"]"), "flask", "ANY"),
     # Express: app.get('/route', handler) or router.post('/route', handler)
-    (re.compile(r"(?:app|router)\.(get|post|put|delete|patch|all)\s*\(\s*['\"]([^'\"]+)['\"]"), "express", ""),
+    (
+        re.compile(r"(?:app|router)\.(get|post|put|delete|patch|all)\s*\(\s*['\"]([^'\"]+)['\"]"),
+        "express",
+        "",
+    ),
     # NestJS: @Get('/'), @Post('/')
     (re.compile(r"@(Get|Post|Put|Delete|Patch)\s*\(\s*['\"]([^'\"]*)['\"]"), "nestjs", ""),
 ]
+
 
 class FrameworkRouter:
     def scan(self, root: str | Path = ".") -> list[RouteDefinition]:
@@ -66,14 +80,16 @@ class FrameworkRouter:
                     handler = ""
                 else:  # flask
                     path_pat, method, handler = groups[0], "ANY", ""
-                found.append(RouteDefinition(
-                    source_file=rel_path,
-                    framework=framework,
-                    method=method,
-                    path_pattern=path_pat,
-                    handler=handler,
-                    line=i,
-                ))
+                found.append(
+                    RouteDefinition(
+                        source_file=rel_path,
+                        framework=framework,
+                        method=method,
+                        path_pattern=path_pat,
+                        handler=handler,
+                        line=i,
+                    )
+                )
                 break
         return found
 

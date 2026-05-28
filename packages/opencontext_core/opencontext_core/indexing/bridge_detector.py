@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
 
 
 @dataclass
@@ -15,7 +14,7 @@ class CrossLanguageBridge:
     source_file: str
     source_symbol: str
     target_hint: str
-    bridge_type: str   # HTTP | GRPC | CLI_SUBPROCESS | IPC
+    bridge_type: str  # HTTP | GRPC | CLI_SUBPROCESS | IPC
     confidence: float  # 0.0–1.0
     line: int = 0
 
@@ -59,8 +58,7 @@ class BridgeDetector:
     def __init__(self, max_file_size_bytes: int = 512_000) -> None:
         self._max_size = max_file_size_bytes
         self._compiled = [
-            (re.compile(pattern), btype, conf)
-            for pattern, btype, conf in _BRIDGE_PATTERNS
+            (re.compile(pattern), btype, conf) for pattern, btype, conf in _BRIDGE_PATTERNS
         ]
 
     def scan(self, root: str | Path = ".") -> list[CrossLanguageBridge]:

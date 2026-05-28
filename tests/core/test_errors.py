@@ -27,7 +27,9 @@ _ALL_ERRORS = [
 def test_base_hierarchy() -> None:
     """All custom errors must inherit from OpenContextError."""
     for cls in _ALL_ERRORS:
-        assert issubclass(cls, OpenContextError), f"{cls.__name__} is not a subclass of OpenContextError"
+        assert issubclass(cls, OpenContextError), (
+            f"{cls.__name__} is not a subclass of OpenContextError"
+        )
 
 
 def test_provider_error_inherits_llm_gateway() -> None:

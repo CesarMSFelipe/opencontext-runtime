@@ -16,9 +16,7 @@ class TestFirstRunDetection:
         """No opencontext.yaml means it's a first run."""
         assert is_first_run(tmp_path) is True
 
-    def test_config_without_setup_is_first_run(
-        self, tmp_path: Path, monkeypatch: Any
-    ) -> None:
+    def test_config_without_setup_is_first_run(self, tmp_path: Path, monkeypatch: Any) -> None:
         """Config exists but setup_completed is False (incomplete setup)."""
         from opencontext_core.user_prefs import UserConfigStore
 
@@ -30,9 +28,7 @@ class TestFirstRunDetection:
         monkeypatch.setattr(UserConfigStore, "CONFIG_DIR", config_dir)
         monkeypatch.setattr(UserConfigStore, "CONFIG_FILE", config_dir / "user-config.json")
         config_dir.mkdir(parents=True, exist_ok=True)
-        (config_dir / "user-config.json").write_text(
-            '{"setup_completed": false}', encoding="utf-8"
-        )
+        (config_dir / "user-config.json").write_text('{"setup_completed": false}', encoding="utf-8")
 
         assert is_first_run(tmp_path) is True
 
@@ -58,9 +54,7 @@ class TestFirstRunDetection:
 
         assert is_first_run(tmp_path) is False
 
-    def test_detection_handles_missing_user_config(
-        self, tmp_path: Path, monkeypatch: Any
-    ) -> None:
+    def test_detection_handles_missing_user_config(self, tmp_path: Path, monkeypatch: Any) -> None:
         """Missing user config with existing project config → first run (setup not completed)."""
         from opencontext_core.user_prefs import UserConfigStore
 

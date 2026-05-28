@@ -313,12 +313,13 @@ def is_first_run(root: str | Path) -> bool:
     """
     root_path = Path(root)
     config_path = root_path / "opencontext.yaml"
+    workspace_marker = root_path / ".opencontext" / "sdd" / "context.json"
 
-    # No config at all → first run
-    if not config_path.exists():
+    # Neither config nor workspace marker → first run
+    if not config_path.exists() and not workspace_marker.exists():
         return True
 
-    # Config exists — check if setup was completed
+    # Check if setup was completed in user prefs
     try:
         from opencontext_core.user_prefs import UserConfigStore
 
@@ -326,5 +327,5 @@ def is_first_run(root: str | Path) -> bool:
         prefs = store.load()
         return not prefs.setup_completed
     except Exception:
-        # If we can't read user prefs, config existence is good enough
+        # If we can't read user prefs, presence of either file is good enough
         return False

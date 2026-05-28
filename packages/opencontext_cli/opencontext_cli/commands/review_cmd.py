@@ -63,11 +63,13 @@ def merge_reports(reports: list[dict[str, Any]]) -> str:
             severity = finding.get("severity", "low").lower()
             if severity not in by_severity:
                 severity = "low"
-            by_severity[severity].append({
-                "role": role,
-                "title": finding.get("title", ""),
-                "details": finding.get("details", ""),
-            })
+            by_severity[severity].append(
+                {
+                    "role": role,
+                    "title": finding.get("title", ""),
+                    "details": finding.get("details", ""),
+                }
+            )
 
     for severity in ("high", "medium", "low"):
         items = by_severity[severity]
@@ -135,7 +137,9 @@ def handle_review(args: Any) -> None:
         rich_console.print("[yellow]Use --party for party mode review.[/]")
         return
 
-    roles = [r.strip() for r in getattr(args, "roles", "architect,security,performance,ux").split(",")]
+    roles = [
+        r.strip() for r in getattr(args, "roles", "architect,security,performance,ux").split(",")
+    ]
     context = getattr(args, "context", None) or sys.stdin.read()
     output_path = getattr(args, "output", None)
 
@@ -153,8 +157,7 @@ def handle_review(args: Any) -> None:
             report = _run_reviewer(role, prompt)
             reports.append(report)
             rich_console.print(
-                f"  [green]✓[/] {role}: "
-                f"{len(report.get('findings', []))} finding(s)"
+                f"  [green]✓[/] {role}: {len(report.get('findings', []))} finding(s)"
             )
 
     merged = merge_reports(reports)
@@ -177,9 +180,13 @@ def _get_adapter() -> Any | None:
     )
 
     if os.environ.get("ANTHROPIC_API_KEY"):
-        return AnthropicAdapter(ProviderConfig(name="anthropic", api_key=os.environ["ANTHROPIC_API_KEY"]))
+        return AnthropicAdapter(
+            ProviderConfig(name="anthropic", api_key=os.environ["ANTHROPIC_API_KEY"])
+        )
     if os.environ.get("OPENROUTER_API_KEY"):
-        return OpenRouterAdapter(ProviderConfig(name="openrouter", api_key=os.environ["OPENROUTER_API_KEY"]))
+        return OpenRouterAdapter(
+            ProviderConfig(name="openrouter", api_key=os.environ["OPENROUTER_API_KEY"])
+        )
     return None
 
 
@@ -195,12 +202,13 @@ def _run_reviewer(role: str, prompt: str) -> dict[str, Any]:
             "role": role,
             "findings": [],
             "summary": f"{role.title()} review: LLM provider not configured. "
-                       "Set a provider in your opencontext config to enable automated review.",
+            "Set a provider in your opencontext config to enable automated review.",
         }
 
     try:
         response = adapter.chat([{"role": "user", "content": prompt}])
         import json
+
         data = json.loads(response.content)
         if not all(k in data for k in ("role", "findings", "summary")):
             raise ValueError("Response missing required keys: role, findings, summary")

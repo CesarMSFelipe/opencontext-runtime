@@ -7,8 +7,8 @@ from pathlib import Path
 
 from opencontext_core.evaluation.benchmark_suite import (
     BenchmarkSuite,
-    save_result,
     load_last_result,
+    save_result,
 )
 
 

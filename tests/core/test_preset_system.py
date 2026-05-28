@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from opencontext_core.workflow.presets import (
     BUILTIN_PRESETS,
     Preset,
@@ -13,7 +11,6 @@ from opencontext_core.workflow.presets import (
     find_presets,
     load_preset,
 )
-
 
 # ── find_presets ─────────────────────────────────────────────────────────────
 

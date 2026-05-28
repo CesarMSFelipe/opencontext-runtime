@@ -57,11 +57,13 @@ class CallGraphAnalyzer:
             if source_node:
                 return PathResult(
                     found=True,
-                    path=[{
-                        "name": source_node.name,
-                        "file_path": source_node.file_path,
-                        "line": source_node.line,
-                    }],
+                    path=[
+                        {
+                            "name": source_node.name,
+                            "file_path": source_node.file_path,
+                            "line": source_node.line,
+                        }
+                    ],
                     hops=0,
                 )
 
@@ -117,15 +119,12 @@ class CallGraphAnalyzer:
             FROM nodes
             WHERE id IN ({placeholders})
             ORDER BY CASE id
-            {' '.join(f'WHEN {i} THEN {pos}' for pos, i in enumerate(ids))}
+            {" ".join(f"WHEN {i} THEN {pos}" for pos, i in enumerate(ids))}
             END
             """,
             ids,
         ).fetchall()
-        return [
-            {"name": r["name"], "file_path": r["file_path"], "line": r["line"]}
-            for r in rows
-        ]
+        return [{"name": r["name"], "file_path": r["file_path"], "line": r["line"]} for r in rows]
 
     def get_callers(self, node_id: int, depth: int = 1) -> list[dict[str, Any]]:
         """Find all symbols that call the given node.

@@ -15,18 +15,18 @@ import yaml
 from opencontext_cli.commands.benchmark_cmd import add_benchmark_parser, handle_benchmark
 from opencontext_cli.commands.bridges_cmd import add_bridges_parser, handle_bridges
 from opencontext_cli.commands.ci_check_cmd import add_ci_check_parser, handle_ci_check
-from opencontext_cli.commands.extension_cmd import add_extension_parser, handle_extension
-from opencontext_cli.commands.review_cmd import add_review_parser, handle_review
-from opencontext_cli.commands.routes_cmd import add_routes_parser, handle_routes
-from opencontext_cli.commands.telemetry_cmd import add_telemetry_parser, handle_telemetry
 from opencontext_cli.commands.config_cmd import add_config_parser, handle_config
+from opencontext_cli.commands.extension_cmd import add_extension_parser, handle_extension
 from opencontext_cli.commands.git_cmd import add_git_parser, handle_git
 from opencontext_cli.commands.hints_cmd import add_hints_parser, handle_hints
 from opencontext_cli.commands.kg_cmd import add_kg_parser, handle_kg
 from opencontext_cli.commands.plugin_cmd import add_plugin_parser, handle_plugin
+from opencontext_cli.commands.review_cmd import add_review_parser, handle_review
+from opencontext_cli.commands.routes_cmd import add_routes_parser, handle_routes
 from opencontext_cli.commands.setup_cmd import add_setup_parser, handle_setup
 from opencontext_cli.commands.skill_cmd import add_skill_parser, handle_skill
 from opencontext_cli.commands.sync_cmd import add_sync_parser, handle_sync
+from opencontext_cli.commands.telemetry_cmd import add_telemetry_parser, handle_telemetry
 from opencontext_cli.commands.update_cmd import (
     add_update_parser,
     add_upgrade_parser,
@@ -94,7 +94,7 @@ from opencontext_core.runtime import OpenContextRuntime
 from opencontext_core.safety.prompt_injection import render_untrusted_context
 from opencontext_core.safety.provider_policy import ProviderPolicyEnforcer
 from opencontext_core.safety.redaction import SinkGuard
-from opencontext_core.update import UpdateChecker
+from opencontext_core.update import EcosystemUpdateChecker, UpdateChecker
 from opencontext_core.workflow_packs.signing import WorkflowPackSigner, WorkflowPackVerifier
 from opencontext_core.workspace.layout import ensure_workspace
 
@@ -246,9 +246,9 @@ def _check_first_run(command: str) -> None:
 def _notify_outdated(args: argparse.Namespace) -> None:
     """Non-blocking version check notification.
 
-    Prints a single-line update hint to stderr after a command finishes,
-    but only when the terminal is interactive and output is not JSON.
-    Respects the 24-hour cache from UpdateChecker.
+    Prints update hints to stderr after a command finishes — opencontext
+    itself plus any cached ecosystem package notices (engram, etc.).
+    Reads from the 24-hour cache; never makes network calls.
     """
     if not sys.stdout.isatty():
         return
@@ -257,8 +257,14 @@ def _notify_outdated(args: argparse.Namespace) -> None:
     check = UpdateChecker.check()
     if check.is_outdated and check.latest_version != check.current_version:
         print(
-            f"Update available: {check.current_version} -> {check.latest_version}. "
-            f"Run 'opencontext upgrade'",
+            f"Update available: opencontext {check.current_version} → {check.latest_version}."
+            " Run 'opencontext upgrade'",
+            file=sys.stderr,
+        )
+    for eco in EcosystemUpdateChecker.check_cached():
+        print(
+            f"Update available: {eco.name} {eco.current_version} → {eco.latest_version}."
+            f" Run 'pip install --upgrade {eco.name}'",
             file=sys.stderr,
         )
 
@@ -739,7 +745,9 @@ def _build_parser() -> argparse.ArgumentParser:
     preset_apply = preset_sub.add_parser("apply", help="Apply a preset to current config.")
     preset_apply.add_argument("name", help="Preset name to apply.")
     preset_apply.add_argument("--root", default=".", help="Project root.")
-    preset_apply.add_argument("--dry-run", action="store_true", help="Show changes without applying.")
+    preset_apply.add_argument(
+        "--dry-run", action="store_true", help="Show changes without applying."
+    )
 
     playbooks_parser = subparsers.add_parser("playbooks", help=argparse.SUPPRESS)
     playbooks_sub = playbooks_parser.add_subparsers(dest="playbooks_command", required=True)
@@ -954,7 +962,12 @@ def _dispatch(args: argparse.Namespace) -> None:
             _unreachable(args.workflow_command)
         return
     if command == "preset":
-        _preset(args.preset_command, getattr(args, "name", None), getattr(args, "root", "."), getattr(args, "dry_run", False))
+        _preset(
+            args.preset_command,
+            getattr(args, "name", None),
+            getattr(args, "root", "."),
+            getattr(args, "dry_run", False),
+        )
         return
     if command == "playbooks":
         _playbooks(args.playbooks_command, getattr(args, "name", None))
@@ -1157,8 +1170,9 @@ def _init(
 
 
 def _runtime(config_path: str) -> OpenContextRuntime:
+    resolved = Path(config_path)
     return OpenContextRuntime(
-        config_path=config_path,
+        config_path=str(resolved) if resolved.exists() else None,
         technology_profiles=first_party_profiles(),
     )
 
@@ -1196,6 +1210,11 @@ def _install(args: argparse.Namespace) -> None:
     from rich.status import Status
 
     from opencontext_core.dx.console_styles import console
+
+    try:
+        console.clear()
+    except Exception:
+        pass
 
     root = Path(args.root)
 
@@ -1260,6 +1279,7 @@ def _install(args: argparse.Namespace) -> None:
         ("Setting up SDD/TDD context...", "sdd"),
         ("Configuring agent integrations...", "agents"),
         ("Setting up harness workflow...", "harness"),
+        ("Verifying setup...", "verify"),
     ]
 
     results: dict[str, str] = {}
@@ -1315,7 +1335,9 @@ def _install(args: argparse.Namespace) -> None:
                         AgentIntegrationGenerator,
                         AgentTarget,
                     )
+                    from opencontext_core.agent_installer import AgentInstaller
 
+                    # Project-level instruction files (AGENTS.md, opencode.json)
                     generator = AgentIntegrationGenerator()
                     agent_files = generator.generate(
                         root, target=AgentTarget("opencode"), force=False
@@ -1329,7 +1351,18 @@ def _install(args: argparse.Namespace) -> None:
                                 _agent_contract_md(client, tdd, "hybrid", "multi-phase"),
                                 encoding="utf-8",
                             )
-                    results[phase_key] = f"✓ ({len(agent_files)} files)"
+
+                    # Global agent config (MCP registration, agent profiles)
+                    installer = AgentInstaller(project_root=root)
+                    detected = installer.detect_installed_agents()
+                    global_report = installer.install(targets=detected, location="global")
+                    global_count = global_report.get("agents_configured", 0)
+
+                    summary = f"✓ ({len(agent_files)} files"
+                    if global_count:
+                        summary += f", {global_count} agent(s) globally configured"
+                    summary += ")"
+                    results[phase_key] = summary
 
                 elif phase_key == "harness":
                     from opencontext_core.onboarding.service import (
@@ -1344,6 +1377,16 @@ def _install(args: argparse.Namespace) -> None:
                         3000,
                     )
                     results[phase_key] = "✓"
+
+                elif phase_key == "verify":
+                    from opencontext_core.doctor.checks import run_doctor
+                    from opencontext_core.runtime import OpenContextRuntime
+
+                    rt = OpenContextRuntime(config_path=None)
+                    checks = run_doctor(rt.config)
+                    passed = sum(1 for c in checks if c.ok)
+                    total = len(checks)
+                    results[phase_key] = f"✓ ({passed}/{total} checks passed)"
 
                 status.update(phase_label)
             except Exception as exc:
@@ -1475,10 +1518,7 @@ def _watch(
                 return
         try:
             manifest = rt.index_project(project_root)
-            print(
-                f"  Re-indexed: {len(manifest.files)} files, "
-                f"{len(manifest.symbols)} symbols"
-            )
+            print(f"  Re-indexed: {len(manifest.files)} files, {len(manifest.symbols)} symbols")
         except Exception as exc:
             print(f"  Re-index failed: {exc}", file=sys.stderr)
 
@@ -1932,11 +1972,29 @@ def _tokens(
 
 
 def _copy_to_clipboard(text: str) -> bool:
+    encoded = text.encode("utf-8")
+
+    # Try pyperclip first (handles macOS pbcopy + Linux xclip/xsel)
     with contextlib.suppress(Exception):
         import pyperclip  # type: ignore[import-not-found]
 
         pyperclip.copy(text)
         return True
+
+    # Try known clipboard backends directly via subprocess
+    import subprocess
+
+    for cmd in (
+        ["xclip", "-selection", "clipboard"],
+        ["xsel", "--clipboard", "--input"],
+        ["wl-copy"],
+        ["pbcopy"],
+    ):
+        with contextlib.suppress(Exception):
+            r = subprocess.run(cmd, input=encoded, capture_output=True, timeout=3)
+            if r.returncode == 0:
+                return True
+
     return False
 
 
@@ -2027,7 +2085,9 @@ def _agent_context(
     if copy:
         copied = _copy_to_clipboard(content)
         print(
-            "Copied to clipboard." if copied else "Clipboard unavailable; printed output instead."
+            "  ✓ Copied to clipboard."
+            if copied
+            else "  ✗ No clipboard (install xclip or wl-clipboard). Printed output instead."
         )
     print(content)
 
@@ -2372,9 +2432,7 @@ def _workflow_resume(run_id: str, root: str = ".") -> None:
 
     state_path = Path(run_id)
     if not state_path.exists():
-        state_path = (
-            Path(root) / ".opencontext" / "runs" / run_id / "state.json"
-        )
+        state_path = Path(root) / ".opencontext" / "runs" / run_id / "state.json"
 
     if not state_path.exists():
         raise OpenContextError(f"State file not found: {state_path}")
@@ -2644,10 +2702,72 @@ def _pack(
     if copy:
         copied = _copy_to_clipboard(rendered)
         print(
-            "Copied to clipboard." if copied else "Clipboard unavailable; printed output instead."
+            "  ✓ Copied to clipboard."
+            if copied
+            else "  ✗ No clipboard (install xclip or wl-clipboard). Printed output instead."
         )
     if output_path is None:
         print(rendered)
+
+    # Record telemetry — estimate naive tokens from all project text files
+    try:
+        import time
+
+        from opencontext_core.evaluation.telemetry import TelemetryEvent, record_event
+
+        root = Path.cwd()
+        naive_chars = 0
+        text_exts = {
+            ".py",
+            ".ts",
+            ".js",
+            ".md",
+            ".yaml",
+            ".yml",
+            ".toml",
+            ".json",
+            ".txt",
+            ".go",
+            ".rs",
+            ".rb",
+        }
+        _skip = {
+            ".git",
+            "__pycache__",
+            "build",
+            ".storage",
+            ".venv",
+            "venv",
+            "node_modules",
+            "dist",
+            "tmp",
+            ".opencontext",
+        }
+        for p in root.rglob("*"):
+            if not p.is_file() or p.suffix not in text_exts:
+                continue
+            if any(part in _skip or part.endswith(".egg-info") for part in p.parts):
+                continue
+            try:
+                naive_chars += p.stat().st_size
+            except OSError:
+                pass
+        naive_tokens = max(naive_chars // 4, 1)
+        optimized_tokens = pack.used_tokens or 1
+        reduction_pct = round(max(0.0, 1.0 - optimized_tokens / naive_tokens) * 100, 1)
+        record_event(
+            TelemetryEvent(
+                timestamp=time.time(),
+                task=query[:80],
+                naive_tokens=naive_tokens,
+                optimized_tokens=optimized_tokens,
+                reduction_pct=reduction_pct,
+                scenario="pack",
+            ),
+            root=root,
+        )
+    except Exception:
+        pass
 
 
 def _render_pack_markdown(pack: ContextPackResult, *, query: str, mode: str) -> str:
@@ -2876,6 +2996,10 @@ def _render_data(data: Any, output_format: str = "json") -> str:
 
 def _unreachable(value: str) -> NoReturn:
     raise SystemExit(f"Unsupported command: {value}")
+
+
+def _scaffold_deprecated(old: str, replacement: str) -> NoReturn:
+    raise SystemExit(f"'{old}' is not a recognised sub-command. Did you mean: {replacement}")
 
 
 if __name__ == "__main__":

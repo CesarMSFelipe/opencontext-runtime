@@ -53,6 +53,7 @@ class ProjectIndexer:
         # Populate knowledge graph if available
         kg_stats = {"files_indexed": 0, "nodes": 0, "edges": 0}
         if self.knowledge_graph is not None:
+            indexed_files: list[tuple[str, str]] = []
             for scanned_file in scanned_files:
                 if scanned_file.language in ("python", "php"):
                     try:
@@ -62,8 +63,15 @@ class ProjectIndexer:
                         kg_stats["files_indexed"] += 1
                         kg_stats["nodes"] += stats.get("nodes", 0)
                         kg_stats["edges"] += stats.get("edges", 0)
+                        indexed_files.append((scanned_file.relative_path, scanned_file.content))
                     except Exception:
                         pass
+            if indexed_files:
+                try:
+                    cross = self.knowledge_graph.finalize_cross_file_edges(indexed_files)
+                    kg_stats["edges"] += cross
+                except Exception:
+                    pass
 
         # Run route scanners for detected profiles
         detected_profile_names = [

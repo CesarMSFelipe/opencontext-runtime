@@ -9,18 +9,19 @@ import pytest
 from opencontext_core.workflow.extension_registry import BUILTIN_INDEX, ExtensionRegistry
 from opencontext_core.workflow.extensions import ExtensionManifest
 
-
 # ── ExtensionManifest ────────────────────────────────────────────────────────
 
 
 def test_manifest_valid() -> None:
     """Valid manifest fields produce a clean model."""
-    m = ExtensionManifest.from_dict({
-        "name": "my-extension",
-        "version": "1.0.0",
-        "description": "A test extension.",
-        "author": "test-author",
-    })
+    m = ExtensionManifest.from_dict(
+        {
+            "name": "my-extension",
+            "version": "1.0.0",
+            "description": "A test extension.",
+            "author": "test-author",
+        }
+    )
     assert m.name == "my-extension"
     assert m.version == "1.0.0"
     assert m.author == "test-author"

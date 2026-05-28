@@ -86,7 +86,6 @@ def test_init_template_creates_workspace_and_config(tmp_path: Path, monkeypatch,
     assert (tmp_path / ".opencontext/policies/security-policy.yaml").exists()
 
 
-
 def test_more_required_scaffolds(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "workflow-packs/example").mkdir(parents=True)

@@ -52,7 +52,9 @@ def handle_extension(args: Any) -> None:
     root = getattr(args, "root", ".")
 
     if command == "search":
-        _handle_search(registry, getattr(args, "query", ""), output_json=getattr(args, "json", False))
+        _handle_search(
+            registry, getattr(args, "query", ""), output_json=getattr(args, "json", False)
+        )
     elif command == "install":
         _handle_install(registry, args.name, root)
     elif command == "list":
@@ -99,7 +101,9 @@ def _handle_install(registry: ExtensionRegistry, name: str, root: str) -> None:
 def _handle_list(registry: ExtensionRegistry, root: str) -> None:
     installed = registry.list_installed(root=root)
     if not installed:
-        console.print("[dim]No extensions installed. Use 'opencontext extension search' to find some.[/]")
+        console.print(
+            "[dim]No extensions installed. Use 'opencontext extension search' to find some.[/]"
+        )
         return
 
     table = Table(title="Installed Extensions")
@@ -120,14 +124,16 @@ def _handle_info(registry: ExtensionRegistry, name: str) -> None:
     ext = matches[0]
     from rich.panel import Panel
 
-    content = "\n".join([
-        f"[bold]Name:[/]        {ext.get('name', '')}",
-        f"[bold]Version:[/]     {ext.get('version', '')}",
-        f"[bold]Author:[/]      {ext.get('author', '')}",
-        f"[bold]Description:[/] {ext.get('description', '')}",
-        f"[bold]Tags:[/]        {', '.join(ext.get('tags', []))}",
-        f"[bold]Requires:[/]    opencontext-core >= {ext.get('requires_version', 'any')}",
-    ])
+    content = "\n".join(
+        [
+            f"[bold]Name:[/]        {ext.get('name', '')}",
+            f"[bold]Version:[/]     {ext.get('version', '')}",
+            f"[bold]Author:[/]      {ext.get('author', '')}",
+            f"[bold]Description:[/] {ext.get('description', '')}",
+            f"[bold]Tags:[/]        {', '.join(ext.get('tags', []))}",
+            f"[bold]Requires:[/]    opencontext-core >= {ext.get('requires_version', 'any')}",
+        ]
+    )
     console.print(Panel(content, title=f"Extension: {name}", border_style="cyan"))
 
 

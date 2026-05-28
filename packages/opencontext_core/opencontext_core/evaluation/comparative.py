@@ -10,10 +10,9 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
-
 
 # ── Token estimation ─────────────────────────────────────────────────────────
+
 
 def _estimate_tokens(text: str) -> int:
     """Rough token estimate: ~4 chars per token (conservative for code)."""
@@ -37,16 +36,17 @@ def _dir_tokens(root: Path, glob: str = "**/*.py") -> int:
 
 # ── Scenario definition ───────────────────────────────────────────────────────
 
+
 @dataclass
 class Scenario:
     """One comparative benchmark scenario."""
 
     id: str
-    difficulty: str          # simple | medium | hard
-    task: str                # natural-language task description
-    naive_files: list[str]   # files a naive approach would send (relative to project root)
+    difficulty: str  # simple | medium | hard
+    task: str  # natural-language task description
+    naive_files: list[str]  # files a naive approach would send (relative to project root)
     relevant_files: list[str]  # ground-truth relevant files
-    sdd_change: str | None = None   # openspec/changes/<name> to check
+    sdd_change: str | None = None  # openspec/changes/<name> to check
     tdd_test_file: str | None = None  # expected test file path
     has_secrets: bool = False
 
@@ -65,8 +65,8 @@ class ScenarioResult:
     reduction_pct: float
 
     # Relevance (of optimized context vs ground truth)
-    precision: float   # retrieved_relevant / retrieved_total
-    recall: float      # retrieved_relevant / total_relevant
+    precision: float  # retrieved_relevant / retrieved_total
+    recall: float  # retrieved_relevant / total_relevant
 
     # SDD compliance
     sdd_compliant: bool
@@ -175,6 +175,7 @@ def _check_sdd(root: Path, change: str | None) -> tuple[bool, list[str]]:
 
 # ── TDD compliance check ──────────────────────────────────────────────────────
 
+
 def _check_tdd(root: Path, test_file: str | None, impl_files: list[str]) -> tuple[bool, str]:
     if test_file is None:
         return True, "(no test file specified — skipped)"
@@ -205,6 +206,7 @@ def _check_tdd(root: Path, test_file: str | None, impl_files: list[str]) -> tupl
 
 # ── Core runner ───────────────────────────────────────────────────────────────
 
+
 class ComparativeBenchmark:
     """Runs comparative scenarios and produces a detailed report."""
 
@@ -218,15 +220,11 @@ class ComparativeBenchmark:
             if candidate.is_file():
                 result.append(candidate)
             elif candidate.is_dir():
-                result.extend(
-                    f for f in candidate.rglob("*.py")
-                    if "__pycache__" not in str(f)
-                )
+                result.extend(f for f in candidate.rglob("*.py") if "__pycache__" not in str(f))
             else:
                 # glob pattern
                 result.extend(
-                    f for f in self.root.glob(p)
-                    if f.is_file() and "__pycache__" not in str(f)
+                    f for f in self.root.glob(p) if f.is_file() and "__pycache__" not in str(f)
                 )
         return result
 
@@ -286,6 +284,7 @@ class ComparativeBenchmark:
 
     def run(self, scenarios: list[Scenario] | None = None) -> ComparativeReport:
         from datetime import datetime
+
         scenarios = scenarios or BUILTIN_SCENARIOS
         results = [self.run_scenario(s) for s in scenarios]
         return ComparativeReport(
@@ -358,11 +357,11 @@ BUILTIN_SCENARIOS: list[Scenario] = [
 # ── Competitive gaps (from market analysis) ───────────────────────────────────
 
 COMPETITIVE_GAPS: list[str] = [
-    "Framework routing (CodeGraph): KG indexes files but doesn't resolve Django URL→view or FastAPI route→handler",
+    "Framework routing: KG indexes files but doesn't resolve Django URL→view or FastAPI route→handler",
     "Quantified benchmark numbers: no published 'X% fewer tokens' claim with methodology — now addressable with this benchmark",
-    "Slash command richness (SuperClaude): 30+ slash commands vs current set",
+    "Slash command richness: 30+ slash commands vs current set",
     "Party Mode wired to LLM: review --party runs but returns scaffold results (no actual model calls)",
-    "Behavioral modes as first-class citizens (SuperClaude): preset system exists but lacks named 'fast/quality/cost' modes",
+    "Behavioral modes as first-class citizens: preset system exists but lacks named 'fast/quality/cost' modes",
     "Visual telemetry: no dashboard showing token savings over time (only CLI tables)",
     "Extension ecosystem: registry has 3 built-ins, no community marketplace yet",
 ]
@@ -379,6 +378,7 @@ IMPROVEMENT_SUGGESTIONS: list[str] = [
 
 
 # ── Report formatting ─────────────────────────────────────────────────────────
+
 
 def format_comparative_report(report: ComparativeReport) -> str:
     lines = [
@@ -399,17 +399,17 @@ def format_comparative_report(report: ComparativeReport) -> str:
         lines += [
             f"┌─ [{r.difficulty.upper()}] {r.scenario_id}",
             f"│  Task: {r.task[:80]}",
-            f"│",
-            f"│  Token Efficiency",
+            "│",
+            "│  Token Efficiency",
             f"│    Naive baseline  : {r.naive_tokens:>8,} tokens",
             f"│    OpenContext     : {r.optimized_tokens:>8,} tokens",
             f"│    Reduction       : {reduction_bar} {r.reduction_pct:.1f}%",
-            f"│",
-            f"│  Relevance",
+            "│",
+            "│  Relevance",
             f"│    Precision       : {r.precision * 100:.0f}%  (relevant files / retrieved files)",
             f"│    Recall          : {r.recall * 100:.0f}%  (retrieved / total naive scope)",
             f"│    F1              : {r.f1 * 100:.0f}%",
-            f"│",
+            "│",
             f"│  SDD Compliance    : {'✓ PASS' if r.sdd_compliant else '✗ FAIL'}",
         ]
         for artifact in r.sdd_artifacts:
@@ -419,7 +419,7 @@ def format_comparative_report(report: ComparativeReport) -> str:
             f"│    {r.tdd_details}",
             f"│  Privacy           : {'✓ CLEAN' if r.privacy_clean else '✗ LEAK DETECTED'}",
             f"│    {r.privacy_details}",
-            f"│",
+            "│",
             f"│  Overall Score     : {score:.1f}/100",
             f"└{'─' * 60}",
             "",

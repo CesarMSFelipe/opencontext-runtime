@@ -131,9 +131,9 @@ class TestBenchmarkSuite:
         """Load-bearing test: all built-in cases must pass consistently."""
         suite = BenchmarkSuite()
         result = suite.run_all()
-        assert result.passed == len(
-            suite.list_cases()
-        ), f"Expected all {len(suite.list_cases())} cases to pass, got {result.passed}/{result.total_cases}"
+        assert result.passed == len(suite.list_cases()), (
+            f"Expected all {len(suite.list_cases())} cases to pass, got {result.passed}/{result.total_cases}"
+        )
 
     def test_run_invalid_id_raises(self) -> None:
         """Running with an unknown case ID should raise ValueError."""

@@ -1,10 +1,14 @@
 """Telemetry CLI command — show cumulative token savings."""
+
 from __future__ import annotations
+
 from typing import Any
+
 from rich.console import Console
 from rich.table import Table
 
 console = Console()
+
 
 def add_telemetry_parser(subparsers: Any) -> None:
     tel_parser = subparsers.add_parser("telemetry", help="Token savings telemetry.")
@@ -14,6 +18,7 @@ def add_telemetry_parser(subparsers: Any) -> None:
     show_parser.add_argument("--last", type=int, default=None, help="Show only last N events.")
     tel_sub.add_parser("clear", help="Clear telemetry data.").add_argument("--root", default=".")
 
+
 def handle_telemetry(args: Any) -> None:
     command = args.telemetry_command
     root = getattr(args, "root", ".")
@@ -22,11 +27,15 @@ def handle_telemetry(args: Any) -> None:
     elif command == "clear":
         _handle_clear(root)
 
+
 def _handle_show(root: str, last: int | None = None) -> None:
     from opencontext_core.evaluation.telemetry import load_telemetry
+
     store = load_telemetry(root)
     if not store.events:
-        console.print("[dim]No telemetry data yet. Run 'opencontext benchmark run' to start tracking.[/]")
+        console.print(
+            "[dim]No telemetry data yet. Run 'opencontext pack . --query <task>' to start tracking.[/]"
+        )
         return
 
     events = store.events[-last:] if last else store.events
@@ -52,8 +61,10 @@ def _handle_show(root: str, last: int | None = None) -> None:
         )
     console.print(table)
 
+
 def _handle_clear(root: str) -> None:
     from pathlib import Path
+
     path = Path(root) / ".opencontext/telemetry.json"
     if path.exists():
         path.unlink()
