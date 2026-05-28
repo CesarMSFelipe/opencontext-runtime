@@ -17,6 +17,7 @@ from opencontext_core.project.profiles import (
     GenericTechnologyProfile,
     ProfileDetectionResult,
     TechnologyProfile,
+    scanners_for_profiles,
 )
 
 
@@ -64,9 +65,18 @@ class ProjectIndexer:
                     except Exception:
                         pass
 
+        # Run route scanners for detected profiles
+        detected_profile_names = [
+            d.profile for d in detections if d.profile != GENERIC_PROFILE and d.score > 0
+        ]
+        routes = []
+        for scanner in scanners_for_profiles(detected_profile_names):
+            routes.extend(scanner.scan(project_root, [file.path for file in project_files]))
+
         metadata = {
             "file_count": len(project_files),
             "symbol_count": len(symbols),
+            "routes": [route.model_dump() for route in routes],
             "safety": {
                 "files_with_potential_secrets": [
                     file.path
