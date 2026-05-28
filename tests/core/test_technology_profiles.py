@@ -111,11 +111,11 @@ def test_core_python_sources_do_not_contain_first_party_profile_logic() -> None:
     forbidden = ("drupal", "symfony", "laravel", "wordpress", "django", "fastapi")
     # Framework route detection legitimately references framework names
     excluded = {
-        "indexing/framework_routes.py",   # route parser for django/fastapi/flask
-        "indexing/framework_router.py",   # router detection, sibling to framework_routes
-        "evaluation/comparative.py",      # benchmark tasks use framework names as test data
-        "workflow/extension_registry.py", # extension registry lists framework-related extensions
-        "project/profiles.py",            # technology profile detection checks framework names
+        "indexing/framework_routes.py",  # route parser for django/fastapi/flask
+        "indexing/framework_router.py",  # router detection, sibling to framework_routes
+        "evaluation/comparative.py",  # benchmark tasks use framework names as test data
+        "workflow/extension_registry.py",  # extension registry lists framework-related extensions
+        "project/profiles.py",  # technology profile detection checks framework names
     }
     offenders: list[str] = []
     for path in core_root.rglob("*.py"):

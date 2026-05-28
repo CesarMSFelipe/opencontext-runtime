@@ -82,7 +82,9 @@ class WorkflowEngine:
             self._run_named_step(state, step_def)
             return
 
-        step_type = step_def.get("type") if isinstance(step_def, dict) else getattr(step_def, "type", None)  # type: ignore[union-attr]
+        step_type = (
+            step_def.get("type") if isinstance(step_def, dict) else getattr(step_def, "type", None)
+        )  # type: ignore[union-attr]
 
         if step_type == "parallel":
             child_steps = (

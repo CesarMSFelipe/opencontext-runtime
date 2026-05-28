@@ -51,19 +51,34 @@ BUILTIN_PRESETS: dict[str, Preset] = {
     "fast": Preset(
         name="fast",
         description="Low-latency mode: cheap model, reduced token budget, skip heavy compression.",
-        base={"sdd": {"sdd_model_profile": "cheap"}, "context": {"max_input_tokens": 2000}, "output": {"max_output_tokens": 600}},
+        base={
+            "sdd": {"sdd_model_profile": "cheap"},
+            "context": {"max_input_tokens": 2000},
+            "output": {"max_output_tokens": 600},
+        },
         strategy="replace",
     ),
     "deep": Preset(
         name="deep",
         description="Maximum quality: premium model, large token budget, all features enabled.",
-        base={"sdd": {"sdd_model_profile": "premium"}, "context": {"max_input_tokens": 8000}, "output": {"max_output_tokens": 2000}},
+        base={
+            "sdd": {"sdd_model_profile": "premium"},
+            "context": {"max_input_tokens": 8000},
+            "output": {"max_output_tokens": 2000},
+        },
         strategy="replace",
     ),
     "privacy": Preset(
         name="privacy",
         description="Maximum privacy: air-gapped, no external providers, aggressive secret redaction.",
-        base={"security": {"mode": "air_gapped", "external_providers_enabled": False, "fail_closed": True}, "providers": {"external_enabled": False}},
+        base={
+            "security": {
+                "mode": "air_gapped",
+                "external_providers_enabled": False,
+                "fail_closed": True,
+            },
+            "providers": {"external_enabled": False},
+        },
         strategy="replace",
     ),
 }

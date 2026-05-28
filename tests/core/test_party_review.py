@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
 from opencontext_cli.commands.review_cmd import (
     PARTY_ROLES,
     generate_role_prompt,
     merge_reports,
 )
-
 
 # ── generate_role_prompt ─────────────────────────────────────────────────────
 
@@ -57,7 +54,11 @@ def test_merge_reports_groups_by_severity() -> None:
         {
             "role": "architect",
             "findings": [
-                {"severity": "high", "title": "Coupling issue", "details": "Module A depends on B."},
+                {
+                    "severity": "high",
+                    "title": "Coupling issue",
+                    "details": "Module A depends on B.",
+                },
                 {"severity": "low", "title": "Style nit", "details": "Minor issue."},
             ],
             "summary": "Architecture needs work.",
@@ -65,7 +66,11 @@ def test_merge_reports_groups_by_severity() -> None:
         {
             "role": "security",
             "findings": [
-                {"severity": "high", "title": "SQL injection risk", "details": "Unsanitized input."},
+                {
+                    "severity": "high",
+                    "title": "SQL injection risk",
+                    "details": "Unsanitized input.",
+                },
             ],
             "summary": "Critical security issues found.",
         },

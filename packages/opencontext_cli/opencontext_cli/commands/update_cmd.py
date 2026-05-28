@@ -11,7 +11,7 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from opencontext_core.update import UpdateCheck, UpdateChecker
+from opencontext_core.update import EcosystemUpdateChecker, UpdateCheck, UpdateChecker
 
 
 def _format_release_notes(check: UpdateCheck) -> str:
@@ -95,3 +95,16 @@ def handle_upgrade(args: Any) -> None:
         sys.exit(1)
     if not upgraded and not failed:
         print("  ✓ All packages are up to date.")
+
+    # Refresh ecosystem update cache (engram, etc.)
+    try:
+        eco = EcosystemUpdateChecker.refresh()
+        outdated_eco = [e for e in eco if e.is_outdated]
+        if outdated_eco:
+            print()
+            print("  Ecosystem updates available:")
+            for e in outdated_eco:
+                print(f"    {e.name}: {e.current_version} → {e.latest_version}")
+            print("  Run 'pip install --upgrade <package>' to update.")
+    except Exception:
+        pass

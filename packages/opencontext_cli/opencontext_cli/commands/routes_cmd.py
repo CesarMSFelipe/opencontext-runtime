@@ -1,26 +1,47 @@
 """Routes CLI command — detect and display framework route definitions."""
+
 from __future__ import annotations
+
 import json as _json
 from typing import Any
+
 from rich.console import Console
 from rich.table import Table
+
 from opencontext_core.indexing.framework_router import FrameworkRouter
 
 console = Console()
 
+
 def add_routes_parser(subparsers: Any) -> None:
-    routes_parser = subparsers.add_parser("routes", help="Detect framework route definitions (Django, FastAPI, Flask, Express, NestJS).")
+    routes_parser = subparsers.add_parser(
+        "routes",
+        help="Detect framework route definitions (Django, FastAPI, Flask, Express, NestJS).",
+    )
     routes_sub = routes_parser.add_subparsers(dest="routes_command", required=True)
     scan_parser = routes_sub.add_parser("scan", help="Scan project for route definitions.")
     scan_parser.add_argument("root", nargs="?", default=".", help="Project root.")
-    scan_parser.add_argument("--framework", default=None, choices=["django", "fastapi", "flask", "express", "nestjs"], help="Filter by framework.")
-    scan_parser.add_argument("--json", action="store_true", dest="output_json", help="Output as JSON.")
+    scan_parser.add_argument(
+        "--framework",
+        default=None,
+        choices=["django", "fastapi", "flask", "express", "nestjs"],
+        help="Filter by framework.",
+    )
+    scan_parser.add_argument(
+        "--json", action="store_true", dest="output_json", help="Output as JSON."
+    )
+
 
 def handle_routes(args: Any) -> None:
     command = args.routes_command
     root = getattr(args, "root", ".")
     if command == "scan":
-        _handle_scan(root, framework=getattr(args, "framework", None), output_json=getattr(args, "output_json", False))
+        _handle_scan(
+            root,
+            framework=getattr(args, "framework", None),
+            output_json=getattr(args, "output_json", False),
+        )
+
 
 def _handle_scan(root: str, framework: str | None = None, output_json: bool = False) -> None:
     with console.status("[bold green]Scanning for routes..."):
@@ -33,6 +54,7 @@ def _handle_scan(root: str, framework: str | None = None, output_json: bool = Fa
         return
     if output_json:
         import dataclasses
+
         print(_json.dumps([dataclasses.asdict(r) for r in routes], indent=2))
         return
     table = Table(title=f"Routes ({len(routes)} found)")

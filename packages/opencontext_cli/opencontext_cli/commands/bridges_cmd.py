@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from pathlib import Path
 from typing import Any
 
 from rich.console import Console
@@ -97,7 +96,9 @@ def _handle_scan(
     table.add_column("Target Hint", max_width=40)
 
     for b in bridges:
-        conf_style = "green" if b.confidence >= 0.85 else ("yellow" if b.confidence >= 0.7 else "dim")
+        conf_style = (
+            "green" if b.confidence >= 0.85 else ("yellow" if b.confidence >= 0.7 else "dim")
+        )
         table.add_row(
             b.source_file,
             str(b.line),
@@ -121,7 +122,8 @@ def _handle_show(root: str, symbol: str) -> None:
     bridges = detector.scan(root)
     sym = symbol.lower()
     filtered = [
-        b for b in bridges
+        b
+        for b in bridges
         if sym in b.source_file.lower()
         or sym in b.bridge_type.lower()
         or sym in b.target_hint.lower()

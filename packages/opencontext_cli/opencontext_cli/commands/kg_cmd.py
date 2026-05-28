@@ -67,9 +67,7 @@ def add_kg_parser(subparsers: Any) -> None:
             "  opencontext knowledge-graph view --output graph.md   Save to file\n"
         ),
     )
-    kg_view.add_argument(
-        "--max-nodes", type=int, default=50, help="Max nodes in Mermaid graph."
-    )
+    kg_view.add_argument("--max-nodes", type=int, default=50, help="Max nodes in Mermaid graph.")
     kg_view.add_argument(
         "--tree",
         action="store_true",
@@ -200,16 +198,26 @@ def handle_kg(args: Any) -> None:
 
         if json_output:
             import json as _json
-            print(_json.dumps({
-                "found": result.found,
-                "path": result.path,
-                "depth_exceeded": result.depth_exceeded,
-                "hops": result.hops,
-            }, indent=2))
+
+            print(
+                _json.dumps(
+                    {
+                        "found": result.found,
+                        "path": result.path,
+                        "depth_exceeded": result.depth_exceeded,
+                        "hops": result.hops,
+                    },
+                    indent=2,
+                )
+            )
         elif result.found:
-            console.print(f"[green]Found path[/] ([bold]{result.hops}[/] hop{'s' if result.hops != 1 else ''})")
+            console.print(
+                f"[green]Found path[/] ([bold]{result.hops}[/] hop{'s' if result.hops != 1 else ''})"
+            )
             for i, node in enumerate(result.path):
-                console.print(f"  {i + 1}. [bold]{node['name']}[/] ({node['file_path']}:{node['line']})")
+                console.print(
+                    f"  {i + 1}. [bold]{node['name']}[/] ({node['file_path']}:{node['line']})"
+                )
         else:
             msg = "Maximum depth reached." if result.depth_exceeded else "No path exists."
             console.print(f"[yellow]{msg}[/]")
@@ -242,43 +250,263 @@ def handle_kg(args: Any) -> None:
                 _display_rich_tree(kg)
         else:
             label = "Mermaid graph"
+            # Gather all data BEFORE mermaid generation closes the DB connection
+            import json as _json
+            from datetime import datetime as _dt
+
+            _stats = kg.get_stats()
+            _tree_data = _build_tree_data(kg, max_nodes)
             output = _generate_mermaid_graph(kg, max_nodes)
             if output_path:
                 with open(output_path, "w") as f:
                     f.write(output)
                 console.print(f"  ✓ {label} saved to [cyan]{output_path}[/]")
             else:
-                # Show Mermaid code and auto-generate an HTML viewer
                 console.print(output)
-
-                # Extract just the mermaid diagram code (without markdown fences or summary)
-                mermaid_code = output
-                if mermaid_code.startswith("```mermaid"):
-                    mermaid_code = mermaid_code.split("```mermaid", 1)[1]
-                closing = mermaid_code.find("\n```")
-                if closing >= 0:
-                    mermaid_code = mermaid_code[:closing]
-                mermaid_code = mermaid_code.strip()
+                _total_nodes = _stats.get("nodes", 0)
+                _total_files = _stats.get("files", 0)
+                _total_edges = _stats.get("edges", 0)
+                _generated_at = _dt.now().strftime("%Y-%m-%d %H:%M")
+                _tree_json = _json.dumps(_tree_data, ensure_ascii=False)
 
                 html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Knowledge Graph — Project Structure</title>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<title>Knowledge Graph — OpenContext</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <style>
-  body {{ background: #fff; color: #333; font-family: sans-serif; padding: 2rem; }}
-  .mermaid {{ max-width: 100%; }}
-  .info {{ margin-top: 1rem; color: #666; font-size: 0.9em; }}
+*,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
+:root{{
+  --bg:#080E1A;--surface:#0D1626;--border:#1A2840;
+  --teal:#00C9A7;--blue:#00A8E8;--purple:#845EC2;
+  --text:#A8C0D8;--muted:#3A5570;
+  --font:ui-monospace,'Cascadia Code','Fira Code',Consolas,monospace;
+}}
+html,body{{height:100%;overflow:hidden}}
+body{{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;display:flex;flex-direction:column}}
+header{{display:flex;align-items:center;gap:1.5rem;padding:1rem 2rem;border-bottom:1px solid var(--border);background:#060B14;flex-shrink:0}}
+.logo-art{{font-size:0.7rem;line-height:1.5;white-space:pre;color:var(--teal);user-select:none}}
+.logo-art .b{{color:var(--blue)}}.logo-art .p{{color:var(--purple)}}.logo-art .d{{color:var(--muted)}}
+.header-info h1{{font-size:1rem;font-weight:700;color:#E0EFFF;letter-spacing:.03em}}
+.header-info p{{font-size:.72rem;color:var(--muted);margin-top:.2rem}}
+.stats-bar{{display:flex;gap:.75rem;padding:.7rem 2rem;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;flex-wrap:wrap;align-items:center}}
+.chip{{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .8rem;border-radius:2rem;font-size:.74rem;font-weight:500;border:1px solid currentColor}}
+.chip-teal{{color:var(--teal);background:rgba(0,201,167,.07)}}
+.chip-blue{{color:var(--blue);background:rgba(0,168,232,.07)}}
+.chip-purple{{color:var(--purple);background:rgba(132,94,194,.07)}}
+.chip-dot{{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}}
+.hint{{margin-left:auto;font-size:.7rem;color:var(--muted);font-style:italic}}
+#tree-wrap{{flex:1;overflow:hidden;position:relative}}
+#tree-svg{{width:100%;height:100%;display:block;cursor:grab}}
+#tree-svg:active{{cursor:grabbing}}
+.nd{{font-family:var(--font);cursor:default}}
+.nd.clickable{{cursor:pointer}}
+.nd circle{{transition:r .18s,fill .18s,stroke .18s}}
+.nd.clickable:hover circle{{filter:brightness(1.3)}}
+.nd text{{font-size:12px;dominant-baseline:central;pointer-events:none;transition:opacity .2s}}
+.nd .nd-pill{{rx:4;transition:fill .18s;pointer-events:all}}
+.nd.clickable:hover .nd-pill{{fill:rgba(255,255,255,0.05)}}
+.lk{{fill:none;stroke:#1A3050;stroke-width:1.5;stroke-opacity:.8}}
+.toolbar{{display:flex;gap:.5rem;margin-left:auto;align-items:center}}
+.btn{{padding:.2rem .75rem;border-radius:.3rem;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:var(--font);font-size:.72rem;cursor:pointer;transition:border-color .15s,color .15s}}
+.btn:hover{{border-color:var(--teal);color:var(--teal)}}
+footer{{padding:.5rem 2rem;border-top:1px solid var(--border);font-size:.7rem;color:var(--muted);display:flex;justify-content:space-between;flex-shrink:0;align-items:center}}
+.leg{{display:flex;gap:1.2rem;align-items:center;flex-wrap:wrap}}
+.leg-dot{{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:.3rem;vertical-align:middle}}
 </style>
 </head>
 <body>
-<div class="mermaid">
-{mermaid_code}
+<header>
+  <div class="logo-art"><span>◉</span><span class="d">──</span><span class="b">◉</span><span class="d">──</span><span class="p">◉</span>
+<span class="d">│</span>     <span class="p">│</span>
+<span>◉</span><span class="d">──</span><span class="b">◉  </span><span class="p">◉</span>
+<span class="d">│  </span><span class="b">│</span></div>
+  <div class="header-info">
+    <h1>Knowledge Graph</h1>
+    <p>OpenContext Runtime &mdash; project structure</p>
+  </div>
+</header>
+<div class="stats-bar">
+  <span class="chip chip-teal"><span class="chip-dot"></span>{_total_nodes:,} symbols</span>
+  <span class="chip chip-blue"><span class="chip-dot"></span>{_total_files:,} files</span>
+  <span class="chip chip-purple"><span class="chip-dot"></span>{_total_edges:,} call edges</span>
+  <div class="toolbar">
+    <button class="btn" id="btn-expand">Expand all</button>
+    <button class="btn" id="btn-collapse">Collapse all</button>
+    <button class="btn" id="btn-fit">Fit view</button>
+  </div>
 </div>
-<div class="info">Auto-generated from OpenContext knowledge graph</div>
-<script>mermaid.initialize({{ startOnLoad: true }});</script>
+<div id="tree-wrap"><svg id="tree-svg"></svg></div>
+<footer>
+  <div class="leg">
+    <span><span class="leg-dot" style="background:#00C9A7"></span>project root</span>
+    <span><span class="leg-dot" style="background:#00A8E8"></span>module <span style="color:var(--muted);font-size:.65rem">(click to collapse)</span></span>
+    <span><span class="leg-dot" style="background:#0A1828;border:1px solid #00A8E8;border-radius:50%"></span>class</span>
+    <span><span class="leg-dot" style="background:#0A1820;border:1px solid #00C9A7;border-radius:50%"></span>function</span>
+    <span style="color:var(--muted)">Scroll to zoom &nbsp;·&nbsp; Drag to pan</span>
+  </div>
+  <span>Generated {_generated_at}</span>
+</footer>
+<script>
+(function(){{
+const DATA = {_tree_json};
+const C = {{
+  root:    {{fill:'#00C9A7', stroke:'#009A80', text:'#060B14', r:12}},
+  module:  {{fill:'#0D1F36', stroke:'#00A8E8', text:'#7DC8F8', r:10}},
+  class:   {{fill:'#0A1828', stroke:'#244A70', text:'#59B0E8', r:6}},
+  function:{{fill:'#0A1820', stroke:'#1E4030', text:'#36C9A2', r:6}},
+}};
+
+const svg = d3.select('#tree-svg');
+const g   = svg.append('g').attr('class','root-g');
+const zoom = d3.zoom().scaleExtent([0.05,8]).on('zoom',e=>g.attr('transform',e.transform));
+svg.call(zoom).on('dblclick.zoom',null);
+
+const tree = d3.tree().nodeSize([38, 290]);
+const root = d3.hierarchy(DATA);
+let uid=0;
+
+function diagonal(s,d){{
+  return `M${{s.y}},${{s.x}}C${{(s.y+d.y)/2}},${{s.x}} ${{(s.y+d.y)/2}},${{d.x}} ${{d.y}},${{d.x}}`;
+}}
+function sy(d){{ return d.y0!==undefined?d.y0:d.y; }}
+function sx(d){{ return d.x0!==undefined?d.x0:d.x; }}
+
+function isToggleable(d){{ return !!(d.children||d._children); }}
+
+function update(src, dur){{
+  const duration = dur!==undefined?dur:280;
+  tree(root);
+  const nodes = root.descendants();
+  const links = root.links();
+
+  // links
+  const lk = g.selectAll('path.lk').data(links, d=>d.target.id);
+  lk.enter().insert('path','g').attr('class','lk')
+    .attr('d',()=>diagonal({{y:sy(src),x:sx(src)}},{{y:sy(src),x:sx(src)}}))
+    .merge(lk).transition().duration(duration).attr('d',d=>diagonal(d.source,d.target));
+  lk.exit().transition().duration(duration)
+    .attr('d',()=>diagonal({{y:src.y,x:src.x}},{{y:src.y,x:src.x}})).remove();
+
+  // nodes
+  const nd = g.selectAll('g.nd').data(nodes, d=>d.id||(d.id=++uid));
+  const enter = nd.enter().append('g').attr('class','nd')
+    .attr('transform', d=>`translate(${{sy(src)}},${{sx(src)}})`);
+
+  enter.append('title');
+  // invisible wider hit-area rect
+  enter.append('rect').attr('class','nd-pill')
+    .attr('y',-14).attr('height',28).attr('fill','transparent');
+  enter.append('circle').attr('r',0);
+  // toggle indicator for module nodes
+  enter.append('text').attr('class','nd-toggle')
+    .attr('dominant-baseline','central')
+    .style('pointer-events','none')
+    .style('font-size','10px')
+    .style('user-select','none');
+  enter.append('text').attr('class','nd-label').style('opacity',0);
+
+  // click on the pill or circle
+  enter.on('click',(e,d)=>{{
+    if(!isToggleable(d)) return;
+    if(d.children){{d._children=d.children;d.children=null;}}
+    else{{d.children=d._children;d._children=null;}}
+    update(d);
+  }});
+
+  const all = nd.merge(enter);
+  all.classed('clickable', d=>isToggleable(d));
+  all.transition().duration(duration).attr('transform',d=>`translate(${{d.y}},${{d.x}})`);
+
+  all.select('title').text(d=>
+    d.data.type==='module'?d.data.path:
+    d.data.file?`${{d.data.file}}:${{d.data.line||''}}`:d.data.name
+  );
+
+  // pill width
+  all.select('.nd-pill')
+    .attr('x', d=>d.depth===0?-80:d.children||d._children?-170:-10)
+    .attr('width', d=>d.depth===0?180:200)
+    .attr('rx', 4);
+
+  all.select('circle')
+    .attr('r', d=>(C[d.data.type]||C.function).r)
+    .style('fill',   d=>(C[d.data.type]||C.function).fill)
+    .style('stroke', d=>(C[d.data.type]||C.function).stroke)
+    .style('stroke-width', d=>d.data.type==='root'?2.5:1.8);
+
+  // expand/collapse indicator
+  all.select('.nd-toggle')
+    .attr('x', d=>(d.children||d._children)?-18:0)
+    .attr('text-anchor','middle')
+    .text(d=>{{
+      if(d.data.type!=='module') return '';
+      return d.children?'▾':'▸';
+    }})
+    .style('fill','#00A8E8')
+    .style('opacity', d=>d.data.type==='module'?1:0);
+
+  all.select('.nd-label')
+    .attr('x', d=>d.depth===0?18:d.children||d._children?-22:16)
+    .attr('text-anchor', d=>d.depth===0?'start':d.children||d._children?'end':'start')
+    .text(d=>{{
+      if(d.data.type==='module'){{
+        const open = !!d.children;
+        const n = (d.children||d._children||[]).length;
+        return `${{d.data.name}}  (${{n}})`;
+      }}
+      return d.data.name;
+    }})
+    .style('fill',   d=>(C[d.data.type]||C.function).text)
+    .style('font-size',d=>d.data.type==='root'?'14px':d.data.type==='module'?'13px':'11.5px')
+    .style('font-weight',d=>['root','module'].includes(d.data.type)?'600':'400')
+    .transition().duration(duration).style('opacity',1);
+
+  nd.exit().transition().duration(duration)
+    .attr('transform',`translate(${{src.y}},${{src.x}})`)
+    .style('opacity',0).remove();
+
+  nodes.forEach(d=>{{d.x0=d.x;d.y0=d.y;}});
+}}
+
+function zoomFit(dur){{
+  const wrap = document.getElementById('tree-wrap');
+  const W=wrap.clientWidth, H=wrap.clientHeight;
+  const bb = g.node().getBBox();
+  if(!bb.width||!bb.height) return;
+  const pad=60;
+  const scale = Math.min((W-pad*2)/bb.width, (H-pad*2)/bb.height, 1.4);
+  const tx = pad - bb.x*scale + (W - bb.width*scale - pad*2)/2;
+  const ty = pad - bb.y*scale + (H - bb.height*scale - pad*2)/2;
+  svg.transition().duration(dur||400)
+    .call(zoom.transform, d3.zoomIdentity.translate(tx,ty).scale(scale));
+}}
+
+function expandAll(){{
+  root.each(d=>{{ if(d._children){{d.children=d._children;d._children=null;}} }});
+  update(root,320);
+  setTimeout(zoomFit,380);
+}}
+function collapseAll(){{
+  root.descendants().filter(d=>d.depth===1).forEach(d=>{{
+    if(d.children){{d._children=d.children;d.children=null;}}
+  }});
+  update(root,320);
+  setTimeout(zoomFit,380);
+}}
+
+document.getElementById('btn-expand').addEventListener('click',expandAll);
+document.getElementById('btn-collapse').addEventListener('click',collapseAll);
+document.getElementById('btn-fit').addEventListener('click',()=>zoomFit(400));
+
+// Start fully expanded
+root.x0=0; root.y0=0;
+update(root, 0);
+setTimeout(zoomFit, 80);
+}})();
+</script>
 </body>
 </html>"""
                 html_path = os.path.join(os.getcwd(), "opencontext-kg-view.html")
@@ -319,18 +547,88 @@ def _find_callers(kg: KnowledgeGraph, symbol: str, depth: int) -> list[dict[str,
     return analyzer.get_callers(node_id, depth)
 
 
-def _generate_mermaid_graph(kg: KnowledgeGraph, max_nodes: int = 50) -> str:
-    """Generate a Mermaid graph showing the project's structure.
+def _build_tree_data(kg: KnowledgeGraph, max_nodes: int = 50) -> dict[str, Any]:
+    """Build a JSON-serializable hierarchy for the D3 tree viewer.
 
-    Groups nodes by module directory and shows key classes with
-    cross-module call relationships. Experimental — gives a quick
-    architectural overview after indexing.
+    Returns: project root → module nodes → symbol leaves.
+    Does NOT close the DB connection (caller is responsible).
     """
     import collections
+    from pathlib import Path
+
+    conn = kg.db._connect()
+    rows = conn.execute("""
+        SELECT n.name, n.kind, n.file_path, n.line
+        FROM nodes n
+        WHERE n.kind IN ('class', 'function')
+          AND (n.container IS NULL OR n.container = '')
+        ORDER BY n.file_path, n.kind, n.name
+    """).fetchall()
+
+    def _module_key(path: str) -> str:
+        parts = path.split("/")
+        if len(parts) >= 3 and parts[0] == "packages":
+            return f"{parts[0]}/{parts[1]}"
+        return parts[0]
+
+    dir_groups: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
+    for name, kind, file_path, line in rows:
+        dir_groups[_module_key(file_path)].append(
+            {"name": name, "kind": kind, "file": file_path, "line": line or 0}
+        )
+
+    sorted_groups = sorted(dir_groups.items(), key=lambda x: -len(x[1]))
+    num_groups = min(len(sorted_groups), max(5, max_nodes // 5))
+    per_group = max(2, max_nodes // num_groups)
+    included_groups: list[tuple[str, list[dict[str, Any]]]] = []
+    included_count = 0
+    for i, (group_key, nodes) in enumerate(sorted_groups):
+        if i >= num_groups:
+            break
+        share = min(per_group, len(nodes))
+        if included_count + share > max_nodes:
+            share = max_nodes - included_count
+        if share <= 0:
+            break
+        included_groups.append((group_key, nodes[:share]))
+        included_count += share
+
+    project_name = Path.cwd().name
+    return {
+        "name": project_name,
+        "type": "root",
+        "children": [
+            {
+                "name": group_key.split("/")[-1] if "/" in group_key else group_key,
+                "type": "module",
+                "path": group_key,
+                "total": len(dir_groups[group_key]),
+                "children": [
+                    {
+                        "name": n["name"],
+                        "type": n["kind"],
+                        "file": n["file"],
+                        "line": n["line"],
+                    }
+                    for n in nodes
+                ],
+            }
+            for group_key, nodes in included_groups
+        ],
+    }
+
+
+def _generate_mermaid_graph(kg: KnowledgeGraph, max_nodes: int = 50) -> str:
+    """Generate a Mermaid tree graph: project root → modules → symbols.
+
+    Hierarchy: ROOT node at top → module header nodes → class/function leaves.
+    Cross-module call edges are shown as dashed arrows.
+    """
+    import collections
+    from pathlib import Path
 
     conn = kg.db._connect()
 
-    # Get all top-level classes and functions
     rows = conn.execute("""
         SELECT n.name, n.kind, n.file_path
         FROM nodes n
@@ -339,36 +637,26 @@ def _generate_mermaid_graph(kg: KnowledgeGraph, max_nodes: int = 50) -> str:
         ORDER BY n.file_path, n.kind, n.name
     """).fetchall()
 
-    # Build a group key that reflects the module structure
     def _module_key(path: str) -> str:
         parts = path.split("/")
         if len(parts) >= 3 and parts[0] == "packages":
-            # packages/opencontext_core/opencontext_core/...
             return f"{parts[0]}/{parts[1]}"
-        # tests/, docs/, examples/, or root files
         return parts[0]
 
     dir_groups: dict[str, list[dict[str, str]]] = collections.defaultdict(list)
     for name, kind, file_path in rows:
-        dir_groups[_module_key(file_path)].append({
-            "name": name,
-            "kind": kind,
-            "file": file_path,
-        })
+        dir_groups[_module_key(file_path)].append({"name": name, "kind": kind, "file": file_path})
 
-    total_nodes = sum(len(nodes) for nodes in dir_groups.values())
+    total_nodes = sum(len(v) for v in dir_groups.values())
 
-    # Pick groups — spread max_nodes evenly so smaller modules get visibility
     sorted_groups = sorted(dir_groups.items(), key=lambda x: -len(x[1]))
     num_groups = min(len(sorted_groups), max(5, max_nodes // 5))
-    # Give each group a fair share: at least 2 per group, leftovers to biggest
     per_group = max(2, max_nodes // num_groups)
     included_groups: list[tuple[str, list[dict[str, str]]]] = []
     included_count = 0
     for i, (group_key, nodes) in enumerate(sorted_groups):
         if i >= num_groups:
             break
-        # Smaller groups get fewer slots
         share = min(per_group, len(nodes))
         if included_count + share > max_nodes:
             share = max_nodes - included_count
@@ -379,41 +667,61 @@ def _generate_mermaid_graph(kg: KnowledgeGraph, max_nodes: int = 50) -> str:
 
     node_id_map: dict[str, str] = {}
     node_counter = 0
+    project_name = Path.cwd().name
 
     lines: list[str] = []
     lines.append("```mermaid")
     lines.append("flowchart TD")
     lines.append("  %% Project structure — auto-generated from knowledge graph")
-    lines.append(f"  %% {included_count} symbols from {len(included_groups)} modules (max {max_nodes})")
+    lines.append(
+        f"  %% {included_count} symbols from {len(included_groups)} modules (max {max_nodes})"
+    )
+    lines.append("")
+    # Project root node at the top
+    safe_proj = project_name.replace('"', "'")
+    lines.append(f'  ROOT(["◎ {safe_proj}"]):::root')
+    lines.append("")
 
-    for group_key, nodes in included_groups:
-        sub_nodes: list[str] = []
+    for group_idx, (group_key, nodes) in enumerate(included_groups):
+        group_id = group_key.replace("/", "_").replace("-", "_")
+        mod_hdr_id = f"MH{group_idx}"
+        short_name = group_key.split("/")[-1] if "/" in group_key else group_key
+        safe_short = short_name.replace('"', "'")
+        safe_group = group_key.replace('"', "'")
+
+        sym_nodes: list[str] = []
+        hdr_edges: list[str] = []
         for n in nodes:
             node_counter += 1
             nid = f"N{node_counter}"
             safe_name = n["name"].replace('"', "'")
-            shape = "[" if n["kind"] == "function" else "(["
-            shape_end = "]" if n["kind"] == "function" else "])"
-            sub_nodes.append(f"    {nid}{shape}\"{safe_name}\"{shape_end}")
+            if n["kind"] == "class":
+                sym_nodes.append(f'    {nid}(["{safe_name}"]):::cls')
+            else:
+                sym_nodes.append(f'    {nid}["{safe_name}"]:::fn')
+            hdr_edges.append(f"    {mod_hdr_id} --> {nid}")
             node_id_map[f"{n['name']}|{n['file']}"] = nid
 
-        group_id = group_key.replace("/", "_").replace("-", "_")
-        lines.append(f"  subgraph {group_id}[\"{group_key}\"]")
-        lines.extend(sub_nodes)
+        lines.append(f'  subgraph {group_id}["{safe_group}"]')
+        lines.append(f'    {mod_hdr_id}["{safe_short}"]:::mod_hdr')
+        lines.extend(sym_nodes)
+        lines.extend(hdr_edges)
         lines.append("  end")
+        lines.append(f"  ROOT --> {mod_hdr_id}")
+        lines.append("")
 
-    # Cross-module edges only (avoid clutter)
+    # Cross-module call edges as dashed arrows
     edge_lines: list[str] = []
-    edge_set: set[tuple[int, int]] = set()
+    edge_set: set[tuple[str, str]] = set()
 
-    for group_key, nodes in included_groups:
+    for _group_key, nodes in included_groups:
         for n in nodes:
             src_key = f"{n['name']}|{n['file']}"
             src_id = node_id_map.get(src_key)
             if not src_id:
                 continue
-
-            edges = conn.execute("""
+            edges = conn.execute(
+                """
                 SELECT tgt.name, tgt.file_path
                 FROM edges e
                 JOIN nodes tgt ON e.target_node_id = tgt.id
@@ -422,36 +730,44 @@ def _generate_mermaid_graph(kg: KnowledgeGraph, max_nodes: int = 50) -> str:
                   AND tgt.name != src.name
                   AND tgt.kind IN ('class', 'function')
                 LIMIT 8
-            """, (n["name"], n["file"])).fetchall()
+            """,
+                (n["name"], n["file"]),
+            ).fetchall()
 
             for tgt_name, tgt_file in edges:
                 tgt_key = f"{tgt_name}|{tgt_file}"
                 tgt_id = node_id_map.get(tgt_key)
                 if not tgt_id:
                     continue
-                # Only show cross-module edges
                 if _module_key(n["file"]) == _module_key(tgt_file):
                     continue
-                pair = (node_counter - len(included_groups) + list(included_groups).index((group_key, nodes)), node_counter - len(included_groups) + nodes.index(n))
-                # Just use the IDs directly
-                if (int(src_id[1:]), int(tgt_id[1:])) not in edge_set:
-                    edge_set.add((int(src_id[1:]), int(tgt_id[1:])))
-                    edge_lines.append(f"  {src_id} --> {tgt_id}")
+                pair = (src_id, tgt_id)
+                if pair not in edge_set:
+                    edge_set.add(pair)
+                    edge_lines.append(f"  {src_id} -.-> {tgt_id}")
 
-    max_edges = max_nodes
     shown = 0
-    for e in edge_lines[:max_edges]:
+    for e in edge_lines[:max_nodes]:
         lines.append(e)
         shown += 1
     if len(edge_lines) > shown:
-        lines.append(f"  %% … {len(edge_lines) - shown} more cross-module edges")
+        lines.append(f"  %% ... {len(edge_lines) - shown} more cross-module call edges")
 
+    lines.append("")
+    lines.append("  classDef root fill:#00C9A7,color:#060B14,stroke:#00C9A7,font-weight:bold,rx:8")
+    lines.append("  classDef mod_hdr fill:#0F1E30,color:#00A8E8,stroke:#00A8E8,font-weight:bold")
+    lines.append("  classDef cls fill:#0A1520,color:#00A8E8,stroke:#1A2840")
+    lines.append("  classDef fn fill:#0A1520,color:#00C9A7,stroke:#1A2840")
     lines.append("```")
     lines.append("")
     lines.append(f"> **{included_count} symbols** in **{len(included_groups)} modules**")
-    lines.append(f"> {total_nodes} total indexed symbols. {len(edge_lines)} cross-module call edges.")
+    lines.append(
+        f"> {total_nodes} total indexed symbols. {len(edge_lines)} cross-module call edges."
+    )
     lines.append("> Paste into any Mermaid renderer (GitHub markdown, etc.).")
-    lines.append("> Classes: `(...)`  Functions: `[...]`")
+    lines.append(
+        "> Classes: `(...)` &nbsp; Functions: `[...]` &nbsp; Dashed arrows: cross-module calls"
+    )
 
     conn.close()
     return "\n".join(lines)
@@ -488,8 +804,13 @@ def _build_file_stats(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
             stats[path]["size"] = size
         else:
             stats[path] = {
-                "classes": 0, "funcs": 0, "methods": 0,
-                "total": 0, "loc": 0, "language": lang, "size": size,
+                "classes": 0,
+                "funcs": 0,
+                "methods": 0,
+                "total": 0,
+                "loc": 0,
+                "language": lang,
+                "size": size,
             }
 
     return stats
@@ -550,9 +871,11 @@ def _generate_ascii_tree(kg: KnowledgeGraph) -> str:
     total_methods = sum(s["methods"] for s in stats.values())
     total_loc = sum(s["loc"] for s in stats.values())
     lines.append("")
-    lines.append(f"Total: {len(file_list)} files  |  "
-                 f"{total_classes} classes  {total_funcs} functions  "
-                 f"{total_methods} methods  |  ~{total_loc} LOC")
+    lines.append(
+        f"Total: {len(file_list)} files  |  "
+        f"{total_classes} classes  {total_funcs} functions  "
+        f"{total_methods} methods  |  ~{total_loc} LOC"
+    )
 
     return "\n".join(lines)
 
@@ -599,9 +922,11 @@ def _generate_tree_text(kg: KnowledgeGraph) -> str:
     total_methods = sum(s["methods"] for s in stats.values())
     total_loc = sum(s["loc"] for s in stats.values())
     lines.append("")
-    lines.append(f"Total: {len(file_list)} files  |  "
-                 f"{total_classes} classes  {total_funcs} functions  "
-                 f"{total_methods} methods  |  ~{total_loc} LOC")
+    lines.append(
+        f"Total: {len(file_list)} files  |  "
+        f"{total_classes} classes  {total_funcs} functions  "
+        f"{total_methods} methods  |  ~{total_loc} LOC"
+    )
 
     return "\n".join(lines)
 
@@ -625,7 +950,9 @@ def _display_rich_tree(kg: KnowledgeGraph) -> None:
     for s in stats.values():
         lang = s.get("language", "unknown")
         languages[lang] = languages.get(lang, 0) + 1
-    lang_summary = "  ".join(f"[cyan]{lang}[/] x{cnt}" for lang, cnt in sorted(languages.items(), key=lambda x: -x[1]))
+    lang_summary = "  ".join(
+        f"[cyan]{lang}[/] x{cnt}" for lang, cnt in sorted(languages.items(), key=lambda x: -x[1])
+    )
 
     dashboard = (
         f"[bold]Project Overview[/]\n\n"
@@ -679,10 +1006,6 @@ def _display_rich_tree(kg: KnowledgeGraph) -> None:
     lang_rows = []
     for lang, cnt in sorted(languages.items(), key=lambda x: -x[1]):
         lang_loc = sum(s["loc"] for s in stats.values() if s.get("language") == lang)
-        lang_syms = sum(
-            s["classes"] + s["funcs"] + s["methods"]
-            for s in stats.values() if s.get("language") == lang
-        )
         # Unicode bar
         pct = lang_loc / total_loc * 100 if total_loc else 0
         bar_len = max(1, int(pct / 5))

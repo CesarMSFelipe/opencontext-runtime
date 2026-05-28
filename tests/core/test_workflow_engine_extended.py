@@ -6,17 +6,14 @@ and pause/resume.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from opencontext_core.errors import ConfigurationError
 from opencontext_core.models.workflow import WorkflowRunState
 from opencontext_core.workflow.engine import WorkflowEngine
 from opencontext_core.workflow.steps import WorkflowServices
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

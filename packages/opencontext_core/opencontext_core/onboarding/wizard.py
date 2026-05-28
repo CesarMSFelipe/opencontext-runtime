@@ -285,7 +285,7 @@ class OnboardingWizard:
                     "[bold]Next steps:[/]",
                     "  • Run [cyan]opencontext doctor[/] to verify your setup",
                     "  • Run [cyan]opencontext index .[/] to re-index if needed",
-                    "  • Run [cyan]opencontext pack . --query \"explain\"[/] to test context",
+                    '  • Run [cyan]opencontext pack . --query "explain"[/] to test context',
                 ]
             ),
             title="Setup Summary",

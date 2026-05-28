@@ -1,6 +1,6 @@
 """Find test files affected by source changes.
 
-CodeGraph-style dependency tracing to identify which tests need to run
+Uses dependency tracing to identify which tests need to run
 after code modifications.
 """
 

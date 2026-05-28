@@ -27,6 +27,12 @@ pip-wheel-metadata/
 .opencontext/
 tmp/opencontext-proof/
 
+# Generated knowledge graph viewer (created by `opencontext knowledge-graph view`)
+opencontext-kg-view.html
+
+# SDD development workspace (local only)
+openspec/
+
 # Local agent harness state and generated analysis output
 .agents/
 .instructions.md

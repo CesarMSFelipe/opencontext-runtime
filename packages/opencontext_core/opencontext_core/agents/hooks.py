@@ -34,9 +34,7 @@ class HookContext:
     event: HookEvent
     project_root: str
     data: dict[str, Any] = field(default_factory=dict)
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 HookCallback = Callable[[HookContext], None]
@@ -51,9 +49,7 @@ class HookRegistry:
     """
 
     def __init__(self) -> None:
-        self._hooks: dict[HookEvent, list[HookCallback]] = {
-            event: [] for event in HookEvent
-        }
+        self._hooks: dict[HookEvent, list[HookCallback]] = {event: [] for event in HookEvent}
 
     def register(self, event: HookEvent, callback: HookCallback) -> None:
         """Register a callback for an event.
@@ -91,9 +87,7 @@ class HookRegistry:
                 callback(context)
                 results.append({"status": "ok"})
             except Exception as exc:
-                logger.warning(
-                    "Hook callback failed for %s: %s", event.value, exc
-                )
+                logger.warning("Hook callback failed for %s: %s", event.value, exc)
                 results.append({"status": "error", "error": str(exc)})
         return results
 

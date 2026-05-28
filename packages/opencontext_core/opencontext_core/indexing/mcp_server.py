@@ -1,14 +1,14 @@
 """MCP server exposing knowledge graph tools.
 
 Provides tools for AI agents to query the code knowledge graph:
-- codegraph_search: Find symbols by name
-- codegraph_context: Build relevant context
-- codegraph_callers: Find callers
-- codegraph_callees: Find callees
-- codegraph_impact: Analyze impact
-- codegraph_node: Get node details
-- codegraph_files: List indexed files
-- codegraph_status: Get database stats
+- opencontext_search: Find symbols by name
+- opencontext_context: Build relevant context
+- opencontext_callers: Find callers
+- opencontext_callees: Find callees
+- opencontext_impact: Analyze impact
+- opencontext_node: Get node details
+- opencontext_files: List indexed files
+- opencontext_status: Get database stats
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from opencontext_core.indexing.impact_analysis import ImpactAnalyzer
 from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 
 
-class CodeGraphMCPServer:
+class KnowledgeGraphMCPServer:
     """MCP server for knowledge graph tools."""
 
     def __init__(
@@ -39,7 +39,7 @@ class CodeGraphMCPServer:
 
     # Tool implementations
 
-    def codegraph_search(self, query: str, limit: int = 20) -> dict[str, Any]:
+    def opencontext_search(self, query: str, limit: int = 20) -> dict[str, Any]:
         """Search symbols by name."""
 
         results = self.db.search_fts(query, limit)
@@ -49,10 +49,9 @@ class CodeGraphMCPServer:
             "results": results,
         }
 
-    def codegraph_context(self, task: str, max_nodes: int = 20) -> dict[str, Any]:
+    def opencontext_context(self, task: str, max_nodes: int = 20) -> dict[str, Any]:
         """Build relevant code context for a task."""
 
-        # Simple approach: search for task keywords and return top nodes
         results = self.db.search_fts(task, max_nodes)
         return {
             "task": task,
@@ -60,10 +59,9 @@ class CodeGraphMCPServer:
             "nodes": results,
         }
 
-    def codegraph_callers(self, symbol: str, depth: int = 1) -> dict[str, Any]:
+    def opencontext_callers(self, symbol: str, depth: int = 1) -> dict[str, Any]:
         """Find what calls a symbol."""
 
-        # Find node by name
         conn = self.db._connect()
         rows = conn.execute("SELECT id FROM nodes WHERE name = ? LIMIT 1", (symbol,)).fetchall()
 
@@ -79,7 +77,7 @@ class CodeGraphMCPServer:
             "count": len(callers),
         }
 
-    def codegraph_callees(self, symbol: str, depth: int = 1) -> dict[str, Any]:
+    def opencontext_callees(self, symbol: str, depth: int = 1) -> dict[str, Any]:
         """Find what a symbol calls."""
 
         conn = self.db._connect()
@@ -97,7 +95,7 @@ class CodeGraphMCPServer:
             "count": len(callees),
         }
 
-    def codegraph_impact(self, symbol: str, depth: int = 2) -> dict[str, Any]:
+    def opencontext_impact(self, symbol: str, depth: int = 2) -> dict[str, Any]:
         """Analyze impact of changing a symbol."""
 
         conn = self.db._connect()
@@ -112,7 +110,6 @@ class CodeGraphMCPServer:
                 "transitive_dependents": [],
             }
 
-        # Analyze first matching node
         result = self.impact.analyze(rows[0]["id"], depth)
 
         return {
@@ -124,7 +121,7 @@ class CodeGraphMCPServer:
             "depth": result.depth,
         }
 
-    def codegraph_node(self, symbol: str, include_code: bool = True) -> dict[str, Any]:
+    def opencontext_node(self, symbol: str, include_code: bool = True) -> dict[str, Any]:
         """Get details about a specific symbol."""
 
         conn = self.db._connect()
@@ -147,7 +144,7 @@ class CodeGraphMCPServer:
             "signature": row["signature"],
         }
 
-    def codegraph_files(self) -> dict[str, Any]:
+    def opencontext_files(self) -> dict[str, Any]:
         """Get indexed file structure."""
 
         conn = self.db._connect()
@@ -158,7 +155,7 @@ class CodeGraphMCPServer:
             "files": [{"path": r["path"], "language": r["language"]} for r in rows],
         }
 
-    def codegraph_status(self) -> dict[str, Any]:
+    def opencontext_status(self) -> dict[str, Any]:
         """Get index health and statistics."""
 
         stats = self.db.get_stats()

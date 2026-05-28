@@ -8,6 +8,7 @@ run automatically at the corresponding agent lifecycle event.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 from .hooks import HookContext, HookEvent
@@ -51,7 +52,7 @@ def on_stop(context: HookContext) -> None:
 
 
 # Map events to their default handlers for bulk registration.
-DEFAULT_HANDLERS: dict[HookEvent, list[callable]] = {
+DEFAULT_HANDLERS: dict[HookEvent, list[Callable]] = {
     HookEvent.SESSION_START: [on_session_start],
     HookEvent.PRE_READ: [on_pre_read],
     HookEvent.PRE_EDIT: [on_pre_edit],

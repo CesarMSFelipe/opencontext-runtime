@@ -6,10 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import pytest
-
 from opencontext_cli.commands.sync_cmd import parse_tasks_from_md
-
 
 # ── parse_tasks_from_md ──────────────────────────────────────────────────────
 

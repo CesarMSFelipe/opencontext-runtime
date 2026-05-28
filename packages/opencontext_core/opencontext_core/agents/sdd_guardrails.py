@@ -6,7 +6,7 @@ output, helping agents avoid shallow or premature work.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

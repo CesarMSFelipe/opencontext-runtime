@@ -124,8 +124,9 @@ class TestWorkflowTracks:
     """Test workflow track support."""
 
     def test_quick_track_three_phases(self, tmp_path: Path) -> None:
-        config = SDDConfig(artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}},
-                           track="quick")
+        config = SDDConfig(
+            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}, track="quick"
+        )
         orch = SDDOrchestrator(config=config)
         orch.start_change("test")
         assert orch._track == "quick"
@@ -140,8 +141,10 @@ class TestWorkflowTracks:
         assert orch.is_complete()
 
     def test_standard_track_five_phases(self, tmp_path: Path) -> None:
-        config = SDDConfig(artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}},
-                           track="standard")
+        config = SDDConfig(
+            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}},
+            track="standard",
+        )
         orch = SDDOrchestrator(config=config)
         orch.start_change("test")
 
@@ -152,21 +155,29 @@ class TestWorkflowTracks:
         assert orch.is_complete()
 
     def test_full_track_eight_phases(self, tmp_path: Path) -> None:
-        config = SDDConfig(artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}},
-                           track="full")
+        config = SDDConfig(
+            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}, track="full"
+        )
         orch = SDDOrchestrator(config=config)
         orch.start_change("test")
 
         for phase in [
-            "explore", "propose", "spec", "design",
-            "tasks", "apply", "verify", "archive",
+            "explore",
+            "propose",
+            "spec",
+            "design",
+            "tasks",
+            "apply",
+            "verify",
+            "archive",
         ]:
             orch.run_phase(phase, f"# {phase}\n")
         assert orch.is_complete()
 
     def test_invalid_phase_rejected(self, tmp_path: Path) -> None:
-        config = SDDConfig(artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}},
-                           track="quick")
+        config = SDDConfig(
+            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}, track="quick"
+        )
         orch = SDDOrchestrator(config=config)
         orch.start_change("test")
         orch.run_phase("explore", "# Explore\n")
@@ -184,8 +195,14 @@ class TestWorkflowTracks:
 
         assert not orch.is_complete()
         for phase in [
-            "explore", "propose", "spec", "design",
-            "tasks", "apply", "verify", "archive",
+            "explore",
+            "propose",
+            "spec",
+            "design",
+            "tasks",
+            "apply",
+            "verify",
+            "archive",
         ]:
             orch.run_phase(phase, f"# {phase}\n")
         assert orch.is_complete()

@@ -116,6 +116,7 @@ def _handle_run(args: Any) -> None:
         path = save_result(result)
         # Print to stderr so it doesn't mix with JSON/markdown stdout output
         import sys as _sys
+
         print(f"Baseline saved to {path}", file=_sys.stderr)
 
     # Exit code

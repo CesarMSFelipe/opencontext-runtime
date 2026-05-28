@@ -1,4 +1,5 @@
 """Tests for token savings telemetry."""
+
 from __future__ import annotations
 
 import time
@@ -8,7 +9,6 @@ import pytest
 
 from opencontext_core.evaluation.telemetry import (
     TelemetryEvent,
-    TelemetryStore,
     load_telemetry,
     record_event,
     record_from_benchmark,
@@ -16,7 +16,6 @@ from opencontext_core.evaluation.telemetry import (
 
 
 class TestTelemetry:
-
     def test_record_and_load(self, tmp_path: Path) -> None:
         """Record an event, load it back, verify all fields."""
         ts = time.time()
@@ -41,20 +40,26 @@ class TestTelemetry:
 
     def test_total_saved_calculation(self, tmp_path: Path) -> None:
         """Two events: verify total_saved is correct."""
-        record_event(TelemetryEvent(
-            timestamp=time.time(),
-            task="task a",
-            naive_tokens=2000,
-            optimized_tokens=1200,
-            reduction_pct=40.0,
-        ), root=tmp_path)
-        record_event(TelemetryEvent(
-            timestamp=time.time(),
-            task="task b",
-            naive_tokens=1000,
-            optimized_tokens=500,
-            reduction_pct=50.0,
-        ), root=tmp_path)
+        record_event(
+            TelemetryEvent(
+                timestamp=time.time(),
+                task="task a",
+                naive_tokens=2000,
+                optimized_tokens=1200,
+                reduction_pct=40.0,
+            ),
+            root=tmp_path,
+        )
+        record_event(
+            TelemetryEvent(
+                timestamp=time.time(),
+                task="task b",
+                naive_tokens=1000,
+                optimized_tokens=500,
+                reduction_pct=50.0,
+            ),
+            root=tmp_path,
+        )
 
         store = load_telemetry(root=tmp_path)
         assert store.total_naive == 3000
@@ -63,20 +68,26 @@ class TestTelemetry:
 
     def test_average_reduction(self, tmp_path: Path) -> None:
         """Verify average_reduction calculation."""
-        record_event(TelemetryEvent(
-            timestamp=time.time(),
-            task="t1",
-            naive_tokens=1000,
-            optimized_tokens=600,
-            reduction_pct=40.0,
-        ), root=tmp_path)
-        record_event(TelemetryEvent(
-            timestamp=time.time(),
-            task="t2",
-            naive_tokens=1000,
-            optimized_tokens=400,
-            reduction_pct=60.0,
-        ), root=tmp_path)
+        record_event(
+            TelemetryEvent(
+                timestamp=time.time(),
+                task="t1",
+                naive_tokens=1000,
+                optimized_tokens=600,
+                reduction_pct=40.0,
+            ),
+            root=tmp_path,
+        )
+        record_event(
+            TelemetryEvent(
+                timestamp=time.time(),
+                task="t2",
+                naive_tokens=1000,
+                optimized_tokens=400,
+                reduction_pct=60.0,
+            ),
+            root=tmp_path,
+        )
 
         store = load_telemetry(root=tmp_path)
         assert store.average_reduction == pytest.approx(50.0)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from opencontext_core.indexing.call_graph import CallGraphAnalyzer, PathResult
+from opencontext_core.indexing.call_graph import CallGraphAnalyzer
 from opencontext_core.indexing.graph_db import GraphDatabase
 
 
@@ -28,12 +28,12 @@ def _make_db(path: Path) -> GraphDatabase:
     conn.executemany(
         "INSERT INTO edges (source_node_id, target_node_id, kind) VALUES (?, ?, ?)",
         [
-            (1, 2, "calls"),   # main -> helper
-            (2, 3, "calls"),   # helper -> parse
-            (3, 4, "calls"),   # parse -> validate (creates cycle 3->4->3 below)
-            (4, 3, "calls"),   # validate -> parse (cycle)
-            (2, 5, "calls"),   # helper -> format_output
-            (1, 5, "calls"),   # main -> format_output (direct)
+            (1, 2, "calls"),  # main -> helper
+            (2, 3, "calls"),  # helper -> parse
+            (3, 4, "calls"),  # parse -> validate (creates cycle 3->4->3 below)
+            (4, 3, "calls"),  # validate -> parse (cycle)
+            (2, 5, "calls"),  # helper -> format_output
+            (1, 5, "calls"),  # main -> format_output (direct)
         ],
     )
     conn.commit()

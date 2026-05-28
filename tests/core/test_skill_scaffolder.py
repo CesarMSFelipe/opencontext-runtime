@@ -41,6 +41,7 @@ class TestScaffoldSkill:
     def test_force_guard_raises_on_existing(self, tmp_path: Path) -> None:
         scaffold_skill(name="existing", output_dir=str(tmp_path))
         import pytest
+
         with pytest.raises(FileExistsError):
             scaffold_skill(name="existing", output_dir=str(tmp_path), force=False)
 

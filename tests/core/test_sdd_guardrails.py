@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from opencontext_core.agents.sdd_guardrails import (
     CATALOGUE,
-    GuardrailHit,
     evaluate_guardrails,
-    get_catalogue,
     get_guardrails_for_phase,
 )
 

@@ -13,7 +13,6 @@ import pytest
 from opencontext_core.evaluation.comparative import (
     BUILTIN_SCENARIOS,
     ComparativeBenchmark,
-    Scenario,
     format_comparative_report,
 )
 
@@ -85,9 +84,7 @@ class TestSDDCompliance:
         """Phase 5 SDD artifacts should all be present in archive or changes dir."""
         bm = ComparativeBenchmark(root=PROJECT_ROOT)
         result = bm.run_scenario(BUILTIN_SCENARIOS[0])
-        assert result.sdd_compliant, (
-            f"SDD artifacts missing: {result.sdd_artifacts}"
-        )
+        assert result.sdd_compliant, f"SDD artifacts missing: {result.sdd_artifacts}"
 
     def test_phase3_artifacts_exist(self) -> None:
         bm = ComparativeBenchmark(root=PROJECT_ROOT)

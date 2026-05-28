@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from opencontext_core.config import find_config, load_config, load_config_or_defaults
+from opencontext_core.config import find_config, load_config_or_defaults
 
 
 class TestFindConfig:

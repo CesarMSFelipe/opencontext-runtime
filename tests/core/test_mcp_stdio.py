@@ -43,17 +43,22 @@ class TestTraceTool:
         """opencontext_trace appears in tool list."""
         server = MCPServer(db_path=tmp_path / "test.db")
         assert "opencontext_trace" in server.tools
-        assert server.tools["opencontext_trace"]["description"] == \
-            "Find the shortest path between two symbols in the call graph"
+        assert (
+            server.tools["opencontext_trace"]["description"]
+            == "Find the shortest path between two symbols in the call graph"
+        )
         server.close()
 
     def test_trace_symbol_not_found(self, tmp_path: Path) -> None:
         """Missing symbol returns error."""
         server = MCPServer(db_path=tmp_path / "test.db")
-        result = server._call_tool("opencontext_trace", {
-            "source": "nonexistent",
-            "target": "main",
-        })
+        result = server._call_tool(
+            "opencontext_trace",
+            {
+                "source": "nonexistent",
+                "target": "main",
+            },
+        )
         assert "error" in result
         assert "SYMBOL_NOT_FOUND" in result.get("code", "")
         server.close()

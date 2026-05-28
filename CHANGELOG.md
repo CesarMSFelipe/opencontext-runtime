@@ -5,6 +5,28 @@ All notable changes to OpenContext Runtime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-05-28
+
+### Fixed
+
+- **`doctor` after fresh install**: `_runtime()` now passes `None` config when `opencontext.yaml` is absent, falling back to defaults instead of raising `ConfigurationError`.
+- **"First Run" banner loop**: `is_first_run()` now treats `.opencontext/sdd/context.json` as a setup marker so the welcome banner does not reappear after `opencontext install`.
+- **Menu install action**: `_run_install()` now clears the screen before invoking the install wizard (header was only shown on error).
+
+### Added
+
+- **D3 knowledge graph viewer**: `opencontext knowledge-graph view` (mermaid format) now saves an interactive `opencontext-kg-view.html` with a zoomable/pannable D3 tree and opens it in the browser automatically.
+- **Ecosystem update checker**: `EcosystemUpdateChecker` tracks updates for companion packages (e.g. engram). Notices appear in the TUI menu update banner and after `opencontext upgrade`.
+- **Cross-file call edges**: `KnowledgeGraph.index_project()` now runs a second-pass resolver that links call edges whose source and target live in different files.
+- **Pack telemetry**: `opencontext pack` automatically records a `TelemetryEvent` so token-reduction stats accumulate without needing a separate benchmark run.
+- **Clipboard fallback**: `pack --copy` now tries `xclip`, `xsel`, `wl-copy`, and `pbcopy` directly via subprocess before giving up, with an actionable install hint on failure.
+
+### Changed
+
+- **TUI menu redesign**: Main menu now renders three side-by-side panels (Setup / Configure / Tools) with an inline update notice when cached updates are available.
+- **Setup wizard step indicators**: Interactive setup flow shows `● ○ ○` progress dots and clears the screen between steps.
+- **`update` hint after commands**: Post-command update notice now also includes outdated ecosystem packages from cache.
+
 ## [1.0.0] - 2026-05-27
 
 ### Removed

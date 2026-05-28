@@ -364,7 +364,6 @@ class VerifyPhase(HarnessPhase):
 
     def _run_tests(self, root: Path) -> dict[str, Any]:
         """Run pytest in the project root, provider-neutral."""
-        import re
 
         try:
             result = subprocess.run(
