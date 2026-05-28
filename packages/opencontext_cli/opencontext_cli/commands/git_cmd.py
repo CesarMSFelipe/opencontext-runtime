@@ -11,7 +11,8 @@ from opencontext_core.indexing.git_context import GitContextProvider
 
 def add_git_parser(subparsers: Any) -> None:
     """Add git command parsers."""
-    git_parser = subparsers.add_parser("git", help="Git context and history.")
+    import argparse
+    git_parser = subparsers.add_parser("git", help=argparse.SUPPRESS)
     git_sub = git_parser.add_subparsers(dest="git_command", required=True)
     git_sub.add_parser("status", help="Show git repository stats.")
     git_history = git_sub.add_parser("history", help="Show git history for a file.")

@@ -9,37 +9,37 @@ import sys
 
 from rich.panel import Panel
 from rich.prompt import Prompt
-from rich.text import Text
 
 from opencontext_cli.commands.update_cmd import handle_upgrade
 from opencontext_core.dx.console_styles import console
 
-# ── ANSI art: OpenContext logo ──────────────────────────────────────────
+# ── Console logo — knowledge graph motif, brand colors ──────────────────
+#
+# Visual layout (terminal rendering, markup stripped):
+#
+#   ◉──◉──◉    OpenContext Runtime           node cols: left=2 mid=5 right=8
+#   │     │    Context Engineering...         ── edges are 2 chars each
+#   ◉──◉  ◉
+#   │  │       * 87% token reduction  * SDD   both bottom nodes are connected
+#   ◉──◉       * MCP server  * 13+ agents     up via │ at cols 2 and 5
+#
+# Graph edges:  A──B──C / │     │ / D──E  F / │  │ / G──H
+# (F is a leaf — only connected upward to C)
 
 LOGO = [
-    "                    ⢀⣀⣤⣤⣶⣶⣶⣶⣦⣤⣤⣄⣀",
-    "              ⣠⣶⣿⣿⠿⠛⠋⠉⠉⠉⠉⠙⠛⠿⣿⣿⣶⣄",
-    "           ⣰⣿⣿⠟⠉      ⢀⣀⣀⣀   ⠉⠻⣿⣿⣆",
-    "          ⣿⣿⡟⠁   ⢀⣴⣿⣿⠿⠿⣿⣿⣶⣄   ⢹⣿⣿",
-    "         ⢸⣿⡟   ⣴⣿⣿⠋  ⢀⣀  ⠙⣿⣿⣦  ⢸⣿⡟",
-    "         ⠸⣿⣿⣦  ⢿⣿⣿⣷⣾⣿⣿⣿⣷⣶⣾⣿⣿⡿  ⣰⣿⣿⠇",
-    "          ⠻⣿⣿⣷⣤⣉⠛⠻⠿⠿⠿⠿⠿⠟⠛⣉⣤⣶⣿⣿⡿⠟",
-    "     ⢀⣀⣤⣶⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣤⣄⣀",
-    "  ⣠⣶⣿⣿⠿⠟⠛⠉⠉      ⠈⠉⠉⠙⠛⠻⢿⣿⣿⣶⣄⡀",
-    " ⣿⣿⡟⠁              ⢀⣀⣤⣶⣿⣿⡿⠿⢿⣿⣷",
-    " ⣿⣿⡇    ⢀⣀⣤⣤⣶⣶⣶⣿⣿⣿⣿⣿⣿⣿⣷⣶⣤⣀  ⢸⣿⣿",
-    " ⣿⣿⡇   ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿  ⢸⣿⣿",
-    " ⢻⣿⣿⣄  ⠙⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛  ⣠⣿⣿⡟",
-    "  ⠻⣿⣿⣷⣤⣀⡀            ⢀⣀⣤⣴⣿⣿⣿⠟",
-    "    ⠙⠛⠿⣿⣿⣿⣿⣷⣶⣶⣶⣶⣶⣶⣾⣿⣿⣿⣿⡿⠟⠋⠁",
-    "          ⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉",
+    "",
+    "  [bold #00C9A7]◉[/][dim]──[/][bold #00A8E8]◉[/][dim]──[/][bold #845EC2]◉[/]    [bold white]OpenContext Runtime[/]",  # noqa: E501
+    "  [#00C9A7]│[/]     [#845EC2]│[/]    [dim]Context Engineering for AI Agents[/]",
+    "  [#00C9A7]◉[/][dim]──[/][#00A8E8]◉[/]  [#845EC2]◉[/]",
+    "  [#00C9A7]│[/]  [#00A8E8]│[/]       [bold #00C9A7]*[/] [bold]87% token reduction[/]  [#00A8E8]*[/] SDD workflow",  # noqa: E501
+    "  [#00C9A7]◉[/][dim]──[/][#00A8E8]◉[/]       [#845EC2]*[/] MCP server  [#00C9A7]*[/] 13+ agents  [#00A8E8]*[/] Zero secrets",  # noqa: E501
+    "",
 ]
 
 COMPACT_LOGO = [
-    "  ╔══════════════════════════════╗",
-    "  ║     OpenContext Runtime      ║",
-    "  ║     Context Engineering      ║",
-    "  ╚══════════════════════════════╝",
+    "  [bold #00C9A7]◉──◉[/]  [bold white]OpenContext Runtime[/]",
+    "  [#00C9A7]│  │[/]  [dim]Context Engineering · 87% token reduction[/]",
+    "  [#00C9A7]◉──◉[/]  [dim]SDD · MCP · 13+ agents · Zero secrets[/]",
 ]
 
 
@@ -48,13 +48,12 @@ def _show_logo() -> None:
     try:
         width = __import__("shutil").get_terminal_size().columns
         height = __import__("shutil").get_terminal_size().lines
-        use_full = width >= 64 and height >= len(LOGO) + 18
+        use_full = width >= 64 and height >= len(LOGO) + 14
     except Exception:
         use_full = False
 
-    logo_lines = LOGO if use_full else COMPACT_LOGO
-    for line in logo_lines:
-        console.print(Text(line, style="bold cyan"))
+    for line in (LOGO if use_full else COMPACT_LOGO):
+        console.print(line)
 
 
 def run_main_menu() -> None:
@@ -70,26 +69,29 @@ def run_main_menu() -> None:
         console.print()
         console.print(
             Panel(
-                "\n".join(
-                    [
-                        "[bold]Menu[/]",
-                        "",
-                        "  [cyan]1[/]  Start installation",
-                        "  [cyan]2[/]  Upgrade tools",
-                        "  [cyan]3[/]  Sync configs",
-                        "  [cyan]4[/]  Upgrade + Sync",
-                        "  [cyan]5[/]  Configure models",
-                        "  [cyan]6[/]  Create your own Agent",
-                        "  [cyan]7[/]  OpenCode Community Plugins",
-                        "  [cyan]8[/]  OpenCode SDD Profiles",
-                        "  [cyan]9[/]  Manage backups",
-                        "  [cyan]10[/] Managed uninstall",
-                        "  [cyan]q[/]  Quit",
-                        "",
-                        "[dim]1-10: select • q: quit[/]",
-                    ]
-                ),
-                border_style="cyan",
+                "\n".join([
+                    "[dim]── Setup & Maintenance ──────────────────[/]",
+                    "  [bold #00C9A7]1[/]  Start installation",
+                    "  [bold #00C9A7]2[/]  Upgrade tools",
+                    "  [bold #00C9A7]3[/]  Sync configs",
+                    "  [bold #00C9A7]4[/]  Upgrade + Sync",
+                    "",
+                    "[dim]── Development ────────────────────────────[/]",
+                    "  [bold #00A8E8]5[/]  Configure models",
+                    "  [bold #00A8E8]6[/]  Create Agent integration",
+                    "  [bold #00A8E8]7[/]  Community plugins",
+                    "  [bold #00A8E8]8[/]  SDD profiles",
+                    "  [bold #00A8E8]11[/] Context memory",
+                    "",
+                    "[dim]── Management ─────────────────────────────[/]",
+                    "  [bold #845EC2]9[/]  Manage backups",
+                    "  [bold #845EC2]10[/] Uninstall",
+                    "",
+                    "  [dim]q[/]   Quit",
+                    "",
+                    "[dim]Enter a number or q[/]",
+                ]),
+                border_style="#00C9A7",
                 padding=(1, 2),
             )
         )
@@ -97,7 +99,7 @@ def run_main_menu() -> None:
 
         choice = Prompt.ask(
             "Select option",
-            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "q"],
+            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "q"],
             default="q",
         )
 
@@ -117,6 +119,8 @@ def run_main_menu() -> None:
             _run_plugins()
         elif choice == "8":
             _run_sdd_profiles()
+        elif choice == "11":
+            _run_memory_tools()
         elif choice == "9":
             _run_backups()
         elif choice == "10":
@@ -248,6 +252,10 @@ def _run_plugins() -> None:
                 (),
                 {
                     "plugin_command": "search",
+                    "registry": None,
+                    "query": "",
+                    "refresh": False,
+                    "json": False,
                 },
             )
         )
@@ -424,19 +432,60 @@ def _cleanup_backups() -> None:
     console.print(f"[green]✓ Removed {removed} backup(s) older than {days} days[/]")
 
 
+def _run_memory_tools() -> None:
+    """Context memory — opencontext memory list."""
+    console.print("\n[bold]Context Memory[/]")
+    try:
+        from opencontext_cli.main import _memory
+
+        class _MemoryArgs:
+            memory_command: str = "list"
+            config: str = "opencontext.yaml"
+
+        _memory(_MemoryArgs())
+    except Exception as exc:
+        console.print(f"[red]Memory list failed: {exc}[/]")
+
+
 def _run_uninstall() -> None:
-    """Managed uninstall — opencontext clean."""
+    """Managed uninstall — removes project files AND global config."""
     console.print("\n[bold]Uninstall OpenContext[/]")
     from rich.prompt import Confirm
 
-    if not Confirm.ask("Remove OpenContext configuration from this project?", default=False):
+    if not Confirm.ask("Remove all OpenContext configuration (project + global)?", default=False):
         console.print("[yellow]Uninstall cancelled.[/]")
         return
 
+    # Step 1: project-local files
     try:
         from opencontext_cli.main import _clean
 
-        _clean(".", dry_run=False, force=False)
-        console.print("[green]✓ OpenContext configuration removed[/]")
+        _clean(".", dry_run=False, force=True)
+        console.print("[green]✓ Project files removed[/]")
     except Exception as exc:
-        console.print(f"[red]Uninstall failed: {exc}[/]")
+        console.print(f"[red]Project cleanup failed: {exc}[/]")
+        return
+
+    # Step 2: global install state
+    try:
+        from opencontext_core.install_manager import InstallationManager
+
+        result = InstallationManager().uninstall(keep_backups=False, yes=True)
+        if result.get("removed"):
+            for item in result["removed"]:
+                console.print(f"  Removed: [dim]{item}[/]")
+        console.print("[green]✓ Global installation state removed[/]")
+    except Exception as exc:
+        console.print(f"[yellow]Global cleanup note: {exc}[/]")
+
+    # Step 3: global user config directory
+    import shutil
+    from pathlib import Path
+
+    config_dir = Path.home() / ".config" / "opencontext"
+    if config_dir.exists():
+        shutil.rmtree(config_dir, ignore_errors=True)
+        console.print(f"[green]✓ Config directory removed: {config_dir}[/]")
+
+    console.print()
+    console.print("[bold green]✓ OpenContext fully uninstalled[/]")
