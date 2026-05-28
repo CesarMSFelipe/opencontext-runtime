@@ -156,10 +156,10 @@ After installation, your agent will have configuration files pointing to OpenCon
 Create `.opencontexthints` to guide AI agents with project-specific conventions:
 
 ```bash
-opencontext hints init
+opencontext agent init --target generic
 ```
 
-Edit the file to add your conventions:
+Edit the generated `AGENTS.md` to add your conventions:
 
 ```
 project: My Project
@@ -178,20 +178,20 @@ project: My Project
 
 ### Set Up CI Checks
 
-Create automated code checks:
+Verify your setup is healthy:
 
 ```bash
-opencontext ci-check init
-opencontext ci-check run
+opencontext verify
+opencontext doctor
 ```
 
-### Git Integration
+### Knowledge Graph
 
-If your project uses git, OpenContext automatically enriches context with authorship and history:
+If your project uses git, OpenContext automatically enriches context with history:
 
 ```bash
-opencontext git status
-opencontext git history src/auth.py
+opencontext knowledge-graph search "symbol"
+opencontext knowledge-graph impact "ClassName"
 ```
 
 ## Advanced Features
@@ -310,17 +310,10 @@ opencontext knowledge-graph impact "UserService"
 opencontext affected src/auth.py
 
 # Agents
-opencontext install --target claude
-opencontext serve --mcp
-
-# Checks
-opencontext ci-check init
-opencontext ci-check run
-
-# Hints
-opencontext hints init
+opencontext agent init --target claude-code
+opencontext mcp
 
 # Health
 opencontext doctor
-opencontext git status
+opencontext verify
 ```

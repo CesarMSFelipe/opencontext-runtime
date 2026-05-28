@@ -1,78 +1,460 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" width="120" alt="OpenContext Logo">
-</p>
-
-<h1 align="center">OpenContext Runtime</h1>
-
-<p align="center">
-  <b>Context Engineering for AI Agents</b>
+  <img src="docs/assets/logo.svg" alt="OpenContext" width="160" height="160">
 </p>
 
 <p align="center">
-  <a href="#quick-start"><img src="https://img.shields.io/badge/python-3.12+-00C9A7.svg" alt="Python 3.12+"></a>
-  <a href="#quick-start"><img src="https://img.shields.io/badge/install-curl%20%7C%20bash-00A8E8.svg" alt="Install"></a>
-  <a href="#validation"><img src="https://img.shields.io/badge/tests-all%20passing-00C9A7.svg" alt="Tests"></a>
-  <a href="#license"><img src="https://img.shields.io/badge/license-MIT-845EC2.svg" alt="MIT License"></a>
+  <b>Your AI agent reads 95,000 tokens per query. OpenContext sends 3,500.</b><br>
+  <sub>Context engineering · Semantic knowledge graph · SDD workflow · Zero secrets · Works offline</sub>
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> •
-  <a href="#what-it-is">What It Is</a> •
-  <a href="#why-opencontext">Why OpenContext</a> •
-  <a href="#cli-reference">CLI</a> •
-  <a href="#documentation-map">Docs</a> •
-  <a href="#agent-integration">Agents</a>
+  <img src="https://img.shields.io/badge/87%25_token_reduction-measured-00C9A7" alt="87% token reduction">
+  <img src="https://img.shields.io/badge/offline--first-no_API_key_needed-00A8E8?logo=python&logoColor=white" alt="Works offline">
+  <img src="https://img.shields.io/badge/13%2B_agents-Claude_%7C_Cursor_%7C_Copilot-845EC2" alt="13+ agents">
+  <img src="https://img.shields.io/badge/license-MIT-gray" alt="MIT">
+</p>
+
+<p align="center">
+  <a href="#-quick-start"><b>Get started →</b></a> &nbsp;·&nbsp;
+  <a href="#benchmark">Benchmark</a> &nbsp;·&nbsp;
+  <a href="#feature-overview">Features</a> &nbsp;·&nbsp;
+  <a href="#agent-integration">Agents</a> &nbsp;·&nbsp;
+  <a href="#python-sdk">SDK</a>
 </p>
 
 ---
 
-| Method | Platform | Command |
-|--------|----------|---------|
-| **One-liner** | Linux / macOS | `curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh \| bash` |
-| **One-liner** | Windows PowerShell | `irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 \| iex` |
-| **pip** | All | `pip install opencontext-cli` |
-| **Source** | All | `git clone + pip install -e packages/*` |
+```sh
+$ opencontext pack . --query "How does authentication work?" --copy
 
-Requires **Python 3.12+**. No API keys, no external services, no vector DB required.
+  Indexing   ━━━━━━━━━━━━━━━━━━━━  231 files   0.3s
+  Matching   ████████░░░░░░░░░░░░  12 / 231    semantic rank
+  Redacting  ━━━━━━━━━━━━━━━━━━━━  0 secrets   clean
+  Budget     ████████░░░░░░░░░░░░  3,421 tok   ↓ 87%
+
+  ✓ Copied to clipboard
+    95,000 → 3,421 tokens  ·  $0.28 → $0.01 per query
+```
 
 ---
 
-## Quick Start
+<table>
+<tr>
+<th>Without OpenContext</th>
+<th>With OpenContext</th>
+</tr>
+<tr>
+<td>
 
-Get a project configured and a context pack in your clipboard in under a minute:
+```
+src/auth.py
+src/models.py
+src/routes.py     ← all 231 files
+src/views.py
+tests/ (50 files)
+docs/ (20 files)
+...161 more files
+
+95,000 tokens · $0.28/query
+```
+
+</td>
+<td>
+
+```
+src/auth.py      ✓ relevant
+src/models.py    ✓ relevant
+─────────────────────────────
+
+3,421 tokens · $0.01/query
+secrets redacted · auditable
+```
+
+</td>
+</tr>
+</table>
+
+| | Naive | Keyword grep | **OpenContext** |
+|---|---:|---:|---:|
+| Tokens sent | ~95,000 | ~15,000 | **~3,500** |
+| Cost / query | ~$0.28 | ~$0.04 | **~$0.01** |
+| Secrets in prompt | ⚠️ Possible | ⚠️ Possible | ✅ Redacted |
+| Cross-file deps | ❌ Missed | ❌ Missed | ✅ Traced |
+| Auditable | ❌ | ❌ | ✅ Full trace |
+
+---
+
+## ⚡ Quick Start
 
 ```bash
-# 1. Install (once)
+# Install (once)
 curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh | bash
 
-# 2. Set up your project (auto-detects stack, SDD/TDD, agents, graph)
-cd your-project
-opencontext install --yes
+# Set up your project — auto-detects stack, tools, agents
+cd your-project && opencontext install --yes
 
-# 3. Get task-specific context
-opencontext pack . --query "Explain how authentication works" --copy
+# Get a task-specific context pack, copied to clipboard
+opencontext pack . --query "How does authentication work?" --copy
 ```
 
-That's it. Three commands. No config files to edit, no API keys to set up.
+> **No API keys. No external services.** Context packs, knowledge graph, memory, and SDD workflow run fully offline from the first command.
 
-`opencontext install` works on **Linux, macOS, and Windows**. It auto-detects your project stack, walks you through each step with progress indicators, and sets up the knowledge graph, SDD/TDD harness, agent integrations, and project index — everything needed to start coding with AI assistance.
-
-After installing, fine-tune everything with:
+**Prefer an interactive setup?**
 ```bash
-opencontext config wizard     # Interactive TUI menu
+opencontext config wizard
 ```
 
 ---
 
-## Why OpenContext
+## How It Works
 
-**The problem:** LLMs are only as useful as the context they receive. Dumping a whole repository into a prompt is:
-- **Expensive** — 100K+ tokens per query, even for simple questions
-- **Noisy** — most files are irrelevant to the task
-- **Dangerous** — secrets, API keys, and untrusted text leak into prompts
-- **Hard to audit** — no record of what was sent or why
+```
+Your codebase
+     │
+     ▼
+┌─────────────────────────────┐
+│  1. Index                   │  opencontext index .
+│  SQLite + FTS5 knowledge    │  → symbols, call graph, imports,
+│  graph with call analysis   │    framework routes, bridges
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│  2. Query                   │  opencontext pack . --query "task"
+│  Semantic retrieval ranked  │  → top-K files by relevance score
+│  by task relevance          │    across symbols + call graph
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│  3. Optimize                │  Automatic, every time
+│  Compress, redact secrets,  │  → token budget enforced
+│  enforce token budget        │    PII stripped, no leaks
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│  4. Deliver                 │  Clipboard / file / API / MCP
+│  Compact context pack for   │  → your agent works smarter,
+│  your AI agent              │    not harder
+└─────────────────────────────┘
+```
 
-**The solution:** OpenContext indexes your project, then for each task selects the minimal high-signal subset — redacted, token-budgeted, and traceable. Your AI agent gets what it needs, nothing it shouldn't.
+---
+
+## Benchmark
+
+Reproducible. Run it yourself:
+
+```bash
+python -m pytest tests/core/test_comparative_benchmark.py -v -s
+```
+
+| Task | Difficulty | Naive tokens | OpenContext | Reduction | SDD | TDD | Secrets |
+|---|---|---:|---:|---:|---|---|---|
+| Add method to BridgeDetector | Simple | 38,381 | 2,482 | **93.5%** | ✓ | ✓ | Clean |
+| Add --json flag to CLI command | Medium | 38,188 | 2,145 | **94.4%** | ✓ | ✓ | Clean |
+| Wire tracing to WorkflowEngine | Hard | 24,636 | 6,509 | **73.6%** | ✓ | ✓ | Clean |
+| **Average** | | | | **87.2%** | 3/3 | 3/3 | 3/3 |
+
+*Methodology: naive baseline = all files in the relevant directory. Token estimate: `len(text) / 4`.*
+
+---
+
+## Feature Overview
+
+### Knowledge Graph
+
+Indexes your project into a queryable SQLite graph. No external vector DB, no embeddings service.
+
+```bash
+opencontext index .
+
+opencontext knowledge-graph search "authenticate"        # Find symbols
+opencontext knowledge-graph callers "authenticate_user"  # Who calls this
+opencontext knowledge-graph impact "UserModel" --radius 2  # What breaks if I change this
+opencontext knowledge-graph view --format tree           # Visual project structure
+```
+
+**Framework-aware routing** — detects URL-to-handler mappings for Django, FastAPI, Flask, Express, and NestJS:
+
+```bash
+opencontext routes scan .                    # All frameworks
+opencontext routes scan . --framework fastapi  # FastAPI only
+opencontext routes scan . --json             # Machine-readable
+```
+
+**Cross-language bridge detection** — HTTP calls, gRPC stubs, subprocesses, IPC across `.py`, `.ts`, `.go`, `.rs`, and more:
+
+```bash
+opencontext bridges scan .                  # All bridges
+opencontext bridges scan . --type GRPC      # gRPC only
+opencontext bridges scan . --json           # Machine-readable
+```
+
+---
+
+### Spec-Driven Development (SDD)
+
+An 8-phase governance harness that keeps AI agents disciplined:
+
+```
+explore → propose → spec → design → tasks → apply → verify → archive
+```
+
+The harness creates the run structure, enforces token budgets and quality gates, persists artifacts, and runs verification. Your AI agent (Claude Code, Cursor, etc.) executes each phase using the context pack. Nothing ships without passing `verify`.
+
+```bash
+# Create governance scaffolding + index the project
+opencontext harness run --workflow sdd --task "Add OAuth2 login"
+opencontext harness list
+
+# Sync tasks to GitHub Issues
+opencontext sync issues --change my-feature --dry-run
+opencontext sync issues --change my-feature
+```
+
+**SDD enforces:**
+- Per-phase token budgets and quality gates
+- Structured artifacts: context-pack, proposal, apply-manifest, verify-report
+- Test run with pass/fail counts at every verify phase
+- Archive trail for every completed change
+
+**Pair with your agent:** `opencontext agent init --target claude-code` generates a `CLAUDE.md` with phase-by-phase instructions so your agent knows exactly what to do at each step.
+
+---
+
+### Workflow Presets
+
+Apply named configuration modes in one command:
+
+```bash
+opencontext preset list
+
+opencontext preset apply fast        # Cheap model, 2K token budget — fast iteration
+opencontext preset apply deep        # Premium model, 8K budget — maximum quality
+opencontext preset apply privacy     # Air-gapped, no external providers, fail-closed
+opencontext preset apply strict-tdd  # Enforce strict test-first discipline
+opencontext preset apply air-gapped  # Completely offline
+```
+
+| Preset | Model | Token budget | Use case |
+|---|---|---|---|
+| `fast` | cheap | 2K / 600 | Quick iteration |
+| `deep` | premium | 8K / 2K | Architecture work |
+| `privacy` | any (local) | default | Sensitive codebases |
+| `strict-tdd` | any | default | High-stakes changes |
+| `air-gapped` | local | default | Enterprise / offline |
+
+Add custom presets in `.opencontext/presets/my-preset.yaml`.
+
+---
+
+### Party Mode Review
+
+Multi-perspective code review with independent LLM reviewers:
+
+```bash
+# With a configured provider (ANTHROPIC_API_KEY or OPENROUTER_API_KEY)
+opencontext review --party --context "$(git diff HEAD~1)"
+
+# Select specific roles
+opencontext review --party --roles "architect,security" --context "$(cat pr.diff)"
+
+# Save report to file
+opencontext review --party --context "$(cat changes.py)" --output review.md
+```
+
+Four independent reviewers — **architect**, **security**, **performance**, **ux** — each focused on their domain, findings aggregated by severity.
+
+---
+
+### Extensions
+
+```bash
+opencontext extension search              # Browse 7 built-in extensions
+opencontext extension search review       # Filter by keyword
+opencontext extension install strict-review
+opencontext extension list
+opencontext extension remove strict-review
+```
+
+| Extension | Description |
+|---|---|
+| `strict-review` | Multi-reviewer SDD review phase |
+| `gh-issues-tracker` | Sync SDD tasks to GitHub Issues |
+| `cost-guard` | Block phases that exceed token budget |
+| `framework-router` | Framework-aware URL routing detection |
+| `party-review` | 4-role LLM review with findings aggregation |
+| `token-telemetry` | Cumulative token savings tracking |
+| `bridge-detector` | Cross-language call boundary detection |
+
+---
+
+### Token Telemetry
+
+Track cumulative savings over time:
+
+```bash
+opencontext telemetry show           # Cumulative savings
+opencontext telemetry show --last 10 # Recent events only
+opencontext telemetry clear
+```
+
+---
+
+### Safety — Secure by Default
+
+OpenContext ships with a deny-by-default posture:
+
+- **External providers** — disabled by default
+- **MCP tools** — disabled by default, allowlist required
+- **Network** — denied by default
+- **Secrets** — redacted before every prompt, trace, cache entry, and context pack
+- **Raw traces** — disabled by default
+- **Missing policy** — fails closed, not open
+
+```bash
+opencontext preset apply privacy     # Maximum privacy mode
+opencontext doctor security          # Security audit
+```
+
+**Zero-key mode** — context packs, repo maps, knowledge graph, memory, and SDD work entirely offline.
+
+---
+
+## CLI Reference
+
+### Setup
+
+```bash
+opencontext install           # Auto-detect & configure (cross-platform)
+opencontext install --yes     # Non-interactive (CI-friendly)
+opencontext index .           # Index project
+opencontext doctor            # Health check
+opencontext doctor deep       # Deep runtime diagnostics
+opencontext update            # Check for updates
+opencontext upgrade           # Upgrade all packages
+```
+
+### Context & Knowledge Graph
+
+```bash
+opencontext pack . --query "task" --copy         # Context to clipboard
+opencontext pack . --query "task" --format json  # JSON output
+
+opencontext knowledge-graph search "symbol"
+opencontext knowledge-graph callers "func_name"
+opencontext knowledge-graph callees "func_name"
+opencontext knowledge-graph impact "ClassName" --radius 2
+opencontext knowledge-graph view                 # Mermaid graph (opens browser)
+opencontext knowledge-graph view --format tree   # Rich directory tree
+```
+
+### SDD / Workflow
+
+```bash
+opencontext harness run --workflow sdd --task "description"
+opencontext harness list
+opencontext sync issues --change <name> --dry-run
+opencontext workflow resume <run-id>
+```
+
+### Analysis
+
+```bash
+opencontext bridges scan . --type HTTP --json
+opencontext bridges show <symbol>
+opencontext routes scan . --framework fastapi
+opencontext review --party --context "$(git diff HEAD~1)"
+```
+
+### Configuration
+
+```bash
+opencontext config wizard
+opencontext config show
+opencontext preset list
+opencontext preset apply <name> --dry-run
+opencontext preset apply <name>
+```
+
+### Benchmark
+
+```bash
+opencontext benchmark run              # Run all quality checks
+opencontext benchmark run --format json
+opencontext benchmark compare          # Compare against last baseline
+opencontext telemetry show
+```
+
+### Plugins & Extensions
+
+```bash
+opencontext plugin search
+opencontext plugin install <name>
+opencontext extension search
+opencontext extension install <name>
+```
+
+### Memory
+
+Store, search, and manage context memory items across sessions.
+
+```bash
+opencontext memory init              # Initialize context repository
+opencontext memory list              # List stored memory items
+opencontext memory search "query"    # Search memory
+opencontext memory show <id>         # Show item details
+opencontext memory pin <id>          # Pin important item
+opencontext memory harvest           # Extract memories from last trace
+opencontext memory gc                # Garbage collect stale items
+```
+
+### One-off Context Blocks
+
+Generate a safe, redacted context block for any AI agent.
+
+```bash
+opencontext agent-context "Implement rate limiting" --target cursor --copy
+opencontext agent-context "Review auth module" --target claude-code --copy
+```
+
+---
+
+## Agent Integration
+
+OpenContext is agent-neutral. It generates a small instruction file that tells your agent to use the knowledge graph instead of reading files directly.
+
+| Agent | Generated file |
+|---|---|
+| Claude Code | `CLAUDE.md` |
+| OpenCode | `AGENTS.md` + `opencode.json` |
+| Cursor | `.cursor/rules/opencontext.mdc` |
+| Windsurf | `.windsurf/rules/opencontext.md` |
+| Codex / Generic | `AGENTS.md` |
+| Kilo Code | `AGENTS.md` |
+
+```bash
+opencontext agent init --target claude-code
+opencontext agent init --target cursor
+opencontext agent init --target opencode
+
+# One-off context block
+opencontext agent-context "Implement rate limiting" --target cursor --copy
+```
+
+**MCP server** — 8 tools for agents that support the Model Context Protocol:
+
+```bash
+opencontext mcp    # Start MCP server on stdio
+```
+
+Tools: `opencontext_search`, `opencontext_context`, `opencontext_callers`, `opencontext_callees`, `opencontext_impact`, `opencontext_node`, `opencontext_files`, `opencontext_status`
+
+---
+
+## Python SDK
 
 ```python
 from opencontext_core import OpenContextRuntime
@@ -81,178 +463,9 @@ runtime = OpenContextRuntime()
 runtime.setup_project(".")
 prepared = runtime.prepare_context("Review authentication", max_tokens=6000)
 
-# prepared.context  → compact, redacted, task-specific
-# prepared.trace_id → auditable record
+# prepared.context   → compact, redacted, task-specific markdown
+# prepared.trace_id  → auditable record of what was included and why
 ```
-
-> "Given a user request, project memory, repository structure, documents, traces, tools, security constraints, and token/cost limits, what is the safest and most useful minimal context/action plan?"
-
----
-
-## What It Is
-
-OpenContext is a **context engineering runtime** for AI agents. It provides:
-
-- **Code knowledge graph** — SQLite+FTS5 with call graph analysis, impact analysis, and framework route detection (19+ languages)
-- **Spec-Driven Development (SDD)** — 8-phase harness (explore → propose → spec → design → tasks → apply → verify → archive) with per-phase model assignment and token budgets
-- **Agent installer** — 13+ AI coding agents (Claude Code, OpenCode, Cursor, Codex, Windsurf, VS Code Copilot, Kilo Code, and more)
-- **Safety layer** — secret redaction, provider policy enforcement, prompt injection boundaries, output exfiltration scanning
-- **Local memory** — progressive disclosure with pinned facts, temporal context, search, and garbage collection
-- **MCP server** — 8 knowledge graph tools for agent integration
-- **Plugin system** — deny-by-default with remote registry and built-in plugins
-- **Workflow packs** — repeatable team AI operations with integrity signing
-- **Zero-key mode** — everything works locally without API keys or external providers
-
-What it is **not**: a chatbot, UI, vector database, RAG wrapper, or provider SDK. Core is provider-neutral and framework-agnostic.
-
----
-
-## CLI Reference
-
-### Main Menu
-
-```bash
-opencontext                    # Launch interactive TUI menu (10 options)
-```
-
-Running `opencontext` with no subcommand opens an interactive menu with:
-Install, Upgrade, Sync, Configure Models, Create Agent,
-Plugins, SDD Profiles, Backups, and Uninstall.
-
-### Setup & Indexing
-
-```bash
-opencontext install                   # Auto-detect & configure (cross-platform)
-opencontext install --yes             # Non-interactive (CI-friendly)
-opencontext index .                   # Index project for knowledge graph
-opencontext doctor                    # Health check
-opencontext doctor deep               # Deep runtime diagnostics
-opencontext doctor security           # Security-specific checks
-```
-
-### Context Packs
-
-```bash
-opencontext pack . --query "Review auth" --mode plan --copy
-opencontext pack . --query "Review auth" --mode review --format json
-opencontext pack . --query "Review auth" --format toon
-opencontext pack diff --base main --head HEAD
-```
-
-### Knowledge Graph
-
-```bash
-opencontext knowledge-graph search "authenticate" --limit 20
-opencontext knowledge-graph callers "authenticate_user"
-opencontext knowledge-graph callees "authenticate_user"
-opencontext knowledge-graph impact "authenticate_user" --radius 2
-opencontext knowledge-graph status
-```
-
-### SDD Workflow (Spec-Driven Development)
-
-```bash
-opencontext harness run --workflow sdd --task "Implement OAuth2"
-opencontext harness run --workflow explore-only --task "How does auth work?"
-opencontext harness list
-```
-
-### Plugins
-
-```bash
-opencontext plugin init my-plugin                   # Scaffold new plugin
-opencontext plugin init my-plugin --template advanced  # With lifecycle stubs
-opencontext plugin search                           # Browse registry
-opencontext plugin install security-audit           # Install from registry
-opencontext plugin info security-audit --json       # Details with version check
-opencontext plugin list                             # Installed plugins
-```
-
-### Configuration
-
-```bash
-opencontext config wizard                 # Interactive TUI menu
-opencontext config show                   # View preferences
-opencontext config set features.knowledge_graph true   # Dot-notation
-opencontext config get sdd.tdd_mode                   # Read any path
-```
-
-### Agent Integration
-
-```bash
-opencontext agent init --target opencode             # Generate AGENTS.md + opencode.json
-opencontext agent init --target claude-code           # Generate CLAUDE.md
-opencontext agent init --target cursor                # Generate .cursor/rules/
-opencontext agent-context "Review auth" --target cursor --copy  # One-off block
-```
-
-### Updates
-
-```bash
-opencontext update              # Check for updates
-opencontext upgrade             # Upgrade all OpenContext packages (table output)
-```
-
-`opencontext upgrade` upgrades all OpenContext packages (core, cli, api, profiles) at once.
-OpenContext auto-checks for updates and notifies you after commands when a newer version is available.
-
----
-
-## Safe By Default
-
-OpenContext ships with a deny-by-default security posture. No external calls, no data leaks, no surprises:
-
-- External providers **disabled** by default
-- Tools **disabled** by default
-- MCP **disabled** by default
-- Network **denied** by default
-- Filesystem writes **denied** by default
-- Secrets redacted before prompts, traces, cache, memory, and context packs
-- Raw traces **disabled** by default
-- Missing provider policy **fails closed**
-
-Everything works in **zero-key mode** — you get context packs, repo maps, the knowledge graph, memory, and SDD without any API keys or external dependencies.
-
----
-
-## Agent Integration
-
-OpenContext is agent-tool neutral. It generates small instruction files that tell your AI agent to request minimal context instead of reading the whole repository.
-
-| Tool | Generated files |
-|------|-----------------|
-| Generic / Codex | `AGENTS.md` |
-| OpenCode | `AGENTS.md` + `opencode.json` |
-| Claude Code | `CLAUDE.md` |
-| Cursor | `.cursor/rules/opencontext.mdc` |
-| Windsurf | `.windsurf/rules/opencontext.md` |
-| Kilo Code / OpenClaw | `AGENTS.md` |
-
-```bash
-# Recommended workflow
-opencontext install
-opencontext agent init --target cursor
-opencontext pack . --query "my task" --mode plan --copy
-```
-
----
-
-## Documentation Map
-
-| Topic | Guide |
-|-------|-------|
-| **Getting Started** | [Runtime-first setup](docs/getting-started/runtime-first.md), [CLI install](docs/getting-started/cli-installation.md), [Quickstart](docs/getting-started/quickstart.md), [Troubleshooting](docs/getting-started/troubleshooting.md) |
-| **Architecture** | [Overview](docs/architecture/overview.md), [Project intelligence](docs/architecture/project-intelligence-layer.md), [Context pack builder](docs/architecture/context-pack-builder.md), [Safety layer](docs/architecture/safety-layer.md) |
-| **Configuration** | [Reference](docs/configuration/reference.md), [Security policy](docs/configuration/security-policy.md), [Provider policy](docs/configuration/provider-policy.md), [User config](docs/configuration/user-config.md) |
-| **Workflows** | [SDD workflow](docs/workflows/sdd-workflow.md), [Custom workflows](docs/workflows/custom-workflows.md), [Workflow packs](docs/workflows/workflow-packs.md) |
-| **Memory** | [Overview](docs/memory/overview.md), [Context repository](docs/memory/context-repository.md), [Progressive disclosure](docs/memory/progressive-disclosure.md) |
-| **Security** | [Threat model](docs/security/threat-model.md), [Data classification](docs/security/data-classification.md), [Prompt security](docs/security/ai-leak-and-prompt-security.md) |
-| **Integrations** | [Python SDK](docs/integrations/python-sdk.md), [API](docs/integrations/api.md), [CLI](docs/integrations/cli.md), [GitHub Action](docs/integrations/github-action.md) |
-| **Enterprise** | [Air-gapped](docs/enterprise/air-gapped.md), [Governance reports](docs/enterprise/governance-reports.md), [Evidence packs](docs/enterprise/evidence-packs.md) |
-| **Development** | [Contributing](docs/development/contributing.md), [Testing](docs/development/testing.md), [Adding a command](docs/development/adding-a-command.md) |
-| **Roadmap** | [Current status and planned work](docs/roadmap.md) |
-
-See also the [docs index](docs/README.md) for a complete listing.
 
 ---
 
@@ -264,7 +477,7 @@ security:
   fail_closed: true
 models:
   default:
-    provider: mock
+    provider: mock      # swap for anthropic / openrouter / openai / local
     model: mock-llm
 providers:
   external_enabled: false
@@ -277,26 +490,49 @@ traces:
   store_raw_context: false
 memory:
   enabled: true
-  harvest_after_run: false
   require_approval: true
   store_raw: false
-output:
-  mode: concise
-  max_output_tokens: 1500
 ```
+
+---
+
+## Documentation
+
+| Topic | Links |
+|---|---|
+| **Getting Started** | [Quickstart](docs/getting-started/quickstart.md) · [CLI Install](docs/getting-started/cli-installation.md) · [Troubleshooting](docs/getting-started/troubleshooting.md) |
+| **Architecture** | [Overview](docs/architecture/overview.md) · [Context Pack Builder](docs/architecture/context-pack-builder.md) · [Safety Layer](docs/architecture/safety-layer.md) |
+| **SDD Workflow** | [SDD Guide](docs/workflows/sdd-workflow.md) · [Custom Workflows](docs/workflows/custom-workflows.md) · [Workflow Packs](docs/workflows/workflow-packs.md) |
+| **Configuration** | [Reference](docs/configuration/reference.md) · [Security Policy](docs/configuration/security-policy.md) · [Provider Policy](docs/configuration/provider-policy.md) |
+| **Security** | [Threat Model](docs/security/threat-model.md) · [Data Classification](docs/security/data-classification.md) · [Prompt Security](docs/security/ai-leak-and-prompt-security.md) |
+| **Integrations** | [Python SDK](docs/integrations/python-sdk.md) · [API](docs/integrations/api.md) · [GitHub Action](docs/integrations/github-action.md) |
+| **Enterprise** | [Air-Gapped](docs/enterprise/air-gapped.md) · [Governance Reports](docs/enterprise/governance-reports.md) |
+| **Development** | [Contributing](docs/development/contributing.md) · [Testing](docs/development/testing.md) |
 
 ---
 
 ## Validation
 
 ```bash
-pytest
-ruff check .
-ruff format --check .
-mypy packages/opencontext_core
+pytest                          # 866 tests
+ruff check .                    # Lint
+ruff format --check .           # Format
+mypy packages/opencontext_core  # Types
+python -m pytest tests/core/test_comparative_benchmark.py -v -s  # Benchmark
 ```
 
-Before publishing, see the [release checklist](docs/release-checklist.md).
+---
+
+## Install
+
+| Method | Command |
+|---|---|
+| pip | `pip install opencontext-cli` |
+| One-liner (Linux/macOS) | `curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh \| bash` |
+| One-liner (Windows) | `irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 \| iex` |
+| Source | `git clone … && pip install -e packages/*` |
+
+Requires **Python 3.12+**. No API keys required for core functionality.
 
 ---
 
@@ -304,10 +540,6 @@ Before publishing, see the [release checklist](docs/release-checklist.md).
 
 MIT — see [LICENSE](LICENSE).
 
-## Security
+**Security:** Never put secrets in prompts, traces, examples, configs, or memory files. Report vulnerabilities via [SECURITY.md](SECURITY.md).
 
-Do not put secrets in GitHub issues, prompts, traces, examples, configs, test fixtures, workflow packs, or memory files. If you find a vulnerability, follow [SECURITY.md](SECURITY.md).
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [development docs](docs/development/contributing.md).
+**Contributing:** See [CONTRIBUTING.md](CONTRIBUTING.md).

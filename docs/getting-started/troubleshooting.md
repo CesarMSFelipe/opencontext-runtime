@@ -17,6 +17,6 @@ pytest
 ```
 
 ## Common Fixes
-- Missing config: run `opencontext onboard`.
+- Missing config: run `opencontext install`.
 - Too much context: lower `--max-tokens`, add ignore patterns, or use `--format toon`.
 - Unsafe provider: keep `providers.external_enabled: false` unless policy and redaction are configured.

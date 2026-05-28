@@ -5,6 +5,30 @@ All notable changes to OpenContext Runtime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-05-27
+
+### Removed
+
+- **Deprecated CLI commands**: Removed `sdd`, `check`, `packs`, `cost`, `policy`, `drupal`, `ddev` top-level commands. All are now in `_DeprecationAwareParser._DEPRECATED` and exit 2 with a migration message.
+- **Deprecated subcommands**: Removed `eval security`, `checkpoint diff`, `checkpoint inspect`, `workflow dry-run`, `workflow explain`, `cache explain`, `org baseline create`, `release transparency`, `security report`, `security policy`, `workflows run`.
+- **Stub functions**: Removed `_sdd`, `_sdd_*`, `_check`, `_drupal`, `_ddev`, `_cost`, `_policy`, `_workflow`, `_context_dag`.
+
+### Changed
+
+- **`_cache()`**: Removed `cache explain` scaffold branch; `cache plan` and `cache warm` remain fully functional.
+- **`_release()`**: Removed `release transparency` scaffold JSON fallback; `release audit`, `release gate`, and `release evidence` remain.
+- **`_org()`**: `org baseline create` now raises `OpenContextError`; only `org baseline check` remains.
+- **`_checkpoint()`**: Non-`create` actions now call `_unreachable`.
+- **`_workflows()`**: `workflows run` removed; `list` and `inspect` remain.
+- **`_eval()`**: `eval security` branch removed.
+- **`_prompt()` export**: Removed misleading `"status": "scaffold"` key from JSON output.
+
+### Added
+
+- **README**: Added `memory` and `agent-context` sections to CLI Reference.
+- **TUI menu**: Added option 11 "Context memory" to the Development section of the main TUI menu.
+- **Tests**: New test files `tests/core/test_backup.py`, `tests/core/test_compat.py`, `tests/core/test_errors.py`.
+
 ## [0.3.0] - 2026-05-25
 
 ### Added
