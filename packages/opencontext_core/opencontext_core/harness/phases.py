@@ -72,6 +72,12 @@ class ExplorePhase(HarnessPhase):
         manifest = runtime.index_project(state.root)
         pack = runtime.build_context_pack(state.task, state.max_tokens or self.config.budget_tokens)
 
+        # Persist context pack to run directory
+        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        pack_path = run_dir / "context-pack.json"
+        pack_path.write_text(pack.model_dump_json(indent=2), encoding="utf-8")
+
         gates: list[PhaseGate] = [
             ProjectIndexExistsGate().evaluate(state.root),
             ContextPackCreatedGate().evaluate(len(pack.included)),
@@ -358,6 +364,8 @@ class VerifyPhase(HarnessPhase):
 
     def _run_tests(self, root: Path) -> dict[str, Any]:
         """Run pytest in the project root, provider-neutral."""
+        import re
+
         try:
             result = subprocess.run(
                 [sys.executable, "-m", "pytest", "-q", "--tb=short", str(root)],
@@ -365,11 +373,12 @@ class VerifyPhase(HarnessPhase):
                 text=True,
                 timeout=120,
             )
+            passed, failed, errors = self._parse_pytest_output(result.stdout)
             return {
                 "exit_code": result.returncode,
-                "passed": 0,
-                "failed": 0,
-                "errors": 0,
+                "passed": passed,
+                "failed": failed,
+                "errors": errors,
                 "output": result.stdout[-2000:],
                 "error_output": result.stderr[-1000:],
             }
@@ -391,6 +400,17 @@ class VerifyPhase(HarnessPhase):
                 "output": "",
                 "error_output": "pytest not found",
             }
+
+    @staticmethod
+    def _parse_pytest_output(output: str) -> tuple[int, int, int]:
+        """Parse pytest -q summary line into (passed, failed, errors)."""
+        import re
+
+        # Matches: "12 passed", "3 failed", "1 error" in the summary line
+        passed = sum(int(m) for m in re.findall(r"(\d+) passed", output))
+        failed = sum(int(m) for m in re.findall(r"(\d+) failed", output))
+        errors = sum(int(m) for m in re.findall(r"(\d+) error", output))
+        return passed, failed, errors
 
 
 class ReviewPhase(HarnessPhase):

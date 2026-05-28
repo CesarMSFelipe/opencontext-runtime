@@ -598,12 +598,62 @@ class ServerConfig(BaseModel):
     port: int = Field(default=8000, ge=1, le=65535, description="Default API port.")
 
 
+class WorkflowStepDef(BaseModel):
+    """A single workflow step — either a simple step name or a structured step."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step: str | None = Field(
+        default=None,
+        description="Simple step name (for basic steps).",
+    )
+    type: str | None = Field(
+        default=None,
+        description="Step type: parallel, if, switch, while, fan-out, fan-in.",
+    )
+    steps: list[str] | None = Field(
+        default=None,
+        description="Child steps (for parallel, if/else, sequential containers).",
+    )
+    condition: str | None = Field(
+        default=None,
+        description="Expression or reference for conditional steps.",
+    )
+    then: list[str] | None = Field(
+        default=None,
+        description="Steps to run when condition is true (for if/switch).",
+    )
+    else_: list[str] | None = Field(
+        default=None,
+        description="Steps to run when condition is false (for if/switch).",
+        alias="else",
+    )
+    step: str | None = Field(
+        default=None,
+        description="Step to fan out (for fan-out).",
+    )
+    inputs: list[str] | None = Field(
+        default=None,
+        description="Inputs to pass to each fan-out iteration.",
+    )
+    join_strategy: str | None = Field(
+        default=None,
+        description="How to merge fan-in results (concatenate, merge, pick_first).",
+    )
+    output_key: str | None = Field(
+        default=None,
+        description="Metadata key to store fan-in results.",
+    )
+
+
 class WorkflowConfig(BaseModel):
     """Named workflow definition loaded from YAML."""
 
     model_config = ConfigDict(extra="forbid")
 
-    steps: list[str] = Field(description="Ordered workflow step names.")
+    steps: list[str | dict[str, Any]] = Field(
+        description="Ordered workflow steps (strings or structured step dicts)."
+    )
 
 
 class ArtifactStoreMode(StrEnum):
@@ -668,6 +718,21 @@ class SDDConfig(BaseModel):
     artifact_store: ArtifactStoreConfig = Field(default_factory=ArtifactStoreConfig)
     delivery_strategy: DeliveryStrategy = Field(default=DeliveryStrategy.PLAN_ONLY)
     chain_strategy: ChainStrategy = Field(default=ChainStrategy.STACKED_TO_MAIN)
+    track: str = Field(
+        default="full",
+        description=(
+            "SDD workflow track: quick (3 phases), standard (5 phases), or full (8 phases)."
+        ),
+    )
+
+    @field_validator("track")
+    @classmethod
+    def _validate_track(cls, value: str) -> str:
+        valid = {"quick", "standard", "full"}
+        if value not in valid:
+            raise ValueError(f"Invalid track '{value}'. Must be one of: {', '.join(sorted(valid))}")
+        return value
+
     model_assignments: dict[str, str] = Field(
         default_factory=lambda: {
             "explore": "default",
@@ -783,8 +848,32 @@ class OpenContextConfig(BaseModel):
     )
 
 
+def find_config(start_dir: str | Path = ".") -> Path | None:
+    """Search for ``opencontext.yaml`` in *start_dir* and parent directories.
+
+    Checks up to 10 levels up.  Returns the first ``opencontext.yaml`` found,
+    or ``None`` if none exists.
+    """
+    search_root = Path(start_dir).resolve()
+    candidates = ("opencontext.yaml",)
+    for _ in range(10):
+        for candidate in candidates:
+            path = search_root / candidate
+            if path.exists():
+                return path
+        parent = search_root.parent
+        if parent == search_root:
+            break
+        search_root = parent
+    return None
+
+
 def load_config(path: str | Path = "configs/opencontext.yaml") -> OpenContextConfig:
-    """Load and validate an OpenContext YAML configuration file."""
+    """Load and validate an OpenContext YAML configuration file.
+
+    If the file does not exist, raises :class:`ConfigurationError`.
+    Use :func:`load_config_or_defaults` for a zero-config fallback.
+    """
 
     config_path = Path(path)
     if not config_path.exists():
@@ -804,6 +893,42 @@ def load_config(path: str | Path = "configs/opencontext.yaml") -> OpenContextCon
         return OpenContextConfig.model_validate(merged_data)
     except Exception as exc:
         raise ConfigurationError(f"Invalid OpenContext configuration: {exc}") from exc
+
+
+def load_config_or_defaults(
+    path: str | Path | None = None,
+    *,
+    auto_detect: bool = True,
+) -> OpenContextConfig:
+    """Load configuration, or return defaults with auto-detected project name.
+
+    This is the **zero-config** entry point.  When *path* is given and the
+    file exists, it loads normally.  When the file is missing and
+    *auto_detect* is ``True`` (the default) it:
+      1. Searches parent directories for ``opencontext.yaml``.
+      2. Falls back to ``default_config_data()`` with the directory name as
+         the project name.
+
+    Args:
+        path: Explicit config path.  If ``None``, searches from the current
+            working directory.
+        auto_detect: Enable parent-directory search and fallback defaults.
+    """
+    if path is not None:
+        config_path = Path(path)
+        if config_path.exists():
+            return load_config(config_path)
+
+    if auto_detect:
+        found = find_config(Path.cwd())
+        if found is not None:
+            return load_config(found)
+
+    # Zero-config fallback
+    data = default_config_data()
+    project_name = Path.cwd().name or "example-project"
+    data["project"] = {"name": project_name}
+    return OpenContextConfig.model_validate(data)
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
