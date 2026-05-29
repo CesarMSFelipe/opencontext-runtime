@@ -202,13 +202,17 @@ def _check_first_run(command: str) -> None:
         if not is_first_run(root):
             return
     except Exception:
-        return  # If detection fails, just proceed
+        return
 
-    # First run detected — show welcome banner
+    # First run detected — show welcome banner to stderr only
+    # to avoid breaking JSON output in CLI commands
+    if not sys.stdout.isatty():
+        return
+
     from rich.console import Console
     from rich.panel import Panel
 
-    fr_console = Console()
+    fr_console = Console(file=sys.stderr)
     banner = Panel(
         "[bold cyan]Welcome to OpenContext![/]\n\n"
         "It looks like this is your first time using OpenContext in this project.\n"
@@ -222,9 +226,6 @@ def _check_first_run(command: str) -> None:
         padding=(1, 2),
     )
     fr_console.print(banner)
-
-    if not sys.stdout.isatty():
-        return  # Non-interactive, continue
 
     try:
         from rich.prompt import Confirm as RichConfirm
