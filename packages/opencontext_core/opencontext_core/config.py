@@ -628,7 +628,7 @@ class WorkflowStepDef(BaseModel):
         description="Steps to run when condition is false (for if/switch).",
         alias="else",
     )
-    step: str | None = Field(
+    fan_step: str | None = Field(
         default=None,
         description="Step to fan out (for fan-out).",
     )

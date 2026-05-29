@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 # ── Quality Dimensions ──────────────────────────────────────────────────────
 
@@ -475,7 +475,12 @@ class BenchmarkSuite:
                     f"{'PASS' if passed else 'FAIL'}"
                 )
             except Exception as exc:
-                score = ContextScore(overall=0, dimensions={})
+                score = ContextScore(
+                    overall=0.0,
+                    dimensions={},
+                    recommendations=[],
+                    metadata={},
+                )
                 passed = False
                 detail = f"Error: {exc}"
             duration = (time.monotonic() - start) * 1000
@@ -601,26 +606,30 @@ def load_last_result(directory: str | Path = BENCHMARK_DIR) -> BenchmarkSuiteRes
     )
 
 
-def _results_from_dict(results: list[dict]) -> list[BenchmarkCaseResult]:
+def _results_from_dict(results: list[dict[str, object]]) -> list[BenchmarkCaseResult]:
     """Deserialize a list of result dicts into BenchmarkCaseResult objects."""
     parsed: list[BenchmarkCaseResult] = []
     for r in results:
-        score_data = r.get("score", {})
+        score_data = cast(dict[str, object], r.get("score") or {})
+        overall = cast(float, score_data.get("overall") or 0)
+        dimensions_raw = cast(dict[str, object], score_data.get("dimensions") or {})
+        recommendations_raw = cast(list[object], score_data.get("recommendations") or [])
+        metadata_raw = cast(dict[str, object], score_data.get("metadata") or {})
         score = ContextScore(
-            overall=score_data.get("overall", 0),
+            overall=overall,
             dimensions={
-                QualityDimension(k): v for k, v in score_data.get("dimensions", {}).items()
+                QualityDimension(str(k)): float(cast(float, v)) for k, v in dimensions_raw.items()
             },
-            recommendations=score_data.get("recommendations", []),
-            metadata=score_data.get("metadata", {}),
+            recommendations=[str(x) for x in recommendations_raw],
+            metadata=metadata_raw,
         )
         parsed.append(
             BenchmarkCaseResult(
-                case_id=r.get("case_id", ""),
-                passed=r.get("passed", False),
+                case_id=str(cast(str, r.get("case_id") or "")),
+                passed=bool(r.get("passed", False)),
                 score=score,
-                details=r.get("details", ""),
-                duration_ms=r.get("duration_ms", 0),
+                details=str(cast(str, r.get("details") or "")),
+                duration_ms=float(cast(float, r.get("duration_ms") or 0)),
             )
         )
     return parsed

@@ -21,8 +21,8 @@ try:
     _HAS_WATCHDOG = True
 except ImportError:
     Observer = None  # type: ignore[assignment]
-    FileSystemEventHandler = object  # type: ignore[assignment]
-    FileSystemEvent = None  # type: ignore
+    FileSystemEventHandler = object  # type: ignore[assignment,misc]
+    FileSystemEvent = None  # type: ignore[assignment,misc]
 
 
 class _WatchdogHandler(FileSystemEventHandler):
@@ -32,21 +32,21 @@ class _WatchdogHandler(FileSystemEventHandler):
         super().__init__()
         self.watcher = watcher
 
-    def on_modified(self, event: FileSystemEvent) -> None:
-        if not event.is_directory:
-            rel = self._rel_path(event.src_path)
+    def on_modified(self, event: FileSystemEvent | None) -> None:
+        if event and not event.is_directory:
+            rel = self._rel_path(str(event.src_path))
             if rel and not self._is_excluded(rel):
                 self.watcher.callback(rel, "modified")
 
-    def on_created(self, event: FileSystemEvent) -> None:
-        if not event.is_directory:
-            rel = self._rel_path(event.src_path)
+    def on_created(self, event: FileSystemEvent | None) -> None:
+        if event and not event.is_directory:
+            rel = self._rel_path(str(event.src_path))
             if rel and not self._is_excluded(rel):
                 self.watcher.callback(rel, "created")
 
-    def on_deleted(self, event: FileSystemEvent) -> None:
-        if not event.is_directory:
-            rel = self._rel_path(event.src_path)
+    def on_deleted(self, event: FileSystemEvent | None) -> None:
+        if event and not event.is_directory:
+            rel = self._rel_path(str(event.src_path))
             if rel and not self._is_excluded(rel):
                 self.watcher.callback(rel, "deleted")
 
