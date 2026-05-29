@@ -8,25 +8,31 @@ from opencontext_core.harness.gates import (
 )
 from opencontext_core.harness.models import (
     BudgetMode,
+    DataClassification,
     GateStatus,
     HarnessArtifact,
     HarnessDecision,
     HarnessRunResult,
+    PermissionScope,
     PhaseGate,
     PhaseLedger,
+    PrivacyProfile,
 )
 
 __all__ = [
     "BudgetMode",
     "ContextPackCreatedGate",
+    "DataClassification",
     "EngramMemoryAdapter",
     "GateStatus",
     "HarnessArtifact",
     "HarnessDecision",
     "HarnessRunResult",
     "MemoryDelta",
+    "PermissionScope",
     "PhaseGate",
     "PhaseLedger",
+    "PrivacyProfile",
     "ProjectIndexExistsGate",
     "TokenBudgetEnforcer",
 ]

@@ -204,21 +204,27 @@ def check_disk_space() -> CheckResult:
 
 
 def check_harness_phases() -> CheckResult:
-    """Verify all 6 SDD harness phases are available."""
+    """Verify all 9 SDD harness phases are available."""
 
     try:
         from opencontext_core.harness.phases import (
             ApplyPhase,
             ArchivePhase,
+            DesignPhase,
             ExplorePhase,
             ProposePhase,
             ReviewPhase,
+            SpecPhase,
+            TasksPhase,
             VerifyPhase,
         )
 
         phases = {
             "explore": ExplorePhase,
             "propose": ProposePhase,
+            "spec": SpecPhase,
+            "design": DesignPhase,
+            "tasks": TasksPhase,
             "apply": ApplyPhase,
             "verify": VerifyPhase,
             "review": ReviewPhase,
@@ -234,17 +240,12 @@ def check_harness_phases() -> CheckResult:
 
         # Verify each phase has an id attribute
         phase_ids = {
-            "explore": ExplorePhase.id,
-            "propose": ProposePhase.id,
-            "apply": ApplyPhase.id,
-            "verify": VerifyPhase.id,
-            "review": ReviewPhase.id,
-            "archive": ArchivePhase.id,
+            name: cls.id for name, cls in phases.items()
         }
         return CheckResult(
             "Harness Phases",
             "passed",
-            f"6/6 phases available: {', '.join(f'{k}={v}' for k, v in phase_ids.items())}",
+            f"9/9 phases available: {', '.join(f'{k}={v}' for k, v in phase_ids.items())}",
         )
     except ImportError as exc:
         return CheckResult("Harness Phases", "failed", f"Import error: {exc}")

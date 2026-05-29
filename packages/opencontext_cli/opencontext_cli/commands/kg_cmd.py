@@ -816,9 +816,9 @@ def _build_file_stats(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
     return stats
 
 
-def _build_tree(files: list[str]) -> dict:
+def _build_tree(files: list[str]) -> dict[str, Any]:
     """Build a nested dict tree from file paths."""
-    tree: dict = {}
+    tree: dict[str, Any] = {}
     for path in sorted(files):
         parts = path.split("/")
         node = tree
@@ -842,7 +842,7 @@ def _generate_ascii_tree(kg: KnowledgeGraph) -> str:
     lines.append("# Project Structure")
     lines.append("")
 
-    def _render(subtree: dict, prefix: str = "", path_so_far: str = "") -> None:
+    def _render(subtree: dict[str, Any], prefix: str = "", path_so_far: str = "") -> None:
         items = list(subtree.items())
         for i, (name, sub) in enumerate(items):
             connector = "`-- " if i == len(items) - 1 else "|-- "
@@ -892,7 +892,7 @@ def _generate_tree_text(kg: KnowledgeGraph) -> str:
     lines.append("# Project Structure")
     lines.append("")
 
-    def _render(subtree: dict, prefix: str = "", path_so_far: str = "") -> None:
+    def _render(subtree: dict[str, Any], prefix: str = "", path_so_far: str = "") -> None:
         items = list(subtree.items())
         for i, (name, sub) in enumerate(items):
             connector = "└── " if i == len(items) - 1 else "├── "
@@ -969,7 +969,7 @@ def _display_rich_tree(kg: KnowledgeGraph) -> None:
     # ── Enhanced directory tree ───────────────────────────────────────
     console.section("Directory Structure")
 
-    def _render(subtree: dict, prefix: str = "", path_so_far: str = "") -> None:
+    def _render(subtree: dict[str, Any], prefix: str = "", path_so_far: str = "") -> None:
         items = list(subtree.items())
         for i, (name, sub) in enumerate(items):
             connector = "└── " if i == len(items) - 1 else "├── "

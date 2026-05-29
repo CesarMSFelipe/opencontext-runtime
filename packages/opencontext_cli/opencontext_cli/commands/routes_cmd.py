@@ -18,7 +18,7 @@ def add_routes_parser(subparsers: Any) -> None:
         "routes",
         help="Detect framework route definitions (Django, FastAPI, Flask, Express, NestJS).",
     )
-    routes_sub = routes_parser.add_subparsers(dest="routes_command", required=True)
+    routes_sub = routes_parser.add_subparsers(dest="routes_command")
     scan_parser = routes_sub.add_parser("scan", help="Scan project for route definitions.")
     scan_parser.add_argument("root", nargs="?", default=".", help="Project root.")
     scan_parser.add_argument(
@@ -33,8 +33,15 @@ def add_routes_parser(subparsers: Any) -> None:
 
 
 def handle_routes(args: Any) -> None:
-    command = args.routes_command
+    command = getattr(args, "routes_command", None)
     root = getattr(args, "root", ".")
+
+    if command is None:
+        import subprocess
+
+        subprocess.run(["opencontext", "routes", "--help"])
+        return
+
     if command == "scan":
         _handle_scan(
             root,

@@ -209,7 +209,7 @@ def _run_reviewer(role: str, prompt: str) -> dict[str, Any]:
         response = adapter.chat([{"role": "user", "content": prompt}])
         import json
 
-        data = json.loads(response.content)
+        data: dict[str, Any] = json.loads(response.content)
         if not all(k in data for k in ("role", "findings", "summary")):
             raise ValueError("Response missing required keys: role, findings, summary")
         return data

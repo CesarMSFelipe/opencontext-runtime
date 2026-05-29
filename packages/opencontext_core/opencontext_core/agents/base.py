@@ -23,8 +23,7 @@ class AgentConfig(BaseModel):
     output: dict[str, Any] = Field(default_factory=dict)
     automation: dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = {"arbitrary_types_allowed": True}
 
 
 @dataclass

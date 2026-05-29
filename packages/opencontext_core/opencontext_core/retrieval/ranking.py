@@ -6,7 +6,8 @@ import re
 
 from opencontext_core.models.project import FileKind, ProjectFile, Symbol
 
-TERM_RE = re.compile(r"[A-Za-z0-9_]+")
+# CAMEL_RE tokenizes queries; underscores are stripped here then re-split by _split_camel
+CAMEL_RE = re.compile(r"[A-Za-z0-9]+")
 QUERY_STOPWORDS = {
     "a",
     "an",
@@ -30,22 +31,51 @@ QUERY_STOPWORDS = {
 }
 
 
+def _split_camel(term: str) -> list[str]:
+    """Split CamelCase into lowercase parts (e.g. PrivacyGate → ['privacy', 'gate'])."""
+    parts: list[str] = []
+    start = 0
+    for i, char in enumerate(term):
+        if i > 0 and char.isupper():
+            parts.append(term[start:i].lower())
+            start = i
+    if start < len(term):
+        parts.append(term[start:].lower())
+    return [p for p in parts if len(p) > 1]
+
+
+CAMEL_RE = re.compile(r"[A-Za-z0-9]+")
+
+
 class RetrievalScorer:
     """Scores manifest entries with simple deterministic hybrid relevance."""
 
     def terms(self, query: str) -> list[str]:
-        """Tokenize a query into lowercase terms."""
+        """Tokenize a query into lowercase terms, splitting CamelCase compounds.
 
+        Skips: stopwords, single chars, and purely numeric terms (which would
+        create spurious substring matches in symbol names via _hit_count).
+        """
+
+        raw_terms = CAMEL_RE.findall(query)
         terms: list[str] = []
-        for raw_term in TERM_RE.findall(query):
+        for raw_term in raw_terms:
             term = raw_term.lower()
+            # Skip single-char, stopwords, and purely numeric terms
             if len(term) <= 1 or term in QUERY_STOPWORDS:
                 continue
-            terms.append(term)
-            if term.endswith("ing") and len(term) > 5:
-                stem = term[:-3]
-                if stem:
-                    terms.append(stem)
+            if term.isdigit():
+                continue
+            # Split CamelCase compounds so PrivacyGate → privacy, gate
+            split_parts = _split_camel(raw_term)
+            for part in split_parts:
+                if part not in QUERY_STOPWORDS:
+                    terms.append(part)
+                # Also add -ing stems for verbs
+                if part.endswith("ing") and len(part) > 5:
+                    stem = part[:-3]
+                    if stem and stem not in QUERY_STOPWORDS:
+                        terms.append(stem)
         return list(dict.fromkeys(terms))
 
     def file_score(

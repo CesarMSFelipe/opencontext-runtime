@@ -556,7 +556,7 @@ def _execute_plan(
     root_path = __import__("pathlib").Path(root)
 
     # ── Phase 1: Agent integrations ─────────────────────────────────────
-    generated_files: list = []
+    generated_files: list[Any] = []
     agent_warnings: list[str] = []
     with console.status("[cyan]Configuring agent integrations...[/]", spinner="dots"):
         generator = AgentIntegrationGenerator()
@@ -582,7 +582,7 @@ def _execute_plan(
 
     # ── Phase 2: SDD/TDD context ─────────────────────────────────────────
     sdd_context = None
-    sdd_files: list = []
+    sdd_files: list[Any] = []
     skill_generated = False
     skill_target = root_path / ".opencontext" / "skills" / "opencontext-agent" / "SKILL.md"
     with console.status("[cyan]Writing SDD/TDD context...[/]", spinner="dots"):
@@ -609,7 +609,7 @@ def _execute_plan(
             skill_generated = True
 
     # ── Phase 3: Project index ───────────────────────────────────────────
-    index_status: dict = {}
+    index_status: dict[str, Any] = {}
     with console.status("[cyan]Indexing project...[/]", spinner="dots"):
         try:
             manifest = OpenContextRuntime().index_project(root_path)

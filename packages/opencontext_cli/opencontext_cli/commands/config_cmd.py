@@ -239,6 +239,15 @@ def _config_get(key: str) -> None:
         print(f"{key} = {value}")
     else:
         print(f"Unknown key: {key}")
+        # Suggest the closest key (replace dots with underscores for display)
+        candidates = sorted(CONFIG_PATHS.keys())
+        key_norm = key.lower().replace(".", "_")
+        suggestions = [
+            c for c in candidates
+            if key_norm in c.lower() or c.lower() in key_norm
+        ]
+        if suggestions:
+            print(f"Hint: did you mean {suggestions[0]!r}?")
         print(f"Available paths ({len(CONFIG_PATHS)}):")
         for path, (typ, desc) in sorted(CONFIG_PATHS.items()):
             print(f"  {path}  ({typ.__name__})  {desc}")
@@ -309,13 +318,13 @@ def _config_cleanup(keep_days: int) -> None:
     for entry_dir in sorted(ConfigBackupManager.BACKUP_DIR.iterdir()):
         if entry_dir.is_dir() and entry_dir.name.startswith("backup-"):
             try:
-                ts = entry_dir.name.replace("backup-", "")
+                ts_str = entry_dir.name.replace("backup-", "")
                 desc = "auto-pre-change"
                 files = sorted(f.name for f in entry_dir.iterdir() if f.is_file())
                 index.append(
                     {
                         "id": entry_dir.name,
-                        "timestamp": ts,
+                        "timestamp": ts_str,
                         "description": desc,
                         "files": files,
                     }

@@ -5,7 +5,9 @@ Run opencontext with no arguments to launch this interactive menu.
 
 from __future__ import annotations
 
+import argparse
 import sys
+from typing import Any
 
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
@@ -210,7 +212,9 @@ def _run_install() -> None:
             root: str = "."
             yes: bool = False
 
-        _install(_InstallArgs())
+        import argparse
+
+        _install(argparse.Namespace(root=".", yes=False))
     except Exception as exc:
         console.print(f"[red]Installation failed: {exc}[/]")
 
@@ -407,7 +411,7 @@ def _run_memory_tools() -> None:
             memory_command: str = "list"
             config: str = "opencontext.yaml"
 
-        _memory(_MemoryArgs())
+        _memory(argparse.Namespace(memory_command="list", config="opencontext.yaml"))
     except Exception as exc:
         console.print(f"[red]Memory list failed: {exc}[/]")
 
@@ -619,7 +623,7 @@ def _run_uninstall() -> None:
     console.print("[green]✓ Project files removed[/]")
 
     global_ok = False
-    global_items: list = []
+    global_items: list[Any] = []
     with console.status("[cyan]Removing global installation state...[/]", spinner="dots"):
         try:
             from opencontext_core.install_manager import InstallationManager
