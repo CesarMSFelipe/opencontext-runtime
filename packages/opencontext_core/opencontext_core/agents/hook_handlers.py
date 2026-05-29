@@ -52,7 +52,7 @@ def on_stop(context: HookContext) -> None:
 
 
 # Map events to their default handlers for bulk registration.
-DEFAULT_HANDLERS: dict[HookEvent, list[Callable]] = {
+DEFAULT_HANDLERS: dict[HookEvent, list[Callable[[HookContext], None]]] = {
     HookEvent.SESSION_START: [on_session_start],
     HookEvent.PRE_READ: [on_pre_read],
     HookEvent.PRE_EDIT: [on_pre_edit],
