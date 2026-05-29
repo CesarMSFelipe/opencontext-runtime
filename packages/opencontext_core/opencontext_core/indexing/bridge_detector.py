@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -111,7 +112,7 @@ class BridgeDetector:
 
         return found
 
-    def _iter_source_files(self, root: Path):
+    def _iter_source_files(self, root: Path) -> Iterator[Path]:
         """Yield source files, skipping known non-code directories."""
         for path in root.rglob("*"):
             if path.is_file() and path.suffix in _SOURCE_EXTENSIONS:

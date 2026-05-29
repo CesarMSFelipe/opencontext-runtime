@@ -6,6 +6,7 @@ Supports Django, FastAPI, Flask, Express.js, and NestJS.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,7 +26,7 @@ _SKIP_DIRS = frozenset(
 )
 _SOURCE_EXTENSIONS = frozenset({".py", ".ts", ".tsx", ".js", ".jsx"})
 
-_PATTERNS: list[tuple[re.Pattern, str, str]] = [
+_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
     # Django urlpatterns: path('route/', view_func)  or  url(r'^route/', view_func)
     (re.compile(r"(?:path|re_path|url)\s*\(\s*['\"]([^'\"]*)['\"].*?,\s*(\w+)"), "django", "ANY"),
     # FastAPI decorators: @app.get('/'), @router.post('/')
@@ -93,7 +94,7 @@ class FrameworkRouter:
                 break
         return found
 
-    def _iter_source_files(self, root: Path):
+    def _iter_source_files(self, root: Path) -> Iterator[Path]:
         for path in root.rglob("*"):
             if path.is_file() and path.suffix in _SOURCE_EXTENSIONS:
                 if not any(part in _SKIP_DIRS for part in path.parts):
