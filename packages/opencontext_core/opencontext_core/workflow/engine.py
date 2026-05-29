@@ -84,7 +84,7 @@ class WorkflowEngine:
 
         step_type = (
             step_def.get("type") if isinstance(step_def, dict) else getattr(step_def, "type", None)
-        )  # type: ignore[union-attr]
+        )
 
         if step_type == "parallel":
             child_steps = (
@@ -126,9 +126,10 @@ class WorkflowEngine:
                 if isinstance(step_def, dict)
                 else (getattr(step_def, "inputs", None) or [])
             )
-            for inp in inputs:
-                state.metadata["current_input"] = inp
-                self._run_named_step(state, fan_step)
+            if fan_step:
+                for inp in inputs:
+                    state.metadata["current_input"] = inp
+                    self._run_named_step(state, fan_step)
 
         else:
             step_name = (
@@ -173,7 +174,8 @@ class WorkflowEngine:
         )
         if self.hooks.before_run is not None:
             self.hooks.before_run(state)
-        for step_name in workflow.steps:
+        for step in workflow.steps:
+            step_name = step if isinstance(step, str) else str(step)
             self._run_named_step(state, step_name)
         if self.hooks.after_run is not None:
             self.hooks.after_run(state)
