@@ -111,24 +111,27 @@ def find_presets(root: str | Path = ".") -> list[Preset]:
 
     search_dirs.append(Path("openspec") / "presets")
 
+    yaml_mod: Any = _yaml
+    if yaml_mod is None:
+        import yaml as _yaml_anon
+
+        yaml_mod = _yaml_anon
     for preset_dir in search_dirs:
         if not preset_dir.exists():
             continue
         for f in sorted(preset_dir.glob("*.yaml")):
             try:
-                if _yaml is None:
-                    continue
-                data = _yaml.safe_load(f.read_text(encoding="utf-8"))
+                data = yaml_mod.safe_load(f.read_text(encoding="utf-8"))
                 if not isinstance(data, dict):
                     continue
-                name = data.get("name", f.stem)
+                name = str(data.get("name", f.stem))
                 presets.setdefault(
                     name,
                     Preset(
                         name=name,
-                        description=data.get("description", ""),
+                        description=str(data.get("description", "")),
                         base=data.get("base", {}),
-                        strategy=data.get("strategy", "replace"),
+                        strategy=str(data.get("strategy", "replace")),
                     ),
                 )
             except Exception:
