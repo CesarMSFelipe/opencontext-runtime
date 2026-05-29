@@ -64,7 +64,7 @@ class FrameworkRouter:
         rel_path = str(file_path.relative_to(root))
         lines = content.splitlines()
         for i, line in enumerate(lines, start=1):
-            for pattern, framework, default_method in _PATTERNS:
+            for pattern, framework, _default_method in _PATTERNS:
                 m = pattern.search(line)
                 if not m:
                     continue

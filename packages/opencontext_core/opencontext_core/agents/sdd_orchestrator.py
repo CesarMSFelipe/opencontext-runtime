@@ -177,8 +177,10 @@ class SDDOrchestrator:
             if phase not in track_phases:
                 return PhaseResult(
                     status="blocked",
-                    executive_summary=f"Phase '{phase}' is not in the active track '{self._track}'. "
-                    f"Track phases: {track_phases}",
+                    executive_summary=(
+                        f"Phase '{phase}' is not in the active track '{self._track}'. "
+                        f"Track phases: {track_phases}"
+                    ),
                 )
             deps = self._get_track_deps().get(phase, [])
             missing = [d for d in deps if not self.state.is_phase_completed(d)]

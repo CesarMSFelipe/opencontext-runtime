@@ -42,7 +42,9 @@ CATALOGUE: list[GuardrailEntry] = [
         name="no-specific-approach",
         phases=["propose"],
         rationalization="no specific approach",
-        counter_argument="Proposals must recommend a concrete technical approach, not just describe the problem.",
+        counter_argument=(
+            "Proposals must recommend a concrete technical approach, not just describe the problem."
+        ),
         severity="warning",
     ),
     GuardrailEntry(
@@ -56,14 +58,18 @@ CATALOGUE: list[GuardrailEntry] = [
         name="design-without-alternatives",
         phases=["design"],
         rationalization="without considering alternatives",
-        counter_argument="Design documents should discuss at least one alternative before choosing an approach.",
+        counter_argument=(
+            "Design documents should discuss at least one alternative before choosing an approach."
+        ),
         severity="warning",
     ),
     GuardrailEntry(
         name="tasks-too-vague",
         phases=["tasks"],
         rationalization="task is too vague",
-        counter_argument="Each task must be specific and actionable — 'implement feature' is not enough.",
+        counter_argument=(
+            "Each task must be specific and actionable - 'implement feature' is not enough."
+        ),
         severity="warning",
     ),
     GuardrailEntry(
@@ -77,7 +83,9 @@ CATALOGUE: list[GuardrailEntry] = [
         name="verify-no-evidence",
         phases=["verify"],
         rationalization="no evidence provided",
-        counter_argument="Verification must include concrete evidence: test output, screenshots, or logs.",
+        counter_argument=(
+            "Verification must include concrete evidence: test output, screenshots, or logs."
+        ),
         severity="warning",
     ),
     GuardrailEntry(

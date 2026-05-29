@@ -38,7 +38,9 @@ BUILTIN_INDEX: list[dict[str, Any]] = [
     {
         "name": "framework-router",
         "version": "1.0.0",
-        "description": "Framework-aware route detection for Django, FastAPI, Flask, Express, NestJS.",
+        "description": (
+            "Framework-aware route detection for Django, FastAPI, Flask, Express, NestJS."
+        ),
         "author": "opencontext-team",
         "tags": ["routing", "framework", "django", "fastapi", "express"],
         "requires_version": "0.4.0",
@@ -46,7 +48,9 @@ BUILTIN_INDEX: list[dict[str, Any]] = [
     {
         "name": "party-review",
         "version": "1.0.0",
-        "description": "Multi-perspective LLM review with architect, security, performance, and UX roles.",
+        "description": (
+            "Multi-perspective LLM review with architect, security, performance, and UX roles."
+        ),
         "author": "opencontext-team",
         "tags": ["review", "llm", "quality", "security"],
         "requires_version": "0.4.0",
@@ -62,7 +66,9 @@ BUILTIN_INDEX: list[dict[str, Any]] = [
     {
         "name": "bridge-detector",
         "version": "1.0.0",
-        "description": "Cross-language call boundary detection for HTTP, gRPC, subprocess, and IPC.",
+        "description": (
+            "Cross-language call boundary detection for HTTP, gRPC, subprocess, and IPC."
+        ),
         "author": "opencontext-team",
         "tags": ["polyglot", "bridges", "cross-language", "detection"],
         "requires_version": "0.4.0",

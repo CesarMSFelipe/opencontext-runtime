@@ -188,11 +188,6 @@ def _check_tdd(root: Path, test_file: str | None, impl_files: list[str]) -> tupl
     if not impl_paths:
         return True, f"Test file exists: {test_file} (no impl to compare)"
 
-    test_mtime = test_path.stat().st_mtime
-    # TDD compliant if test file was created before or at the same time as impl
-    # (or if test exists at all — verifies test-first discipline)
-    latest_impl = max(p.stat().st_mtime for p in impl_paths)
-
     # In this codebase, test and impl were written together in the same session,
     # so we check that the test file EXISTS and has assertions
     content = test_path.read_text(encoding="utf-8", errors="ignore")
@@ -357,11 +352,22 @@ BUILTIN_SCENARIOS: list[Scenario] = [
 # ── Competitive gaps (from market analysis) ───────────────────────────────────
 
 COMPETITIVE_GAPS: list[str] = [
-    "Framework routing: KG indexes files but doesn't resolve Django URL→view or FastAPI route→handler",
-    "Quantified benchmark numbers: no published 'X% fewer tokens' claim with methodology — now addressable with this benchmark",
+    (
+        "Framework routing: KG indexes files but doesn't resolve "
+        "Django URL->view or FastAPI route->handler"
+    ),
+    "Quantified benchmark numbers: "
+    "no published 'X% fewer tokens' claim with methodology - "
+    "now addressable with this benchmark",
     "Slash command richness: 30+ slash commands vs current set",
-    "Party Mode wired to LLM: review --party runs but returns scaffold results (no actual model calls)",
-    "Behavioral modes as first-class citizens: preset system exists but lacks named 'fast/quality/cost' modes",
+    (
+        "Party Mode wired to LLM: review --party runs but returns "
+        "scaffold results (no actual model calls)"
+    ),
+    (
+        "Behavioral modes as first-class citizens: preset system exists "
+        "but lacks named 'fast/quality/cost' modes"
+    ),
     "Visual telemetry: no dashboard showing token savings over time (only CLI tables)",
     "Extension ecosystem: registry has 3 built-ins, no community marketplace yet",
 ]

@@ -70,7 +70,9 @@ BUILTIN_PRESETS: dict[str, Preset] = {
     ),
     "privacy": Preset(
         name="privacy",
-        description="Maximum privacy: air-gapped, no external providers, aggressive secret redaction.",
+        description=(
+            "Maximum privacy: air-gapped, no external providers, aggressive secret redaction."
+        ),
         base={
             "security": {
                 "mode": "air_gapped",

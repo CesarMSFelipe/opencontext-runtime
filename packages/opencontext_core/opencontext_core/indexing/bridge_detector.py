@@ -15,7 +15,7 @@ class CrossLanguageBridge:
     source_symbol: str
     target_hint: str
     bridge_type: str  # HTTP | GRPC | CLI_SUBPROCESS | IPC
-    confidence: float  # 0.0–1.0
+    confidence: float  # 0.0-1.0
     line: int = 0
 
 

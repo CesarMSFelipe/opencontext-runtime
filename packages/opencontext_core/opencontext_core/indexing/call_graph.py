@@ -95,13 +95,13 @@ class CallGraphAnalyzer:
                 if neighbor_id in visited:
                     continue
                 if neighbor_id == target_id:
-                    full_path_ids = path + [neighbor_id]
+                    full_path_ids = [*path, neighbor_id]
                     hops = len(full_path_ids) - 1
                     full_path = self._ids_to_path(full_path_ids, conn)
                     return PathResult(found=True, path=full_path, hops=hops)
 
                 visited.add(neighbor_id)
-                queue.append((neighbor_id, path + [neighbor_id]))
+                queue.append((neighbor_id, [*path, neighbor_id]))
 
         return PathResult(found=False, depth_exceeded=skipped_due_to_depth)
 
