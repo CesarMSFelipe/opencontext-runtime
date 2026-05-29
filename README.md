@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/up_to_96%25_token_reduction-benchmarked-00C9A7?style=flat-square" alt="Up to 96% token reduction">
   <img src="https://img.shields.io/badge/offline--first-no_API_key-00A8E8?style=flat-square&logo=python&logoColor=white" alt="Works offline">
   <img src="https://img.shields.io/badge/13%2B_agents-Claude_%7C_Cursor_%7C_Copilot-845EC2?style=flat-square" alt="13+ agents">
-  <img src="https://img.shields.io/badge/865_tests-passing-00C9A7?style=flat-square" alt="Tests">
+  <img src="https://img.shields.io/badge/tests_passing-00C9A7?style=flat-square" alt="Tests">
   <img src="https://img.shields.io/badge/license-MIT-gray?style=flat-square" alt="MIT">
 </p>
 
@@ -205,7 +205,7 @@ opencontext knowledge-graph view --format tree   # visual project map
 
 ### Windsurf
 
-`opencontext install` creates `~/.windsurf/workflows/opencontext.md` — a Windsurf workflow with plan and code mode instructions.
+`opencontext install` creates `~/.windsurf/rules/opencontext.md` — a Windsurf rules file that Cascade loads automatically.
 
 **Day-to-day workflow:**
 
@@ -215,13 +215,11 @@ opencontext pack . --query "Explain the data layer" --copy
 # → paste into Cascade (Cmd+L)
 ```
 
-**Or use the workflow directly in Cascade:**
+For complex tasks, use the harness:
 
+```bash
+opencontext harness run --workflow sdd --task "Add caching to the API layer"
 ```
-> Run the opencontext workflow for: implement caching in the API layer
-```
-
-Cascade follows the instructions in the workflow file — it runs `opencontext pack` to get context, then proceeds with the task.
 
 ---
 
@@ -574,7 +572,7 @@ memory:
 Requires **Python 3.12+**. No API keys required for core functionality.
 
 ```bash
-pytest                          # 865 tests
+pytest                          # Tests (800+)
 ruff check .                    # Lint
 mypy packages/opencontext_core  # Types
 ```
