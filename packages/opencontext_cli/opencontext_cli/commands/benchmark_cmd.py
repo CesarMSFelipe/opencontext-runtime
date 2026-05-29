@@ -85,6 +85,9 @@ def _handle_run(args: Any) -> None:
     """Run benchmark cases."""
     suite = BenchmarkSuite()
 
+    if sys.stdout.encoding and "utf" not in sys.stdout.encoding.lower():
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     # Determine which cases to run
     if args.case:
         case_ids = [args.case]

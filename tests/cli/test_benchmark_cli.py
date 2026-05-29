@@ -14,6 +14,8 @@ def _run_cli(*args: str, cwd: Path | None = None, timeout: int = 60) -> subproce
         [sys.executable, "-m", "opencontext_cli", *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=str(cwd) if cwd else None,
         timeout=timeout,
     )
@@ -43,6 +45,7 @@ class TestBenchmarkCli:
         result = _run_cli("benchmark", "run")
         assert result.returncode == 0
         assert "OpenContext Benchmark Results" in result.stdout
+        assert "Summary:" in result.stdout
 
     def test_benchmark_run_json(self) -> None:
         result = _run_cli("benchmark", "run", "--format", "json")
@@ -55,12 +58,14 @@ class TestBenchmarkCli:
         result = _run_cli("benchmark", "run", "--case", "completeness/minimal")
         assert result.returncode == 0
         assert "completeness/minimal" in result.stdout
+        assert "Summary:" in result.stdout
 
     def test_benchmark_run_category_filter(self) -> None:
         result = _run_cli("benchmark", "run", "--category", "freshness")
         assert result.returncode == 0
         assert "freshness/recent" in result.stdout
         assert "freshness/stale" in result.stdout
+        assert "Summary:" in result.stdout
 
     def test_benchmark_run_save_and_compare(self, tmp_path: Path) -> None:
         """Full round-trip: run --save, then compare."""

@@ -530,9 +530,9 @@ class BenchmarkSuite:
 def format_benchmark_result(result: BenchmarkSuiteResult) -> str:
     """Format benchmark results as a human-readable string."""
     lines = [
-        "╭─────────────────────────────────────────────╮",
-        "│        OpenContext Benchmark Results         │",
-        "╰─────────────────────────────────────────────╯",
+        "+---------------------------------------------+",
+        "|        OpenContext Benchmark Results         |",
+        "+---------------------------------------------+",
         f"Timestamp: {result.timestamp}",
         "",
         f"Summary: {result.passed}/{result.total_cases} passed | "
@@ -540,17 +540,19 @@ def format_benchmark_result(result: BenchmarkSuiteResult) -> str:
         "",
     ]
     for r in result.results:
-        icon = "✓" if r.passed else "✗"
-        lines.append(f"  {icon} {r.case_id:40} {r.score.overall:5.1f}/100  ({r.duration_ms:.0f}ms)")
+        icon = "PASS" if r.passed else "FAIL"
+        lines.append(
+            f"  [{icon}] {r.case_id:40} {r.score.overall:5.1f}/100  ({r.duration_ms:.0f}ms)"
+        )
         for dim, score in r.score.dimensions.items():
-            bar = "█" * int(score / 10) + "░" * (10 - int(score / 10))
+            bar = "#" * int(score / 10) + "-" * (10 - int(score / 10))
             lines.append(f"      {DIMENSION_LABELS.get(dim, dim.value):20} {bar} {score:.0f}")
         lines.append("")
 
     if result.recommendations:
         lines.append("Recommendations:")
         for rec in result.recommendations:
-            lines.append(f"  → {rec}")
+            lines.append(f"  -> {rec}")
 
     return "\n".join(lines)
 
