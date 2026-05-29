@@ -629,7 +629,8 @@ def _execute_plan(
     )
     summary_rows = [
         f"  [bold]Agents:[/]   {', '.join(agents)} ({len(generated_files)} file(s))",
-        f"  [bold]SDD/TDD:[/]  {len(sdd_files)} artifact(s), strict TDD: {strict_tdd}, mode: {tdd_mode}",
+        f"  [bold]SDD/TDD:[/]  {len(sdd_files)} artifact(s), strict TDD: "
+        f"{strict_tdd}, mode: {tdd_mode}",
         f"  [bold]Index:[/]    {index_line}",
     ]
     if skill_generated:

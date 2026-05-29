@@ -34,7 +34,8 @@ def _handle_show(root: str, last: int | None = None) -> None:
     store = load_telemetry(root)
     if not store.events:
         console.print(
-            "[dim]No telemetry data yet. Run 'opencontext pack . --query <task>' to start tracking.[/]"
+            "[dim]No telemetry data yet. "
+            "Run 'opencontext pack . --query <task>' to start tracking.[/]"
         )
         return
 

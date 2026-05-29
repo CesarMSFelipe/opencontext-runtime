@@ -102,7 +102,7 @@ def _handle_validate(args: Any) -> None:
     ]
 
     # Body section checks
-    body = frontmatter.get("_body", content)
+    _body = frontmatter.get("_body", content)
     has_overview = "## Overview" in content
     has_implementation = "## Implementation" in content
     has_common_mistakes = "## Common Mistakes" in content

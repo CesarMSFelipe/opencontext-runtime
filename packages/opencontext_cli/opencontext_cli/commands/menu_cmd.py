@@ -64,7 +64,7 @@ def _action_header(title: str) -> None:
         console.clear()
     except Exception:
         pass
-    console.print(f"\n  [bold white]OpenContext[/bold white]   [dim]›[/dim]   [bold]{title}[/bold]")
+    console.print(f"\n  [bold white]OpenContext[/bold white]   [dim]>[/dim]   [bold]{title}[/bold]")
     console.print()
 
 

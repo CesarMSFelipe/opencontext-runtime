@@ -34,7 +34,7 @@ def add_bridges_parser(subparsers: Any) -> None:
         "--min-confidence",
         type=float,
         default=0.0,
-        help="Minimum confidence threshold (0.0–1.0).",
+        help="Minimum confidence threshold (0.0-1.0).",
     )
     scan_parser.add_argument(
         "--json",
