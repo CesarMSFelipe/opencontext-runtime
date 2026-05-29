@@ -86,6 +86,127 @@ class TestPhaseResult:
         assert restored.status == "success"
         assert restored.executive_summary == "Done"
 
+    def test_warnings_field(self) -> None:
+        """Warnings field serialization round-trip."""
+        result = PhaseResult(status="success", warnings=["spec missing non_goals"])
+        data = result.to_dict()
+        assert "warnings" in data
+        assert data["warnings"] == ["spec missing non_goals"]
+
+        restored = PhaseResult.from_dict(data)
+        assert restored.warnings == ["spec missing non_goals"]
+
+    def test_warnings_default_empty(self) -> None:
+        """Default warnings is empty list."""
+        result = PhaseResult()
+        assert result.warnings == []
+
+        data = result.to_dict()
+        restored = PhaseResult.from_dict(data)
+        assert restored.warnings == []
+
+    def test_warnings_backward_compat(self) -> None:
+        """Old dict without warnings key still loads."""
+        data = {
+            "status": "success",
+            "executive_summary": "",
+            "detailed_report": "",
+            "artifacts": [],
+            "next_recommended": "none",
+            "risks": [],
+            "skill_resolution": "none",
+        }
+        restored = PhaseResult.from_dict(data)
+        assert restored.warnings == []
+
+
+class TestWorkflowTracks:
+    """Test workflow track support."""
+
+    def test_quick_track_three_phases(self, tmp_path: Path) -> None:
+        config = SDDConfig(
+            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}, track="quick"
+        )
+        orch = SDDOrchestrator(config=config)
+        orch.start_change("test")
+        assert orch._track == "quick"
+
+        # Quick track: explore -> apply -> verify
+        assert orch.get_next_phases() == ["explore"]
+        orch.run_phase("explore", "# Explore\n")
+        assert "apply" in orch.get_next_phases()
+        assert "spec" not in orch.get_next_phases()  # not in quick track
+        orch.run_phase("apply", "# Apply\n")
+        orch.run_phase("verify", "# Verify\n")
+        assert orch.is_complete()
+
+    def test_standard_track_five_phases(self, tmp_path: Path) -> None:
+        config = SDDConfig(
+            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}},
+            track="standard",
+        )
+        orch = SDDOrchestrator(config=config)
+        orch.start_change("test")
+
+        assert orch._track == "standard"
+        phases = ["explore", "spec", "design", "apply", "verify"]
+        for phase in phases:
+            orch.run_phase(phase, f"# {phase}\n")
+        assert orch.is_complete()
+
+    def test_full_track_eight_phases(self, tmp_path: Path) -> None:
+        config = SDDConfig(
+            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}, track="full"
+        )
+        orch = SDDOrchestrator(config=config)
+        orch.start_change("test")
+
+        for phase in [
+            "explore",
+            "propose",
+            "spec",
+            "design",
+            "tasks",
+            "apply",
+            "verify",
+            "archive",
+        ]:
+            orch.run_phase(phase, f"# {phase}\n")
+        assert orch.is_complete()
+
+    def test_invalid_phase_rejected(self, tmp_path: Path) -> None:
+        config = SDDConfig(
+            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}, track="quick"
+        )
+        orch = SDDOrchestrator(config=config)
+        orch.start_change("test")
+        orch.run_phase("explore", "# Explore\n")
+
+        # propose is not in quick track
+        result = orch.run_phase("propose", "# Propose\n")
+        assert result.is_blocked()
+        assert "not in the active track" in result.executive_summary
+
+    def test_full_track_regression(self, tmp_path: Path) -> None:
+        """Pre-existing orchestrator tests pass with full track."""
+        config = SDDConfig(artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}})
+        orch = SDDOrchestrator(config=config)
+        orch.start_change("test")
+
+        assert not orch.is_complete()
+        for phase in [
+            "explore",
+            "propose",
+            "spec",
+            "design",
+            "tasks",
+            "apply",
+            "verify",
+            "archive",
+        ]:
+            orch.run_phase(phase, f"# {phase}\n")
+        assert orch.is_complete()
+
 
 class TestSDDOrchestrator:
     def test_start_change(self) -> None:

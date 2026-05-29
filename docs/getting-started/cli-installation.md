@@ -34,10 +34,10 @@ The CLI commands map directly to runtime-first APIs:
 
 | CLI command | Runtime/API equivalent |
 | --- | --- |
-| `opencontext onboard` | `runtime.setup_project(...)` or `POST /v1/setup` |
+| `opencontext install` | `runtime.setup_project(...)` or `POST /v1/setup` |
 | `opencontext index .` | `runtime.index_project(...)` |
 | `opencontext pack . --query ...` | `runtime.prepare_context(...)` or `POST /v1/context` |
-| `opencontext trace last` | `runtime.latest_trace()` |
+| `opencontext status .` | `runtime.latest_trace()` |
 
 ## When to Use the CLI
 

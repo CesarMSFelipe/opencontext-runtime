@@ -27,6 +27,29 @@ from opencontext_core.user_prefs import UserConfigStore
 console = Console()
 
 
+def _wizard_clear(
+    step: int,
+    total: int,
+    context: list[tuple[str, str]] | None = None,
+) -> None:
+    """Clear the terminal and render a compact wizard step header."""
+    try:
+        console.clear()
+    except Exception:
+        pass
+
+    dots = "  ".join(
+        "[bold #00C9A7]●[/]" if i <= step else "[dim]○[/]" for i in range(1, total + 1)
+    )
+    console.print(
+        f"\n  [bold white]OpenContext Setup[/bold white]   {dots}   [dim]step {step}/{total}[/dim]"
+    )
+    if context:
+        crumbs = "   [dim]•[/dim]   ".join(f"[dim]{k}:[/dim] [bold]{v}[/bold]" for k, v in context)
+        console.print(f"  {crumbs}")
+    console.print()
+
+
 def _check_first_run() -> bool:
     """Check if this is a first run and suggest onboard if so."""
     store = UserConfigStore()
@@ -170,58 +193,53 @@ def _run_interactive(
 ) -> None:
     """Run interactive setup with rich prompts."""
 
-    # Check first run — suggest onboard before proceeding
-    _check_first_run()
-
-    console.print()
-    console.print(
-        Panel.fit(
-            "[bold]OpenContext Setup[/bold]\n"
-            "Configure your environment with presets, profiles, and components.",
-            border_style="cyan",
-        )
-    )
-
-    # Step 1: Choose preset
+    # ── Step 1: Preset ──────────────────────────────────────────────────
     if not preset:
+        _wizard_clear(1, 6)
         preset = _choose_preset()
-    else:
-        console.print(f"[bold]Preset:[/] {preset}")
 
-    # Step 2: Choose profile
+    # ── Step 2: Profile ─────────────────────────────────────────────────
     if not profile:
+        _wizard_clear(2, 6, [("preset", preset)])
         profile = _choose_profile(preset)
-    else:
-        console.print(f"[bold]Profile:[/] {profile}")
 
-    # Step 3: Show components (optional override)
+    # ── Step 3: Components ──────────────────────────────────────────────
     if not components:
+        _wizard_clear(3, 6, [("preset", preset), ("profile", profile)])
         components = resolve_preset_components(preset)
-        console.print(f"\n[bold]Components ({len(components)}):[/]")
+        console.print(f"[bold]Components ({len(components)}):[/]")
         for c in components:
             console.print(f"  • {c}")
-
         if not Confirm.ask("\nContinue with these components?", default=True):
             custom_components = _choose_components()
             if custom_components:
                 components = custom_components
 
-    # Step 4: Agent + SDD/TDD choices
+    # ── Step 4: Agent clients + TDD mode ────────────────────────────────
+    _wizard_clear(
+        4,
+        6,
+        [("preset", preset), ("profile", profile), ("components", str(len(components)))],
+    )
     agents = _choose_agents(agents)
     tdd_mode = _choose_tdd_mode(tdd_mode)
 
-    # Step 5: SDD model profile
+    # ── Step 5: SDD model profile ────────────────────────────────────────
     if not sdd_profile:
+        _wizard_clear(
+            5,
+            6,
+            [("preset", preset), ("profile", profile), ("tdd", tdd_mode)],
+        )
         sdd_profile = _choose_sdd_profile()
 
-    # Step 6: Build plan
-    plan = build_plan(
-        preset_id=preset,
-        profile_id=profile,
-        components=components,
+    # ── Step 6: Plan review + confirm ────────────────────────────────────
+    _wizard_clear(
+        6,
+        6,
+        [("preset", preset), ("profile", profile), ("tdd", tdd_mode), ("sdd", sdd_profile)],
     )
-
-    # Step 7: Show plan
+    plan = build_plan(preset_id=preset, profile_id=profile, components=components)
     _show_plan(plan)
     console.print(f"\n[bold]Agents:[/] {', '.join(agents)}")
     console.print(f"[bold]TDD mode:[/] {tdd_mode}")
@@ -234,12 +252,15 @@ def _run_interactive(
         console.print("\n[bold yellow]── Dry run — no changes made ──[/]")
         return
 
-    # Step 8: Confirm
     if not Confirm.ask("\nApply this plan?", default=True):
         console.print("[yellow]Setup cancelled.[/]")
         return
 
-    # Step 9: Execute
+    # ── Execute (spinners) ───────────────────────────────────────────────
+    try:
+        console.clear()
+    except Exception:
+        pass
     _execute_plan(plan, agents, tdd_mode, root, max_tokens, sdd_profile, orchestrator_profile)
     console.print()
     console.print(
@@ -534,49 +555,91 @@ def _execute_plan(
 
     root_path = __import__("pathlib").Path(root)
 
-    # Project-local instructions for every selected client. These files make the
-    # graph/memory/SDD rules available immediately in the repository.
-    generator = AgentIntegrationGenerator()
-    generated_files = []
-    for selected_agent in agents:
-        try:
-            generated_files.extend(
-                generator.generate(root_path, target=AgentTarget(selected_agent), force=True)
-            )
-        except ValueError:
-            console.print(f"[yellow]⚠ Unknown project-local agent target: {selected_agent}[/]")
-
-    # Global client config (MCP + profile files) for selected clients, using
-    # OpenContext's local knowledge graph.
-    if "mcp-server" in plan.components or "knowledge-graph" in plan.components:
-        global_targets = []
+    # ── Phase 1: Agent integrations ─────────────────────────────────────
+    generated_files: list = []
+    agent_warnings: list[str] = []
+    with console.status("[cyan]Configuring agent integrations...[/]", spinner="dots"):
+        generator = AgentIntegrationGenerator()
         for selected_agent in agents:
             try:
-                global_targets.append(GlobalAgentTarget(selected_agent))
+                generated_files.extend(
+                    generator.generate(root_path, target=AgentTarget(selected_agent), force=True)
+                )
             except ValueError:
-                continue
-        if global_targets:
-            AgentInstaller(project_root=root_path).install(
-                targets=global_targets, location="global", yes=True
-            )
+                agent_warnings.append(f"Unknown project-local agent target: {selected_agent}")
 
-    # SDD/TDD artifacts and graph index are created now so the user does not
-    # need a second setup step after the wizard.
-    sdd_context, sdd_files = write_sdd_context(
-        root_path,
-        token_budget_per_phase=max_tokens,
-        tdd_mode=tdd_mode,
-        active_clients=agents,
-        sdd_model_profile=sdd_profile,
+        if "mcp-server" in plan.components or "knowledge-graph" in plan.components:
+            global_targets = []
+            for selected_agent in agents:
+                try:
+                    global_targets.append(GlobalAgentTarget(selected_agent))
+                except ValueError:
+                    continue
+            if global_targets:
+                AgentInstaller(project_root=root_path).install(
+                    targets=global_targets, location="global", yes=True
+                )
+
+    # ── Phase 2: SDD/TDD context ─────────────────────────────────────────
+    sdd_context = None
+    sdd_files: list = []
+    skill_generated = False
+    skill_target = root_path / ".opencontext" / "skills" / "opencontext-agent" / "SKILL.md"
+    with console.status("[cyan]Writing SDD/TDD context...[/]", spinner="dots"):
+        sdd_context, sdd_files = write_sdd_context(
+            root_path,
+            token_budget_per_phase=max_tokens,
+            tdd_mode=tdd_mode,
+            active_clients=agents,
+            sdd_model_profile=sdd_profile,
+        )
+        skill_source = (
+            __import__("pathlib").Path(__file__).resolve().parent.parent.parent
+            / "packages"
+            / "opencontext_core"
+            / "opencontext_core"
+            / "skills"
+            / "templates"
+            / "opencontext-agent"
+            / "SKILL.md"
+        )
+        if skill_source.exists():
+            skill_target.parent.mkdir(parents=True, exist_ok=True)
+            skill_target.write_text(skill_source.read_text(encoding="utf-8"), encoding="utf-8")
+            skill_generated = True
+
+    # ── Phase 3: Project index ───────────────────────────────────────────
+    index_status: dict = {}
+    with console.status("[cyan]Indexing project...[/]", spinner="dots"):
+        try:
+            manifest = OpenContextRuntime().index_project(root_path)
+            index_status = {"files": len(manifest.files), "symbols": len(manifest.symbols)}
+        except Exception as exc:  # pragma: no cover - defensive, surfaced to user
+            index_status = {"error": str(exc)}
+
+    # ── Summary ─────────────────────────────────────────────────────────
+    for w in agent_warnings:
+        console.print(f"[yellow]⚠ {w}[/]")
+
+    strict_tdd = getattr(sdd_context, "strict_tdd", False) if sdd_context else False
+    index_line = (
+        f"[red]✗ {index_status['error']}[/]"
+        if "error" in index_status
+        else f"{index_status.get('files', '?')} files, {index_status.get('symbols', '?')} symbols"
     )
-    try:
-        manifest = OpenContextRuntime().index_project(root_path)
-        index_status = {"files": len(manifest.files), "symbols": len(manifest.symbols)}
-    except Exception as exc:  # pragma: no cover - defensive, surfaced to user
-        index_status = {"error": str(exc)}
+    summary_rows = [
+        f"  [bold]Agents:[/]   {', '.join(agents)} ({len(generated_files)} file(s))",
+        f"  [bold]SDD/TDD:[/]  {len(sdd_files)} artifact(s), strict TDD: "
+        f"{strict_tdd}, mode: {tdd_mode}",
+        f"  [bold]Index:[/]    {index_line}",
+    ]
+    if skill_generated:
+        summary_rows.append(f"  [bold]Skill:[/]    {skill_target}")
 
-    console.print(f"[green]✓ Plan applied for agents:[/] {', '.join(agents)}")
-    console.print(f"[green]✓ SDD/TDD artifacts:[/] {', '.join(str(p) for p in sdd_files)}")
-    console.print(f"[green]✓ Strict TDD detected:[/] {sdd_context.strict_tdd}; mode: {tdd_mode}")
-    console.print(f"[green]✓ Project-local agent files:[/] {len(generated_files)}")
-    console.print(f"[green]✓ Knowledge graph index:[/] {index_status}")
+    console.print(
+        Panel.fit(
+            "\n".join(summary_rows),
+            title="[bold green]Setup applied[/bold green]",
+            border_style="green",
+        )
+    )

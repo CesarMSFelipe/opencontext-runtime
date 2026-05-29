@@ -16,6 +16,7 @@ class PhaseResult:
     artifacts: list[str] = field(default_factory=list)
     next_recommended: str = "none"
     risks: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     skill_resolution: str = "none"  # injected, fallback-registry, fallback-path, none
 
     def to_dict(self) -> dict[str, Any]:
@@ -28,6 +29,7 @@ class PhaseResult:
             "artifacts": list(self.artifacts),
             "next_recommended": self.next_recommended,
             "risks": list(self.risks),
+            "warnings": list(self.warnings),
             "skill_resolution": self.skill_resolution,
         }
 
@@ -42,6 +44,7 @@ class PhaseResult:
             artifacts=list(data.get("artifacts", [])),
             next_recommended=str(data.get("next_recommended", "none")),
             risks=list(data.get("risks", [])),
+            warnings=list(data.get("warnings", [])),
             skill_resolution=str(data.get("skill_resolution", "none")),
         )
 

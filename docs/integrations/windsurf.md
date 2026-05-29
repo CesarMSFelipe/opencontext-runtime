@@ -7,7 +7,7 @@ a workflow file with plan/code mode instructions.
 ## Setup
 
 ```bash
-opencontext onboard
+opencontext install
 opencontext agent init --target windsurf
 ```
 
@@ -19,7 +19,7 @@ This creates `~/.windsurf/workflows/opencontext.md`.
 # Code exploration
 opencontext pack . --query "Review auth" --mode plan --copy
 opencontext index .
-opencontext inspect repomap
+opencontext knowledge-graph view --format tree
 
 # Health
 opencontext verify

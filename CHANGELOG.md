@@ -5,6 +5,43 @@ All notable changes to OpenContext Runtime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-05-28
+
+### Fixed
+
+- **`doctor` after fresh install**: `_runtime()` now passes `None` config when `opencontext.yaml` is absent, falling back to defaults instead of raising `ConfigurationError`.
+- **"First Run" banner loop**: `is_first_run()` now treats `.opencontext/sdd/context.json` as a setup marker so the welcome banner does not reappear after `opencontext install`.
+- **Menu install action**: `_run_install()` now clears the screen before invoking the install wizard (header was only shown on error).
+- **Deprecated CLI commands**: Removed `sdd`, `check`, `packs`, `cost`, `policy`, `drupal`, `ddev` top-level commands. All are now in `_DeprecationAwareParser._DEPRECATED` and exit 2 with a migration message.
+- **Deprecated subcommands**: Removed `eval security`, `checkpoint diff`, `checkpoint inspect`, `workflow dry-run`, `workflow explain`, `cache explain`, `org baseline create`, `release transparency`, `security report`, `security policy`, `workflows run`.
+- **Stub functions**: Removed `_sdd`, `_sdd_*`, `_check`, `_drupal`, `_ddev`, `_cost`, `_policy`, `_workflow`, `_context_dag`.
+
+### Added
+
+- **D3 knowledge graph viewer**: `opencontext knowledge-graph view` now saves an interactive `opencontext-kg-view.html` with a zoomable/pannable D3 tree and opens it in the browser automatically.
+- **Ecosystem update checker**: `EcosystemUpdateChecker` tracks updates for companion packages (e.g. engram). Notices appear in the TUI menu update banner and after `opencontext upgrade`.
+- **Cross-file call edges**: `KnowledgeGraph.index_project()` now runs a second-pass resolver that links call edges whose source and target live in different files.
+- **Pack telemetry**: `opencontext pack` automatically records a `TelemetryEvent` so token-reduction stats accumulate without needing a separate benchmark run.
+- **Clipboard fallback**: `pack --copy` now tries `xclip`, `xsel`, `wl-copy`, and `pbcopy` directly via subprocess before giving up, with an actionable install hint on failure.
+- **Global MCP setup on install**: `opencontext install` now calls `AgentInstaller` to write `~/.config/opencode/mcp.json` and `~/.config/opencode/agents/sdd-orchestrator.json`.
+- **Verify phase in install**: Install ends with a health-check step that reports `N/N checks passed` before finishing.
+- **README**: Added `memory` and `agent-context` sections to CLI Reference.
+- **TUI menu**: Added option 11 "Context memory" to the Development section of the main TUI menu.
+- **Tests**: New test files `tests/core/test_backup.py`, `tests/core/test_compat.py`, `tests/core/test_errors.py`.
+
+### Changed
+
+- **TUI menu redesign**: Main menu now renders three side-by-side panels (Setup / Configure / Tools) with an inline update notice when cached updates are available.
+- **Setup wizard step indicators**: Interactive setup flow shows `● ○ ○` progress dots and clears the screen between steps.
+- **`update` hint after commands**: Post-command update notice now also includes outdated ecosystem packages from cache.
+- **`_cache()`**: Removed `cache explain` scaffold branch; `cache plan` and `cache warm` remain fully functional.
+- **`_release()`**: Removed `release transparency` scaffold JSON fallback; `release audit`, `release gate`, and `release evidence` remain.
+- **`_org()`**: `org baseline create` now raises `OpenContextError`; only `org baseline check` remains.
+- **`_checkpoint()`**: Non-`create` actions now call `_unreachable`.
+- **`_workflows()`**: `workflows run` removed; `list` and `inspect` remain.
+- **`_eval()`**: `eval security` branch removed.
+- **`_prompt()` export**: Removed misleading `"status": "scaffold"` key from JSON output.
+
 ## [0.3.0] - 2026-05-25
 
 ### Added

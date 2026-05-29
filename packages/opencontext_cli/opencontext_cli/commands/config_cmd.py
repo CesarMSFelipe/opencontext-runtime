@@ -94,6 +94,8 @@ def handle_config(args: Any) -> None:
 
             run_wizard_menu()
         else:
+            from opencontext_core.wizard import run_wizard
+
             run_wizard(non_interactive=True)
     elif command == "show":
         show_config()
@@ -302,19 +304,14 @@ def _config_cleanup(keep_days: int) -> None:
         except (ValueError, OSError):
             continue
 
-    # Rebuild index
-    [b for b in backups if b.id not in [r.id for r in ConfigBackupManager.list_backups()]]
-    # Actually let's rebuild from disk
+    # Rebuild index from disk — removes stale index entries for deleted dirs
     index = []
     for entry_dir in sorted(ConfigBackupManager.BACKUP_DIR.iterdir()):
         if entry_dir.is_dir() and entry_dir.name.startswith("backup-"):
             try:
                 ts = entry_dir.name.replace("backup-", "")
-                desc = "auto-pre-change"  # rough default
-                files = []
-                for f in entry_dir.iterdir():
-                    if f.is_file():
-                        files.append(f.name)
+                desc = "auto-pre-change"
+                files = sorted(f.name for f in entry_dir.iterdir() if f.is_file())
                 index.append(
                     {
                         "id": entry_dir.name,

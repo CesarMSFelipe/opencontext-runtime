@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -84,3 +86,21 @@ class WorkflowRunState(BaseModel):
         default_factory=dict,
         description="Implementation details shared between steps.",
     )
+
+    def save(self, path: Path | str) -> None:
+        """Persist minimal run state (run_id, workflow_name, user_request, metadata) to JSON."""
+        dest = Path(path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "run_id": self.run_id,
+            "workflow_name": self.workflow_name,
+            "user_request": self.user_request,
+            "metadata": self.metadata,
+        }
+        dest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: Path | str) -> WorkflowRunState:
+        """Restore run state from a previously saved JSON file."""
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        return cls(**data)

@@ -15,6 +15,10 @@ from opencontext_core.agents.artifact_store import (
 )
 from opencontext_core.agents.dag_state import DAGState
 from opencontext_core.agents.result_contract import PhaseResult
+from opencontext_core.agents.sdd_guardrails import (
+    evaluate_guardrails,
+    get_guardrails_for_phase,
+)
 from opencontext_core.config import (
     ArtifactStoreMode,
     SDDConfig,
@@ -43,6 +47,32 @@ PHASE_DEPENDENCIES: dict[str, list[str]] = {
     "archive": ["verify"],
 }
 
+# Workflow tracks: each track defines its own phase order and dependencies
+WORKFLOW_TRACKS: dict[str, dict[str, object]] = {
+    "quick": {
+        "phases": ["explore", "apply", "verify"],
+        "deps": {
+            "explore": [],
+            "apply": ["explore"],
+            "verify": ["apply"],
+        },
+    },
+    "standard": {
+        "phases": ["explore", "spec", "design", "apply", "verify"],
+        "deps": {
+            "explore": [],
+            "spec": ["explore"],
+            "design": ["explore"],
+            "apply": ["spec", "design"],
+            "verify": ["apply"],
+        },
+    },
+    "full": {
+        "phases": PHASE_ORDER,
+        "deps": PHASE_DEPENDENCIES,
+    },
+}
+
 
 class SDDOrchestrator:
     """Orchestrates the full SDD lifecycle."""
@@ -51,6 +81,27 @@ class SDDOrchestrator:
         self.config = config or SDDConfig()
         self.store = self._create_store()
         self.state: DAGState | None = None
+        self._track = getattr(self.config, "track", "full")
+
+    def _get_track_phases(self) -> list[str]:
+        """Get phase list for the active track."""
+
+        track_data = WORKFLOW_TRACKS.get(self._track, WORKFLOW_TRACKS["full"])
+        phases = track_data["phases"]
+        assert isinstance(phases, list)
+        return phases
+
+    def _get_track_deps(self) -> dict[str, list[str]]:
+        """Get dependency map for the active track."""
+
+        track_data = WORKFLOW_TRACKS.get(self._track, WORKFLOW_TRACKS["full"])
+        deps = track_data["deps"]
+        assert isinstance(deps, dict)
+        result: dict[str, list[str]] = {}
+        for k, v in deps.items():
+            assert isinstance(v, list)
+            result[k] = v
+        return result
 
     def _create_store(self) -> ArtifactStore:
         """Create artifact store based on config."""
@@ -73,22 +124,30 @@ class SDDOrchestrator:
         return self.state
 
     def can_run_phase(self, phase: str) -> bool:
-        """Check if a phase can run (all dependencies completed)."""
+        """Check if a phase can run (track-valid and all dependencies completed).
+
+        Returns False if the phase is not part of the active track.
+        """
 
         if self.state is None:
             return False
 
-        deps = PHASE_DEPENDENCIES.get(phase, [])
+        track_phases = self._get_track_phases()
+        if phase not in track_phases:
+            return False
+
+        deps = self._get_track_deps().get(phase, [])
         return all(self.state.is_phase_completed(dep) for dep in deps)
 
     def get_next_phases(self) -> list[str]:
-        """Get list of phases that are ready to run."""
+        """Get list of phases that are ready to run in the active track."""
 
         if self.state is None:
             return []
 
+        track_phases = self._get_track_phases()
         ready: list[str] = []
-        for phase in PHASE_ORDER:
+        for phase in track_phases:
             if not self.state.is_phase_completed(phase) and self.can_run_phase(phase):
                 ready.append(phase)
 
@@ -97,8 +156,7 @@ class SDDOrchestrator:
     def run_phase(self, phase: str, content: str) -> PhaseResult:
         """Run a single SDD phase.
 
-        In a real implementation, this would delegate to a sub-agent.
-        For now, it creates the artifact and updates state.
+        Runs guardrail evaluation on phase content, then persists artifact.
 
         Args:
             phase: Phase name.
@@ -115,12 +173,34 @@ class SDDOrchestrator:
             )
 
         if not self.can_run_phase(phase):
-            deps = PHASE_DEPENDENCIES.get(phase, [])
+            track_phases = self._get_track_phases()
+            if phase not in track_phases:
+                return PhaseResult(
+                    status="blocked",
+                    executive_summary=(
+                        f"Phase '{phase}' is not in the active track '{self._track}'. "
+                        f"Track phases: {track_phases}"
+                    ),
+                )
+            deps = self._get_track_deps().get(phase, [])
             missing = [d for d in deps if not self.state.is_phase_completed(d)]
             return PhaseResult(
                 status="blocked",
                 executive_summary=f"Dependencies not met: {missing}",
             )
+
+        # Evaluate guardrails
+        hits = evaluate_guardrails(phase, content)
+        warnings: list[str] = []
+        for hit in hits:
+            if hit.severity == "block":
+                return PhaseResult(
+                    status="blocked",
+                    executive_summary=f"Guardrail block: {hit.name}",
+                    detailed_report=hit.counter_argument,
+                    warnings=warnings,
+                )
+            warnings.append(f"[{hit.name}] {hit.counter_argument}")
 
         # Save artifact
         artifact_ref = self.store.save(self.state.change, phase, content)
@@ -133,8 +213,34 @@ class SDDOrchestrator:
             status="success",
             executive_summary=f"Phase '{phase}' completed for '{self.state.change}'.",
             artifacts=[artifact_ref],
+            warnings=warnings,
             next_recommended=self._get_next_recommended(),
         )
+
+    def _agent_contract_md(self, phase: str) -> str:
+        """Generate the agent contract markdown for a phase, including guardrails.
+
+        Args:
+            phase: Phase name.
+
+        Returns:
+            Markdown string with agent instructions and guardrails.
+        """
+
+        md = f"# Agent Contract: {phase}\n\n"
+        md += f"You are executing the **{phase}** phase of the SDD lifecycle.\n"
+        md += "Follow the spec and design documents for this change.\n"
+
+        guardrails = get_guardrails_for_phase(phase)
+        if guardrails:
+            md += "\n## Guardrails\n\n"
+            md += "Watch for these common anti-patterns:\n\n"
+            for entry in guardrails:
+                md += f"- **{entry.name}**: {entry.rationalization}\n"
+                md += f"  - *Counter-argument*: {entry.counter_argument}\n"
+            md += "\n"
+
+        return md
 
     def _get_next_recommended(self) -> str:
         """Determine the next recommended phase."""
@@ -178,9 +284,9 @@ class SDDOrchestrator:
         return self.store.load(self.state.change, phase)
 
     def is_complete(self) -> bool:
-        """Check if all phases are completed."""
+        """Check if all phases in the active track are completed."""
 
         if self.state is None:
             return False
 
-        return all(self.state.is_phase_completed(phase) for phase in PHASE_ORDER)
+        return all(self.state.is_phase_completed(phase) for phase in self._get_track_phases())

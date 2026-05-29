@@ -9,6 +9,7 @@ from typing import Any
 
 from opencontext_core.harness.budget import TokenBudgetEnforcer
 from opencontext_core.harness.config import HarnessConfig
+from opencontext_core.harness.gates import ConfidenceGate
 from opencontext_core.harness.models import (
     BudgetMode,
     GateStatus,
@@ -90,6 +91,27 @@ class HarnessRunner:
             phase_ids = ["explore", "archive"]
 
         for phase_id in phase_ids:
+            # Evaluate ConfidenceGate before running the phase
+            phase_config = self.config.phases.get(phase_id)
+            if phase_config is not None and phase_config.confidence_threshold is not None:
+                prev_gates = state.gates if state.gates else None
+                confidence_gate = ConfidenceGate().evaluate(
+                    phase=phase_id,
+                    threshold=phase_config.confidence_threshold,
+                    previous_gates=prev_gates,
+                )
+                if confidence_gate.status == GateStatus.FAILED:
+                    state.gates.append(confidence_gate)
+                    state.warnings.append(
+                        f"{phase_id}: confidence gate blocked "
+                        f"(score below {phase_config.confidence_threshold})"
+                    )
+                    if budget_mode is BudgetMode.STRICT:
+                        final_status = GateStatus.FAILED
+                        break
+                    # In non-strict modes, still warn but continue
+                    continue
+
             phase_obj = self._build_phase(phase_id, budget_mode)
             if phase_obj is None:
                 continue

@@ -304,3 +304,109 @@ class UpdateChecker:
             "skip_version": state.skip_version,
         }
         cls.CACHE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+# ── Ecosystem Update Checker ───────────────────────────────────────────────
+
+ECOSYSTEM_PACKAGES: list[str] = ["engram"]
+
+
+@dataclass
+class EcosystemCheck:
+    """Result of a single ecosystem package check."""
+
+    name: str
+    current_version: str
+    latest_version: str
+    is_outdated: bool
+    checked_at: str = ""
+
+
+class EcosystemUpdateChecker:
+    """Check for updates to known ecosystem packages (e.g. engram).
+
+    Caches results for 24 hours at ``ecosystem-update-cache.json``.
+    ``check_cached`` is read-only / no network; ``refresh`` hits PyPI.
+    """
+
+    CACHE_FILE = Path.home() / ".config" / "opencontext" / "ecosystem-update-cache.json"
+
+    @classmethod
+    def check_cached(cls) -> list[EcosystemCheck]:
+        """Return outdated packages from the on-disk cache. No network I/O."""
+        try:
+            if not cls.CACHE_FILE.exists():
+                return []
+            data = json.loads(cls.CACHE_FILE.read_text(encoding="utf-8"))
+            checked_at = data.get("checked_at", "")
+            if checked_at:
+                last = datetime.fromisoformat(checked_at)
+                if datetime.now() - last > CACHE_DURATION:
+                    return []
+            return [
+                EcosystemCheck(
+                    name=e["name"],
+                    current_version=e["current_version"],
+                    latest_version=e["latest_version"],
+                    is_outdated=e.get("is_outdated", False),
+                    checked_at=checked_at,
+                )
+                for e in data.get("packages", [])
+                if e.get("is_outdated")
+            ]
+        except Exception:
+            return []
+
+    @classmethod
+    def refresh(cls) -> list[EcosystemCheck]:
+        """Check PyPI for each installed ecosystem package and cache results."""
+        import importlib.metadata
+
+        results: list[EcosystemCheck] = []
+        now = datetime.now().isoformat()
+
+        for pkg in ECOSYSTEM_PACKAGES:
+            try:
+                current = importlib.metadata.version(pkg)
+            except Exception:
+                continue
+            try:
+                url = f"https://pypi.org/pypi/{pkg}/json"
+                req = Request(url, headers={"User-Agent": "OpenContext/1.0"})
+                with urlopen(req, timeout=5) as resp:
+                    pkg_data: dict[str, Any] = json.loads(resp.read().decode())
+                latest = pkg_data["info"]["version"]
+                results.append(
+                    EcosystemCheck(
+                        name=pkg,
+                        current_version=current,
+                        latest_version=latest,
+                        is_outdated=UpdateChecker._compare_versions(current, latest) < 0,
+                        checked_at=now,
+                    )
+                )
+            except Exception:
+                pass
+
+        cls._save_cache(results, now)
+        return results
+
+    @classmethod
+    def _save_cache(cls, results: list[EcosystemCheck], checked_at: str) -> None:
+        try:
+            cls.CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            data: dict[str, Any] = {
+                "checked_at": checked_at,
+                "packages": [
+                    {
+                        "name": r.name,
+                        "current_version": r.current_version,
+                        "latest_version": r.latest_version,
+                        "is_outdated": r.is_outdated,
+                    }
+                    for r in results
+                ],
+            }
+            cls.CACHE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass

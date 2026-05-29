@@ -13,6 +13,28 @@ from opencontext_core.models.project import FileKind, ProjectFile, Symbol
 GENERIC_PROFILE = "generic"
 
 
+class Route(BaseModel):
+    """A detected HTTP route in a project."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: str = Field(description="HTTP method (GET, POST, etc.) or '*' for any.")
+    path: str = Field(description="URL path pattern (e.g. '/users/<id>').")
+    handler: str = Field(description="Handler function or class name.")
+    file_path: str = Field(description="Project-relative file path.")
+    line: int = Field(default=0, description="Line number in source file.")
+    framework: str = Field(description="Framework identifier (django, fastapi, etc.).")
+
+
+class RouteScanner(Protocol):
+    """Protocol for framework-specific route scanners."""
+
+    framework: str
+
+    def scan(self, project_root: Path, paths: Sequence[str] = ()) -> list[Route]:
+        """Scan project files and return detected routes."""
+
+
 class ProfileDetectionResult(BaseModel):
     """Detection result emitted by a technology profile."""
 
@@ -135,3 +157,227 @@ class GenericTechnologyProfile:
         """Generic profile does not suggest executable validation commands."""
 
         return []
+
+
+# ── Route Scanners ──────────────────────────────────────────────────────────
+
+
+class DjangoRouteScanner:
+    """Scan Django ``urls.py`` files for ``path()`` and ``re_path()`` routes."""
+
+    framework = "django"
+
+    def scan(self, project_root: Path, paths: Sequence[str] = ()) -> list[Route]:
+        """Scan Python files named ``urls.py`` for Django route definitions.
+
+        Detects ``path(route, view, ...)`` and ``re_path(route, view, ...)``
+        calls inside ``urlpatterns`` lists.  ``include()`` calls are skipped.
+        """
+        routes: list[Route] = []
+
+        # Determine which files to scan
+        if paths:
+            url_files = [p for p in paths if p.endswith("urls.py")]
+        else:
+            url_files = self._find_urls_files(project_root)
+
+        for rel_path in url_files:
+            full_path = project_root / rel_path
+            if not full_path.is_file():
+                continue
+            try:
+                content = full_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+
+            routes.extend(self._scan_content(rel_path, content))
+
+        return routes
+
+    def _find_urls_files(self, root: Path) -> list[str]:
+        """Walk the project tree and find ``urls.py`` files."""
+        import os
+
+        results: list[str] = []
+        for dirpath, _dirnames, filenames in os.walk(root):
+            for fn in filenames:
+                if fn == "urls.py":
+                    full = Path(dirpath) / fn
+                    try:
+                        results.append(str(full.relative_to(root)))
+                    except ValueError:
+                        continue
+        return results
+
+    def _scan_content(self, rel_path: str, content: str) -> list[Route]:
+        """Extract routes from a single ``urls.py`` file."""
+        import re
+
+        routes: list[Route] = []
+
+        # Match: path('...', view_func, ...)  or  re_path(r'...', view_func, ...)
+        # Handles r'', f'', b'', and plain string prefixes
+        pattern = re.compile(
+            r"(?:path|re_path)\s*\(\s*"
+            r"(?:[rRfFuUbB]*)?"
+            r"['\"](?P<route>[^'\"]+)['\"]\s*,\s*"
+            r"(?P<view>[^,)]+?)"
+            r"(?:\s*[,)])",
+        )
+
+        for match in pattern.finditer(content):
+            route_str = match.group("route")
+            view_str = match.group("view").strip()
+
+            # Skip include() calls
+            if view_str.startswith("include("):
+                continue
+
+            routes.append(
+                Route(
+                    method="*",
+                    path=route_str,
+                    handler=view_str,
+                    file_path=rel_path,
+                    line=content[: match.start()].count("\n") + 1,
+                    framework=self.framework,
+                )
+            )
+
+        return routes
+
+
+class FastAPIRouteScanner:
+    """Scan FastAPI files for ``@app.get()``, ``@router.post()``, etc. routes."""
+
+    framework = "fastapi"
+
+    def scan(self, project_root: Path, paths: Sequence[str] = ()) -> list[Route]:
+        """Scan Python files for FastAPI route decorators.
+
+        Detects ``@<instance>.<method>(<path>)`` patterns where instance
+        is an ``app`` or ``router`` variable, and method is an HTTP verb
+        (get, post, put, patch, delete).
+        """
+        import os
+
+        routes: list[Route] = []
+
+        py_files: list[str] = []
+        if paths:
+            py_files = [p for p in paths if p.endswith(".py")]
+        else:
+            for dirpath, _dirnames, filenames in os.walk(project_root):
+                for fn in filenames:
+                    if fn.endswith(".py"):
+                        full = Path(dirpath) / fn
+                        try:
+                            py_files.append(str(full.relative_to(project_root)))
+                        except ValueError:
+                            continue
+
+        for rel_path in py_files:
+            full_path = project_root / rel_path
+            if not full_path.is_file():
+                continue
+            try:
+                content = full_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+
+            routes.extend(self._scan_content(rel_path, content))
+
+        return routes
+
+    def _scan_content(self, rel_path: str, content: str) -> list[Route]:
+        """Extract routes from a single Python file."""
+        import re
+
+        routes: list[Route] = []
+
+        # Match: @app.get('...'), @router.post("..."), etc.
+        # Also handles multi-line: @app.get(  '...'  )
+        pattern = re.compile(
+            r"@(?P<instance>\w+)\s*\.\s*(?P<method>get|post|put|patch|delete|options|head)\s*"
+            r"\(\s*"
+            r"['\"](?P<path>[^'\"]+)['\"]",
+        )
+
+        # Track APIRouter instances with prefixes
+        prefixes: dict[str, str] = {}
+        prefix_pattern = re.compile(
+            r"(?P<var>\w+)\s*=\s*APIRouter\s*\(.*?prefix\s*=\s*['\"](?P<prefix>[^'\"]+)['\"]",
+        )
+        for p_match in prefix_pattern.finditer(content):
+            prefixes[p_match.group("var")] = p_match.group("prefix")
+
+        for match in pattern.finditer(content):
+            instance = match.group("instance")
+            method = match.group("method").upper()
+            path = match.group("path")
+
+            # Resolve handler name: the next function/method def after the decorator
+            handler = self._resolve_handler(content, match.end())
+
+            # Apply prefix if the instance is an APIRouter
+            if instance in prefixes:
+                prefix = prefixes[instance].rstrip("/")
+                if not path.startswith("/"):
+                    path = "/" + path
+                path = prefix + path
+
+            routes.append(
+                Route(
+                    method=method,
+                    path=path,
+                    handler=handler or f"{instance}.{method.lower()}",
+                    file_path=rel_path,
+                    line=content[: match.start()].count("\n") + 1,
+                    framework=self.framework,
+                )
+            )
+
+        return routes
+
+    @staticmethod
+    def _resolve_handler(content: str, decorator_end: int) -> str:
+        """Find the function name after a decorator."""
+        import re
+
+        rest = content[decorator_end:]
+        # Skip whitespace and find the next def/async def
+        func_match = re.search(
+            r"^\s*(?:async\s+)?def\s+(?P<name>\w+)\s*\(",
+            rest,
+            re.MULTILINE,
+        )
+        if func_match:
+            return func_match.group("name")
+        return ""
+
+
+# ── Scanner registry ────────────────────────────────────────────────────────
+
+_FRAMEWORK_SCANNERS: dict[str, type[RouteScanner]] = {}
+
+
+def register_scanner(framework: str, scanner_cls: type[RouteScanner]) -> None:
+    """Register a route scanner for a framework.
+
+    Called automatically by importing scanner modules.
+    """
+    _FRAMEWORK_SCANNERS[framework] = scanner_cls
+
+
+def scanners_for_profiles(profiles: list[str]) -> list[RouteScanner]:
+    """Return route scanner instances for the given profile names."""
+    scanners: list[RouteScanner] = []
+    for profile_name in profiles:
+        if profile_name in _FRAMEWORK_SCANNERS:
+            scanners.append(_FRAMEWORK_SCANNERS[profile_name]())
+    return scanners
+
+
+# Register built-in scanners
+register_scanner("django", DjangoRouteScanner)
+register_scanner("fastapi", FastAPIRouteScanner)

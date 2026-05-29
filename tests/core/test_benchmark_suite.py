@@ -127,6 +127,23 @@ class TestBenchmarkSuite:
         assert 0 <= result.average_score <= 100
         assert len(result.results) == result.total_cases
 
+    def test_load_bearing_all_pass(self) -> None:
+        """Load-bearing test: all built-in cases must pass consistently."""
+        suite = BenchmarkSuite()
+        result = suite.run_all()
+        assert result.passed == len(suite.list_cases()), (
+            f"Expected all {len(suite.list_cases())} cases to pass, "
+            f"got {result.passed}/{result.total_cases}"
+        )
+
+    def test_run_invalid_id_raises(self) -> None:
+        """Running with an unknown case ID should raise ValueError."""
+        suite = BenchmarkSuite()
+        import pytest
+
+        with pytest.raises(ValueError, match="No matching cases"):
+            suite.run(case_ids=["nonexistent/case"])
+
     def test_run_specific(self) -> None:
         suite = BenchmarkSuite()
         result = suite.run(case_ids=["completeness/minimal", "safety/clean_context"])

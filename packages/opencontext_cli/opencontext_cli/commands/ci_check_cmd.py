@@ -53,7 +53,9 @@ jobs:
 
 def add_ci_check_parser(subparsers: Any) -> None:
     """Add ci-check command parsers."""
-    check_parser = subparsers.add_parser("ci-check", help="CI check management.")
+    import argparse
+
+    check_parser = subparsers.add_parser("ci-check", help=argparse.SUPPRESS)
     check_sub = check_parser.add_subparsers(dest="ci_check_command", required=True)
     check_init = check_sub.add_parser(
         "init", help="Initialize checks directory and ContextBench workflow."

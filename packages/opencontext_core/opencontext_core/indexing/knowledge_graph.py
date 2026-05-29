@@ -109,17 +109,19 @@ class KnowledgeGraph:
             node_map[sym.name] = node_ids[i]
 
         # Insert edges (resolve target names to node IDs when possible)
+        # Only store edges where both source and target are known in this file.
+        # Cross-file edges are resolved in a second pass by index_project().
         edges: list[Edge] = []
         for pe in parsed_edges:
             source_id = node_map.get(pe.source_name)
             target_id = node_map.get(pe.target_name)
 
-            if source_id is not None:
+            if source_id is not None and target_id is not None:
                 edges.append(
                     Edge(
                         id=None,
                         source_node_id=source_id,
-                        target_node_id=target_id or 0,
+                        target_node_id=target_id,
                         kind=pe.kind,
                         call_site_file=file_path,
                         call_site_line=pe.call_site_line,
@@ -149,11 +151,11 @@ class KnowledgeGraph:
         total_nodes = 0
         total_edges = 0
 
+        # Collect files to index
+        file_contents: list[tuple[str, str]] = []
         for ext in LANGUAGE_EXTENSIONS:
             for file_path in root_path.rglob(f"*{ext}"):
                 rel_path = file_path.relative_to(root_path).as_posix()
-
-                # Skip excluded
                 skip = False
                 for pattern in self.config.exclude:
                     if self._match_pattern(rel_path, pattern):
@@ -161,21 +163,117 @@ class KnowledgeGraph:
                         break
                 if skip:
                     continue
-
                 try:
                     content = file_path.read_text(encoding="utf-8")
-                    stats = self.index_file(rel_path, content)
-                    files_indexed += 1
-                    total_nodes += stats["nodes"]
-                    total_edges += stats["edges"]
+                    file_contents.append((rel_path, content))
                 except (OSError, UnicodeDecodeError):
                     continue
+
+        # Pass 1: index all files (creates nodes + intra-file edges)
+        for rel_path, content in file_contents:
+            stats = self.index_file(rel_path, content)
+            files_indexed += 1
+            total_nodes += stats["nodes"]
+            total_edges += stats["edges"]
+
+        # Pass 2: resolve cross-file edges using the complete global node map
+        cross_edges = self._resolve_cross_file_edges(file_contents)
+        if cross_edges:
+            conn = self.db._connect()
+            _SQL = "INSERT OR IGNORE INTO edges (source_node_id, target_node_id, kind, call_site_file, call_site_line) VALUES (?, ?, ?, ?, ?)"  # noqa: E501
+            conn.executemany(
+                _SQL,
+                [
+                    (e.source_node_id, e.target_node_id, e.kind, e.call_site_file, e.call_site_line)
+                    for e in cross_edges
+                ],
+            )
+            conn.commit()
+            total_edges += len(cross_edges)
 
         return {
             "files_indexed": files_indexed,
             "nodes": total_nodes,
             "edges": total_edges,
         }
+
+    def _resolve_cross_file_edges(self, file_contents: list[tuple[str, str]]) -> list[Edge]:
+        """Second pass: resolve calls whose target lives in a different file."""
+
+        conn = self.db._connect()
+
+        # Build global name → node_id map; dotted calls resolved via last component
+        global_map: dict[str, int] = {}
+        node_files: dict[int, str] = {}
+        for row in conn.execute("SELECT id, name, file_path FROM nodes").fetchall():
+            global_map[row["name"]] = row["id"]
+            node_files[row["id"]] = row["file_path"]
+
+        def _resolve(name: str) -> int | None:
+            result = global_map.get(name)
+            if result is None and "." in name:
+                result = global_map.get(name.rsplit(".", 1)[-1])
+            return result
+
+        # Collect already-stored (source, target) pairs to avoid duplicates
+        existing: set[tuple[int, int]] = set()
+        for row in conn.execute("SELECT source_node_id, target_node_id FROM edges").fetchall():
+            existing.add((row["source_node_id"], row["target_node_id"]))
+
+        cross_edges: list[Edge] = []
+        for file_path, content in file_contents:
+            language = self.parser.detect_language(file_path)
+            if language is None:
+                continue
+            try:
+                _, parsed_edges = self.parser.parse_file(file_path, content)
+            except Exception:
+                continue
+
+            for pe in parsed_edges:
+                source_id = _resolve(pe.source_name)
+                target_id = _resolve(pe.target_name)
+                if source_id is None or target_id is None:
+                    continue
+                if (source_id, target_id) in existing:
+                    continue
+                src_file = node_files.get(source_id, "")
+                tgt_file = node_files.get(target_id, "")
+                if src_file and tgt_file and src_file != tgt_file:
+                    cross_edges.append(
+                        Edge(
+                            id=None,
+                            source_node_id=source_id,
+                            target_node_id=target_id,
+                            kind=pe.kind,
+                            call_site_file=file_path,
+                            call_site_line=pe.call_site_line,
+                        )
+                    )
+                    existing.add((source_id, target_id))
+
+        return cross_edges
+
+    def finalize_cross_file_edges(self, file_contents: list[tuple[str, str]]) -> int:
+        """Resolve and store cross-file edges from an externally-managed file batch.
+
+        Call this after a series of index_file() calls to wire up inter-file relationships.
+        Returns the number of cross-file edges added.
+        """
+        cross_edges = self._resolve_cross_file_edges(file_contents)
+        if not cross_edges:
+            return 0
+        conn = self.db._connect()
+        _SQL = "INSERT OR IGNORE INTO edges (source_node_id, target_node_id, kind, call_site_file, call_site_line) VALUES (?, ?, ?, ?, ?)"  # noqa: E501
+        conn.executemany(
+            _SQL,
+            [
+                (e.source_node_id, e.target_node_id, e.kind, e.call_site_file, e.call_site_line)
+                for e in cross_edges
+            ],
+        )
+        conn.commit()
+        return len(cross_edges)
 
     def search(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         """Search for symbols by name using FTS5."""

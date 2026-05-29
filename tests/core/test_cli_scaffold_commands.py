@@ -7,11 +7,8 @@ from conftest import write_config
 
 from opencontext_cli.main import (
     _agent_context,
-    _check,
     _checkpoint,
-    _ddev,
     _doctor,
-    _drupal,
     _eval,
     _init,
     _pack,
@@ -20,16 +17,15 @@ from opencontext_cli.main import (
     _provider_simulate,
     _security,
     _tokens,
-    _watch,
 )
 from opencontext_core.runtime import OpenContextRuntime
 
 
-def test_check_deprecation(capsys) -> None:
-    _check("run", "all")
-    data = json.loads(capsys.readouterr().out)
-    assert data["status"] == "removed"
-    assert "opencontext verify" in data["hint"]
+def test_check_deprecation() -> None:
+    """check command is now in _DEPRECATED frozenset — it exits 2 via _DeprecationAwareParser."""
+    from opencontext_cli.main import _DeprecationAwareParser
+
+    assert "check" in _DeprecationAwareParser._DEPRECATED
 
 
 def test_checkpoint_create_outputs_hashes(capsys) -> None:
@@ -52,19 +48,18 @@ def test_pack_diff_scaffold(capsys) -> None:
     assert data["status"] == "scaffold"
 
 
-def test_eval_scaffold_commands(capsys) -> None:
+def test_eval_run_handles_missing_path(capsys) -> None:
+    """eval run with no path prints a helpful message."""
     runtime = OpenContextRuntime()
-    _eval(runtime, "security", None, ".", 6000, 0.5)
-    security = json.loads(capsys.readouterr().out)
-    assert security["suite"] == "security"
+    _eval(runtime, "run", None, ".", 6000, 0.5)
+    out = capsys.readouterr().out
+    assert "eval file" in out.lower() or "no eval" in out.lower() or "path" in out.lower()
 
 
-def test_tokens_and_watch_scaffolds(capsys) -> None:
+def test_tokens_report(capsys) -> None:
     _tokens("report")
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "ready"
-    _watch(".")
-    assert "scaffold" in capsys.readouterr().out
 
 
 def test_agent_context_copy_fallback(capsys) -> None:
@@ -91,15 +86,6 @@ def test_init_template_creates_workspace_and_config(tmp_path: Path, monkeypatch,
     assert (tmp_path / ".opencontext/policies/security-policy.yaml").exists()
 
 
-def test_ddev_init_scaffolds_wrapper(tmp_path: Path, monkeypatch, capsys) -> None:
-    monkeypatch.chdir(tmp_path)
-    _ddev("init")
-    out = capsys.readouterr().out
-    assert "DDEV" in out
-    assert (tmp_path / ".ddev/commands/web/opencontext").exists()
-    assert (tmp_path / ".opencontext/workflows/drupal-review.yaml").exists()
-
-
 def test_more_required_scaffolds(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "workflow-packs/example").mkdir(parents=True)
@@ -109,8 +95,6 @@ def test_more_required_scaffolds(tmp_path: Path, monkeypatch, capsys) -> None:
     assert json.loads(capsys.readouterr().out) == ["example"]
     _packs("inspect", "example")
     assert json.loads(capsys.readouterr().out)["status"] == "available"
-    _drupal("tests", "plan")
-    assert json.loads(capsys.readouterr().out)["profile"] == "drupal"
 
 
 def test_provider_simulate_denies_confidential(tmp_path: Path, capsys) -> None:

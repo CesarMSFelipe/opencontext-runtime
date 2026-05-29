@@ -12,6 +12,7 @@ class PhaseConfig:
 
     budget_tokens: int = 6000
     gates: list[str] = field(default_factory=list)
+    confidence_threshold: float | None = None
 
 
 @dataclass
@@ -41,6 +42,7 @@ class HarnessConfig:
             ),
             "apply": PhaseConfig(
                 budget_tokens=12000,
+                confidence_threshold=0.4,
                 gates=[
                     "provider_policy_passed",
                     "approval_required_for_writes",
@@ -48,6 +50,7 @@ class HarnessConfig:
             ),
             "verify": PhaseConfig(
                 budget_tokens=4000,
+                confidence_threshold=0.3,
                 gates=[
                     "security_scan_passed",
                     "no_high_risk_exports",
@@ -55,6 +58,7 @@ class HarnessConfig:
             ),
             "review": PhaseConfig(
                 budget_tokens=4000,
+                confidence_threshold=0.3,
                 gates=[
                     "review_artifact_created",
                 ],

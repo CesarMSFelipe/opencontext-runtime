@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import sqlite3
+from collections import deque
+from dataclasses import dataclass, field
 from typing import Any
 
 from opencontext_core.indexing.graph_db import GraphDatabase
+
+
+@dataclass
+class PathResult:
+    """Result of a BFS path query between two symbols."""
+
+    found: bool
+    path: list[dict[str, Any]] = field(default_factory=list)
+    depth_exceeded: bool = False
+    hops: int = 0
 
 
 @dataclass
@@ -22,6 +34,97 @@ class CallGraphAnalyzer:
 
     def __init__(self, db: GraphDatabase) -> None:
         self.db = db
+
+    def find_path(
+        self,
+        source_id: int,
+        target_id: int,
+        max_depth: int = 10,
+    ) -> PathResult:
+        """Find the shortest directed path from source to target using BFS.
+
+        Args:
+            source_id: Starting node ID.
+            target_id: Target node ID.
+            max_depth: Maximum traversal depth (1-50).
+
+        Returns:
+            PathResult with path, depth_exceeded, and hop count.
+        """
+
+        if source_id == target_id:
+            source_node = self.db.get_node_by_id(source_id)
+            if source_node:
+                return PathResult(
+                    found=True,
+                    path=[
+                        {
+                            "name": source_node.name,
+                            "file_path": source_node.file_path,
+                            "line": source_node.line,
+                        }
+                    ],
+                    hops=0,
+                )
+
+        visited: set[int] = {source_id}
+        queue: deque[tuple[int, list[int]]] = deque()
+        queue.append((source_id, [source_id]))
+        conn = self.db._connect()
+        skipped_due_to_depth = False
+
+        while queue:
+            node_id, path = queue.popleft()
+            current_depth = len(path) - 1
+
+            if current_depth >= max_depth:
+                skipped_due_to_depth = True
+                continue
+
+            rows = conn.execute(
+                """
+                SELECT e.target_node_id
+                FROM edges e
+                WHERE e.source_node_id = ? AND e.kind = 'calls'
+                """,
+                (node_id,),
+            ).fetchall()
+
+            for row in rows:
+                neighbor_id = row["target_node_id"]
+                if neighbor_id in visited:
+                    continue
+                if neighbor_id == target_id:
+                    full_path_ids = [*path, neighbor_id]
+                    hops = len(full_path_ids) - 1
+                    full_path = self._ids_to_path(full_path_ids, conn)
+                    return PathResult(found=True, path=full_path, hops=hops)
+
+                visited.add(neighbor_id)
+                queue.append((neighbor_id, [*path, neighbor_id]))
+
+        return PathResult(found=False, depth_exceeded=skipped_due_to_depth)
+
+    def _ids_to_path(
+        self,
+        ids: list[int],
+        conn: sqlite3.Connection,
+    ) -> list[dict[str, Any]]:
+        """Convert node IDs to path records with name, file_path, line."""
+
+        placeholders = ",".join("?" for _ in ids)
+        rows = conn.execute(
+            f"""
+            SELECT name, file_path, line
+            FROM nodes
+            WHERE id IN ({placeholders})
+            ORDER BY CASE id
+            {" ".join(f"WHEN {i} THEN {pos}" for pos, i in enumerate(ids))}
+            END
+            """,
+            ids,
+        ).fetchall()
+        return [{"name": r["name"], "file_path": r["file_path"], "line": r["line"]} for r in rows]
 
     def get_callers(self, node_id: int, depth: int = 1) -> list[dict[str, Any]]:
         """Find all symbols that call the given node.

@@ -24,10 +24,9 @@ executing native tools by default.
 
 ## Related Commands
 ```bash
-opencontext workflows list
-opencontext workflow dry-run security-audit
-opencontext run architect --task "review architecture"
-opencontext propose patch --task "fix tests"
+opencontext harness list
+opencontext harness run --workflow sdd --task "review architecture"
+opencontext workflow resume <run-id>
 ```
 
 ## Implemented Code

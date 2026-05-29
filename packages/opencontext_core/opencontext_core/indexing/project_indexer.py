@@ -17,6 +17,7 @@ from opencontext_core.project.profiles import (
     GenericTechnologyProfile,
     ProfileDetectionResult,
     TechnologyProfile,
+    scanners_for_profiles,
 )
 
 
@@ -52,6 +53,7 @@ class ProjectIndexer:
         # Populate knowledge graph if available
         kg_stats = {"files_indexed": 0, "nodes": 0, "edges": 0}
         if self.knowledge_graph is not None:
+            indexed_files: list[tuple[str, str]] = []
             for scanned_file in scanned_files:
                 if scanned_file.language in ("python", "php"):
                     try:
@@ -61,12 +63,28 @@ class ProjectIndexer:
                         kg_stats["files_indexed"] += 1
                         kg_stats["nodes"] += stats.get("nodes", 0)
                         kg_stats["edges"] += stats.get("edges", 0)
+                        indexed_files.append((scanned_file.relative_path, scanned_file.content))
                     except Exception:
                         pass
+            if indexed_files:
+                try:
+                    cross = self.knowledge_graph.finalize_cross_file_edges(indexed_files)
+                    kg_stats["edges"] += cross
+                except Exception:
+                    pass
+
+        # Run route scanners for detected profiles
+        detected_profile_names = [
+            d.profile for d in detections if d.profile != GENERIC_PROFILE and d.score > 0
+        ]
+        routes = []
+        for scanner in scanners_for_profiles(detected_profile_names):
+            routes.extend(scanner.scan(project_root, [file.path for file in project_files]))
 
         metadata = {
             "file_count": len(project_files),
             "symbol_count": len(symbols),
+            "routes": [route.model_dump() for route in routes],
             "safety": {
                 "files_with_potential_secrets": [
                     file.path

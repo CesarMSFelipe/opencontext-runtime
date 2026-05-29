@@ -270,8 +270,14 @@ class ConfigBackupManager:
 
     @classmethod
     def _save_index(cls, index: list[BackupEntry]) -> None:
-        """Save backup index."""
+        """Save backup index, deduplicating by backup ID."""
 
         cls.ensure_dir()
-        data = [asdict(entry) for entry in index]
+        seen: set[str] = set()
+        deduped: list[BackupEntry] = []
+        for entry in index:
+            if entry.id not in seen:
+                seen.add(entry.id)
+                deduped.append(entry)
+        data = [asdict(entry) for entry in deduped]
         cls.INDEX_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")

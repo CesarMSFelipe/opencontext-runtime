@@ -7,6 +7,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from .base import AgentConfig, BaseAgent
+from .hook_handlers import DEFAULT_HANDLERS
+from .hooks import HookEvent, HookRegistry
 from .loader import list_available_agents
 from .memory_manager import MemoryManager
 from .token_manager import TokenBudget
@@ -60,9 +62,18 @@ class AgentOrchestrator:
         self.agents_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
+        # Initialize hook system with default handlers
+        self.hooks = HookRegistry()
+        for event, handlers in DEFAULT_HANDLERS.items():
+            for handler in handlers:
+                self.hooks.register(event, handler)
+
         # Load available agents
         self.agents: dict[str, AgentConfig] = {}
         self._load_agents()
+
+        # Fire session start
+        self.hooks.trigger(HookEvent.SESSION_START, project_root=str(self.project_root))
 
     def _load_agents(self) -> None:
         """Load all available agent configurations."""
@@ -158,7 +169,7 @@ class AgentOrchestrator:
             # In production, this would call agent.run()
             result_data = self._mock_agent_execution(config, agent)
 
-            return AgentResult(
+            result = AgentResult(
                 agent_name=config.name,
                 agent_type=config.type,
                 status="success",
@@ -175,13 +186,29 @@ class AgentOrchestrator:
                     "provider": config.provider or {},
                 },
             )
+            self.hooks.trigger(
+                HookEvent.POST_TOOL,
+                project_root=str(self.project_root),
+                tool_name="run_agent",
+                status="success",
+                agent_name=config.name,
+            )
+            return result
         except Exception as e:
-            return AgentResult(
+            result = AgentResult(
                 agent_name=config.name,
                 agent_type=config.type,
                 status="error",
                 error=str(e),
             )
+            self.hooks.trigger(
+                HookEvent.POST_TOOL,
+                project_root=str(self.project_root),
+                tool_name="run_agent",
+                status="error",
+                agent_name=config.name,
+            )
+            return result
 
     def run_all_agents(self) -> dict[str, AgentResult]:
         """Run all enabled agents sequentially.

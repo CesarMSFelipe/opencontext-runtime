@@ -8,12 +8,12 @@ The default model provider is `mock/mock-llm`. Indexing, repo maps, token report
 
 ## Commands
 ```bash
-opencontext onboard
+opencontext install
 opencontext index .
-opencontext inspect repomap
+opencontext knowledge-graph view --format tree
 opencontext pack . --query "Explain this project"
 opencontext memory init
-opencontext release audit --dist .
+opencontext security scan .
 ```
 
 ## Safety Notes
