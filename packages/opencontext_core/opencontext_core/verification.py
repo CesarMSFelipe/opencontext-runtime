@@ -239,9 +239,7 @@ def check_harness_phases() -> CheckResult:
             )
 
         # Verify each phase has an id attribute
-        phase_ids = {
-            name: cls.id for name, cls in phases.items()
-        }
+        phase_ids = {name: cls.id for name, cls in phases.items()}
         return CheckResult(
             "Harness Phases",
             "passed",

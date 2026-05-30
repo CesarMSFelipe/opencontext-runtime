@@ -3050,8 +3050,7 @@ def _render_pack_markdown(pack: ContextPackResult, *, query: str, mode: str) -> 
             for item in pack.included
         )
         query_hits_sources = any(
-            any(term in item.source.lower() for term in query_terms)
-            for item in pack.included
+            any(term in item.source.lower() for term in query_terms) for item in pack.included
         )
         is_noise_query = all_generic and not query_hits_sources
     else:
