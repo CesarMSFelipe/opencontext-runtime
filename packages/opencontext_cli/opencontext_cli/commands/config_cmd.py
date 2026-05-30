@@ -242,10 +242,7 @@ def _config_get(key: str) -> None:
         # Suggest the closest key (replace dots with underscores for display)
         candidates = sorted(CONFIG_PATHS.keys())
         key_norm = key.lower().replace(".", "_")
-        suggestions = [
-            c for c in candidates
-            if key_norm in c.lower() or c.lower() in key_norm
-        ]
+        suggestions = [c for c in candidates if key_norm in c.lower() or c.lower() in key_norm]
         if suggestions:
             print(f"Hint: did you mean {suggestions[0]!r}?")
         print(f"Available paths ({len(CONFIG_PATHS)}):")
