@@ -131,8 +131,8 @@ def build_plan(
     elif components:
         resolved_components = list(dict.fromkeys(components))  # dedup, preserve order
     else:
-        # Default: minimal preset
-        resolved_components = resolve_preset_components("minimal")
+        # Default: context-first preset
+        resolved_components = resolve_preset_components("context-first")
 
     if profile_id is None:
         if preset_id:

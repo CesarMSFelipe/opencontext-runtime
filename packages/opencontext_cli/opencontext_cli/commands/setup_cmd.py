@@ -79,7 +79,7 @@ def add_setup_parser(subparsers: Any) -> None:
     )
     setup_parser.add_argument(
         "--preset",
-        choices=["full", "minimal", "enterprise", "air-gapped"],
+        choices=["full", "context-essential", "enterprise", "air-gapped", "context-first"],
         help="Preset to install (skips interactive selection).",
     )
     setup_parser.add_argument(
@@ -290,7 +290,7 @@ def _run_automated(
     _check_first_run()
 
     if not preset and not components:
-        preset = "minimal"
+        preset = "context-first"
 
     plan = build_plan(
         preset_id=preset,
@@ -321,6 +321,14 @@ def _choose_preset() -> str:
 
     presets = get_available_presets()
 
+    # Sort so context-first appears first with [default] marker
+    def preset_sort_key(p):
+        if p.id == "context-first":
+            return (0, p.id)
+        return (1, p.id)
+
+    sorted_presets = sorted(presets, key=preset_sort_key)
+
     console.print("\n[bold]Available Presets:[/]")
     table = Table(box=None)
     table.add_column("Option", style="cyan")
@@ -328,22 +336,25 @@ def _choose_preset() -> str:
     table.add_column("Description")
     table.add_column("Components")
 
-    for i, p in enumerate(presets, 1):
+    for i, p in enumerate(sorted_presets, 1):
         components = resolve_preset_components(p.id)
+        marker = " [default]" if p.id == "context-first" else ""
+        name = p.name + marker
         table.add_row(
             str(i),
-            p.name,
+            name,
             p.description,
             ", ".join(components),
         )
     console.print(table)
 
+    # Default to context-first (option 1)
     choice = Prompt.ask(
         "\nSelect preset",
-        choices=[str(i) for i in range(1, len(presets) + 1)],
+        choices=[str(i) for i in range(1, len(sorted_presets) + 1)],
         default="1",
     )
-    return presets[int(choice) - 1].id
+    return sorted_presets[int(choice) - 1].id
 
 
 def _choose_profile(preset: str | None = None) -> str:
@@ -354,9 +365,10 @@ def _choose_profile(preset: str | None = None) -> str:
     # Suggest a default based on preset
     suggestions = {
         "full": "developer",
-        "minimal": "minimal",
+        "context-essential": "minimal",
         "enterprise": "security-officer",
         "air-gapped": "security-officer",
+        "context-first": "minimal",
     }
     default = suggestions.get(preset or "", "developer")
     default_idx = next((i for i, p in enumerate(profiles) if p.id == default), 0)
