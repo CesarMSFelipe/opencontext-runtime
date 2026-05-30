@@ -40,23 +40,35 @@ hide:
 
 <div class="features">
 
-### 🔍 Knowledge Graph
-Indexes call chains, imports, and framework routes into a queryable SQLite graph. No external services, no API keys.
+<div class="feature-card">
+<h4>🔍 Knowledge Graph</h4>
+<p>Indexes call chains, imports, and framework routes into a queryable SQLite graph. No external services, no API keys.</p>
+</div>
 
-### 📦 Context Packs
-Task-specific, redacted, ranked, and budgeted before every LLM call. Only what matters gets sent.
+<div class="feature-card">
+<h4>📦 Context Packs</h4>
+<p>Task-specific, redacted, ranked, and budgeted before every LLM call. Only what matters gets sent.</p>
+</div>
 
-### 🛡️ Privacy & Security
-Secrets redacted automatically. Governance with audit trails. Air-gapped mode supported.
+<div class="feature-card">
+<h4>🛡️ Privacy & Security</h4>
+<p>Secrets redacted automatically. Governance with audit trails. Air-gapped mode supported.</p>
+</div>
 
-### 🔗 13+ Agents
-OpenCode, Cursor, Claude Code, Windsurf, Kilo Code, and more — auto-configured on install.
+<div class="feature-card">
+<h4>🔗 13+ Agents</h4>
+<p>OpenCode, Cursor, Claude Code, Windsurf, Kilo Code, and more — auto-configured on install.</p>
+</div>
 
-### 📐 SDD Workflow
-Spec-Driven Development with built-in TDD, phase governance, and traceable decisions.
+<div class="feature-card">
+<h4>📐 SDD Workflow</h4>
+<p>Spec-Driven Development with built-in TDD, phase governance, and traceable decisions.</p>
+</div>
 
-### ⚡ Works Offline
-The entire stack runs locally. No external APIs, no network required after setup.
+<div class="feature-card">
+<h4>⚡ Works Offline</h4>
+<p>The entire stack runs locally. No external APIs, no network required after setup.</p>
+</div>
 
 </div>
 
