@@ -26,8 +26,7 @@ class AgentResult(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict, description="Execution metadata")
     error: str | None = Field(None, description="Error message if failed")
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = {"arbitrary_types_allowed": True}
 
 
 class AgentOrchestrator:

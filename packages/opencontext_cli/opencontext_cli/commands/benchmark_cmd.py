@@ -86,7 +86,9 @@ def _handle_run(args: Any) -> None:
     suite = BenchmarkSuite()
 
     if sys.stdout.encoding and "utf" not in sys.stdout.encoding.lower():
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        import io
+
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
     # Determine which cases to run
     if args.case:

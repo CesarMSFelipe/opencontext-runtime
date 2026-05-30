@@ -1,0 +1,28 @@
+project: 
+description: Project-specific instructions for AI agents
+
+[conventions]
+- Use type hints for all function signatures
+- Write docstrings for public APIs
+- Prefer immutable data structures
+- Keep functions under 50 lines
+
+[architecture]
+- Core business logic is in the domain layer
+- Infrastructure concerns are in adapters
+- Use dependency injection for testability
+
+[workflows]
+- Run the full test suite before committing
+- Use conventional commits for changelog generation
+- Update documentation when changing public APIs
+
+[patterns]
+- Repository pattern for data access
+- Strategy pattern for interchangeable algorithms
+- Factory pattern for complex object creation
+
+[warnings]
+- Never commit secrets or API keys
+- Don't use global mutable state
+- Avoid circular dependencies between modules

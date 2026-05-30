@@ -1,0 +1,200 @@
+site_name: OpenContext Runtime
+site_description: Context engineering runtime for AI coding agents. Up to 96% token reduction.
+site_url: https://CesarMSFelipe.github.io/OpenContext-Runtime
+site_author: OpenContext Runtime maintainers
+
+repo_name: CesarMSFelipe/OpenContext-Runtime
+repo_url: https://github.com/CesarMSFelipe/OpenContext-Runtime
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.instant
+    - navigation.trimming
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+plugins:
+  - search:
+      lang:
+        - en
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - pymdownx.mark
+  - attr_list
+  - md_in_html
+  - tables
+
+extra:
+  generator: false
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - getting-started/index.md
+    - getting-started/quickstart.md
+    - getting-started/installation.md
+    - getting-started/first-context-pack.md
+    - getting-started/runtime-first.md
+    - getting-started/zero-key-mode.md
+    - getting-started/cli-installation.md
+    - getting-started/troubleshooting.md
+    - getting-started/getting-started-guide.md
+  - Product:
+    - product/index.md
+    - product/installation-experience.md
+    - product/community-sdd-tdd-gap-analysis.md
+  - Concepts:
+    - concepts/index.md
+    - concepts/what-is-context-engineering.md
+  - Configuration:
+    - configuration/index.md
+    - configuration/overview.md
+    - configuration/defaults.md
+    - configuration/security-policy.md
+    - configuration/provider-policy.md
+    - configuration/tool-policy.md
+    - configuration/memory-policy.md
+    - configuration/plugins.md
+    - configuration/templates.md
+    - configuration/reference.md
+    - configuration/workflow-config.md
+    - configuration/output-policy.md
+    - configuration/cache-policy.md
+  - Workflows:
+    - workflows/index.md
+    - workflows/overview.md
+    - workflows/sdd-workflow.md
+    - workflows/modes.md
+    - workflows/custom-workflows.md
+    - workflows/orchestrate-mode.md
+    - workflows/validation-mode.md
+    - workflows/patch-proposals.md
+    - workflows/workflow-packs.md
+    - workflows/sdd-implementation-summary.md
+  - Integrations:
+    - integrations/index.md
+    - integrations/opencode-kilo-code.md
+    - integrations/claude-code.md
+    - integrations/cursor.md
+    - integrations/codex.md
+    - integrations/windsurf.md
+    - integrations/python-sdk.md
+    - integrations/api.md
+    - integrations/cli.md
+  - Development:
+    - development/index.md
+    - development/architecture-boundaries.md
+    - development/testing.md
+    - development/contributing.md
+    - development/adding-a-command.md
+    - development/adding-a-profile.md
+    - development/adding-a-serializer.md
+    - development/adding-a-memory-backend.md
+  - Performance:
+    - performance/index.md
+    - performance/cost-ledger.md
+    - performance/model-role-routing.md
+    - performance/cache-warming.md
+    - performance/batch-runs.md
+    - performance/offline-precomputation.md
+    - performance/provider-context-caching.md
+    - performance/latency-budgets.md
+    - performance/cache-aware-prompting.md
+    - performance/model-escalation.md
+    - performance/context-layers.md
+  - Quality:
+    - quality/index.md
+    - quality/context-quality-evaluation.md
+    - quality/contextbench.md
+    - quality/tool-chain-analysis.md
+    - quality/plan-drift-detection.md
+    - quality/quality-gates.md
+    - quality/critic-verifier-steps.md
+  - Operations:
+    - operations/index.md
+    - operations/org-baselines.md
+    - operations/playbooks.md
+    - operations/hooks.md
+    - operations/approvals.md
+    - operations/ai-team-operating-model.md
+  - Enterprise:
+    - enterprise/index.md
+    - enterprise/evidence-packs.md
+    - enterprise/team-policies.md
+    - enterprise/org-baselines.md
+    - enterprise/governance-reports.md
+    - enterprise/retention.md
+    - enterprise/air-gapped.md
+  - Governance:
+    - governance/index.md
+  - Memory:
+    - memory/index.md
+  - Security:
+    - security/index.md
+  - Architecture:
+    - architecture/index.md
+    - architecture/overview.md
+    - architecture/project-intelligence-layer.md
+    - architecture/repo-map-engine.md
+    - architecture/trace-model.md
+    - architecture/workflow-engine.md
+    - architecture/context-optimization-layer.md
+    - architecture/observability.md
+    - architecture/evaluation-layer.md
+    - architecture/safety-layer.md
+    - architecture/cache-layer.md
+    - architecture/compression.md
+    - architecture/context-pack-builder.md
+    - architecture/technology-profiles.md
+    - architecture/openclaw-boundary.md
+  - Guides:
+    - guides/index.md
+    - guides/pypi-publishing.md
+  - Research:
+    - research/index.md
+  - Token Efficiency:
+    - token-efficiency/index.md
+    - token-efficiency/repo-map-first.md
+    - token-efficiency/toon-and-compact-serialization.md
+  - Profiles:
+    - profiles/index.md
+    - profiles/overview.md
+    - profiles/python.md
+    - profiles/node-typescript.md
+    - profiles/symfony.md
+    - profiles/drupal.md
+    - profiles/generic.md
+    - profiles/creating-a-profile.md

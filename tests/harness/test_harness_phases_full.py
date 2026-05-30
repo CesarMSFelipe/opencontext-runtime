@@ -183,7 +183,7 @@ class TestReviewPhase:
 
 class TestSddWorkflowPhases:
     def test_sdd_run_all_phases(self, tmp_path: Path) -> None:
-        """SDD workflow should produce artifacts for all 6 phases."""
+        """SDD workflow should produce artifacts for all 9 phases."""
         pkg = tmp_path / "mypkg"
         pkg.mkdir(parents=True, exist_ok=True)
         (pkg / "__init__.py").write_text("", encoding="utf-8")

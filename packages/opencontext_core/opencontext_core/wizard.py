@@ -280,14 +280,19 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
 
     # Step 4: Agent Integrations
     _print_section("Step 4: Agent Integrations")
-    console.print("\nWhich AI agents do you use?")
-
-    for agent, enabled in prefs.agent_integrations.items():
-        prefs.agent_integrations[agent] = _ask_bool(f"  Enable {agent}?", enabled)
+    if prefs.context_first_mode:
+        console.print("[dim]Skipped (context-first mode)[/dim]")
+    else:
+        console.print("\nWhich AI agents do you use?")
+        for agent, enabled in prefs.agent_integrations.items():
+            prefs.agent_integrations[agent] = _ask_bool(f"  Enable {agent}?", enabled)
 
     # Step 5: Plugins
     _print_section("Step 5: Plugins")
-    _plugin_wizard_step(prefs)
+    if prefs.context_first_mode:
+        console.print("[dim]Skipped (context-first mode)[/dim]")
+    else:
+        _plugin_wizard_step(prefs)
 
     # Step 6: Learning & Analytics
     _print_section("Step 6: Learning & Optimization")

@@ -209,6 +209,21 @@ class OpenContextRuntime:
 
         self._validate_security_mode_guards()
 
+        # Check context-first mode
+        from opencontext_core.user_prefs import UserConfigStore
+
+        store = UserConfigStore()
+        prefs = store.load()
+        if prefs.context_first_mode:
+            self._agent_subsystems_disabled = True
+            import logging as _logging
+
+            _logging.getLogger("opencontext").info(
+                "Context-first mode active — agent subsystems disabled."
+            )
+        else:
+            self._agent_subsystems_disabled = False
+
     def index_project(self, root: str | Path | None = None) -> ProjectManifest:
         """Index a project and persist the project manifest."""
 

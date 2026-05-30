@@ -74,7 +74,7 @@ def handle_git(args: Any) -> None:
     elif command == "recent":
         diffs = provider.get_recent_changes(days=days, max_commits=max_commits)
         if json_output:
-            data = [
+            recent_data: list[dict[str, Any]] = [
                 {
                     "commit_hash": d.commit_hash,
                     "author": d.author,
@@ -84,7 +84,7 @@ def handle_git(args: Any) -> None:
                 }
                 for d in diffs
             ]
-            print(json.dumps(data, indent=2))
+            print(json.dumps(recent_data, indent=2))
         else:
             console.header(f"Recent Changes (last {days} days)")
             console.print(_format_git_recent(diffs))

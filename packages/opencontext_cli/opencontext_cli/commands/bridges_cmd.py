@@ -20,7 +20,7 @@ def add_bridges_parser(subparsers: Any) -> None:
         "bridges",
         help="Detect cross-language call boundaries in your project.",
     )
-    bridges_sub = bridges_parser.add_subparsers(dest="bridges_command", required=True)
+    bridges_sub = bridges_parser.add_subparsers(dest="bridges_command")
 
     scan_parser = bridges_sub.add_parser("scan", help="Scan project for cross-language bridges.")
     scan_parser.add_argument("root", nargs="?", default=".", help="Project root to scan.")
@@ -50,8 +50,14 @@ def add_bridges_parser(subparsers: Any) -> None:
 
 def handle_bridges(args: Any) -> None:
     """Handle bridges commands."""
-    command = args.bridges_command
+    command = getattr(args, "bridges_command", None)
     root = getattr(args, "root", ".")
+
+    if command is None:
+        import subprocess
+
+        subprocess.run(["opencontext", "bridges", "--help"])
+        return
 
     if command == "scan":
         _handle_scan(

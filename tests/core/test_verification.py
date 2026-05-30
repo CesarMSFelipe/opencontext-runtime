@@ -22,12 +22,15 @@ class TestCheckResult:
 
 
 class TestHarnessPhasesCheck:
-    def test_all_six_phases_available(self) -> None:
+    def test_all_nine_phases_available(self) -> None:
         result = check_harness_phases()
         assert result.status == "passed"
-        assert "6/6" in result.message
+        assert "9/9" in result.message
         assert "explore" in result.message
         assert "propose" in result.message
+        assert "spec" in result.message
+        assert "design" in result.message
+        assert "tasks" in result.message
         assert "apply" in result.message
         assert "verify" in result.message
         assert "review" in result.message

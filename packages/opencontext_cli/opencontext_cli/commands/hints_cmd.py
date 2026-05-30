@@ -47,8 +47,8 @@ def handle_hints(args: Any) -> None:
             console.warning("No hints found. Run 'opencontext hints init' to create them.")
     elif command == "validate":
         files = manager.discover_hints()
-        valid = []
-        invalid = []
+        valid: list[str] = []
+        invalid: list[str] = []
         for f in files:
             parsed = manager.parse_hints_file(f)
             if parsed:
@@ -62,8 +62,8 @@ def handle_hints(args: Any) -> None:
             console.success(f"Valid: {len(valid)}")
             if invalid:
                 console.error(f"Invalid: {len(invalid)}")
-                for f in invalid:
-                    console.print(f"  [dim]✗ {f}[/]")
+                for item in invalid:
+                    console.print(f"  [dim]✗ {item}[/]")
             console.info(f"Total files checked: {len(files)}")
     else:
         console.error(f"Unknown hints command: {command}")
