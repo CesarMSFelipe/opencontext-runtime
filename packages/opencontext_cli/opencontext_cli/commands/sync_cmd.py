@@ -138,7 +138,7 @@ def _resolve_tasks_file(args: Any) -> Path | None:
     """Resolve tasks.md path from --change or --tasks-file args."""
     if getattr(args, "tasks_file", None):
         return Path(args.tasks_file)
-    change = getattr(args, "change", None)
+    change: str | None = getattr(args, "change", None)
     if change:
         return Path("openspec") / "changes" / change / "tasks.md"
     return None

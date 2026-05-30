@@ -104,7 +104,7 @@ def handle_upgrade(args: Any) -> None:
             print()
             print("  Ecosystem updates available:")
             for e in outdated_eco:
-                print(f"    {e.name}: {e.current_version} → {e.latest_version}")
+                print(f"    {e.name}: {e.current_version} -> {e.latest_version}")
             print("  Run 'pip install --upgrade <package>' to update.")
     except Exception:
         pass

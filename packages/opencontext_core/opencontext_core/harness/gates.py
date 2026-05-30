@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
-from opencontext_core.harness.models import GateStatus, PhaseGate, PhaseLedger
+from opencontext_core.harness.models import (
+    AuditLevel,
+    GateStatus,
+    PhaseGate,
+    PhaseLedger,
+    PrivacyRule,
+)
 
 
 class ProjectIndexExistsGate:
@@ -147,12 +153,16 @@ class ConfidenceGate:
     - Previous phase success (passed/failed prior gates)
 
     The gate FAILS if the combined score falls below the configured threshold.
+
+    Complexity can be overridden per-project via PhaseConfig.complexity in
+    harness.yaml (e.g., {"spec": {"complexity": 0.6}} to make spec more lenient).
     """
 
     id = "confidence"
 
-    # Baseline complexity per phase (0.0 = trivial, 1.0 = very complex)
-    _PHASE_COMPLEXITY: ClassVar[dict[str, float]] = {
+    # Baseline complexity per phase (0.0 = trivial, 1.0 = very complex).
+    # These defaults apply when PhaseConfig.complexity is not set.
+    _DEFAULT_COMPLEXITY: ClassVar[dict[str, float]] = {
         "explore": 0.2,
         "propose": 0.3,
         "spec": 0.4,
@@ -170,6 +180,7 @@ class ConfidenceGate:
         threshold: float = 0.5,
         previous_gates: list[PhaseGate] | None = None,
         test_coverage: float | None = None,
+        complexity_override: float | None = None,
     ) -> PhaseGate:
         """Evaluate confidence for a phase.
 
@@ -178,15 +189,28 @@ class ConfidenceGate:
             threshold: Minimum confidence score required (0-1).
             previous_gates: Results from previous phases' gate evaluations.
             test_coverage: Optional test coverage ratio (0-1).
+            complexity_override: Per-project complexity (0.0-1.0) from
+                PhaseConfig.complexity. When set, overrides the default
+                baseline for this phase.
 
         Returns:
             A PhaseGate with PASSED or FAILED status.
         """
-        score = self._calculate_score(phase, previous_gates, test_coverage)
+        # Use per-project override if provided, otherwise fall back to default
+        complexity = (
+            complexity_override
+            if complexity_override is not None
+            else self._DEFAULT_COMPLEXITY.get(phase, 0.5)
+        )
+        score = self._calculate_score(complexity, previous_gates, test_coverage)
         passed = score >= threshold
 
         details: list[str] = []
-        details.append(f"complexity={self._PHASE_COMPLEXITY.get(phase, 0.5):.2f}")
+        details.append(f"complexity={complexity:.2f}")
+        if complexity_override is not None:
+            details.append("complexity_source=config")
+        else:
+            details.append("complexity_source=default")
 
         if previous_gates:
             prev_passed = sum(1 for g in previous_gates if g.status == GateStatus.PASSED)
@@ -222,24 +246,227 @@ class ConfidenceGate:
 
     def _calculate_score(
         self,
-        phase: str,
+        complexity: float,
         previous_gates: list[PhaseGate] | None = None,
         test_coverage: float | None = None,
     ) -> float:
-        """Compute confidence score from weighted factors."""
+        """Compute confidence score from weighted factors.
+
+        Args:
+            complexity: Phase complexity (0.0=trivial, 1.0=very complex).
+                Already resolved by evaluate() from config or defaults.
+            previous_gates: Gate results from prior phases.
+            test_coverage: Optional test coverage ratio (0-1).
+        """
         # Factor 1: Phase complexity (inverse — simpler = higher base)
-        complexity = self._PHASE_COMPLEXITY.get(phase, 0.5)
         complexity_factor = 1.0 - complexity
 
         # Factor 2: Previous phase success rate
         prev_factor = 0.5
         if previous_gates:
-            passed = sum(1 for g in previous_gates if g.status == GateStatus.PASSED)
+            passed_count = sum(1 for g in previous_gates if g.status == GateStatus.PASSED)
             total = len(previous_gates)
-            prev_factor = passed / max(total, 1)
+            prev_factor = passed_count / max(total, 1)
 
         # Factor 3: Test coverage (default 0.5 when unknown)
         coverage_factor = test_coverage if test_coverage is not None else 0.5
 
         # Weighted combination (complexity 20%, history 50%, coverage 30%)
         return 0.2 * complexity_factor + 0.5 * prev_factor + 0.3 * coverage_factor
+
+
+class PrivacyGate:
+    """Evaluate whether an operation violates a privacy rule.
+
+    BLOCKS the operation if the provider is in the rule's provider_restrictions
+    and the operation scope matches one of the rule's permission_scopes.
+
+    When ``rule.audit_level`` is ``DETAILED``, writes a per-rule JSON-Lines audit
+    trail to ``<run_dir>/audit-<rule_id>.jsonl`` for traceability.
+    """
+
+    id = "privacy"
+
+    def evaluate(
+        self,
+        operation: dict[str, Any],
+        rule: PrivacyRule,
+        run_dir: Path | None = None,
+    ) -> PhaseGate:
+        """Evaluate privacy gate for an operation against a rule.
+
+        Args:
+            operation: Dict with 'provider' and 'scope' keys.
+            rule: PrivacyRule to evaluate against.
+            run_dir: When provided and ``rule.audit_level == DETAILED``, writes
+                an audit record to ``<run_dir>/audit-<rule_id>.jsonl``.
+
+        Returns:
+            PhaseGate with PASSED if allowed, FAILED if blocked.
+        """
+        allowed = rule.evaluate(operation)
+        if allowed:
+            result = PhaseGate(
+                id=self.id,
+                phase="privacy",
+                status=GateStatus.PASSED,
+                message=f"Operation allowed by rule '{rule.name}'.",
+                metadata={"rule_id": rule.id, "provider": operation.get("provider")},
+            )
+        else:
+            result = PhaseGate(
+                id=self.id,
+                phase="privacy",
+                status=GateStatus.FAILED,
+                message=(
+                    f"Privacy rule violated: {rule.name} "
+                    f"(blocked provider: {operation.get('provider')})"
+                ),
+                metadata={"rule_id": rule.id, "blocked_provider": operation.get("provider")},
+            )
+
+        # Emit detailed audit trail when configured
+        if run_dir is not None and rule.audit_level == AuditLevel.DETAILED:
+            self._write_audit(run_dir, rule, operation, result)
+
+        return result
+
+    def _write_audit(
+        self,
+        run_dir: Path,
+        rule: PrivacyRule,
+        operation: dict[str, Any],
+        result: PhaseGate,
+    ) -> None:
+        """Append a JSON-Lines audit record for DETAILED audit level."""
+        import json
+
+        audit_path = run_dir / f"audit-{rule.id}.jsonl"
+        record = {
+            "rule_id": rule.id,
+            "rule_name": rule.name,
+            "operation": operation,
+            "result": result.status.value,
+            "message": result.message,
+        }
+        try:
+            audit_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(audit_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
+        except Exception:
+            # Never fail a gate due to audit write failures
+            pass
+
+
+class FailingTestExistsGate:
+    """Check that a test file exists matching the change/task name pattern.
+
+    In Strict TDD mode, VerifyPhase requires a failing test before ApplyPhase
+    can execute. This gate looks for test files matching patterns like:
+    - tests/**/test_*<task>*.py
+    - tests/**/*<task>*_test.py
+
+    If no exact match is found, performs fuzzy matching against all test files
+    and suggests the closest alternative to help developers create the right test.
+    """
+
+    id = "failing_test_exists"
+
+    def evaluate(self, task: str, root: Path) -> PhaseGate:
+        """Find a test file matching the task name.
+
+        Args:
+            task: The task/change name (e.g., "add-privacy-gate").
+            root: Project root directory.
+
+        Returns:
+            PhaseGate with PASSED if found, FAILED if not found.
+        """
+        tests_dir = root / "tests"
+        if not tests_dir.exists():
+            return PhaseGate(
+                id=self.id,
+                phase="verify",
+                status=GateStatus.FAILED,
+                message=f"No test found for task '{task}' — tests/ directory does not exist.",
+            )
+
+        # Build search patterns from task name
+        # "add-privacy-gate" → "test_add_privacy_gate.py", "test*privacy*gate*.py"
+        task_slug = task.replace("-", "_")
+        patterns = [
+            f"**/test_{task_slug}.py",
+            f"**/test*{task_slug}*.py",
+            f"**/*{task_slug}*_test.py",
+            f"**/*{task_slug}*.py",
+        ]
+
+        matching_files: list[str] = []
+        for pattern in patterns:
+            matching_files.extend(str(p) for p in root.glob(pattern) if p.is_file())
+
+        if matching_files:
+            return PhaseGate(
+                id=self.id,
+                phase="verify",
+                status=GateStatus.PASSED,
+                message=f"Test found for '{task}': {matching_files[0]}",
+                metadata={"test_files": matching_files, "task": task},
+            )
+
+        # No exact match — try fuzzy matching to suggest alternatives
+        suggestion = self._fuzzy_suggest(task, root)
+        if suggestion:
+            return PhaseGate(
+                id=self.id,
+                phase="verify",
+                status=GateStatus.FAILED,
+                message=(
+                    f"No test found for task '{task}'. "
+                    f"Did you mean: {suggestion}? "
+                    f"Write a failing test first (Strict TDD)."
+                ),
+                metadata={"task": task, "suggestion": suggestion},
+            )
+
+        return PhaseGate(
+            id=self.id,
+            phase="verify",
+            status=GateStatus.FAILED,
+            message=f"No test found for task '{task}' — write a failing test first (Strict TDD).",
+            metadata={"task": task},
+        )
+
+    def _fuzzy_suggest(self, task: str, root: Path) -> str | None:
+        """Find the most similar test file when exact matching fails.
+
+        Splits the task into words and finds test files whose names contain
+        at least half of those words.
+        """
+        tests_dir = root / "tests"
+        if not tests_dir.exists():
+            return None
+
+        # Get all test files
+        all_tests = [str(p) for p in tests_dir.rglob("test_*.py")]
+        if not all_tests:
+            return None
+
+        # Split task into words for matching
+        task_words = set(task.replace("-", "_").replace("_", " ").split())
+        if not task_words:
+            return None
+
+        best_match: tuple[str, int] | None = None
+        for test_path in all_tests:
+            test_name = Path(test_path).stem.replace("test_", "").replace("_test", "")
+            test_words = set(test_name.replace("_", " ").split())
+
+            # Count overlapping words
+            overlap = len(task_words & test_words)
+            if overlap > 0 and (best_match is None or overlap > best_match[1]):
+                best_match = (test_path, overlap)
+
+        if best_match:
+            return best_match[0]
+        return None

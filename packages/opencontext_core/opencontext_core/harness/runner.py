@@ -9,7 +9,7 @@ from typing import Any
 
 from opencontext_core.harness.budget import TokenBudgetEnforcer
 from opencontext_core.harness.config import HarnessConfig
-from opencontext_core.harness.gates import ConfidenceGate
+from opencontext_core.harness.gates import ConfidenceGate, PrivacyGate
 from opencontext_core.harness.models import (
     BudgetMode,
     GateStatus,
@@ -18,15 +18,20 @@ from opencontext_core.harness.models import (
     HarnessRunResult,
     PhaseGate,
     PhaseLedger,
+    PrivacyProfile,
+    PrivacyRule,
 )
 from opencontext_core.harness.phases import (
     ApplyPhase,
     ArchivePhase,
+    DesignPhase,
     ExplorePhase,
     HarnessPhase,
     PhaseResult,
     ProposePhase,
     ReviewPhase,
+    SpecPhase,
+    TasksPhase,
     VerifyPhase,
 )
 
@@ -80,9 +85,22 @@ class HarnessRunner:
         results: list[PhaseResult] = []
         final_status = GateStatus.PASSED
 
+        # Warn if knowledge graph has not been indexed (ExplorePhase depends on it)
+        self._warn_if_kg_not_indexed(state)
+
         # Determine which phases to run based on workflow
         if workflow == "sdd":
-            phase_ids = ["explore", "propose", "apply", "verify", "review", "archive"]
+            phase_ids = [
+                "explore",
+                "propose",
+                "spec",
+                "design",
+                "tasks",
+                "apply",
+                "verify",
+                "review",
+                "archive",
+            ]
         elif workflow == "explore-only":
             phase_ids = ["explore"]
         elif workflow == "apply-only":
@@ -99,6 +117,7 @@ class HarnessRunner:
                     phase=phase_id,
                     threshold=phase_config.confidence_threshold,
                     previous_gates=prev_gates,
+                    complexity_override=phase_config.complexity,
                 )
                 if confidence_gate.status == GateStatus.FAILED:
                     state.gates.append(confidence_gate)
@@ -111,6 +130,25 @@ class HarnessRunner:
                         break
                     # In non-strict modes, still warn but continue
                     continue
+
+            # PrivacyGate: evaluate privacy rules when a privacy profile is active (opt-in)
+            # Privacy is independent of budget_mode — activated via privacy_profile config
+            if self.config.privacy_profile is not PrivacyProfile.OFF:
+                privacy_rules = self._load_privacy_rules()
+                if privacy_rules:
+                    run_dir = state.root / ".opencontext" / "runs" / state.run_id
+                    for rule in privacy_rules:
+                        privacy_gate = PrivacyGate()
+                        # Operation is determined by phase type
+                        operation = self._operation_for_phase(phase_id)
+                        gate_result = privacy_gate.evaluate(operation, rule, run_dir=run_dir)
+                        if gate_result.status == GateStatus.FAILED:
+                            state.gates.append(gate_result)
+                            state.warnings.append(f"{phase_id}: privacy rule violated: {rule.name}")
+                            final_status = GateStatus.FAILED
+                            break
+                    if final_status == GateStatus.FAILED:
+                        break
 
             phase_obj = self._build_phase(phase_id, budget_mode)
             if phase_obj is None:
@@ -174,6 +212,12 @@ class HarnessRunner:
             return ExplorePhase(phase_config, budget_mode)
         if phase_id == "propose":
             return ProposePhase(phase_config, budget_mode)
+        if phase_id == "spec":
+            return SpecPhase(phase_config, budget_mode)
+        if phase_id == "design":
+            return DesignPhase(phase_config, budget_mode)
+        if phase_id == "tasks":
+            return TasksPhase(phase_config, budget_mode)
         if phase_id == "apply":
             return ApplyPhase(phase_config, budget_mode)
         if phase_id == "verify":
@@ -185,6 +229,106 @@ class HarnessRunner:
 
         # Fallback: return None for unknown phases
         return None
+
+    def _load_privacy_rules(self) -> list[PrivacyRule]:
+        """Load privacy rules from .opencontext/privacy.yaml if present."""
+        try:
+            import yaml
+
+            privacy_path = self.root / ".opencontext" / "privacy.yaml"
+            if not privacy_path.exists():
+                return []
+            data = yaml.safe_load(privacy_path.read_text(encoding="utf-8"))
+            rules_data = data.get("privacy_rules", []) if isinstance(data, dict) else []
+            return [PrivacyRule(**r) for r in rules_data]
+        except Exception:
+            return []
+
+    def _operation_for_phase(self, phase_id: str) -> dict[str, str]:
+        """Return the operation descriptor for a given phase.
+
+        Includes scope, provider, and data_classification when relevant.
+        The data_classification field is used by PrivacyRule.evaluate() to
+        enforce classification-based thresholds (e.g., block SENSITIVE+ on
+        external_calls).
+        """
+        # Map phase IDs to operation scope/provider pairs
+        # data_classification: the default classification for data accessed/written
+        # by this phase — used by PrivacyGate to enforce classification thresholds
+        phase_ops = {
+            "explore": {
+                "scope": "external_calls",
+                "provider": "opencontext-kg",
+                "data_classification": "internal",
+            },
+            "propose": {
+                "scope": "external_calls",
+                "provider": "opencontext-propose",
+                "data_classification": "internal",
+            },
+            "spec": {
+                "scope": "file_read",
+                "provider": "local",
+                "data_classification": "internal",
+            },
+            "design": {
+                "scope": "file_read",
+                "provider": "local",
+                "data_classification": "internal",
+            },
+            "tasks": {
+                "scope": "file_read",
+                "provider": "local",
+                "data_classification": "internal",
+            },
+            "apply": {
+                "scope": "file_write",
+                "provider": "local",
+                "data_classification": "confidential",  # writes may expose sensitive data
+            },
+            "verify": {
+                "scope": "network_call",
+                "provider": "pytest",
+                "data_classification": "internal",
+            },
+            "review": {
+                "scope": "file_read",
+                "provider": "local",
+                "data_classification": "internal",
+            },
+            "archive": {
+                "scope": "file_write",
+                "provider": "local",
+                "data_classification": "internal",
+            },
+        }
+        default_op = {
+            "scope": "file_read",
+            "provider": "local",
+            "data_classification": "internal",
+        }
+        return phase_ops.get(phase_id, default_op)
+
+    def _warn_if_kg_not_indexed(self, state: HarnessState) -> None:
+        """Add a warning if the knowledge graph has no indexed content.
+
+        ExplorePhase depends on the KG. If it is empty, the explore phase
+        will produce degraded results. Warn early rather than failing silently.
+        """
+        try:
+            from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+
+            kg = KnowledgeGraph()
+            stats = kg.get_stats()
+            kg.close()
+            if stats.get("nodes", 0) == 0:
+                state.warnings.append(
+                    "knowledge-graph: no content indexed — "
+                    "run 'opencontext index' first for best explore results"
+                )
+        except Exception:
+            # Never fail due to KG check failures
+            pass
 
     def persist_run(self, state: HarnessState, result: HarnessRunResult) -> Path:
         """Persist run artifacts to .opencontext/runs/<run_id>/."""

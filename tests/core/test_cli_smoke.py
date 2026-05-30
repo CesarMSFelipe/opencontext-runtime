@@ -49,7 +49,7 @@ class TestHarnessCli:
         assert "sdd" in data
         assert "explore-only" in data
         assert "apply-only" in data
-        assert len(data["sdd"]["phases"]) == 6
+        assert len(data["sdd"]["phases"]) == 9
 
     def test_harness_run_explore_only(self, tmp_path: Path) -> None:
         """Run explore-only workflow in a temp directory with pyproject.toml."""

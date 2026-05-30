@@ -79,6 +79,7 @@ class UserPreferences:
     version: str = "0.1.0"
     first_run: bool = True
     install_date: str = ""
+    context_first_mode: bool = False
 
     # Security
     security_mode: str = "private_project"

@@ -134,9 +134,9 @@ PRESET_CATALOG: dict[str, PresetDef] = {
             "plugins",
         ],
     ),
-    "minimal": PresetDef(
-        id="minimal",
-        name="Minimal",
+    "context-essential": PresetDef(
+        id="context-essential",
+        name="Context Essential",
         description="Just the basics — KG and git integration",
         components=[
             "knowledge-graph",
@@ -167,6 +167,13 @@ PRESET_CATALOG: dict[str, PresetDef] = {
             "git-integration",
         ],
         profile="security-officer",
+    ),
+    "context-first": PresetDef(
+        id="context-first",
+        name="Context First",
+        description="Start with context engine — KG, retrieval, git history. No agents.",
+        components=["knowledge-graph", "call-graph", "git-integration"],
+        profile="minimal",
     ),
 }
 

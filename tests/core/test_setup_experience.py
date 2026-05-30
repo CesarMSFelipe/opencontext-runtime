@@ -45,7 +45,7 @@ def test_execute_plan_leaves_agents_sdd_and_index_ready(tmp_path: Path, monkeypa
     project = tmp_path / "project"
     project.mkdir()
     (project / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
-    plan = build_plan(preset_id="minimal", profile_id="developer")
+    plan = build_plan(preset_id="context-essential", profile_id="developer")
 
     setup_cmd._execute_plan(
         plan,

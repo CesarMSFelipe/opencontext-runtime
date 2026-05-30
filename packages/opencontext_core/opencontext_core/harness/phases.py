@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -14,6 +15,7 @@ from opencontext_core.harness.config import PhaseConfig
 from opencontext_core.harness.gates import (
     ArtifactPersistedGate,
     ContextPackCreatedGate,
+    FailingTestExistsGate,
     ProjectIndexExistsGate,
     TokenBudgetGate,
 )
@@ -78,6 +80,32 @@ class ExplorePhase(HarnessPhase):
         pack_path = run_dir / "context-pack.json"
         pack_path.write_text(pack.model_dump_json(indent=2), encoding="utf-8")
 
+        # KG wiring: run impact analysis if task is provided
+        impact_affected_files: list[str] = []
+        impact_affected_tests: list[str] = []
+        kg_available: bool = False
+        kg_error: str | None = None
+        try:
+            from opencontext_core.indexing.impact_analysis import ImpactAnalyzer
+
+            db_path = state.root / ".storage" / "opencontext" / "graph.db"
+            if db_path.exists():
+                from opencontext_core.indexing.graph_db import GraphDatabase
+
+                db = GraphDatabase(db_path)
+                analyzer = ImpactAnalyzer(db)
+                impact_results = analyzer.analyze_by_name(state.task, depth=2)
+                kg_available = True
+                for ir in impact_results:
+                    impact_affected_files.extend(ir.affected_files)
+                    impact_affected_tests.extend(ir.affected_tests)
+                db.close()
+            else:
+                kg_error = "graph.db not found — run `opencontext index` first"
+        except Exception as exc:
+            kg_error = str(exc)
+            # KG wiring is best-effort — don't fail the phase if KG is unavailable
+
         gates: list[PhaseGate] = [
             ProjectIndexExistsGate().evaluate(state.root),
             ContextPackCreatedGate().evaluate(len(pack.included)),
@@ -121,20 +149,88 @@ class ExplorePhase(HarnessPhase):
                 "omitted": len(pack.omitted),
                 "indexed_files": len(manifest.files),
                 "indexed_symbols": len(manifest.symbols),
+                "impact_affected_files": impact_affected_files,
+                "impact_affected_tests": impact_affected_tests,
+                "kg_available": kg_available,
+                "kg_error": kg_error,
             },
         )
 
 
 class ArchivePhase(HarnessPhase):
-    """Archive phase: persist trace, create artifacts summary."""
+    """Archive phase: produce all run artifacts and the archive report.
+
+    Produces memory_delta.json (summary of project memory changes) and
+    graph_delta.json (summary of knowledge graph changes) by extracting
+    relevant data from the run's artifact collection. Then produces a
+    structured archive-report.json summary.
+    """
 
     id = "archive"
 
     def run(self, state: Any) -> PhaseResult:
         run_dir = state.root / ".opencontext" / "runs" / state.run_id
-        gates: list[PhaseGate] = [
-            ArtifactPersistedGate().evaluate(run_dir / "run.json"),
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        # Produce memory_delta.json
+        memory_delta = self._build_memory_delta(state)
+        memory_delta_path = run_dir / "memory_delta.json"
+        memory_delta_path.write_text(json.dumps(memory_delta, indent=2), encoding="utf-8")
+
+        # Produce graph_delta.json
+        graph_delta = self._build_graph_delta(state)
+        graph_delta_path = run_dir / "graph_delta.json"
+        graph_delta_path.write_text(json.dumps(graph_delta, indent=2), encoding="utf-8")
+
+        # Gate checks — all three core artifacts must now exist
+        artifacts_to_check = [
+            ("run.json", "run"),
+            ("memory_delta.json", "memory_delta"),
+            ("graph_delta.json", "graph_delta"),
         ]
+        gates: list[PhaseGate] = []
+        missing: list[str] = []
+        for filename, _kind in artifacts_to_check:
+            path = run_dir / filename
+            gate = ArtifactPersistedGate().evaluate(path)
+            gates.append(gate)
+            if gate.status != GateStatus.PASSED:
+                missing.append(filename)
+
+        # Produce the archive report
+        archive_report = {
+            "run_id": state.run_id,
+            "task": state.task,
+            "created_at": datetime.now(UTC).isoformat(),
+            "status": "archived",
+            "phases_completed": len(state.ledgers),
+            "total_artifacts": len(state.artifacts),
+            "total_gates": len(state.gates),
+            "passed_gates": sum(1 for g in state.gates if g.status == GateStatus.PASSED),
+            "failed_gates": sum(1 for g in state.gates if g.status == GateStatus.FAILED),
+            "warnings": state.warnings,
+            "artifacts": [
+                {
+                    "id": a.id,
+                    "phase": a.phase,
+                    "kind": a.kind,
+                    "path": a.path,
+                }
+                for a in state.artifacts
+            ],
+            "missing_artifacts": missing,
+            "summary": (
+                f"Archived run {state.run_id}: "
+                f"{len(state.artifacts)} artifacts, "
+                f"{sum(1 for g in state.gates if g.status == GateStatus.PASSED)}/"
+                f"{len(state.gates)} gates passed."
+                if not missing
+                else f"Archive incomplete — missing: {', '.join(missing)}"
+            ),
+        }
+        report_path = run_dir / "archive-report.json"
+        report_path.write_text(json.dumps(archive_report, indent=2), encoding="utf-8")
+
         ledger = PhaseLedger(
             phase="archive",
             used_tokens=0,
@@ -151,8 +247,111 @@ class ArchivePhase(HarnessPhase):
             status=status,
             ledger=ledger,
             gates=gates,
-            metadata={"run_dir": str(run_dir)},
+            artifacts=[
+                HarnessArtifact(
+                    id=f"archive-{state.run_id[:8]}",
+                    phase="archive",
+                    path=str(report_path),
+                    kind="archive-report",
+                    description=f"Archive report for run {state.run_id}",
+                )
+            ],
+            metadata={
+                "missing_artifacts": missing,
+                "total_artifacts": len(state.artifacts),
+            },
         )
+
+    def _build_memory_delta(self, state: Any) -> dict[str, Any]:
+        """Build the memory_delta artifact from run state.
+
+        Summarises project memory changes observed during this run:
+        - New or updated files (from explore phase artifacts)
+        - New symbols discovered
+        - Decisions made
+        - Trace IDs collected
+        """
+        delta = {
+            "run_id": state.run_id,
+            "task": state.task,
+            "created_at": datetime.now(UTC).isoformat(),
+            "changed_files": [],
+            "decisions": [
+                {"id": d.id, "reason": d.reason, "phase": d.phase} for d in state.decisions
+            ],
+            "trace_ids": list(state.trace_ids),
+            "summary": "",
+        }
+
+        # Extract file changes from explore/propose artifacts
+        for artifact in state.artifacts:
+            if artifact.kind in ("context-pack", "proposal", "spec", "design", "tasks"):
+                path = Path(artifact.path)
+                if path.exists() and path.suffix == ".json":
+                    try:
+                        data = json.loads(path.read_text(encoding="utf-8"))
+                        if "changed_files" in data:
+                            delta["changed_files"].extend(data["changed_files"])
+                        if "files" in data and isinstance(data["files"], list):
+                            for f in data["files"][:50]:
+                                if isinstance(f, dict) and f.get("path"):
+                                    delta["changed_files"].append(f["path"])
+                    except Exception:
+                        pass
+
+        delta["changed_files"] = list(set(delta["changed_files"]))[:100]
+        delta["summary"] = (
+            f"{len(delta['changed_files'])} files considered, "
+            f"{len(delta['decisions'])} decisions, "
+            f"{len(state.trace_ids)} trace(s)."
+        )
+        return delta
+
+    def _build_graph_delta(self, state: Any) -> dict[str, Any]:
+        """Build the graph_delta artifact from run state.
+
+        Summarises knowledge graph changes observed during this run:
+        - Symbols referenced or created
+        - Call relationships discovered
+        - Phase-level KG activity flags
+        """
+        delta = {
+            "run_id": state.run_id,
+            "task": state.task,
+            "created_at": datetime.now(UTC).isoformat(),
+            "symbols": [],
+            "phases_with_kg_activity": [],
+            "summary": "",
+        }
+
+        # Extract symbol references from artifacts
+        for artifact in state.artifacts:
+            path = Path(artifact.path)
+            if path.exists() and path.suffix == ".json":
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    if "symbols" in data:
+                        delta["symbols"].extend(data["symbols"])
+                    if artifact.phase not in delta["phases_with_kg_activity"]:
+                        delta["phases_with_kg_activity"].append(artifact.phase)
+                except Exception:
+                    pass
+
+        # Deduplicate symbols
+        seen: set[str] = set()
+        unique: list[dict[str, Any]] = []
+        for s in delta["symbols"]:
+            key = s.get("name", "") or s.get("id", "")
+            if key and key not in seen:
+                seen.add(key)
+                unique.append(s)
+        delta["symbols"] = unique[:200]
+
+        delta["summary"] = (
+            f"{len(delta['symbols'])} symbols, "
+            f"{len(delta['phases_with_kg_activity'])} phase(s) with KG activity."
+        )
+        return delta
 
 
 class ProposePhase(HarnessPhase):
@@ -281,6 +480,301 @@ class ApplyPhase(HarnessPhase):
         )
 
 
+class SpecPhase(HarnessPhase):
+    """Spec phase: read proposal and produce structured spec with requirements and scenarios."""
+
+    id = "spec"
+
+    def run(self, state: Any) -> PhaseResult:
+        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        proposal_path = run_dir / "proposal.json"
+        spec_path = run_dir / "spec.md"
+
+        # Read proposal artifact
+        if not proposal_path.exists():
+            return PhaseResult(
+                phase="spec",
+                status=GateStatus.FAILED,
+                gates=[],
+                metadata={"error": "Proposal artifact missing"},
+            )
+
+        proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
+        task = proposal.get("task", state.task)
+        approach = proposal.get("approach", {})
+
+        # Generate spec content with ADDED/MODIFIED sections and GIVEN/WHEN/THEN scenarios
+        spec_content = f"""# Delta Spec: {task}
+
+## ADDED Requirements
+
+### Requirement: {task.replace("-", " ").title()}
+MUST implement the feature described as: {task}.
+
+#### Scenario: Basic implementation
+GIVEN a harness run with task "{task}"
+WHEN the SDD workflow executes
+THEN the system SHALL produce artifacts for all required phases
+
+#### Scenario: Implementation follows provider-neutral approach
+GIVEN the approach specification: {approach}
+WHEN implementation is designed
+THEN the code SHALL remain provider-neutral (no external LLM provider coupling)
+
+## MODIFIED Requirements
+
+_None — initial implementation._
+
+## REMOVED Requirements
+
+_None._
+
+## Criterios de Éxito
+
+- SpecPhase writes valid markdown spec with RFC 2119 requirements and GIVEN/WHEN/THEN scenarios
+- Spec artifact is persisted to `.opencontext/runs/{{run_id}}/spec.md`
+"""
+        spec_path.write_text(spec_content, encoding="utf-8")
+
+        gates: list[PhaseGate] = [
+            ArtifactPersistedGate().evaluate(spec_path),
+        ]
+        ledger = PhaseLedger(
+            phase="spec",
+            used_tokens=0,
+            budget_tokens=self.config.budget_tokens,
+            budget_mode=self.budget_mode,
+        )
+        gates.append(TokenBudgetGate().evaluate(ledger))
+
+        status = (
+            GateStatus.FAILED
+            if any(g.status == GateStatus.FAILED for g in gates)
+            else GateStatus.PASSED
+        )
+
+        return PhaseResult(
+            phase="spec",
+            status=status,
+            ledger=ledger,
+            gates=gates,
+            artifacts=[
+                HarnessArtifact(
+                    id=f"spec-{state.run_id[:8]}",
+                    phase="spec",
+                    path=str(spec_path),
+                    kind="spec",
+                    description=f"Spec for: {task}",
+                )
+            ],
+            metadata={"spec_path": str(spec_path)},
+        )
+
+
+class DesignPhase(HarnessPhase):
+    """Design phase: read spec and produce technical design with architecture decisions."""
+
+    id = "design"
+
+    def run(self, state: Any) -> PhaseResult:
+        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        spec_path = run_dir / "spec.md"
+        design_path = run_dir / "design.md"
+
+        # Read spec artifact
+        if not spec_path.exists():
+            return PhaseResult(
+                phase="design",
+                status=GateStatus.FAILED,
+                gates=[],
+                metadata={"error": "Spec artifact missing"},
+            )
+
+        spec_content = spec_path.read_text(encoding="utf-8")
+        task = state.task
+
+        # Extract requirements from spec content
+        requirements = []
+        for line in spec_content.split("\n"):
+            if "### Requirement:" in line or "### " in line:
+                requirements.append(line.lstrip("# ").strip())
+
+        # Generate design content
+        req_lines = (
+            "\n".join(f"- {r}" for r in requirements[:5])
+            if requirements
+            else "- (analyze spec.md for details)"
+        )
+        design_content = f"""# Design: {task}
+
+## Architecture
+
+This section describes the high-level architecture for implementing: {task}.
+
+### Components
+- New components should follow the existing patterns in the codebase
+- Provider-neutral design: no direct coupling to external LLM APIs
+
+## Files to Create/Modify
+
+{req_lines}
+
+## Dependencies
+
+- No new external dependencies required
+- Uses existing opencontext_core modules
+
+## Data Flow
+
+```
+(state) --> SpecPhase --> DesignPhase --> TasksPhase --> ApplyPhase
+```
+
+## Testing Strategy
+
+- Unit tests for new components
+- Integration tests for phase interactions
+- Provider-neutral test fixtures
+"""
+        design_path.write_text(design_content, encoding="utf-8")
+
+        gates: list[PhaseGate] = [
+            ArtifactPersistedGate().evaluate(design_path),
+        ]
+        ledger = PhaseLedger(
+            phase="design",
+            used_tokens=0,
+            budget_tokens=self.config.budget_tokens,
+            budget_mode=self.budget_mode,
+        )
+        gates.append(TokenBudgetGate().evaluate(ledger))
+
+        status = (
+            GateStatus.FAILED
+            if any(g.status == GateStatus.FAILED for g in gates)
+            else GateStatus.PASSED
+        )
+
+        return PhaseResult(
+            phase="design",
+            status=status,
+            ledger=ledger,
+            gates=gates,
+            artifacts=[
+                HarnessArtifact(
+                    id=f"design-{state.run_id[:8]}",
+                    phase="design",
+                    path=str(design_path),
+                    kind="design",
+                    description=f"Design for: {task}",
+                )
+            ],
+            metadata={"design_path": str(design_path)},
+        )
+
+
+class TasksPhase(HarnessPhase):
+    """Tasks phase: read design and produce task breakdown as JSON."""
+
+    id = "tasks"
+
+    def run(self, state: Any) -> PhaseResult:
+        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        design_path = run_dir / "design.md"
+        tasks_path = run_dir / "tasks.json"
+
+        # Read design artifact
+        if not design_path.exists():
+            return PhaseResult(
+                phase="tasks",
+                status=GateStatus.FAILED,
+                gates=[],
+                metadata={"error": "Design artifact missing"},
+            )
+
+        design_content = design_path.read_text(encoding="utf-8")
+        task = state.task
+
+        # Parse files from design content
+        file_pattern = re.compile(r"[-*] (.+\.(?:py|ts|js|go|rs))")
+        files = file_pattern.findall(design_content)
+
+        # Build task breakdown
+        tasks = []
+        if files:
+            for i, f in enumerate(files, 1):
+                tasks.append(
+                    {
+                        "id": f"task-{i}",
+                        "description": f"Implement {f} per design",
+                        "file_paths": [f],
+                        "complexity": "medium",
+                    }
+                )
+        else:
+            # Default task if no files extracted
+            tasks.append(
+                {
+                    "id": "task-1",
+                    "description": f"Implement feature: {task}",
+                    "file_paths": ["harness/gates.py", "tests/harness/test_harness_gates.py"],
+                    "complexity": "medium",
+                }
+            )
+
+        # Always include a test task
+        tasks.append(
+            {
+                "id": "task-test",
+                "description": "Write failing test before implementation",
+                "file_paths": ["tests/"],
+                "complexity": "low",
+            }
+        )
+
+        tasks_path.write_text(json.dumps(tasks, indent=2), encoding="utf-8")
+
+        gates: list[PhaseGate] = [
+            ArtifactPersistedGate().evaluate(tasks_path),
+        ]
+        ledger = PhaseLedger(
+            phase="tasks",
+            used_tokens=0,
+            budget_tokens=self.config.budget_tokens,
+            budget_mode=self.budget_mode,
+        )
+        gates.append(TokenBudgetGate().evaluate(ledger))
+
+        status = (
+            GateStatus.FAILED
+            if any(g.status == GateStatus.FAILED for g in gates)
+            else GateStatus.PASSED
+        )
+
+        return PhaseResult(
+            phase="tasks",
+            status=status,
+            ledger=ledger,
+            gates=gates,
+            artifacts=[
+                HarnessArtifact(
+                    id=f"tasks-{state.run_id[:8]}",
+                    phase="tasks",
+                    path=str(tasks_path),
+                    kind="tasks",
+                    description=f"Task breakdown for: {task}",
+                )
+            ],
+            metadata={"task_count": len(tasks)},
+        )
+
+
 class VerifyPhase(HarnessPhase):
     """Verify phase: run tests and validate implementation."""
 
@@ -291,6 +785,18 @@ class VerifyPhase(HarnessPhase):
         run_dir.mkdir(parents=True, exist_ok=True)
 
         verify_report_path = run_dir / "verify-report.json"
+
+        # Strict TDD enforcement: check for failing test before running tests
+        if self.budget_mode == BudgetMode.STRICT:
+            test_gate = FailingTestExistsGate()
+            test_gate_result = test_gate.evaluate(state.task, state.root)
+            if test_gate_result.status == GateStatus.FAILED:
+                return PhaseResult(
+                    phase="verify",
+                    status=GateStatus.FAILED,
+                    gates=[test_gate_result],
+                    metadata={"strict_tdd_blocked": True},
+                )
 
         # Provider-neutral verification: run pytest and capture results
         test_result = self._run_tests(state.root)
@@ -413,7 +919,12 @@ class VerifyPhase(HarnessPhase):
 
 
 class ReviewPhase(HarnessPhase):
-    """Review phase: create review summary from all prior phase results."""
+    """Review phase: create a review summary by reading all phase artifacts.
+
+    Produces a human- and machine-readable review.json that aggregates the
+    state of every artifact produced during the run, making it easy to
+    understand what was created without digging into individual files.
+    """
 
     id = "review"
 
@@ -423,22 +934,74 @@ class ReviewPhase(HarnessPhase):
 
         review_path = run_dir / "review.json"
 
-        # Aggregate data from all completed phases
+        # Read artifact summaries from disk where available
+        artifact_summaries: list[dict[str, Any]] = []
+        for artifact in state.artifacts:
+            summary: dict[str, Any] = {
+                "id": artifact.id,
+                "phase": artifact.phase,
+                "kind": artifact.kind,
+                "path": artifact.path,
+                "description": artifact.description,
+            }
+            # Try to read the artifact to extract a short preview
+            artifact_path = Path(artifact.path)
+            if artifact_path.exists() and artifact_path.stat().st_size < 50_000:
+                try:
+                    data = json.loads(artifact_path.read_text(encoding="utf-8"))
+                    # Extract common summary fields when present
+                    for key in ("summary", "status", "task", "description"):
+                        if key in data:
+                            summary[key] = data[key]
+                except Exception:
+                    pass
+            artifact_summaries.append(summary)
+
+        # Build a phase-by-phase status from ledgers
+        phase_status: dict[str, dict[str, Any]] = {}
+        for ledger in state.ledgers:
+            phase_status[ledger.phase] = {
+                "status": ledger.status.value,
+                "used_tokens": ledger.used_tokens,
+                "budget_tokens": ledger.budget_tokens,
+                "remaining": ledger.remaining,
+            }
+
+        # Summarise gate outcomes
+        gate_summary: dict[str, int] = {
+            "passed": 0,
+            "warning": 0,
+            "failed": 0,
+        }
+        for g in state.gates:
+            key = g.status.value
+            if key in gate_summary:
+                gate_summary[key] += 1
+
         review = {
             "run_id": state.run_id,
             "task": state.task,
             "created_at": datetime.now(UTC).isoformat(),
             "status": "completed",
-            "phases_completed": len(set(ledger.phase for ledger in state.ledgers)),
-            "total_gates": len(state.gates),
-            "passed_gates": sum(1 for g in state.gates if g.status == GateStatus.PASSED),
-            "warning_gates": sum(1 for g in state.gates if g.status == GateStatus.WARNING),
-            "failed_gates": sum(1 for g in state.gates if g.status == GateStatus.FAILED),
+            "phases": phase_status,
+            "phases_completed": len(phase_status),
+            "gates": gate_summary,
             "total_artifacts": len(state.artifacts),
+            "artifacts": artifact_summaries,
             "total_decisions": len(state.decisions),
             "warnings": state.warnings,
             "trace_ids": state.trace_ids,
-            "summary": f"Review completed for run {state.run_id}",
+            # Legacy flat gate counts (for backward compatibility)
+            "total_gates": len(state.gates),
+            "passed_gates": gate_summary["passed"],
+            "warning_gates": gate_summary["warning"],
+            "failed_gates": gate_summary["failed"],
+            "summary": (
+                f"Review completed: {len(phase_status)} phases, "
+                f"{gate_summary['passed']} gates passed, "
+                f"{gate_summary['warning']} warnings, "
+                f"{gate_summary['failed']} failures."
+            ),
         }
         review_path.write_text(json.dumps(review, indent=2), encoding="utf-8")
 
