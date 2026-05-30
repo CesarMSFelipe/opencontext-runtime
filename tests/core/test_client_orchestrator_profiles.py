@@ -223,7 +223,7 @@ class TestSetupExperienceWithSddProfile:
 
         project = tmp_path / "project"
         project.mkdir()
-        plan = build_plan(preset_id="minimal", profile_id="developer")
+        plan = build_plan(preset_id="context-essential", profile_id="developer")
 
         setup_cmd._execute_plan(
             plan,
@@ -255,7 +255,7 @@ class TestSetupExperienceWithSddProfile:
 
         project = tmp_path / "project"
         project.mkdir()
-        plan = build_plan(preset_id="minimal", profile_id="developer")
+        plan = build_plan(preset_id="context-essential", profile_id="developer")
 
         setup_cmd._execute_plan(
             plan,
