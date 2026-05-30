@@ -10,9 +10,24 @@ Running `opencontext` with no arguments launches an interactive TUI menu with 10
 # Quick launch — TUI menu
 opencontext
 
-# Direct setup
+# Direct setup — context-first (KG + retrieval, no agents)
+opencontext setup --preset context-first
+
+# Direct setup — full (KG + agents + SDD/TDD)
 opencontext setup --preset full --agent opencode --agent cursor --tdd ask --root . --max-tokens 3000
 ```
+
+## Preset Options
+
+| Preset | Description | Agents |
+|--------|-------------|--------|
+| `context-first` | Start with context engine — KG, retrieval, git history. No agents. | No |
+| `context-essential` | Just the basics — KG and git integration. | No |
+| `full` | Everything — KG, learning, governance, MCP, plugins, and more. | Yes |
+| `enterprise` | Governance, audit, team policies with full KG. | No |
+| `air-gapped` | Completely offline — no network features. | No |
+
+The default preset for automated runs is `context-first`. To override, pass `--preset <name>`.
 
 After the setup wizard finishes, the project should already have:
 
