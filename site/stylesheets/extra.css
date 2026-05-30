@@ -1,0 +1,448 @@
+/* ── OpenContext Runtime — Extra CSS ──────────────────────────────────── */
+
+/* Override Material theme teal to match our exact brand teal */
+[data-md-color-primary="teal"] .md-header,
+[data-md-color-primary="teal"] .md-nav__link--active,
+[data-md-color-primary="teal"] .md-typeset a:not(.md-button):not(.md-icon),
+[data-md-color-primary="teal"] .md-typeset .md-nav__link:hover {
+  color: #00C9A7;
+}
+
+/* Brand teal */
+.md-header {
+  background-color: #0c0e14 !important;
+  border-bottom: 1px solid #1e2230;
+}
+
+.md-header__title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Sidebar */
+.md-sidebar {
+  background-color: #0c0e14;
+  border-right: 1px solid #1e2230;
+}
+
+.md-nav__item--nested > .md-nav__link {
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+  padding-top: 1rem;
+}
+
+.md-nav__link {
+  font-size: 0.875rem;
+  color: #d4d8e8;
+  border-radius: 6px;
+  padding: 0.3rem 0.75rem;
+}
+
+.md-nav__link:hover {
+  background-color: rgba(0, 201, 167, 0.06) !important;
+  color: #00C9A7;
+}
+
+.md-nav__link--active {
+  background-color: rgba(0, 201, 167, 0.1) !important;
+  color: #00C9A7 !important;
+  font-weight: 600;
+  border-left: 2px solid #00C9A7;
+}
+
+/* Code blocks */
+.md-typeset code {
+  background-color: #1a1e2a;
+  border: 1px solid #2a2e3a;
+  color: #00C9A7;
+  font-size: 0.8rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.md-typeset pre code {
+  background-color: #13161f;
+  border: 1px solid #2a2e3a;
+  color: #d4d8e8;
+}
+
+/* Tables */
+.md-typeset table {
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 0.875rem;
+}
+
+.md-typeset table thead tr {
+  background-color: #13161f;
+}
+
+.md-typeset table th {
+  color: #00C9A7;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid #2a2e3a;
+}
+
+.md-typeset table td {
+  color: #d4d8e8;
+  border-bottom: 1px solid #1a1e2a;
+}
+
+.md-typeset table tbody tr:hover {
+  background-color: rgba(0, 201, 167, 0.04);
+}
+
+/* Admonitions */
+.md-typeset .admonition {
+  border-left: 4px solid #00C9A7;
+  border-radius: 0 8px 8px 0;
+  background-color: rgba(0, 201, 167, 0.04);
+}
+
+.md-typeset .admonition.note {
+  border-left-color: #00A8E8;
+  background-color: rgba(0, 168, 232, 0.04);
+}
+
+.md-typeset .admonition.warning {
+  border-left-color: #d4a017;
+  background-color: rgba(212, 160, 23, 0.04);
+}
+
+.md-typeset .admonition.danger {
+  border-left-color: #ff4d4d;
+  background-color: rgba(255, 77, 77, 0.04);
+}
+
+/* Selection color */
+::selection {
+  background-color: rgba(0, 201, 167, 0.25);
+  color: #fff;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0c0e14;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2e3a;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3e4a;
+}
+
+/* Body background */
+.md-body {
+  background-color: #0c0e14;
+  color: #d4d8e8;
+}
+
+/* Typography */
+.md-typeset {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: #d4d8e8;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.md-typeset h1 { font-size: 1.8rem; margin-top: 0; }
+.md-typeset h2 { font-size: 1.4rem; margin-top: 2rem; border-bottom: 1px solid #1e2230; padding-bottom: 0.5rem; }
+.md-typeset h3 { font-size: 1.15rem; margin-top: 1.5rem; }
+
+/* Links */
+.md-typeset a {
+  color: #00C9A7;
+}
+
+.md-typeset a:hover {
+  color: #00e0ba;
+}
+
+/* Search */
+.md-search__input {
+  background-color: #13161f;
+  border: 1px solid #2a2e3a;
+  border-radius: 6px;
+  color: #d4d8e8;
+}
+
+.md-search__input::placeholder {
+  color: #6b7280;
+}
+
+/* Footer */
+.md-footer {
+  background-color: #0c0e14;
+  border-top: 1px solid #1e2230;
+  color: #6b7280;
+}
+
+.md-footer-copyright {
+  color: #6b7280;
+  font-size: 0.8rem;
+}
+
+/* Navigation top bar */
+.md-tabs {
+  background-color: #0c0e14;
+  border-bottom: 1px solid #1e2230;
+}
+
+.md-tabs__link {
+  color: #6b7280;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.md-tabs__link--active {
+  color: #00C9A7 !important;
+  border-bottom-color: #00C9A7;
+}
+
+.md-tabs__link:hover {
+  color: #d4d8e8;
+}
+
+/* Content area */
+.md-content {
+  max-width: 860px;
+}
+
+/* Version badge */
+.md-version {
+  background-color: #13161f;
+  border: 1px solid #2a2e3a;
+  color: #00C9A7;
+  font-size: 0.75rem;
+  border-radius: 4px;
+}
+
+/* TOC */
+.md-toc__link {
+  color: #6b7280;
+  font-size: 0.8rem;
+}
+
+.md-toc__link--active {
+  color: #00C9A7 !important;
+  font-weight: 600;
+}
+
+/* Buttons */
+.md-button {
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.md-button--primary {
+  background-color: #00C9A7;
+  color: #0c0e14;
+}
+
+.md-button--primary:hover {
+  background-color: #00e0ba;
+}
+
+/* Copy button on code blocks */
+.md-clipboard {
+  color: #6b7280;
+}
+
+.md-clipboard:hover {
+  color: #00C9A7;
+}
+
+/* Home page hero overrides */
+.md-typeset .hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #00C9A7;
+  background: rgba(0, 201, 167, 0.1);
+  border: 1px solid rgba(0, 201, 167, 0.25);
+  padding: 0.3rem 0.75rem;
+  border-radius: 100px;
+  margin-bottom: 1.5rem;
+}
+
+.md-typeset .hero-sub {
+  color: #6b7280;
+  font-size: 1.05rem;
+  max-width: 540px;
+  margin: 1rem auto 2rem;
+  line-height: 1.75;
+}
+
+.md-typeset .hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin: 1.5rem 0;
+}
+
+.md-typeset .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.md-typeset .btn-primary {
+  background: #00C9A7;
+  color: #0c0e14;
+}
+
+.md-typeset .btn-primary:hover {
+  background: #00e0ba;
+  color: #0c0e14;
+  text-decoration: none;
+}
+
+.md-typeset .btn-secondary {
+  background: #1a1e2a;
+  color: #d4d8e8;
+  border: 1px solid #2a2e3a;
+}
+
+.md-typeset .btn-secondary:hover {
+  background: #22263a;
+  text-decoration: none;
+}
+
+/* Stats */
+.md-typeset .stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: #2a2e3a;
+  border: 1px solid #2a2e3a;
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 2rem 0;
+}
+
+.md-typeset .stat {
+  background: #13161f;
+  padding: 1.25rem;
+  text-align: center;
+}
+
+.md-typeset .stat-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #00C9A7;
+  line-height: 1;
+  margin-bottom: 0.3rem;
+}
+
+.md-typeset .stat-label {
+  font-size: 0.7rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Feature cards on home */
+.md-typeset .features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.md-typeset .feature-card {
+  background: #13161f;
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  padding: 1.2rem;
+  transition: border-color 0.2s;
+}
+
+.md-typeset .feature-card:hover {
+  border-color: #3a3e4a;
+}
+
+.md-typeset .feature-card h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0.6rem 0 0.3rem;
+}
+
+.md-typeset .feature-card p {
+  font-size: 0.825rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Code blocks */
+.md-typeset pre {
+  background: #13161f;
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  margin: 1.25rem 0;
+  padding: 1rem 1.2rem;
+}
+
+.md-typeset pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #d4d8e8;
+  font-size: 0.825rem;
+}
+
+/* Inline code */
+.md-typeset code:not(pre code) {
+  background-color: #1a1e2a;
+  border: 1px solid #2a2e3a;
+  color: #00C9A7;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  padding: 0.1rem 0.4rem;
+}
+
+/* Horizontal rules */
+.md-typeset hr {
+  border: none;
+  border-top: 1px solid #1e2230;
+  margin: 2rem 0;
+}
