@@ -71,6 +71,7 @@ nav:
     - getting-started/zero-key-mode.md
     - getting-started/cli-installation.md
     - getting-started/troubleshooting.md
+    - getting-started/getting-started-guide.md
   - Product:
     - product/index.md
     - product/installation-experience.md
@@ -88,11 +89,21 @@ nav:
     - configuration/memory-policy.md
     - configuration/plugins.md
     - configuration/templates.md
+    - configuration/reference.md
+    - configuration/workflow-config.md
+    - configuration/output-policy.md
+    - configuration/cache-policy.md
   - Workflows:
     - workflows/index.md
     - workflows/overview.md
     - workflows/sdd-workflow.md
     - workflows/modes.md
+    - workflows/custom-workflows.md
+    - workflows/orchestrate-mode.md
+    - workflows/validation-mode.md
+    - workflows/patch-proposals.md
+    - workflows/workflow-packs.md
+    - workflows/sdd-implementation-summary.md
   - Integrations:
     - integrations/index.md
     - integrations/opencode-kilo-code.md
@@ -114,16 +125,76 @@ nav:
     - development/adding-a-memory-backend.md
   - Performance:
     - performance/index.md
+    - performance/cost-ledger.md
+    - performance/model-role-routing.md
+    - performance/cache-warming.md
+    - performance/batch-runs.md
+    - performance/offline-precomputation.md
+    - performance/provider-context-caching.md
+    - performance/latency-budgets.md
+    - performance/cache-aware-prompting.md
+    - performance/model-escalation.md
+    - performance/context-layers.md
   - Quality:
     - quality/index.md
+    - quality/context-quality-evaluation.md
+    - quality/contextbench.md
+    - quality/tool-chain-analysis.md
+    - quality/plan-drift-detection.md
+    - quality/quality-gates.md
+    - quality/critic-verifier-steps.md
   - Operations:
     - operations/index.md
+    - operations/org-baselines.md
+    - operations/playbooks.md
+    - operations/hooks.md
+    - operations/approvals.md
+    - operations/ai-team-operating-model.md
   - Enterprise:
     - enterprise/index.md
+    - enterprise/evidence-packs.md
+    - enterprise/team-policies.md
+    - enterprise/org-baselines.md
+    - enterprise/governance-reports.md
+    - enterprise/retention.md
+    - enterprise/air-gapped.md
+  - Governance:
+    - governance/index.md
+  - Memory:
+    - memory/index.md
+  - Security:
+    - security/index.md
+  - Architecture:
+    - architecture/index.md
+    - architecture/overview.md
+    - architecture/project-intelligence-layer.md
+    - architecture/repo-map-engine.md
+    - architecture/trace-model.md
+    - architecture/workflow-engine.md
+    - architecture/context-optimization-layer.md
+    - architecture/observability.md
+    - architecture/evaluation-layer.md
+    - architecture/safety-layer.md
+    - architecture/cache-layer.md
+    - architecture/compression.md
+    - architecture/context-pack-builder.md
+    - architecture/technology-profiles.md
+    - architecture/openclaw-boundary.md
+  - Guides:
+    - guides/index.md
+    - guides/pypi-publishing.md
+  - Research:
+    - research/index.md
+  - Token Efficiency:
+    - token-efficiency/index.md
+    - token-efficiency/repo-map-first.md
+    - token-efficiency/toon-and-compact-serialization.md
   - Profiles:
     - profiles/index.md
-  - Reference:
-    - configuration/reference.md
-
-extra_css:
-  - stylesheets/extra.css
+    - profiles/overview.md
+    - profiles/python.md
+    - profiles/node-typescript.md
+    - profiles/symfony.md
+    - profiles/drupal.md
+    - profiles/generic.md
+    - profiles/creating-a-profile.md
