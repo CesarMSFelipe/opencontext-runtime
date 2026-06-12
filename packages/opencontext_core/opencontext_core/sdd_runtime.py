@@ -48,6 +48,14 @@ class SDDContext(BaseModel):
         default="default",
         description="SDD model profile (default, cheap, hybrid, premium).",
     )
+    execution_mode: str = Field(
+        default="auto",
+        description="Guided SDD execution mode: auto or manual.",
+    )
+    artifact_mode: str = Field(
+        default="hybrid",
+        description="SDD artifact persistence mode: engram, openspec, hybrid, or none.",
+    )
 
 
 SDD_PHASES: list[str] = [
@@ -126,6 +134,8 @@ def build_sdd_context(
     tdd_mode: str = "ask",
     active_clients: list[str] | None = None,
     sdd_model_profile: str = "default",
+    execution_mode: str = "auto",
+    artifact_mode: str = "hybrid",
 ) -> SDDContext:
     """Build a compact SDD/TDD context model for a project."""
 
@@ -135,6 +145,10 @@ def build_sdd_context(
     capabilities = detect_test_capabilities(resolved)
     strict_tdd = any(item.scope in {"focused", "e2e"} for item in capabilities)
     normalized_tdd_mode = tdd_mode if tdd_mode in {"ask", "strict", "off"} else "ask"
+    normalized_execution_mode = execution_mode if execution_mode in {"auto", "manual"} else "auto"
+    normalized_artifact_mode = (
+        artifact_mode if artifact_mode in {"engram", "openspec", "hybrid", "none"} else "hybrid"
+    )
     clients = active_clients or []
     orchestrator_profiles = {
         c: get_client_orchestrator_profile(c).orchestrator_type for c in clients
@@ -147,6 +161,8 @@ def build_sdd_context(
         "Keep each SDD phase under the configured token budget unless explicitly overridden.",
         "During verify, run focused tests first, then broader lint/type checks when available.",
         "Persist decisions, omitted context reasons, trace ids, and verification evidence.",
+        f"Use SDD execution mode `{normalized_execution_mode}`.",
+        f"Persist SDD artifacts with `{normalized_artifact_mode}` mode.",
     ]
     if normalized_tdd_mode == "ask":
         instructions.append(
@@ -177,6 +193,8 @@ def build_sdd_context(
         active_clients=clients,
         orchestrator_profiles=orchestrator_profiles,
         sdd_model_profile=sdd_model_profile,
+        execution_mode=normalized_execution_mode,
+        artifact_mode=normalized_artifact_mode,
     )
 
 
@@ -187,6 +205,8 @@ def write_sdd_context(
     tdd_mode: str = "ask",
     active_clients: list[str] | None = None,
     sdd_model_profile: str = "default",
+    execution_mode: str = "auto",
+    artifact_mode: str = "hybrid",
 ) -> tuple[SDDContext, list[Path]]:
     """Write project-local SDD/TDD artifacts and return their paths."""
 
@@ -197,6 +217,8 @@ def write_sdd_context(
         tdd_mode=tdd_mode,
         active_clients=active_clients,
         sdd_model_profile=sdd_model_profile,
+        execution_mode=execution_mode,
+        artifact_mode=artifact_mode,
     )
     out_dir = base / ".opencontext" / "sdd"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -281,6 +303,8 @@ def _render_testing_markdown(context: SDDContext) -> str:
         f"TDD mode: `{context.tdd_mode}`",
         f"Token budget per phase: `{context.token_budget_per_phase}`",
         f"SDD model profile: `{context.sdd_model_profile}`",
+        f"Execution mode: `{context.execution_mode}`",
+        f"Artifact mode: `{context.artifact_mode}`",
         "",
         "## Test capabilities",
     ]

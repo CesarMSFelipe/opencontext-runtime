@@ -19,6 +19,16 @@ Low-consumption defaults:
 - Keep final answers concise. Include file paths, commands run, and test results;
   avoid long summaries of files the user can already open.
 
+OpenContext SDD/TDD profile:
+- Current Codex setup uses the `opencontext` orchestrator profile.
+- Use SDD execution mode `auto` and artifact mode `hybrid` unless overridden.
+- Keep the coordinator direct and low-verbosity; ask only on risk, ambiguity, or
+  missing configuration.
+- For non-trivial changes, follow explore → propose → spec/design/tasks → apply
+  → verify → archive using OpenContext context packs.
+- During apply, follow `tdd_mode`; in strict mode, write or update the closest
+  failing test before implementation.
+
 Validation:
 - Typical checks: `pytest`, `ruff check .`, `ruff format --check .`, and
   `mypy packages/opencontext_core`.

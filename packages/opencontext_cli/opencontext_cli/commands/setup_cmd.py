@@ -130,9 +130,21 @@ def add_setup_parser(subparsers: Any) -> None:
     )
     setup_parser.add_argument(
         "--orchestrator-profile",
-        choices=["solo-compact", "multi-phase", "subagent-native"],
+        choices=["opencontext", "solo-compact", "multi-phase", "subagent-native"],
         default=None,
         help="Orchestration strategy for SDD agents.",
+    )
+    setup_parser.add_argument(
+        "--execution-mode",
+        choices=["auto", "manual"],
+        default="auto",
+        help="Guided SDD execution mode.",
+    )
+    setup_parser.add_argument(
+        "--artifact-mode",
+        choices=["engram", "openspec", "hybrid", "none"],
+        default="hybrid",
+        help="SDD artifact persistence mode.",
     )
 
 
@@ -150,6 +162,8 @@ def handle_setup(args: Any) -> None:
     max_tokens = getattr(args, "max_tokens", 3000)
     sdd_profile = getattr(args, "sdd_profile", None)
     orchestrator_profile = getattr(args, "orchestrator_profile", None)
+    execution_mode = getattr(args, "execution_mode", "auto")
+    artifact_mode = getattr(args, "artifact_mode", "hybrid")
 
     if non_interactive:
         _run_automated(
@@ -163,6 +177,8 @@ def handle_setup(args: Any) -> None:
             max_tokens,
             sdd_profile,
             orchestrator_profile,
+            execution_mode,
+            artifact_mode,
         )
     else:
         _run_interactive(
@@ -176,6 +192,8 @@ def handle_setup(args: Any) -> None:
             max_tokens,
             sdd_profile,
             orchestrator_profile,
+            execution_mode,
+            artifact_mode,
         )
 
 
@@ -190,6 +208,8 @@ def _run_interactive(
     max_tokens: int,
     sdd_profile: str | None = None,
     orchestrator_profile: str | None = None,
+    execution_mode: str = "auto",
+    artifact_mode: str = "hybrid",
 ) -> None:
     """Run interactive setup with rich prompts."""
 
@@ -261,7 +281,17 @@ def _run_interactive(
         console.clear()
     except Exception:
         pass
-    _execute_plan(plan, agents, tdd_mode, root, max_tokens, sdd_profile, orchestrator_profile)
+    _execute_plan(
+        plan,
+        agents,
+        tdd_mode,
+        root,
+        max_tokens,
+        sdd_profile,
+        orchestrator_profile,
+        execution_mode,
+        artifact_mode,
+    )
     console.print()
     console.print(
         Panel.fit(
@@ -283,6 +313,8 @@ def _run_automated(
     max_tokens: int,
     sdd_profile: str | None = None,
     orchestrator_profile: str | None = None,
+    execution_mode: str = "auto",
+    artifact_mode: str = "hybrid",
 ) -> None:
     """Run automated setup (non-interactive)."""
 
@@ -312,6 +344,8 @@ def _run_automated(
         max_tokens,
         sdd_profile or "default",
         orchestrator_profile,
+        execution_mode,
+        artifact_mode,
     )
     console.print("[green]✓ Setup complete.[/]")
 
@@ -512,6 +546,8 @@ def _execute_plan(
     max_tokens: int = 3000,
     sdd_profile: str = "default",
     orchestrator_profile: str | None = None,
+    execution_mode: str = "auto",
+    artifact_mode: str = "hybrid",
 ) -> None:
     """Execute the install plan and leave SDD/TDD ready for selected agents."""
 
@@ -551,7 +587,9 @@ def _execute_plan(
     prefs.sdd_tdd_mode = tdd_mode
     prefs.sdd_token_budget = max_tokens
     prefs.sdd_model_profile = sdd_profile
-    prefs.sdd.orchestrator_profile = orchestrator_profile or prefs.sdd.orchestrator_profile
+    prefs.sdd.orchestrator_profile = orchestrator_profile or "opencontext"
+    prefs.sdd.execution_mode = execution_mode
+    prefs.sdd.artifact_mode = artifact_mode
     prefs.setup_completed = True
     for known_agent in list(prefs.agent_integrations):
         prefs.agent_integrations[known_agent] = known_agent in agents
@@ -604,6 +642,8 @@ def _execute_plan(
             tdd_mode=tdd_mode,
             active_clients=agents,
             sdd_model_profile=sdd_profile,
+            execution_mode=execution_mode,
+            artifact_mode=artifact_mode,
         )
         skill_source = (
             __import__("pathlib").Path(__file__).resolve().parent.parent.parent

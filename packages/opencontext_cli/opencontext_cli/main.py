@@ -1344,7 +1344,7 @@ def _install(args: argparse.Namespace) -> None:
                     prefs.security_mode = "private_project"
                     prefs.sdd.tdd_mode = tdd
                     prefs.sdd.sdd_model_profile = "hybrid"
-                    prefs.sdd.orchestrator_profile = "multi-phase"
+                    prefs.sdd.orchestrator_profile = "opencontext"
                     prefs.agents.active_clients = ["opencode"]
                     prefs.agents.default_client = "opencode"
                     prefs.setup_completed = True
@@ -1373,6 +1373,8 @@ def _install(args: argparse.Namespace) -> None:
                         tdd_mode=tdd,
                         active_clients=["opencode"],
                         sdd_model_profile="hybrid",
+                        execution_mode="auto",
+                        artifact_mode="hybrid",
                     )
                     _context_path = next((str(f) for f in files if f.name == "context.json"), "")
                     results[phase_key] = f"✓ (TDD: {tdd})"
@@ -1395,7 +1397,7 @@ def _install(args: argparse.Namespace) -> None:
                         agent_path = agents_dir / f"{client}.md"
                         if not agent_path.exists():
                             agent_path.write_text(
-                                _agent_contract_md(client, tdd, "hybrid", "multi-phase"),
+                                _agent_contract_md(client, tdd, "hybrid", "opencontext"),
                                 encoding="utf-8",
                             )
 

@@ -48,7 +48,9 @@ class SDDPreferences:
 
     tdd_mode: str = "ask"
     sdd_model_profile: str = "hybrid"
-    orchestrator_profile: str = "multi-phase"
+    orchestrator_profile: str = "opencontext"
+    execution_mode: str = "auto"
+    artifact_mode: str = "hybrid"
     token_budget_per_phase: dict[str, int] = field(
         default_factory=lambda: {
             "explore": 6000,
