@@ -187,6 +187,7 @@ nav:
     - guides/pypi-publishing.md
   - Research:
     - research/index.md
+    - Graph and Agent Integration Strategy: research/graph-and-agent-integration-strategy.md
   - Token Efficiency:
     - token-efficiency/index.md
     - token-efficiency/repo-map-first.md

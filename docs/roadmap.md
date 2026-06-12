@@ -24,11 +24,19 @@ OpenContext Runtime v0.4.0b0 delivers a complete context engineering platform wi
 
 ## Next Milestones
 
-1. **Parser-backed dependency graphs**: Deeper symbol extraction with cross-file type resolution and more accurate impact analysis
-2. **Public-key workflow-pack signing**: Signed workflow packs with transparency log integration for supply-chain integrity
-3. **Production provider SDK packages**: Published provider adapter packages (OpenAI, Anthropic, OpenRouter) outside core as documented extras
-4. **Context quality GA**: Production-ready quality gates with configurable thresholds and CI integration
-5. **Enterprise hardening**: Multi-user policy enforcement, hosted governance scaffolds, and org baseline distribution
+1. **Unified graph-aware retrieval**: Use one evidence planner across runtime context packs, MCP, CLI, API, workflows, and agents
+2. **Parser-backed dependency graphs**: Deeper symbol extraction with cross-file type resolution and more accurate impact analysis
+3. **Progressive and reversible compression**: Content-aware routing, exact-source retrieval handles, and cache-aligned output
+4. **Production governed agent harness**: Replace mocked agent execution and prove parity or improvement against agentic workflow tool workflows
+5. **Optional semantic graph adapters**: SCIP first, then evaluated LSP, document/schema/IaC, and specialist security adapters
+6. **Public-key workflow-pack signing**: Signed workflow packs with transparency log integration for supply-chain integrity
+7. **Production provider SDK packages**: Published provider adapter packages (OpenAI, Anthropic, OpenRouter) outside core as documented extras
+8. **Context quality GA**: Production-ready quality gates with configurable thresholds and CI integration
+9. **Enterprise hardening**: Multi-user policy enforcement, hosted governance scaffolds, and org baseline distribution
+
+See [Graph and Agent Integration Strategy](research/graph-and-agent-integration-strategy.md)
+for the external-system review, integration boundaries, release phases, and
+stability gates.
 
 ## Not Yet Enterprise Ready
 
