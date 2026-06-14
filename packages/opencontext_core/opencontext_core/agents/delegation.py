@@ -45,10 +45,29 @@ class SubAgentDelegate:
         self,
         mode: DelegationMode = DelegationMode.LOCAL,
         timeout: int = 300,
+        compression_mode: str = "terse",
     ) -> None:
         self.mode = mode
         self.timeout = timeout
         self._local_handlers: dict[str, Any] = {}
+        self._compression_mode = compression_mode
+        try:
+            from opencontext_core.backends.factory import BackendFactory
+            self._compressor = BackendFactory.create_compression_backend(compression_mode)
+        except Exception:
+            self._compressor = None
+
+    def _compress_context(self, context: dict) -> dict:
+        """Compress text values in context dict to reduce inter-agent token cost."""
+        if self._compressor is None:
+            return context
+        result = {}
+        for k, v in context.items():
+            if isinstance(v, str) and len(v) > 200:
+                result[k] = self._compressor.compress(v, [])
+            else:
+                result[k] = v
+        return result
 
     def register_handler(self, phase: str, handler: Any) -> None:
         """Register a local handler for a phase."""
@@ -117,6 +136,7 @@ class SubAgentDelegate:
             )
 
         try:
+            context = self._compress_context(context)
             result = handler(context)
             if isinstance(result, dict):
                 return SubAgentResult(
@@ -146,6 +166,7 @@ class SubAgentDelegate:
         # Write context to temp file
         import tempfile
 
+        context = self._compress_context(context)
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(context, f)
             context_path = f.name
