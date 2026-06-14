@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,12 @@ from opencontext_core.indexing.tree_sitter_parser import (
     LANGUAGE_EXTENSIONS,
     TreeSitterParser,
 )
+
+
+def _stable_symbol_id(project_id: str, file_path: str, qualified_name: str, kind: str) -> str:
+    """Return a 16-char deterministic hex ID for a symbol, unique across files."""
+    payload = f"{project_id}:{file_path}:{qualified_name}:{kind}"
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
 class KnowledgeGraph:
@@ -23,7 +30,7 @@ class KnowledgeGraph:
     def __init__(
         self,
         config: KnowledgeGraphConfig | None = None,
-        db_path: str | Path = ".storage/opencontext/codegraph.db",
+        db_path: str | Path = ".storage/opencontext/context_graph.db",
     ) -> None:
         self.config = config or KnowledgeGraphConfig()
         self.db = GraphDatabase(db_path=db_path)
@@ -202,17 +209,26 @@ class KnowledgeGraph:
 
         conn = self.db._connect()
 
-        # Build global name → node_id map; dotted calls resolved via last component
-        global_map: dict[str, int] = {}
+        # Build global (name, file_path) → node_id map; avoids silent overwrite on same-name symbols
+        global_map: dict[tuple[str, str], int] = {}
         node_files: dict[int, str] = {}
         for row in conn.execute("SELECT id, name, file_path FROM nodes").fetchall():
-            global_map[row["name"]] = row["id"]
+            global_map[(row["name"], row["file_path"])] = row["id"]
             node_files[row["id"]] = row["file_path"]
 
-        def _resolve(name: str) -> int | None:
-            result = global_map.get(name)
+        def _resolve(name: str, hint_file: str = "") -> int | None:
+            # Try exact (name, hint_file) first, then any file, then short name
+            result = global_map.get((name, hint_file))
+            if result is None:
+                # Fall back: search all files for this name
+                for (n, _fp), nid in global_map.items():
+                    if n == name:
+                        return nid
             if result is None and "." in name:
-                result = global_map.get(name.rsplit(".", 1)[-1])
+                short = name.rsplit(".", 1)[-1]
+                for (n, _fp), nid in global_map.items():
+                    if n == short:
+                        return nid
             return result
 
         # Collect already-stored (source, target) pairs to avoid duplicates
@@ -231,7 +247,7 @@ class KnowledgeGraph:
                 continue
 
             for pe in parsed_edges:
-                source_id = _resolve(pe.source_name)
+                source_id = _resolve(pe.source_name, file_path)
                 target_id = _resolve(pe.target_name)
                 if source_id is None or target_id is None:
                     continue
