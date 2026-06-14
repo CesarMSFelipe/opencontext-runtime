@@ -36,6 +36,7 @@ from opencontext_cli.commands.update_cmd import (
     handle_update,
     handle_upgrade,
 )
+from opencontext_cli.commands.loop_cmd import add_loop_commands, handle_loop
 from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
 from opencontext_core.actions import ActionRequest, ActionType, evaluate_action
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
@@ -910,6 +911,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_telemetry_parser(subparsers)
     add_contract_commands(subparsers)
     add_mutation_commands(subparsers)
+    add_loop_commands(subparsers)
 
     return parser
 
@@ -1135,6 +1137,8 @@ def _dispatch(args: argparse.Namespace) -> None:
         sys.exit(handle_contract(args))
     if command == "mutation":
         sys.exit(handle_mutation(args))
+    if command == "loop":
+        return sys.exit(handle_loop(args, config=None))
     runtime = _runtime(args.config)
     if command == "index":
         _index(runtime, args.root, args.incremental)
