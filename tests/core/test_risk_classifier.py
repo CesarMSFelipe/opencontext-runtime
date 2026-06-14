@@ -11,8 +11,9 @@ def test_security_always_critical() -> None:
     assert rc.classify("security", "high") == "critical"
 
 
-def test_bugfix_low_precise() -> None:
-    assert RiskClassifier().classify("bugfix", "low") == "precise"
+def test_bugfix_low_cheap() -> None:
+    # low-risk bugfixes (typos, trivial fixes) use cheap tier
+    assert RiskClassifier().classify("bugfix", "low") == "cheap"
 
 
 def test_bugfix_high_critical() -> None:

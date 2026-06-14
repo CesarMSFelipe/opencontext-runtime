@@ -15,7 +15,7 @@ class RiskClassifier:
     """Maps task_type + risk_level to retrieval tier."""
 
     _MAP: ClassVar[dict[tuple[str, str], str]] = {
-        ("bugfix", "low"): "precise",
+        ("bugfix", "low"): "cheap",
         ("bugfix", "medium"): "precise",
         ("bugfix", "high"): "critical",
         ("bugfix", "critical"): "critical",

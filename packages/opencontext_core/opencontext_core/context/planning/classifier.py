@@ -118,6 +118,17 @@ DEFAULT_RULES: tuple[ClassificationRule, ...] = (
 
 _RISK_ORDER = ("low", "medium", "high", "critical")
 
+# Task types inherently low-risk — default to "low", only boosted by explicit escalators
+_LOW_RISK_TASK_TYPES: frozenset[str] = frozenset({
+    "refactor", "documentation", "test", "configuration",
+})
+
+# Keywords that always force risk to "low" regardless of task type
+_TRIVIAL_KEYWORDS: frozenset[str] = frozenset({
+    "typo", "rename", "whitespace", "comment", "unused", "cleanup",
+    "format", "trivial", "minor", "cosmetic",
+})
+
 
 class TaskClassifier:
     """Deterministic. O(n) over keyword rules. Never calls LLM."""
@@ -145,6 +156,14 @@ class TaskClassifier:
                     risk_level = _RISK_ORDER[max(current_idx, boost_idx)]
                 if rule.requires_mutation:
                     requires_mutation = True
+
+        # Low-risk task types start at "low" unless a boost already raised them
+        if task_type in _LOW_RISK_TASK_TYPES and risk_level == "medium":
+            risk_level = "low"
+
+        # Trivial keywords force risk to "low" regardless of task type or prior boosts
+        if any(kw in normalized for kw in _TRIVIAL_KEYWORDS):
+            risk_level = "low"
 
         language = None
         framework = None
