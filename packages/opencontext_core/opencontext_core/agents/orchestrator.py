@@ -238,9 +238,10 @@ class AgentOrchestrator:
         Returns:
             BaseAgent instance or None if type unknown
         """
-        # For now, return None and use mock execution
-        # In production, would instantiate specific agent classes
-        # (CodeReviewAgent, SecurityAuditAgent, etc.)
+        from opencontext_core.agents import AGENT_REGISTRY
+        AgentClass = AGENT_REGISTRY.get(config.type)
+        if AgentClass is not None:
+            return AgentClass(config, self.project_root)
         return None
 
     def _mock_agent_execution(self, config: AgentConfig, agent: BaseAgent | None) -> dict[str, Any]:
