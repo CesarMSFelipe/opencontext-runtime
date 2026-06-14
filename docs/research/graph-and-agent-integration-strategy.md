@@ -40,8 +40,8 @@ workflows, and agents.
 
 | System | Strong ideas to adopt | Integration decision |
 |---|---|---|
-| [CodeGraph](https://github.com/colbymchenry/codegraph) | Graph-first exploration, one-call context, impact analysis, cross-language/framework links, file watching, explicit stale-result warnings, agent guidance that avoids redundant reads, benchmark by tokens/tool calls/cost/time | Adopt patterns and benchmark methodology. Consider an optional adapter only after native graph retrieval is unified. MIT license. |
-| [graph tool](https://github.com/safishamsi/graph tool) | A graph that spans code, database schema, infrastructure, documents, and media; graph reports; optional Neo4j export; parallel extraction through agent-native capabilities | Adopt the multi-source graph model and report/export concepts. Keep LLM-backed or multimodal extraction optional and outside core. MIT license. |
+| Graph-first exploration systems | One-call context, impact analysis, cross-language/framework links, file watching, explicit stale-result warnings, agent guidance that avoids redundant reads, benchmark by tokens/tool calls/cost/time | Adopt patterns and benchmark methodology. Consider optional adapters only after native graph retrieval is unified. |
+| Multi-source graph systems | A graph that spans code, database schema, infrastructure, documents, and media; graph reports; optional export; parallel extraction through agent-native capabilities | Adopt the multi-source graph model and report/export concepts. Keep LLM-backed or multimodal extraction optional and outside core. |
 | [Headroom](https://github.com/chopratejas/headroom) | Content-aware compression routing, AST compression, cache-aligned stable prefixes, reversible compression with retrieval on demand, cross-agent deduplication, evaluation of answer preservation | Implement provider-neutral equivalents in core interfaces. An optional bridge may be useful, but Headroom must not become a mandatory runtime dependency. Apache-2.0 license. |
 | [Trellis](https://github.com/mindfold-ai/trellis) | Scoped specs, task-centered artifacts, project journals, auto-injected context, plan/implement/verify/finish loop, verification sub-agent, promotion of discoveries into shared specs | Adopt workflow behavior, not code. AGPL-3.0 means no code copying into the MIT core. |
 | [Odysseus](https://github.com/pewdiepie-archdaemon/odysseus) | Local-first workspace, model fit recommendations, blind model comparison, deep-research runs, persistent skills and memory | Use as inspiration for a local evaluation lab and model-selection evidence. Do not absorb the workspace UI or AGPL code into core. |
@@ -210,7 +210,7 @@ must not be copied into the MIT-licensed core.
 3. Evaluate LSP/Serena-style enrichment.
 4. Evaluate external graph adapters against native retrieval.
 5. Add Joern only for opt-in security workflows.
-6. Add document/schema/IaC graph enrichment inspired by graph tool.
+6. Add document/schema/IaC graph enrichment inspired by multi-source graph systems.
 
 ### Release D — Production agentic harness
 
@@ -257,4 +257,3 @@ The first dogfood suite should run on OpenContext Runtime itself and compare:
 
 No external adapter should be enabled by default unless it wins on a documented
 quality-efficiency frontier and preserves OpenContext's security defaults.
-

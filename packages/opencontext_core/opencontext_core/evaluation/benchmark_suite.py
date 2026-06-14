@@ -313,6 +313,44 @@ class BenchmarkCase:
     tags: list[str] = field(default_factory=list)
 
 
+# ── v2 Quality Metrics Schema ───────────────────────────────────────────────
+
+V2_QUALITY_METRICS: dict[str, object] = {
+    "context_contract_completeness": 0.0,    # % contracts with is_complete() == True
+    "validation_gate_pass_rate": 0.0,        # % gates that passed
+    "memory_hit_rate": 0.0,                  # % memory retrievals in final pack
+    "tier_distribution": {"cheap": 0, "precise": 0, "critical": 0},
+}
+
+
+def contract_build_latency_benchmark() -> dict[str, object]:
+    """Measure time to build a ContextContract. Returns timing metadata."""
+    import time
+    try:
+        from opencontext_core.context.planning.classifier import TaskClassifier
+        from opencontext_core.context.planning.contract import ContextContractBuilder
+        from opencontext_core.context.planning.risk import RiskClassifier
+
+        start = time.monotonic()
+        ContextContractBuilder(
+            classifier=TaskClassifier(),
+            risk_classifier=RiskClassifier(),
+        ).build("benchmark: fix bug in payment service")
+        elapsed_ms = (time.monotonic() - start) * 1000
+        return {
+            "scenario": "contract_build_latency",
+            "duration_ms": round(elapsed_ms, 2),
+            "status": "ok",
+        }
+    except Exception as exc:
+        return {
+            "scenario": "contract_build_latency",
+            "duration_ms": -1.0,
+            "status": "error",
+            "error": str(exc),
+        }
+
+
 BUILTIN_CASES: list[BenchmarkCase] = [
     BenchmarkCase(
         id="completeness/minimal",

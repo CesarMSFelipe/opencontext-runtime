@@ -83,10 +83,19 @@ context:
       priority: 0.25
       source_trust: 0.15
       token_efficiency: 0.15
+    semantic_relevance: 0.25
+    graph_centrality: 0.20
+    call_distance: 0.15
+    test_affinity: 0.10
+    memory_confidence: 0.10
+    recent_failure: 0.08
+    risk_requirement: 0.07
+    freshness: 0.03
+    provenance: 0.02
   compression:
     enabled: true
     strategy: extractive_head_tail
-    caveman_intensity: full
+    terse_intensity: full
     max_compression_ratio: 0.5
     adaptive: true
     protected_spans: true
@@ -384,3 +393,17 @@ skills:
   project_dirs:
   - .claude/skills/
   - skills/
+context_planning:
+  enabled: true
+  default_mode: progressive
+  contract_required: true
+  risk_classifier: deterministic
+  max_expansion_rounds: 3
+  fail_on_unverified_critical_assumptions: false
+testing:
+  mutation:
+    enabled: false
+    threshold: 80
+    fail_on_low_score: false
+context_storage:
+  semantic_search: false
