@@ -64,6 +64,19 @@ class HarnessRunner:
         self.config = config or HarnessConfig.from_yaml_file(root / ".opencontext" / "harness.yaml")
         self.enforcer = TokenBudgetEnforcer()
 
+        # v2: inject memory store (additive, never breaks existing usage)
+        try:
+            from opencontext_core.backends.factory import BackendFactory
+
+            storage_path = self.root / ".opencontext"
+            storage_path.mkdir(parents=True, exist_ok=True)
+            _memory_config = type("MemConfig", (), {"enabled": True, "provider": "local"})()
+            self._memory_store = BackendFactory.create_memory_store(_memory_config, storage_path)
+        except Exception:
+            from opencontext_core.memory.agent import NullAgentMemoryStore
+
+            self._memory_store = NullAgentMemoryStore()
+
     def create_run(self, workflow: str, task: str) -> HarnessState:
         """Create a new run with a unique run_id."""
         run_id = f"{workflow}-{uuid.uuid4().hex[:12]}"
@@ -208,8 +221,9 @@ class HarnessRunner:
         if phase_config is None:
             return None
 
+        memory_store = getattr(self, "_memory_store", None)
         if phase_id == "explore":
-            return ExplorePhase(phase_config, budget_mode)
+            return ExplorePhase(phase_config, budget_mode, memory_store=memory_store)
         if phase_id == "propose":
             return ProposePhase(phase_config, budget_mode)
         if phase_id == "spec":
@@ -225,7 +239,7 @@ class HarnessRunner:
         if phase_id == "review":
             return ReviewPhase(phase_config, budget_mode)
         if phase_id == "archive":
-            return ArchivePhase(phase_config, budget_mode)
+            return ArchivePhase(phase_config, budget_mode, memory_store=memory_store)
 
         # Fallback: return None for unknown phases
         return None

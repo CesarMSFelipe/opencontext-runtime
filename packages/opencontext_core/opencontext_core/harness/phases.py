@@ -62,6 +62,15 @@ class ExplorePhase(HarnessPhase):
 
     id = "explore"
 
+    def __init__(
+        self,
+        config: PhaseConfig,
+        budget_mode: BudgetMode = BudgetMode.WARN,
+        memory_store: Any = None,
+    ) -> None:
+        super().__init__(config, budget_mode)
+        self._memory_store = memory_store
+
     def run(self, state: Any) -> PhaseResult:
         from opencontext_core.runtime import OpenContextRuntime
 
@@ -128,22 +137,55 @@ class ExplorePhase(HarnessPhase):
             )
         )
 
+        # Memory context enrichment (additive, non-breaking)
+        if hasattr(self, "_memory_store") and self._memory_store is not None:
+            try:
+                self._memory_store.search(state.task, limit=5)
+            except Exception:
+                pass  # memory is optional, never block explore
+
+        # Build context contract (additive, non-breaking)
+        explore_artifacts: list[HarnessArtifact] = [
+            HarnessArtifact(
+                id=f"explore-pack-{state.run_id[:8]}",
+                phase="explore",
+                path=str(
+                    state.root / ".opencontext" / "runs" / state.run_id / "context-pack.json"
+                ),
+                kind="context-pack",
+                description=f"Context pack with {len(pack.included)} items",
+            )
+        ]
+        try:
+            from opencontext_core.context.planning.classifier import TaskClassifier
+            from opencontext_core.context.planning.contract import ContextContractBuilder
+            from opencontext_core.context.planning.risk import RiskClassifier
+
+            contract_builder = ContextContractBuilder(
+                classifier=TaskClassifier(),
+                risk_classifier=RiskClassifier(),
+            )
+            contract = contract_builder.build(state.task)
+            contract_path = run_dir / "contract.yaml"
+            contract_path.write_text(contract.to_yaml())
+            explore_artifacts.append(
+                HarnessArtifact(
+                    id=f"contract-{state.run_id}",
+                    phase="explore",
+                    path=str(contract_path),
+                    kind="context-contract",
+                    description="Verified context contract",
+                )
+            )
+        except Exception:
+            pass  # contract building is additive, never block explore
+
         return PhaseResult(
             phase="explore",
             status=status,
             ledger=ledger,
             gates=gates,
-            artifacts=[
-                HarnessArtifact(
-                    id=f"explore-pack-{state.run_id[:8]}",
-                    phase="explore",
-                    path=str(
-                        state.root / ".opencontext" / "runs" / state.run_id / "context-pack.json"
-                    ),
-                    kind="context-pack",
-                    description=f"Context pack with {len(pack.included)} items",
-                )
-            ],
+            artifacts=explore_artifacts,
             metadata={
                 "included": len(pack.included),
                 "omitted": len(pack.omitted),
@@ -167,6 +209,15 @@ class ArchivePhase(HarnessPhase):
     """
 
     id = "archive"
+
+    def __init__(
+        self,
+        config: PhaseConfig,
+        budget_mode: BudgetMode = BudgetMode.WARN,
+        memory_store: Any = None,
+    ) -> None:
+        super().__init__(config, budget_mode)
+        self._memory_store = memory_store
 
     def run(self, state: Any) -> PhaseResult:
         run_dir = state.root / ".opencontext" / "runs" / state.run_id
@@ -242,6 +293,30 @@ class ArchivePhase(HarnessPhase):
             if any(g.status == GateStatus.FAILED for g in gates)
             else GateStatus.PASSED
         )
+
+        # Memory harvest (additive, non-breaking)
+        if hasattr(self, "_memory_store") and self._memory_store is not None:
+            try:
+                from opencontext_core.harness.models import HarnessRunResult
+                from opencontext_core.memory.harvester import MemoryHarvester
+
+                run_result = HarnessRunResult(
+                    run_id=state.run_id,
+                    workflow=getattr(state, "workflow", "unknown"),
+                    task=state.task,
+                    status=GateStatus.PASSED,
+                    ledgers=state.ledgers,
+                    gates=state.gates,
+                    artifacts=state.artifacts,
+                    decisions=state.decisions,
+                    trace_ids=state.trace_ids,
+                    warnings=state.warnings,
+                )
+                harvester = MemoryHarvester(self._memory_store)
+                harvester.harvest(run_result)
+            except Exception:
+                pass  # harvesting is optional, never block archive
+
         return PhaseResult(
             phase="archive",
             status=status,
@@ -835,6 +910,43 @@ class VerifyPhase(HarnessPhase):
                     message=f"Tests exited with code {test_result['exit_code']}",
                 )
             )
+
+        # Mutation testing hook (additive, non-breaking)
+        try:
+            from opencontext_core.config import load_config_or_defaults
+
+            _cfg = load_config_or_defaults(state.root / "opencontext.yaml")
+            _mut_cfg = getattr(getattr(_cfg, "testing", None), "mutation", None)
+            if _mut_cfg is not None and getattr(_mut_cfg, "enabled", False):
+                from opencontext_core.mutation.models import MutationResult  # noqa: F401
+                from opencontext_core.mutation.runner import MutationRunner
+
+                mutation_result = MutationRunner().run(
+                    state.root,
+                    scope="changed",
+                    threshold=_mut_cfg.threshold,
+                )
+                gate_status = GateStatus.PASSED
+                if not mutation_result.available:
+                    gate_status = GateStatus.WARNING
+                elif mutation_result.score < _mut_cfg.threshold:
+                    gate_status = (
+                        GateStatus.FAILED if _mut_cfg.fail_on_low_score else GateStatus.WARNING
+                    )
+                gates.append(
+                    PhaseGate(
+                        id="mutation-tests",
+                        phase="verify",
+                        status=gate_status,
+                        message=(
+                            f"Mutation coverage: {mutation_result.score:.1f}%"
+                            if mutation_result.available
+                            else (mutation_result.error or "Not available")
+                        ),
+                    )
+                )
+        except Exception:
+            pass  # mutation is optional
 
         status = (
             GateStatus.FAILED

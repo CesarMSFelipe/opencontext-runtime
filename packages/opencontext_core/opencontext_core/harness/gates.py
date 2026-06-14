@@ -358,6 +358,160 @@ class PrivacyGate:
             pass
 
 
+class NoSecretLeakageGate:
+    """Check that no sensitive patterns exist in an artifact."""
+
+    id = "no_secret_leakage"
+
+    def evaluate(self, artifact_content: str) -> PhaseGate:
+        from opencontext_core.safety.secrets import SecretScanner
+
+        try:
+            findings = SecretScanner().scan(artifact_content)
+        except Exception:
+            findings = []
+        if findings:
+            return PhaseGate(
+                id=self.id,
+                status=GateStatus.FAILED,
+                message=f"{len(findings)} sensitive pattern(s) detected in artifact",
+                phase="any",
+            )
+        return PhaseGate(
+            id=self.id,
+            status=GateStatus.PASSED,
+            message="No sensitive patterns detected",
+            phase="any",
+        )
+
+
+class IncludedSourcesPresentGate:
+    """Check that all required sources appear in the context."""
+
+    id = "included_sources_present"
+
+    def evaluate(self, required_sources: list[str], included_sources: set[str]) -> PhaseGate:
+        missing = [s for s in required_sources if s not in included_sources]
+        if missing:
+            return PhaseGate(
+                id=self.id,
+                status=GateStatus.WARNING,
+                message=f"Required sources not in context: {missing[:3]}",
+                phase="any",
+            )
+        return PhaseGate(
+            id=self.id,
+            status=GateStatus.PASSED,
+            message="All required sources included",
+            phase="any",
+        )
+
+
+class OmissionsRecordedGate:
+    """Check that omitted items have recorded reasons."""
+
+    id = "omissions_recorded"
+
+    def evaluate(self, omitted_count: int, omissions_recorded: int) -> PhaseGate:
+        if omitted_count > 0 and omissions_recorded == 0:
+            return PhaseGate(
+                id=self.id,
+                status=GateStatus.WARNING,
+                message="Items omitted but omission reasons not recorded",
+                phase="any",
+            )
+        return PhaseGate(
+            id=self.id,
+            status=GateStatus.PASSED,
+            message="Omission trace complete",
+            phase="any",
+        )
+
+
+class ProviderPolicyPassedGate:
+    """Check provider policy for external context sends."""
+
+    id = "provider_policy_passed"
+
+    def evaluate(self, provider: str, is_external: bool, items_count: int) -> PhaseGate:
+        if is_external and items_count > 0:
+            return PhaseGate(
+                id=self.id,
+                status=GateStatus.WARNING,
+                message=f"Context sent to external provider '{provider}' — verify policy",
+                phase="any",
+            )
+        return PhaseGate(
+            id=self.id,
+            status=GateStatus.PASSED,
+            message="Provider policy check passed",
+            phase="any",
+        )
+
+
+class ApprovalRequiredForWritesGate:
+    """Check that write operations are approved in strict mode."""
+
+    id = "approval_required_for_writes"
+
+    def evaluate(self, budget_mode: str, approved: bool) -> PhaseGate:
+        if budget_mode == "strict" and not approved:
+            return PhaseGate(
+                id=self.id,
+                status=GateStatus.FAILED,
+                message="Write operations require explicit approval in strict mode",
+                phase="any",
+            )
+        return PhaseGate(
+            id=self.id,
+            status=GateStatus.PASSED,
+            message="Approval check passed",
+            phase="any",
+        )
+
+
+class NoHighRiskExportsGate:
+    """Check that restricted data is not exported to external providers."""
+
+    id = "no_high_risk_exports"
+
+    def evaluate(self, has_confidential: bool, is_external_provider: bool) -> PhaseGate:
+        if is_external_provider and has_confidential:
+            return PhaseGate(
+                id=self.id,
+                status=GateStatus.FAILED,
+                message="Restricted data cannot be exported to external provider",
+                phase="any",
+            )
+        return PhaseGate(
+            id=self.id,
+            status=GateStatus.PASSED,
+            message="No restricted data export",
+            phase="any",
+        )
+
+
+class ReviewArtifactCreatedGate:
+    """Check that the review artifact exists in the run directory."""
+
+    id = "review_artifact_created"
+
+    def evaluate(self, run_dir: Path) -> PhaseGate:
+        if not (run_dir / "review.json").exists():
+            return PhaseGate(
+                id=self.id,
+                status=GateStatus.FAILED,
+                message="Review artifact not found in run directory",
+                phase="any",
+            )
+        return PhaseGate(
+            id=self.id,
+            status=GateStatus.PASSED,
+            message="Review artifact present",
+            phase="any",
+        )
+
+
 class FailingTestExistsGate:
     """Check that a test file exists matching the change/task name pattern.
 

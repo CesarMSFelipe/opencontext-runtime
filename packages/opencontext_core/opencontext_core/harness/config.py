@@ -60,15 +60,15 @@ class HarnessConfig:
                 gates=[
                     "project_index_exists",
                     "context_pack_created",
-                    # "no_secret_leakage" — not implemented yet
+                    "no_secret_leakage",
                 ],
             ),
             "propose": PhaseConfig(
                 budget_tokens=6000,
                 gates=[
                     "trace_id_created",
-                    # "included_sources_present" — not implemented yet
-                    # "omissions_recorded" — not implemented yet
+                    "included_sources_present",
+                    "omissions_recorded",
                 ],
             ),
             "spec": PhaseConfig(
@@ -94,8 +94,8 @@ class HarnessConfig:
                 confidence_threshold=0.4,
                 complexity=0.8,
                 gates=[
-                    # "provider_policy_passed" — not implemented yet
-                    # "approval_required_for_writes" — not implemented yet
+                    "provider_policy_passed",
+                    "approval_required_for_writes",
                 ],
             ),
             "verify": PhaseConfig(
@@ -104,7 +104,7 @@ class HarnessConfig:
                 complexity=0.4,
                 gates=[
                     "security_scan_passed",
-                    # "no_high_risk_exports" — not implemented yet
+                    "no_high_risk_exports",
                     "failing_test_exists",
                 ],
             ),
@@ -113,7 +113,7 @@ class HarnessConfig:
                 confidence_threshold=0.3,
                 complexity=0.3,
                 gates=[
-                    # "review_artifact_created" — not implemented yet
+                    "review_artifact_created",
                 ],
             ),
             "archive": PhaseConfig(
