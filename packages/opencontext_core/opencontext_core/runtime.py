@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -18,11 +19,10 @@ from opencontext_core.config import (
 )
 from opencontext_core.context.assembler import PromptAssembler
 from opencontext_core.context.budgeting import TokenBudgetManager
+from opencontext_core.context.compiler import ContextCompiler, evidence_to_context_item
 from opencontext_core.context.compression import CompressionEngine
-from opencontext_core.context.packing import ContextPackBuilder, sanitize_context_pack
-from opencontext_core.context.ranking import ContextRanker
 from opencontext_core.embeddings.extractors import items_from_manifest
-from opencontext_core.embeddings.stores import LocalVectorStore
+from opencontext_core.embeddings.stores import LocalVectorStore, NullVectorStore
 from opencontext_core.embeddings.worker import AsyncEmbeddingWorker, create_worker
 from opencontext_core.errors import ConfigurationError, MemoryStoreError, WorkflowExecutionError
 from opencontext_core.indexing.graph_tunnel import GraphTunnelStore
@@ -33,7 +33,8 @@ from opencontext_core.learning.learning_orchestrator import LearningOrchestrator
 from opencontext_core.llm.gateway import LLMGateway
 from opencontext_core.llm.mock import MockLLMGateway
 from opencontext_core.memory.stores import LocalProjectMemoryStore, ProjectMemoryStore
-from opencontext_core.models.context import ContextItem, ContextPackResult, ContextPriority
+from opencontext_core.memory_usability.context_repository import ContextRepository
+from opencontext_core.models.context import ContextItem, ContextPackResult
 from opencontext_core.models.llm import LLMRequest, LLMResponse
 from opencontext_core.models.project import ProjectManifest
 from opencontext_core.models.trace import RuntimeTrace, TraceEvent, TraceSpan
@@ -44,7 +45,19 @@ from opencontext_core.operating_model.call_budget import (
 from opencontext_core.operating_model.performance import ModelRoleRouter
 from opencontext_core.operating_model.quality import PreLLMQualityGate
 from opencontext_core.project.profiles import TechnologyProfile
-from opencontext_core.retrieval.retriever import ProjectRetriever
+from opencontext_core.retrieval.contracts import (
+    EvidenceItem,
+    EvidencePlan,
+    EvidenceRequest,
+    FreshnessStatus,
+    GateSummary,
+    RetrievalSurface,
+    RiskLevel,
+    TrustDecision,
+    VerifiedContextRequest,
+    VerifiedContextResult,
+)
+from opencontext_core.retrieval.planner import RetrievalPlanner
 from opencontext_core.safety.firewall import ContextFirewall
 from opencontext_core.safety.trace_sanitizer import TraceSanitizer
 from opencontext_core.trace.logger import LocalTraceLogger
@@ -126,6 +139,11 @@ class PreparedContext(BaseModel):
     included_sources: list[str] = Field(description="Sources included in the prepared context.")
     omitted_sources: list[str] = Field(description="Sources omitted from the prepared context.")
     token_usage: dict[str, int] = Field(description="Context and prompt token accounting.")
+    trust_decision: dict[str, str] = Field(description="Planner trust decision metadata.")
+    fallback_actions: list[str] = Field(
+        description="Planner fallback actions for low-trust evidence."
+    )
+    source_surfaces: list[str] = Field(description="Planner surfaces represented in the evidence.")
 
 
 class ProjectSetupResult(BaseModel):
@@ -163,14 +181,18 @@ class OpenContextRuntime:
         self.llm_gateway = llm_gateway or self._gateway_from_config()
         self.technology_profiles = technology_profiles
         self.tunnel_store = GraphTunnelStore(self.storage_path)
-        self.knowledge_graph = KnowledgeGraph(db_path=self.storage_path / "codegraph.db")
+        self.knowledge_graph = KnowledgeGraph(db_path=self.storage_path / "context_graph.db")
         self.learning = LearningOrchestrator(
             storage_path=self.storage_path / "learning",
-            kg_db_path=self.storage_path / "codegraph.db",
+            kg_db_path=self.storage_path / "context_graph.db",
             default_token_budget=self.config.context.max_input_tokens,
         )
         self.compression_engine = CompressionEngine(self.config.context.compression)
-        vector_store = LocalVectorStore(self.storage_path)
+        vector_store = (
+            LocalVectorStore(self.storage_path)
+            if self.config.embedding.enabled
+            else NullVectorStore()
+        )
         self.embedding_worker = embedding_worker or create_worker(
             self.config, vector_store=vector_store
         )
@@ -223,6 +245,43 @@ class OpenContextRuntime:
             )
         else:
             self._agent_subsystems_disabled = False
+
+        # v2: contract-driven planning (additive — never raises to caller)
+        try:
+            from opencontext_core.backends.factory import BackendFactory
+            from opencontext_core.context.planning.classifier import TaskClassifier
+            from opencontext_core.context.planning.contract import ContextContractBuilder
+            from opencontext_core.context.planning.planner import ContextPlanner
+            from opencontext_core.context.planning.risk import RiskClassifier
+
+            self._task_classifier = TaskClassifier()
+            self._risk_classifier = RiskClassifier()
+            self._contract_builder = ContextContractBuilder(
+                classifier=self._task_classifier,
+                risk_classifier=self._risk_classifier,
+            )
+            self._context_planner = ContextPlanner(
+                graph=self.knowledge_graph if hasattr(self, "knowledge_graph") else None,
+            )
+            _v2_storage = self.storage_path
+            _mem_config = type("MC", (), {"enabled": True, "provider": "local"})()
+            self._v2_memory_store = BackendFactory.create_memory_store(_mem_config, _v2_storage)
+            self._v2_enabled = True
+        except Exception:
+            self._v2_enabled = False
+
+    def build_contract(self, query: str) -> object | None:
+        """Build a verified context contract for a query.
+
+        Returns a ContextContract if v2 planning is available, else None.
+        Never raises — callers can always treat None as "v2 not available".
+        """
+        if not getattr(self, "_v2_enabled", False):
+            return None
+        try:
+            return self._contract_builder.build(query)
+        except Exception:
+            return None
 
     def index_project(self, root: str | Path | None = None) -> ProjectManifest:
         """Index a project and persist the project manifest."""
@@ -344,6 +403,7 @@ class OpenContextRuntime:
         self,
         query: str,
         max_tokens: int | None = None,
+        surface: RetrievalSurface = RetrievalSurface.RUNTIME,
     ) -> ContextPackResult:
         """Build a token-aware context pack from retrieved project context."""
 
@@ -354,7 +414,7 @@ class OpenContextRuntime:
             )
         budget = max_tokens
         op_id = self.learning.start_operation("context_pack", query, tokens_budgeted=budget)
-        pack, trace = self._build_context_pack_with_trace(query, max_tokens)
+        pack, trace, _plan = self._build_context_pack_with_trace(query, max_tokens, surface=surface)
         total_tokens = sum(trace.token_estimates.values()) if trace.token_estimates else 0
         self.learning.finish_operation(
             op_id,
@@ -371,6 +431,7 @@ class OpenContextRuntime:
         root: str | Path | None = None,
         max_tokens: int | None = None,
         refresh_index: bool = False,
+        surface: RetrievalSurface = RetrievalSurface.API,
     ) -> PreparedContext:
         """Prepare, persist, and return a compact context bundle for API adapters."""
 
@@ -382,7 +443,7 @@ class OpenContextRuntime:
             except MemoryStoreError:
                 self.index_project(root)
 
-        pack, trace = self._build_context_pack_with_trace(query, max_tokens)
+        pack, trace, plan = self._build_context_pack_with_trace(query, max_tokens, surface=surface)
         return PreparedContext(
             query=query,
             trace_id=trace.run_id,
@@ -390,29 +451,132 @@ class OpenContextRuntime:
             included_sources=[item.source for item in pack.included],
             omitted_sources=[item.source for item in pack.omitted],
             token_usage=trace.token_estimates,
+            trust_decision=plan.trust_decision.model_dump(mode="json"),
+            fallback_actions=plan.fallback_actions,
+            source_surfaces=[surface.value for surface in plan.source_surfaces],
         )
+
+    def verify_context(self, request: VerifiedContextRequest) -> VerifiedContextResult:
+        """Build one-shot verified context with local evidence, gates, risk, and trace."""
+
+        risk_level = _classify_context_risk(request.query, evidence_count=0)
+        omitted_sources: list[str] = []
+        if not request.include_vector or not self.config.embedding.enabled:
+            omitted_sources.append("vector_disabled")
+        if not request.include_memory:
+            omitted_sources.append("memory_disabled")
+
+        if request.refresh_index:
+            self.index_project(request.root)
+
+        try:
+            pack, trace, plan = self._build_context_pack_with_trace(
+                request.query,
+                request.max_tokens,
+                surface=RetrievalSurface.RUNTIME,
+                risk_level=risk_level,
+            )
+        except MemoryStoreError:
+            plan = EvidencePlan(
+                request=EvidenceRequest(
+                    query=request.query,
+                    root=request.root or Path(self.config.project_index.root),
+                    surface=RetrievalSurface.RUNTIME,
+                    max_tokens=request.max_tokens or self.config.context.sections.retrieved_context,
+                    risk_level=RiskLevel.HIGH.value,
+                ),
+                evidence=[],
+                fallback_actions=["index_project"],
+                trust_decision=TrustDecision(
+                    status="insufficient",
+                    reason="no local manifest available",
+                ),
+                trace_id=uuid4().hex,
+                omissions=["manifest_unavailable"],
+                source_surfaces=[RetrievalSurface.RUNTIME],
+            )
+            return VerifiedContextResult(
+                trace_id=plan.trace_id,
+                context="",
+                evidence=[],
+                memory=[],
+                gates=_verified_context_gates([], 0, request.max_tokens, plan, RiskLevel.HIGH),
+                risk_level=RiskLevel.HIGH,
+                trust_decision=plan.trust_decision,
+                token_usage={"final_context_pack": 0},
+                omitted_sources=[*omitted_sources, *plan.omissions],
+            )
+
+        risk_level = _classify_context_risk(request.query, evidence_count=len(plan.evidence))
+        memory = self._load_verified_memory(request) if request.include_memory else []
+        gates = _verified_context_gates(
+            [*plan.evidence, *memory],
+            pack.used_tokens,
+            request.max_tokens,
+            plan,
+            risk_level,
+        )
+        trust_decision = plan.trust_decision
+        if any(not gate.passed for gate in gates):
+            trust_decision = TrustDecision(status="insufficient", reason="verification gate failed")
+        return VerifiedContextResult(
+            trace_id=trace.run_id,
+            context=self._render_adapter_context(pack),
+            evidence=plan.evidence,
+            memory=memory,
+            gates=gates,
+            risk_level=risk_level,
+            trust_decision=trust_decision,
+            token_usage=trace.token_estimates,
+            omitted_sources=[*omitted_sources, *plan.omissions],
+        )
+
+    def _load_verified_memory(self, request: VerifiedContextRequest) -> list[EvidenceItem]:
+        root = request.root or Path(self.config.project_index.root)
+        return [
+            EvidenceItem(
+                id=f"memory:{item.id}",
+                content=item.content,
+                source=item.source,
+                source_type="memory",
+                provenance={"source": item.source, "kind": item.kind, "memory_id": item.id},
+                confidence=0.8,
+                freshness=FreshnessStatus.CURRENT,
+                surface=RetrievalSurface.RUNTIME,
+                tokens=item.tokens,
+                protected=item.pin,
+                classification=item.classification,
+            )
+            for item in ContextRepository(root).search(request.query)[:3]
+        ]
 
     def _build_context_pack_with_trace(
         self,
         query: str,
         max_tokens: int | None = None,
-    ) -> tuple[ContextPackResult, RuntimeTrace]:
+        *,
+        surface: RetrievalSurface = RetrievalSurface.RUNTIME,
+        risk_level: RiskLevel = RiskLevel.NORMAL,
+    ) -> tuple[ContextPackResult, RuntimeTrace, EvidencePlan]:
         """Build and persist a context pack, returning the trace that records it."""
 
         manifest = self.load_manifest()
-        retriever = ProjectRetriever(manifest)
-        candidates = retriever.retrieve(query, self.config.retrieval.top_k)
-        ranked = ContextRanker(self.config.context.ranking.weights).rank(candidates)
-        required = {
-            ContextPriority[name] for name in self.config.context_packing.preserve_priorities
-        }
-        pack_result = ContextPackBuilder().pack(
-            ranked,
-            available_tokens=max_tokens or self.config.context.sections.retrieved_context,
-            required_priorities=required,
-            compression_engine=self.compression_engine,
+        planner = RetrievalPlanner(manifest, graph_db_path=self.storage_path / "context_graph.db")
+        plan = planner.plan(
+            EvidenceRequest(
+                query=query,
+                root=Path(manifest.root),
+                surface=surface,
+                max_tokens=max_tokens or self.config.context.sections.retrieved_context,
+                risk_level=risk_level.value,
+            ),
+            self.config.retrieval.top_k,
         )
-        sanitized_pack = sanitize_context_pack(pack_result)
+        candidates = [evidence_to_context_item(item) for item in plan.evidence]
+        ranked = candidates
+        sanitized_pack = ContextCompiler(
+            ranking_weights=self.config.context.ranking.weights
+        ).compile(plan, compression_engine=self.compression_engine)
         ContextFirewall(self.config).check_context_export(
             [*sanitized_pack.included, *sanitized_pack.omitted],
             sink="context_pack",
@@ -423,8 +587,9 @@ class OpenContextRuntime:
             candidates,
             ranked,
             sanitized_pack,
+            plan,
         )
-        return sanitized_pack, trace
+        return sanitized_pack, trace, plan
 
     def load_trace(self, trace_id: str) -> RuntimeTrace:
         """Load a trace by identifier."""
@@ -470,6 +635,7 @@ class OpenContextRuntime:
         candidates: list[ContextItem],
         ranked: list[ContextItem],
         pack_result: ContextPackResult,
+        plan: EvidencePlan | None = None,
     ) -> RuntimeTrace:
         """Persist a sanitized local-only trace for CLI/API context packing."""
 
@@ -550,6 +716,7 @@ class OpenContextRuntime:
                 "local_only": True,
                 "provider_calls": 0,
                 "context_pack": pack_result.model_dump(mode="json"),
+                "evidence_plan": plan.model_dump(mode="json") if plan is not None else None,
                 "quality_inputs": {
                     "candidate_count": len(candidates),
                     "ranked_count": len(ranked),
@@ -650,3 +817,65 @@ class OpenContextRuntime:
             f"Files: {len(manifest.files)}\n"
             f"Symbols: {len(manifest.symbols)}"
         )
+
+
+def _classify_context_risk(query: str, *, evidence_count: int) -> RiskLevel:
+    text = query.lower()
+    sensitive_terms = ("secret", "token", "credential", "password", "private key")
+    change_terms = ("change", "delete", "write", "modify", "deploy", "security")
+    if evidence_count == 0 or any(term in text for term in sensitive_terms):
+        return RiskLevel.HIGH
+    if any(term in text for term in change_terms):
+        return RiskLevel.HIGH
+    return RiskLevel.NORMAL
+
+
+def _verified_context_gates(
+    evidence: Sequence[EvidenceItem],
+    used_tokens: int,
+    max_tokens: int | None,
+    plan: EvidencePlan,
+    risk_level: RiskLevel,
+) -> list[GateSummary]:
+    budget = max_tokens or plan.request.max_tokens
+    stale = [
+        item.source
+        for item in plan.evidence
+        if item.freshness
+        in {FreshnessStatus.STALE, FreshnessStatus.UNKNOWN, FreshnessStatus.UNAVAILABLE}
+    ]
+    missing_provenance = [item.id for item in evidence if not item.source or not item.provenance]
+    return [
+        GateSummary(
+            name="coverage",
+            passed=bool(evidence),
+            reason="evidence available" if evidence else "no evidence available",
+            risks=[] if evidence else ["missing_evidence"],
+        ),
+        GateSummary(
+            name="freshness",
+            passed=not stale or risk_level is not RiskLevel.HIGH,
+            reason="fresh evidence" if not stale else "high-risk context has stale evidence",
+            risks=[] if not stale else ["stale_or_unknown_freshness"],
+        ),
+        GateSummary(
+            name="provenance",
+            passed=bool(evidence) and not missing_provenance,
+            reason="source provenance available"
+            if evidence and not missing_provenance
+            else "missing source provenance",
+            risks=[] if evidence and not missing_provenance else ["missing_provenance"],
+        ),
+        GateSummary(
+            name="budget",
+            passed=used_tokens <= budget,
+            reason="within budget" if used_tokens <= budget else "context exceeds budget",
+            risks=[] if used_tokens <= budget else ["context_over_budget"],
+        ),
+        GateSummary(
+            name="policy",
+            passed=plan.trust_decision.status == "sufficient",
+            reason=plan.trust_decision.reason,
+            risks=[] if plan.trust_decision.status == "sufficient" else ["insufficient_trust"],
+        ),
+    ]
