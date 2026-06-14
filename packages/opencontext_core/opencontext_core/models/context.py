@@ -31,6 +31,7 @@ class CompressionStrategy(StrEnum):
     TERSE = "terse"
     COMPACT = "compact"
     DEEP = "deep"
+    EFFICIENT = "efficient"
 
     @classmethod
     def _missing_(cls, value: object) -> CompressionStrategy | None:

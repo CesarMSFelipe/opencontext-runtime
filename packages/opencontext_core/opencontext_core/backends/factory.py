@@ -33,6 +33,9 @@ class BackendFactory:
             return CompactCompressionBackend()
         elif strategy == "terse":
             return TerseCompressionBackend()
+        elif strategy == "efficient":
+            from opencontext_core.backends.compression.efficient import EfficientCompressionBackend
+            return EfficientCompressionBackend()
         elif strategy == "none":
             return NullCompressionBackend()
         return TerseCompressionBackend()  # safe default

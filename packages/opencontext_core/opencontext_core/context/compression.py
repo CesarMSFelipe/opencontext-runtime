@@ -56,6 +56,8 @@ class CompressionEngine:
             return self._compress_compact(item)
         elif strategy_value == CompressionStrategy.DEEP.value:
             return self._compress_deep_with_fallback(item)
+        elif strategy_value == CompressionStrategy.EFFICIENT.value:
+            return self._compress_efficient(item)
         else:
             raise ValueError(f"Unsupported compression strategy: {strategy_value}")
 
@@ -175,6 +177,30 @@ class CompressionEngine:
             }
         )
         return self._result(item, compressed_item, CompressionStrategy.COMPACT, "lossy_structural")
+
+    def _compress_efficient(self, item: ContextItem) -> CompressionResult:
+        """Apply maximum efficient compression (compact + terse + extended dict)."""
+        from opencontext_core.backends.compression.efficient import EfficientCompressionBackend
+
+        backend = EfficientCompressionBackend()
+        spans = self.protected_spans.detect(item.content) if self.config.protected_spans else []
+        compressed_content = backend.compress(item.content, spans)
+        compressed_tokens = estimate_tokens(compressed_content)
+        metadata = dict(item.metadata)
+        metadata["compression"] = {
+            "original_token_estimate": item.tokens,
+            "compressed_token_estimate": compressed_tokens,
+            "strategy": CompressionStrategy.EFFICIENT.value,
+            "lossiness": "lossy_maximum",
+        }
+        compressed_item = item.model_copy(
+            update={
+                "content": compressed_content,
+                "tokens": compressed_tokens,
+                "metadata": metadata,
+            }
+        )
+        return self._result(item, compressed_item, CompressionStrategy.EFFICIENT, "lossy_maximum")
 
     def _compress_deep_with_fallback(self, item: ContextItem) -> CompressionResult:
         """Attempt deep compression; degrade to compact if unavailable."""
