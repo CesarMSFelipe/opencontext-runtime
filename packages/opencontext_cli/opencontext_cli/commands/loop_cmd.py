@@ -58,6 +58,12 @@ def handle_loop(args: argparse.Namespace, config=None) -> int:
 
     phases = FLOWS.get(flow) or FLOWS["full"]
 
+    # ponytail: hardcoded default storage path — matches runtime default
+    manifest_path = root / ".storage" / "opencontext" / "project_manifest.json"
+    if not manifest_path.exists():
+        print("No index found. Run 'opencontext index .' first, then retry.")
+        return 1
+
     _print_header(task, flow, compress_mode)
 
     if dry_run:

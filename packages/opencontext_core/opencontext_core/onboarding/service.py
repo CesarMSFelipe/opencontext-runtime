@@ -73,6 +73,9 @@ class OnboardingService:
             import yaml
 
             config_data = default_config_data()
+            project = config_data.get("project")
+            if isinstance(project, dict):
+                project["name"] = root.name or project.get("name", "my-project")
             security = config_data.get("security")
             if isinstance(security, dict):
                 security["mode"] = options.security_mode

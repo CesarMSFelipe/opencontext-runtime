@@ -1505,6 +1505,20 @@ def _install(args: argparse.Namespace) -> None:
     console.print("  [cyan]opencontext config wizard[/]")
     console.print("  [cyan]opencontext pack . --query 'Explain this code' --copy[/]")
     console.print()
+    try:
+        import yaml as _yaml
+        _cfg = _yaml.safe_load((Path(".") / "opencontext.yaml").read_text(encoding="utf-8"))
+        _provider = _cfg.get("provider", {})
+        if isinstance(_provider, dict):
+            _provider = _provider.get("name", "mock")
+        if str(_provider) == "mock":
+            console.print(
+                "[yellow]Tip:[/] Using mock provider. Run [cyan]opencontext config wizard[/] "
+                "to connect a real provider."
+            )
+            console.print()
+    except Exception:
+        pass
     console.print("[dim]For help: opencontext --help[/]")
 
 

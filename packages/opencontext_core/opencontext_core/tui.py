@@ -154,6 +154,16 @@ class OpenContextTUI:
             encoding="utf-8",
         )
         print(f"Created: {self.config_path}")
+        print(f"Indexing {self.project_root.name}...")
+        try:
+            from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+
+            kg = KnowledgeGraph()
+            kg.index_project(self.project_root)
+            kg.close()
+            print("Index complete.")
+        except Exception as exc:
+            print(f"Auto-index skipped: {exc}")
         print("Project initialized. Run 'opencontext onboard' for full setup.")
 
     def _do_index(self) -> None:
