@@ -25,15 +25,6 @@ if TYPE_CHECKING:
     from opencontext_core.runtime import OpenContextRuntime
 
 
-def _impact_risk_level(affected: int) -> str:
-    """Derive a real risk level from impact blast-radius (never 'unknown')."""
-    if affected >= 10:
-        return "high"
-    if affected >= 1:
-        return "normal"
-    return "low"
-
-
 # Adaptive max_nodes tiers based on indexed file count
 _MAX_NODES_TIERS: list[tuple[int, int]] = [
     (500, 10),
@@ -503,7 +494,10 @@ class MCPServer:
             "affected_nodes": affected,
             "affected_files": list(impact.affected_files),
             "test_files": list(impact.affected_tests),
-            "risk_level": _impact_risk_level(affected),
+            # Single source of truth: the analyzer derives risk from the full
+            # blast radius (callers, dependents, files, tests, centrality).
+            "risk_level": impact.risk_level,
+            "centrality": impact.centrality,
         }
 
     def _handle_node(self, params: dict[str, Any]) -> dict[str, Any]:

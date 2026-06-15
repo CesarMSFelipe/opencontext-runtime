@@ -44,16 +44,62 @@ def test_mcp_context_routes_through_verify_context(tmp_path: Path) -> None:
     assert out["risk_level"] == verified.risk_level.value
 
 
-def test_mcp_impact_returns_real_risk_level(tmp_path: Path) -> None:
+_ANALYZER_RISK_VOCAB = {"low", "medium", "high", "critical"}
+
+
+def test_mcp_impact_risk_matches_analyzer_single_source(tmp_path: Path) -> None:
+    """The MCP impact risk MUST be the analyzer's value, not a second vocabulary.
+
+    The handler previously recomputed risk from caller+dependent counts alone with
+    a divergent low/normal/high scale, ignoring the analyzer's blast-radius model.
+    Pin true parity so the agent and the engine never disagree on risk.
+    """
     runtime, _ = _runtime(tmp_path)
     server = MCPServer(db_path=runtime.storage_path / "context_graph.db", runtime=runtime)
 
+    node_id = server._find_node("audit_login", None)
+    assert node_id is not None
+    analyzer_risk = server.impact.analyze(node_id, depth=2).risk_level
+
     out = server._handle_impact({"symbol": "audit_login"})
-    # Either the symbol resolves (real risk) or it is a clean not-found error —
-    # but it MUST NOT report the hardcoded "unknown".
-    if "risk_level" in out:
-        assert out["risk_level"] in {"low", "normal", "high"}
-        assert out["risk_level"] != "unknown"
+    assert out["risk_level"] == analyzer_risk
+    assert out["risk_level"] in _ANALYZER_RISK_VOCAB  # never "normal", never "unknown"
+
+
+def test_mcp_impact_risk_rises_with_callers(tmp_path: Path) -> None:
+    """A symbol that is actually called crosses out of the trivial 'low' band.
+
+    Exercises a non-trivial risk branch (the toy fixture's leaf symbol never
+    could), proving the handler surfaces the analyzer's graduated levels.
+    """
+    project_root = tmp_path / "called"
+    (project_root / "src").mkdir(parents=True)
+    (project_root / "src" / "core.py").write_text(
+        "\n".join(
+            [
+                "def target() -> int:",
+                "    return 1",
+                "",
+                "def caller_a() -> int:",
+                "    return target()",
+                "",
+                "def caller_b() -> int:",
+                "    return target() + caller_a()",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    runtime = OpenContextRuntime(
+        config_path=write_config(tmp_path, project_root),
+        storage_path=tmp_path / ".storage/called",
+    )
+    runtime.index_project(project_root)
+    server = MCPServer(db_path=runtime.storage_path / "context_graph.db", runtime=runtime)
+
+    out = server._handle_impact({"symbol": "target"})
+    assert out["affected_nodes"] >= 1
+    assert out["risk_level"] in _ANALYZER_RISK_VOCAB
+    assert out["risk_level"] != "low"  # has real callers -> graduated above the floor
 
 
 def test_mcp_server_without_runtime_is_backward_compatible(tmp_path: Path) -> None:
