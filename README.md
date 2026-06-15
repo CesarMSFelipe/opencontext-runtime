@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/up_to_95%25_token_reduction-benchmarked-00C9A7?style=flat-square" alt="Up to 95% token reduction">
+  <img src="https://img.shields.io/badge/up_to_96%25_token_reduction-benchmarked-00C9A7?style=flat-square" alt="Up to 96% token reduction">
   <img src="https://img.shields.io/badge/offline--first-no_API_key-00A8E8?style=flat-square&logo=python&logoColor=white" alt="Works offline">
-  <img src="https://img.shields.io/badge/1300%2B_tests-passing-00C9A7?style=flat-square" alt="1300+ tests passing">
+  <img src="https://img.shields.io/badge/1500%2B_tests-passing-00C9A7?style=flat-square" alt="1500+ tests passing">
   <img src="https://img.shields.io/badge/14%2B_agents-Claude_%7C_Cursor_%7C_Copilot-845EC2?style=flat-square" alt="14+ agents">
   <img src="https://img.shields.io/badge/license-MIT-gray?style=flat-square" alt="MIT">
 </p>
@@ -74,7 +74,7 @@ opencontext loop --task "fix crash in auth middleware" --flow full
 1. **Detects your stack** — Python, Node, Go, Rust, Terraform, and more
 2. **Builds the knowledge graph** — symbols, call chains, imports, framework routes
 3. **Configures your agent** — generates the right instruction file for your editor
-4. **Sets up MCP tools** — pre-approves 9 knowledge graph tools (now routed through the verified pipeline)
+4. **Sets up MCP tools** — pre-approves 13 tools (9 read + 4 symbol-level edits), all routed through the verified pipeline
 5. **Verifies the setup** — health check before finishing
 
 > **No API keys. No external services.** Everything runs offline on your machine.
@@ -120,7 +120,7 @@ Agent sees only what the task needs:
   ─────────────────────────────────────────────
   Everything else filtered out
 
-Up to 95% fewer tokens (benchmarked)
+Up to 96% fewer tokens (benchmarked)
 Secrets auto-redacted
 Call chain traced precisely
 Past failures boost relevant symbols
@@ -328,7 +328,7 @@ Every verify phase runs 16 gates automatically:
 | `approval-required-for-writes` | Writes confirmed by user/policy |
 | `no-high-risk-exports` | No confidential data to external providers |
 | `review-artifact-created` | Review trail persisted |
-| `failing-test-exists` | TDD: failing test written before apply (strict-tdd mode) |
+| `failing-test-exists` | TDD: failing test before apply — advisory by default, blocks in strict-tdd |
 
 ---
 
@@ -415,18 +415,18 @@ AICX (Agent Incremental Context Exchange) is a compact, checksum-verified repres
 $ opencontext bytecode compile --query "fix auth bug"
 
 AICX/1
-REQ id:f2db108a surface:cli risk:normal budget:16000 q:q001
-EVID id:file:exa src:s002 type:file conf:0.39 fresh:current tok:1214 mode:handle
-EVID id:file:exa src:s003 type:file conf:0.38 fresh:current tok:591 mode:handle
+REQ id:2f8a2d6e surface:cli risk:normal budget:16000 q:q001
+EVID id:file:exa src:s002 type:file conf:0.51 fresh:current tok:591 mode:handle
+EVID id:symbol:e src:s004 type:symbol conf:0.33 fresh:current tok:47 mode:handle
 ...
-CHK 9af11ae07bac
+CHK ed078856445c
 
 instructions     : 15
 evidence items   : 10
 dictionary keys  : 12
-original tokens  : 4073
+original tokens  : 2654
 bytecode tokens  : 242
-token reduction  : 94.1%
+token reduction  : 90.9%
 checksum         : ✓ valid
 ```
 
@@ -473,12 +473,14 @@ Results on OpenContext's own codebase:
 
 | Task | Naive tokens | OpenContext | Reduction |
 |------|------------:|------------:|----------:|
-| Add method to BridgeDetector | 41,125 | 2,468 | **94.0%** |
-| Add --json flag to bridges scan | 53,407 | 2,296 | **95.7%** |
-| Wire tracing to WorkflowEngine | 27,041 | 6,529 | **75.9%** |
-| **Average** | | | **88.5%** |
+| Add `count_by_type()` to BridgeDetector | 49,394 | 2,474 | **95.0%** |
+| Add `--json` flag to `bridges scan` | 59,363 | 2,273 | **96.2%** |
+| Add RuntimeTrace persistence to WorkflowEngine | 27,556 | 6,905 | **74.9%** |
+| **Average** | | | **88.7%** |
 
-All 3 tasks: SDD ✓ · TDD ✓ · Secrets clean ✓ · Gates passed ✓
+TDD compliance ✓ · Secrets clean ✓ on all three. The naive baseline grows as the
+repo grows, so these are a snapshot — the numbers above are whatever the command
+prints today.
 
 *Naive baseline = all files in the relevant directory. Token estimate: `len(text)/4`. Run `pytest tests/core/test_comparative_benchmark.py -v -s` to reproduce.*
 
@@ -558,12 +560,17 @@ opencontext preset apply air-gapped   # Fully offline
 | OpenCode / Kilo Code | MCP + agent profile |
 | Any agent | `opencontext agent-context` emits reusable context block |
 
-**MCP tools** (9 tools, pre-approved after `opencontext install`):
+**MCP tools** (13 tools, pre-approved after `opencontext install`) — every read routed through the verified pipeline, every edit applied at symbol granularity:
 
 ```
+# read (9)
 opencontext_search    opencontext_context   opencontext_callers
 opencontext_callees   opencontext_impact    opencontext_node
-opencontext_files     opencontext_status
+opencontext_files     opencontext_status    opencontext_trace
+
+# symbol-level edits (4)
+opencontext_replace_symbol_body   opencontext_insert_before_symbol
+opencontext_insert_after_symbol   opencontext_rename_symbol
 ```
 
 ---
@@ -701,7 +708,7 @@ print(result["cycle_status"])    # "green" | "red"
 Requires **Python 3.12+**. No API key required for core functionality.
 
 ```bash
-pytest                          # 1300+ tests
+pytest                          # 1500+ tests
 ruff check .                    # Lint
 mypy packages/opencontext_core  # Types
 ```
