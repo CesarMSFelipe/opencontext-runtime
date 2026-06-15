@@ -14,6 +14,11 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from opencontext_cli.commands.update_cmd import handle_upgrade
+from opencontext_cli.commands.verified_context_view import (
+    gather_kg_status,
+    render_kg_header,
+    render_verified_context,
+)
 from opencontext_core.dx.console_styles import console
 from opencontext_core.update import EcosystemUpdateChecker, UpdateChecker
 
@@ -81,6 +86,8 @@ def run_main_menu() -> None:
 
         _show_logo()
         console.print()
+        _print_kg_header()
+        console.print()
 
         grid = Table.grid(expand=True, padding=(0, 1))
         grid.add_column(ratio=1)
@@ -117,6 +124,7 @@ def run_main_menu() -> None:
             Panel(
                 "\n".join(
                     [
+                        " [bold #00C9A7]12[/]  [bold]Verified context for a task[/]",
                         " [bold #845EC2] 9[/]  Doctor",
                         " [bold #845EC2]10[/]  Backups",
                         " [bold #845EC2]11[/]  Uninstall",
@@ -138,7 +146,7 @@ def run_main_menu() -> None:
 
         choice = Prompt.ask(
             "Select option",
-            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "q"],
+            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "q"],
             default="q",
         )
 
@@ -164,6 +172,8 @@ def run_main_menu() -> None:
             _run_backups()
         elif choice == "11":
             _run_uninstall()
+        elif choice == "12":
+            _run_verified_context()
         elif choice == "q":
             console.print("[dim]Goodbye.[/]")
             break
@@ -197,6 +207,16 @@ def _print_update_banner() -> None:
             f"  [bold yellow]Updates available:[/] {joined}  [dim](option 2 to upgrade)[/]"
         )
         console.print()
+
+
+def _print_kg_header() -> None:
+    """Show the knowledge-graph status panel at the top of the menu."""
+    try:
+        status = gather_kg_status(".")
+        console.print(render_kg_header(status))
+    except Exception:
+        # The header is informational; never block the menu on a status read.
+        pass
 
 
 # ── Menu action dispatchers ─────────────────────────────────────────────
@@ -460,6 +480,47 @@ def _run_doctor() -> None:
             )
     except Exception as exc:
         console.print(f"[red]Doctor check failed: {exc}[/]")
+
+
+def _run_verified_context() -> None:
+    """Prompt for a task and render a verified-context result card."""
+    _action_header("Verified context for a task")
+
+    status = gather_kg_status(".")
+    console.print(render_kg_header(status))
+    console.print()
+    if not status.indexed:
+        console.print(
+            "[yellow]No index found.[/] Run [bold]option 1[/] (Install) or "
+            "[bold]opencontext index .[/] first, then retry."
+        )
+        return
+
+    from rich.prompt import Prompt as RPrompt
+
+    query = RPrompt.ask("Describe the task or question").strip()
+    if not query:
+        console.print("[dim]Cancelled — no task entered.[/]")
+        return
+
+    try:
+        from pathlib import Path
+
+        from opencontext_core.retrieval.contracts import VerifiedContextRequest
+        from opencontext_core.runtime import OpenContextRuntime
+
+        config_path = Path("opencontext.yaml")
+        runtime = OpenContextRuntime(
+            config_path=str(config_path) if config_path.exists() else None,
+        )
+        with console.status("[cyan]Building verified context...[/]", spinner="dots"):
+            result = runtime.verify_context(VerifiedContextRequest(query=query))
+    except Exception as exc:
+        console.print(f"[red]Verified context failed: {exc}[/]")
+        return
+
+    console.print()
+    console.print(render_verified_context(result, query=query))
 
 
 def _run_backups() -> None:

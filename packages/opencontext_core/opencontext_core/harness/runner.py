@@ -67,6 +67,10 @@ class HarnessState:
         self.apply_edits: list[Any] = []
         # Phases for which human approval has been granted (e.g. {"apply"}).
         self.approved_phases: set[str] = set()
+        # Executor/delegation layer the work-producing phases (spec/design/tasks)
+        # run via run_phase_executor. None when no real LLM is configured, in
+        # which case those phases report honest planned/executor-absent results.
+        self.delegate: Any = None
 
 
 class HarnessRunner:
@@ -76,10 +80,22 @@ class HarnessRunner:
     with token budget enforcement, gates, and artifact persistence.
     """
 
-    def __init__(self, root: Path, config: HarnessConfig | None = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        config: HarnessConfig | None = None,
+        *,
+        llm_gateway: Any = None,
+    ) -> None:
         self.root = root.resolve()
         self.config = config or HarnessConfig.from_yaml_file(root / ".opencontext" / "harness.yaml")
         self.enforcer = TokenBudgetEnforcer()
+        # Optional explicit LLM gateway. When provided (and not the mock
+        # provider) the runner builds a live executor from it and attaches it to
+        # the run state so spec/design/tasks produce real artifacts. When absent
+        # the runner resolves a gateway from the configured provider, falling
+        # back to no executor (honest planned/executor-absent) for mock/local.
+        self._llm_gateway = llm_gateway
 
         # v2: inject memory store (additive, never breaks existing usage)
         try:
@@ -95,14 +111,83 @@ class HarnessRunner:
             self._memory_store = NullAgentMemoryStore()
 
     def create_run(self, workflow: str, task: str) -> HarnessState:
-        """Create a new run with a unique run_id."""
+        """Create a new run with a unique run_id.
+
+        Attaches a live executor to ``state.delegate`` when a real (non-mock)
+        LLM gateway is configured, so the work-producing phases run it. When no
+        real model is available the attribute is left unset and those phases keep
+        their honest planned/executor-absent behavior.
+        """
         run_id = f"{workflow}-{uuid.uuid4().hex[:12]}"
-        return HarnessState(
+        state = HarnessState(
             run_id=run_id,
             root=self.root,
             task=task,
             max_tokens=6000,
         )
+        delegate = self._build_executor()
+        if delegate is not None:
+            state.delegate = delegate
+        return state
+
+    def _build_executor(self) -> Any:
+        """Build the work-producing-phase executor from the configured gateway.
+
+        Resolves a gateway and its provider/model, then builds a delegation
+        layer that runs spec/design/tasks through it. Returns ``None`` when no
+        real model is available (mock/local default, or gateway construction
+        failed) so the harness stays honest instead of faking success.
+        """
+        try:
+            from opencontext_core.agents.executor import build_phase_executor
+
+            gateway, provider, model = self._resolve_gateway()
+            return build_phase_executor(gateway, provider=provider, model=model)
+        except Exception:
+            # Executor wiring is opt-in/best-effort: never break a run because a
+            # gateway could not be constructed. Phases fall back to honest
+            # planned/executor-absent reporting.
+            return None
+
+    def _resolve_gateway(self) -> tuple[Any, str, str]:
+        """Resolve (gateway, provider, model) for the work-producing executor.
+
+        An explicitly injected gateway takes priority: it is an explicit intent
+        to use a real executor, so it is paired with a non-mock provider label
+        regardless of config. Otherwise the default provider is read from this
+        run root's ``opencontext.yaml``; for ``mock`` (the zero-config default)
+        the gateway is ``None`` so no executor is attached. For a real provider
+        the runtime's gateway construction is used.
+        """
+        from opencontext_core.config import load_config_or_defaults
+
+        # Scope resolution to this run's root — do not walk up to an unrelated
+        # parent project's config (keeps wiring deterministic per run root).
+        cfg = load_config_or_defaults(self.root / "opencontext.yaml", auto_detect=False)
+        default = cfg.models.default
+        provider = getattr(default, "provider", "mock")
+        model = getattr(default, "model", "")
+
+        if self._llm_gateway is not None:
+            # An injected gateway overrides a mock config so the executor runs.
+            effective_provider = provider if provider != "mock" else "injected"
+            return self._llm_gateway, effective_provider, model
+
+        if provider == "mock":
+            return None, provider, model
+
+        # Real provider configured but no gateway injected: ask the runtime to
+        # build one from config. If it cannot, fall back to no executor.
+        try:
+            from opencontext_core.runtime import OpenContextRuntime
+
+            runtime = OpenContextRuntime(
+                config=cfg,
+                storage_path=self.root / ".storage" / "opencontext",
+            )
+            return runtime.llm_gateway, provider, model
+        except Exception:
+            return None, provider, model
 
     # ------------------------------------------------------------------
     # Phase scheduling — the single live spine.
