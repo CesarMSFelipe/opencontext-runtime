@@ -73,9 +73,32 @@ def _gates_for_tier(
 def _extract_key_terms(query: str) -> list[str]:
     """Extract potential symbol patterns from query."""
     stop_words = {
-        "fix", "add", "create", "the", "a", "an", "in", "for", "to", "of",
-        "and", "or", "with", "from", "on", "at", "by", "is", "are", "was",
-        "write", "refactor", "implement", "build", "migrate", "optimize",
+        "fix",
+        "add",
+        "create",
+        "the",
+        "a",
+        "an",
+        "in",
+        "for",
+        "to",
+        "of",
+        "and",
+        "or",
+        "with",
+        "from",
+        "on",
+        "at",
+        "by",
+        "is",
+        "are",
+        "was",
+        "write",
+        "refactor",
+        "implement",
+        "build",
+        "migrate",
+        "optimize",
     }
     words = query.lower().split()
     terms = [w for w in words if len(w) > 3 and w not in stop_words]
@@ -116,9 +139,7 @@ class ContextContractBuilder:
         )
         required_memories: list[str] = []
         if memory_context:
-            required_memories = [
-                m.key for m in memory_context if hasattr(m, "key")
-            ]
+            required_memories = [m.key for m in memory_context if hasattr(m, "key")]
 
         return ContextContract(
             task=query,

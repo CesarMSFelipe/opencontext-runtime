@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from opencontext_core.config import default_config_data, OpenContextConfig
+from opencontext_core.config import OpenContextConfig, default_config_data
 from opencontext_core.runtime import OpenContextRuntime
 
 

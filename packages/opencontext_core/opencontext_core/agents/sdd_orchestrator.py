@@ -32,6 +32,7 @@ PHASE_ORDER = [
     "tasks",
     "apply",
     "verify",
+    "review",
     "archive",
 ]
 
@@ -44,7 +45,8 @@ PHASE_DEPENDENCIES: dict[str, list[str]] = {
     "tasks": ["spec", "design"],
     "apply": ["tasks"],
     "verify": ["apply"],
-    "archive": ["verify"],
+    "review": ["verify"],
+    "archive": ["review"],
 }
 
 # Workflow tracks: each track defines its own phase order and dependencies

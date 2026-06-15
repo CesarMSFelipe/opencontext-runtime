@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from opencontext_core.context.planning.classifier import TaskClassifier
 from opencontext_core.context.planning.contract import ContextContractBuilder
-from opencontext_core.context.planning.planner import ContextPlanner, TIER_BUDGET, TIER_RADIUS
+from opencontext_core.context.planning.planner import TIER_BUDGET, TIER_RADIUS, ContextPlanner
 
 
 def make_contract(query: str):

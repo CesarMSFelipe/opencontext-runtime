@@ -10,12 +10,14 @@ from opencontext_core.exceptions import BackendUnavailableError
 def test_semantic_vector_backend_raises_backend_unavailable_not_import_error():
     with pytest.raises(BackendUnavailableError):
         from opencontext_core.backends.vector.semantic import SemanticVectorBackend
+
         SemanticVectorBackend()
 
 
 def test_semantic_vector_backend_error_contains_feature_name():
     with pytest.raises(BackendUnavailableError) as exc_info:
         from opencontext_core.backends.vector.semantic import SemanticVectorBackend
+
         SemanticVectorBackend()
     assert "semantic-search" in str(exc_info.value)
 
@@ -23,6 +25,7 @@ def test_semantic_vector_backend_error_contains_feature_name():
 def test_semantic_error_no_tech_name():
     with pytest.raises(BackendUnavailableError) as exc_info:
         from opencontext_core.backends.vector.semantic import SemanticVectorBackend
+
         SemanticVectorBackend()
     msg = str(exc_info.value).lower()
     assert "qdrant" not in msg

@@ -450,23 +450,34 @@ class ProviderPolicyPassedGate:
 
 
 class ApprovalRequiredForWritesGate:
-    """Check that write operations are approved in strict mode."""
+    """Human-approval pre-gate for write operations.
+
+    Decoupled from token ``budget_mode``: whether approval is *required* is a
+    governance decision declared in config (``approval_required``), and whether
+    it has been *granted* is supplied separately (``approved``). When approval is
+    required but not granted the gate FAILS, which must block ApplyPhase before
+    any file is edited.
+    """
 
     id = "approval_required_for_writes"
 
-    def evaluate(self, budget_mode: str, approved: bool) -> PhaseGate:
-        if budget_mode == "strict" and not approved:
+    def evaluate(self, approval_required: bool, approved: bool) -> PhaseGate:
+        if approval_required and not approved:
             return PhaseGate(
                 id=self.id,
                 status=GateStatus.FAILED,
-                message="Write operations require explicit approval in strict mode",
-                phase="any",
+                message="Write operations require explicit human approval (not granted)",
+                phase="apply",
             )
         return PhaseGate(
             id=self.id,
             status=GateStatus.PASSED,
-            message="Approval check passed",
-            phase="any",
+            message=(
+                "Approval granted for writes"
+                if approval_required
+                else "Approval not required for writes"
+            ),
+            phase="apply",
         )
 
 

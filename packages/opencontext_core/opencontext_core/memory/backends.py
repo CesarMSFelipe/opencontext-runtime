@@ -50,10 +50,7 @@ def _row_to_record(row: sqlite3.Row) -> MemoryRecord:
     from datetime import datetime
 
     source_refs_data = json.loads(row["source_refs"])
-    source_refs = [
-        EvidenceRef(**ref) if isinstance(ref, dict) else ref
-        for ref in source_refs_data
-    ]
+    source_refs = [EvidenceRef(**ref) if isinstance(ref, dict) else ref for ref in source_refs_data]
     return MemoryRecord(
         id=row["id"],
         layer=MemoryLayer(row["layer"]),
@@ -92,9 +89,7 @@ class SQLiteMemoryBackend:
 
     def store(self, record: MemoryRecord) -> None:
         """Upsert a MemoryRecord."""
-        source_refs_json = json.dumps(
-            [ref.model_dump() for ref in record.source_refs]
-        )
+        source_refs_json = json.dumps([ref.model_dump() for ref in record.source_refs])
         with self._connect() as conn:
             conn.execute(
                 """

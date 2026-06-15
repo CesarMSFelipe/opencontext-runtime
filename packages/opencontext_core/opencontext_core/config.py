@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
@@ -474,6 +474,10 @@ class MemoryPolicyConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = Field(default=True, description="Local memory layer enabled.")
+    provider: str = Field(
+        default="local",
+        description="Memory backend provider: 'local' (SQLite) or 'engram'.",
+    )
     harvest_after_run: bool = Field(default=False, description="Automatic harvest disabled.")
     require_approval: bool = Field(default=True, description="Harvested memories require approval.")
     store_raw: bool = Field(default=False, description="Raw memory storage disabled.")
@@ -816,12 +820,8 @@ class ContextPlanningConfig(BaseModel):
     contract_required: bool = Field(
         default=True, description="Whether a context contract is required."
     )
-    risk_classifier: str = Field(
-        default="deterministic", description="Risk classifier to use."
-    )
-    max_expansion_rounds: int = Field(
-        default=3, ge=1, description="Maximum expansion rounds."
-    )
+    risk_classifier: str = Field(default="deterministic", description="Risk classifier to use.")
+    max_expansion_rounds: int = Field(default=3, ge=1, description="Maximum expansion rounds.")
     fail_on_unverified_critical_assumptions: bool = Field(
         default=False,
         description="Fail when critical assumptions cannot be verified.",
@@ -863,6 +863,78 @@ class SkillsConfig(BaseModel):
             "skills/",
         ],
         description="Project-level skill directories.",
+    )
+
+
+class AutoImproveConfig(BaseModel):
+    """Opt-in, bounded auto-improvement (self-tuning) controls.
+
+    Disabled by default. Nothing changes runtime behavior without either an
+    approved proposal (``apply_policy="propose"``) or an explicit ``auto`` policy
+    the developer set, and even then no more than ``max_auto_apply_per_cycle``
+    proposals are applied per cycle.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=False,
+        description="Master switch. When False, no proposal is auto-applied.",
+    )
+    apply_policy: Literal["propose", "auto"] = Field(
+        default="propose",
+        description="'propose' requires developer approval; 'auto' applies within bounds.",
+    )
+    max_auto_apply_per_cycle: int = Field(
+        default=3,
+        ge=1,
+        description="Maximum proposals auto-applied in a single cycle.",
+    )
+    max_weight_delta: float = Field(
+        default=0.1,
+        ge=0.0,
+        description="Cap on per-field retrieval-weight change a proposal may apply.",
+    )
+    min_confidence: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Minimum proposal confidence eligible for auto-apply.",
+    )
+    applied_budgets: dict[str, int] = Field(
+        default_factory=dict,
+        description="Applied per-operation token budgets (written by approved proposals).",
+    )
+
+
+class HarnessSettingsConfig(BaseModel):
+    """Agentic harness governance settings.
+
+    Drives the apply pre-gates (TDD failing-test ordering and human approval
+    before writes). These are read by ``HarnessRunner`` and are intentionally
+    decoupled from token ``budget_mode`` — TDD enforcement and write approval
+    are governance concerns, not budget concerns.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tdd_mode: Literal["ask", "strict", "off"] = Field(
+        default="ask",
+        description=(
+            "TDD failing-test pre-gate mode. 'strict' blocks apply until a "
+            "failing test exists for the task; 'ask'/'off' do not block."
+        ),
+    )
+    strict_tdd: bool = Field(
+        default=False,
+        description="Whether a strict test harness was detected/required for this project.",
+    )
+    approval_required_for_writes: bool = Field(
+        default=False,
+        description=(
+            "When True, ApplyPhase requires an explicit human approval gate to "
+            "pass before any file is edited, independent of budget_mode."
+        ),
     )
 
 
@@ -915,6 +987,14 @@ class OpenContextConfig(BaseModel):
     )
     context_storage: ContextStorageConfig = Field(
         default_factory=ContextStorageConfig, description="Context vector storage configuration."
+    )
+    auto_improve: AutoImproveConfig = Field(
+        default_factory=AutoImproveConfig,
+        description="Opt-in auto-improvement (self-tuning) controls.",
+    )
+    harness: HarnessSettingsConfig = Field(
+        default_factory=HarnessSettingsConfig,
+        description="Agentic harness governance settings (TDD / approval pre-gates).",
     )
 
 

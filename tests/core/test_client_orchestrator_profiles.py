@@ -171,7 +171,6 @@ class TestSDDContextOrchestrationFields:
         context = build_sdd_context(tmp_path, sdd_model_profile="cheap")
         assert context.sdd_model_profile == "cheap"
 
-
     def test_build_sdd_context_stores_execution_and_artifact_modes(self, tmp_path: Path) -> None:
         context = build_sdd_context(
             tmp_path,

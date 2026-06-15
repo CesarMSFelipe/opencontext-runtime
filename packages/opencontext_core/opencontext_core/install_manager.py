@@ -106,6 +106,7 @@ class InstallationManager:
         components: list[str] | None = None,
         backup: bool = True,
         yes: bool = False,
+        root: Path | str | None = None,
     ) -> dict[str, Any]:
         """Install OpenContext integration.
 
@@ -115,14 +116,20 @@ class InstallationManager:
             components: Specific components to install.
             backup: Create backup before installation.
             yes: Skip prompts.
+            root: Project root for the on-disk config + skills. Defaults to cwd.
 
         Returns:
             Installation report.
         """
 
+        project_root = Path(root).resolve() if root is not None else Path.cwd()
+
         # Backup existing config
         if backup and self._is_installed():
             self.backup_manager.create_backup(name="pre-install")
+
+        # Write a loadable opencontext.yaml so the project is runnable.
+        config_path = self._write_project_config(project_root)
 
         # Determine components
         to_install = self._resolve_components(profile, components)
@@ -149,7 +156,7 @@ class InstallationManager:
 
         # Install skills
         if "skills" in to_install:
-            skills_result = self._install_skills()
+            skills_result = self._install_skills(project_root)
             results.append(skills_result)
 
         # Install profiles
@@ -174,6 +181,7 @@ class InstallationManager:
         return {
             "status": "installed",
             "profile": profile.value,
+            "config_path": str(config_path),
             "components": list(to_install),
             "agents": agents,
             "results": results,
@@ -464,13 +472,73 @@ class InstallationManager:
             "note": "MCP config written to agent directories",
         }
 
-    def _install_skills(self) -> dict[str, Any]:
-        """Install skill registry."""
-        return {
+    def _write_project_config(self, project_root: Path) -> Path:
+        """Write a loadable ``opencontext.yaml`` to *project_root*.
+
+        Reuses the canonical default template (``default_config_data``) — the
+        same source ``OnboardingService.run`` uses — and validates the written
+        file by loading it back, so install never reports success over an
+        unloadable config. An existing config is left untouched.
+        """
+        import yaml
+
+        from opencontext_core.config import default_config_data, load_config
+
+        project_root.mkdir(parents=True, exist_ok=True)
+        config_path = project_root / "opencontext.yaml"
+        if not config_path.exists():
+            config_data = default_config_data()
+            project = config_data.get("project")
+            if isinstance(project, dict):
+                project["name"] = project_root.name or project.get("name", "my-project")
+            config_path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
+
+        # Fail loudly rather than report success over an unloadable config.
+        load_config(config_path)
+        return config_path
+
+    def _install_skills(self, project_root: Path) -> dict[str, Any]:
+        """Copy the bundled skill templates (SDD set + agent skill) to disk.
+
+        Templates ship inside the package under ``skills/templates/``; each is a
+        directory containing a ``SKILL.md``. They are copied into the project's
+        ``.opencontext/skills/`` directory. The result lists every file written
+        so callers can assert real on-disk installation.
+        """
+        templates_dir = Path(__file__).resolve().parent / "skills" / "templates"
+        dest_root = project_root / ".opencontext" / "skills"
+        dest_root.mkdir(parents=True, exist_ok=True)
+
+        # Skills the developer drives, plus the agent lifecycle skill.
+        required_skills = (
+            "sdd-new",
+            "sdd-apply",
+            "sdd-verify",
+            "sdd-archive",
+            "opencontext-agent",
+        )
+
+        written: list[str] = []
+        missing: list[str] = []
+        for skill_name in required_skills:
+            src = templates_dir / skill_name / "SKILL.md"
+            if not src.exists():
+                missing.append(skill_name)
+                continue
+            dest_dir = dest_root / skill_name
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = dest_dir / "SKILL.md"
+            dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+            written.append(str(dest))
+
+        result: dict[str, Any] = {
             "component": "skills",
-            "status": "installed",
-            "note": "Skill registry initialized",
+            "status": "installed" if written and not missing else "partial",
+            "files": written,
         }
+        if missing:
+            result["missing"] = missing
+        return result
 
     def _install_profiles(self) -> dict[str, Any]:
         """Install SDD profiles."""

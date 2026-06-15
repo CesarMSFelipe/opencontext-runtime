@@ -186,9 +186,8 @@ def test_legacy_terse_intensity_key_loads_without_public_default(tmp_path: Path)
     assert config.context.compression.terse_intensity == "lite"
 
 
-
 def test_testing_config_defaults() -> None:
-    from opencontext_core.config import TestingConfig, MutationConfig
+    from opencontext_core.config import MutationConfig, TestingConfig
 
     cfg = TestingConfig()
     assert cfg.mutation.enabled is False
@@ -210,7 +209,7 @@ def test_context_planning_config_defaults() -> None:
 
 
 def test_opencontext_config_accepts_new_fields() -> None:
-    from opencontext_core.config import default_config_data, OpenContextConfig
+    from opencontext_core.config import OpenContextConfig, default_config_data
 
     data = default_config_data()
     config = OpenContextConfig.model_validate(data)

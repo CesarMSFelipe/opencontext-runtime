@@ -119,15 +119,30 @@ DEFAULT_RULES: tuple[ClassificationRule, ...] = (
 _RISK_ORDER = ("low", "medium", "high", "critical")
 
 # Task types inherently low-risk — default to "low", only boosted by explicit escalators
-_LOW_RISK_TASK_TYPES: frozenset[str] = frozenset({
-    "refactor", "documentation", "test", "configuration",
-})
+_LOW_RISK_TASK_TYPES: frozenset[str] = frozenset(
+    {
+        "refactor",
+        "documentation",
+        "test",
+        "configuration",
+    }
+)
 
 # Keywords that always force risk to "low" regardless of task type
-_TRIVIAL_KEYWORDS: frozenset[str] = frozenset({
-    "typo", "rename", "whitespace", "comment", "unused", "cleanup",
-    "format", "trivial", "minor", "cosmetic",
-})
+_TRIVIAL_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "typo",
+        "rename",
+        "whitespace",
+        "comment",
+        "unused",
+        "cleanup",
+        "format",
+        "trivial",
+        "minor",
+        "cosmetic",
+    }
+)
 
 
 class TaskClassifier:

@@ -150,6 +150,20 @@ class UserPreferences:
     auto_update_plugins: bool = False
 
 
+def mark_setup_complete(prefs: UserPreferences) -> UserPreferences:
+    """Reconcile the two completion flags on *prefs*.
+
+    ``first_run`` and ``setup_completed`` historically drifted apart because
+    different onboarding entry points set only one of them. They describe the
+    same condition ("the project has been set up"), so they must always move
+    together: setup complete implies ``first_run=False`` and
+    ``setup_completed=True``.
+    """
+    prefs.first_run = False
+    prefs.setup_completed = True
+    return prefs
+
+
 class UserConfigStore:
     """Persistent store for user preferences."""
 
@@ -230,10 +244,14 @@ class UserConfigStore:
         return prefs.first_run
 
     def mark_configured(self) -> None:
-        """Mark as configured (no longer first run)."""
+        """Mark setup as complete.
+
+        Sets both ``first_run`` and ``setup_completed`` so every onboarding
+        entry point (and every first-run probe) agrees that setup is done.
+        """
 
         prefs = self.load()
-        prefs.first_run = False
+        mark_setup_complete(prefs)
         from datetime import datetime
 
         prefs.install_date = datetime.now().isoformat()

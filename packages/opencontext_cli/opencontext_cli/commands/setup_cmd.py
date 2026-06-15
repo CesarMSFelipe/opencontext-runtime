@@ -73,7 +73,6 @@ def _check_first_run() -> bool:
 
 def add_setup_parser(subparsers: Any) -> None:
     """Add setup command parser."""
-
     setup_parser = subparsers.add_parser(
         "setup", help="Interactive or automated setup with presets and profiles."
     )
@@ -150,7 +149,6 @@ def add_setup_parser(subparsers: Any) -> None:
 
 def handle_setup(args: Any) -> None:
     """Handle setup command."""
-
     preset = getattr(args, "preset", None)
     profile = getattr(args, "profile", None)
     components = getattr(args, "components", None)
@@ -212,7 +210,6 @@ def _run_interactive(
     artifact_mode: str = "hybrid",
 ) -> None:
     """Run interactive setup with rich prompts."""
-
     # ── Step 1: Preset ──────────────────────────────────────────────────
     if not preset:
         _wizard_clear(1, 6)
@@ -317,7 +314,6 @@ def _run_automated(
     artifact_mode: str = "hybrid",
 ) -> None:
     """Run automated setup (non-interactive)."""
-
     # Check first run — suggest onboard before proceeding
     _check_first_run()
 
@@ -352,7 +348,6 @@ def _run_automated(
 
 def _choose_preset() -> str:
     """Interactive preset selection."""
-
     presets = get_available_presets()
 
     # Sort so context-first appears first with [default] marker
@@ -393,7 +388,6 @@ def _choose_preset() -> str:
 
 def _choose_profile(preset: str | None = None) -> str:
     """Interactive profile selection."""
-
     profiles = get_available_profiles()
 
     # Suggest a default based on preset
@@ -487,7 +481,6 @@ def _choose_sdd_profile() -> str:
 
 def _choose_components() -> list[str]:
     """Interactive component selection."""
-
     components = get_available_components()
     selected: list[str] = []
 
@@ -503,7 +496,6 @@ def _choose_components() -> list[str]:
 
 def _show_plan(plan: Any) -> None:
     """Display the install plan."""
-
     from rich.table import Table as RichTable
 
     console.print("\n[bold]── Install Plan ──[/]")
@@ -550,7 +542,6 @@ def _execute_plan(
     artifact_mode: str = "hybrid",
 ) -> None:
     """Execute the install plan and leave SDD/TDD ready for selected agents."""
-
     store = UserConfigStore()
     prefs = store.load()
 
@@ -605,7 +596,7 @@ def _execute_plan(
 
     root_path = __import__("pathlib").Path(root)
 
-    # ── Phase 1: Agent integrations ─────────────────────────────────────
+    # ── Agent integrations ─────────────────────────────────────
     generated_files: list[Any] = []
     agent_warnings: list[str] = []
     with console.status("[cyan]Configuring agent integrations...[/]", spinner="dots"):
@@ -630,7 +621,7 @@ def _execute_plan(
                     targets=global_targets, location="global", yes=True
                 )
 
-    # ── Phase 2: SDD/TDD context ─────────────────────────────────────────
+    # ── SDD/TDD context ─────────────────────────────────────────
     sdd_context = None
     sdd_files: list[Any] = []
     skill_generated = False
@@ -660,7 +651,7 @@ def _execute_plan(
             skill_target.write_text(skill_source.read_text(encoding="utf-8"), encoding="utf-8")
             skill_generated = True
 
-    # ── Phase 3: Project index ───────────────────────────────────────────
+    # ── Project index ───────────────────────────────────────────
     index_status: dict[str, Any] = {}
     with console.status("[cyan]Indexing project...[/]", spinner="dots"):
         try:

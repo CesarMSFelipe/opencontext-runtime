@@ -1,4 +1,5 @@
 """Efficient compression — maximum token reduction combining all strategies."""
+
 from __future__ import annotations
 
 from opencontext_core.backends.compression.compact import CompactCompressionBackend
@@ -68,7 +69,8 @@ class EfficientCompressionBackend:
         result = self._terse.compress(result, protected_spans)
         # Step 3: extended dict substitution (word-boundary safe)
         import re
+
         for verbose, concise in EXTENDED_DICT.items():
-            pattern = r'\b' + re.escape(verbose) + r'\b'
+            pattern = r"\b" + re.escape(verbose) + r"\b"
             result = re.sub(pattern, concise, result, flags=re.IGNORECASE)
         return result

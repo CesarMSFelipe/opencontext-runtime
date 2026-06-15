@@ -30,9 +30,9 @@ class OpCode(StrEnum):
 class ExpandMode(StrEnum):
     """When to expand evidence to full text."""
 
-    HANDLE = "handle"        # send reference only
+    HANDLE = "handle"  # send reference only
     IF_NEEDED = "if_needed"  # expand on explicit EXPAND request
-    INLINE = "inline"        # expand immediately (last-mile, LLM boundary)
+    INLINE = "inline"  # expand immediately (last-mile, LLM boundary)
 
 
 class BytecodeInstruction(BaseModel):

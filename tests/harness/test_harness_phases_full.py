@@ -66,7 +66,10 @@ class TestApplyPhase:
         assert manifest_path.exists()
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         assert manifest["task"] == "apply test"
-        assert manifest["status"] == "applied"
+        # Honest contract: with no executor edits, status is "planned" (never
+        # "applied" over an empty changes list) and no files are mutated.
+        assert manifest["status"] == "planned"
+        assert manifest["changes"] == []
 
     def test_apply_artifact_kind(self, tmp_path: Path) -> None:
         runner = HarnessRunner(root=tmp_path)

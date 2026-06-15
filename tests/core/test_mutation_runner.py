@@ -14,9 +14,7 @@ class TestMutationResult:
         assert dataclasses.is_dataclass(MutationResult)
 
     def test_defaults_are_correct(self) -> None:
-        result = MutationResult(
-            score=0.0, killed=0, survivors=0, available=False, framework="none"
-        )
+        result = MutationResult(score=0.0, killed=0, survivors=0, available=False, framework="none")
         assert result.score == 0.0
         assert result.killed == 0
         assert result.survivors == 0
@@ -32,9 +30,7 @@ class TestMutationResult:
         assert 0.0 <= result.score <= 100.0
 
     def test_available_false_when_framework_none(self) -> None:
-        result = MutationResult(
-            score=0.0, killed=0, survivors=0, available=False, framework="none"
-        )
+        result = MutationResult(score=0.0, killed=0, survivors=0, available=False, framework="none")
         assert result.available is False
 
 

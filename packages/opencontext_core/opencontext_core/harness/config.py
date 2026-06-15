@@ -53,6 +53,12 @@ class HarnessConfig:
     budget_mode: str = "warn"
     privacy_profile: PrivacyProfile = PrivacyProfile.OFF
     artifact_root: str = ".opencontext/runs"
+    # TDD / approval pre-gate governance (decoupled from budget_mode).
+    # tdd_mode: "ask" | "strict" | "off". Only "strict" gates apply on tests.
+    tdd_mode: str = "ask"
+    strict_tdd: bool = False
+    # When True, ApplyPhase requires an approved human-approval gate before edits.
+    approval_required_for_writes: bool = False
     phases: dict[str, PhaseConfig] = field(
         default_factory=lambda: {
             "explore": PhaseConfig(
@@ -168,6 +174,11 @@ class HarnessConfig:
             privacy_str = wf_defaults.get("privacy_profile", "off")
             config.privacy_profile = PrivacyProfile(privacy_str)
             config.artifact_root = wf_defaults.get("artifact_root", config.artifact_root)
+            config.tdd_mode = wf_defaults.get("tdd_mode", config.tdd_mode)
+            config.strict_tdd = wf_defaults.get("strict_tdd", config.strict_tdd)
+            config.approval_required_for_writes = wf_defaults.get(
+                "approval_required_for_writes", config.approval_required_for_writes
+            )
 
         phases_data = data.get("phases", {})
         if isinstance(phases_data, dict):

@@ -71,8 +71,7 @@ class MemoryHarvester:
                 layer=MemoryLayer.PROCEDURAL,
                 key=f"procedural:failure_pattern:{task[:40]}",
                 content=(
-                    f"Task '{task}' had test failures. "
-                    "Review test coverage before similar tasks."
+                    f"Task '{task}' had test failures. Review test coverage before similar tasks."
                 ),
                 confidence=0.7,
             )

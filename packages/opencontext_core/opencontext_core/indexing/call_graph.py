@@ -37,8 +37,8 @@ class CallGraphAnalyzer:
 
     def find_path(
         self,
-        source_id: int,
-        target_id: int,
+        source_id: int | str,
+        target_id: int | str,
         max_depth: int = 10,
     ) -> PathResult:
         """Find the shortest directed path from source to target using BFS.
@@ -51,6 +51,11 @@ class CallGraphAnalyzer:
         Returns:
             PathResult with path, depth_exceeded, and hop count.
         """
+
+        # Node ids are stable text strings in the DB; normalize so Python-level
+        # equality/visited-set checks against DB-returned ids never str/int-mismatch.
+        source_id = str(source_id)
+        target_id = str(target_id)
 
         if source_id == target_id:
             source_node = self.db.get_node_by_id(source_id)
@@ -67,8 +72,8 @@ class CallGraphAnalyzer:
                     hops=0,
                 )
 
-        visited: set[int] = {source_id}
-        queue: deque[tuple[int, list[int]]] = deque()
+        visited: set[str] = {source_id}
+        queue: deque[tuple[str, list[str]]] = deque()
         queue.append((source_id, [source_id]))
         conn = self.db._connect()
         skipped_due_to_depth = False
@@ -91,7 +96,7 @@ class CallGraphAnalyzer:
             ).fetchall()
 
             for row in rows:
-                neighbor_id = row["target_node_id"]
+                neighbor_id = str(row["target_node_id"])
                 if neighbor_id in visited:
                     continue
                 if neighbor_id == target_id:
@@ -107,26 +112,31 @@ class CallGraphAnalyzer:
 
     def _ids_to_path(
         self,
-        ids: list[int],
+        ids: list[str],
         conn: sqlite3.Connection,
     ) -> list[dict[str, Any]]:
-        """Convert node IDs to path records with name, file_path, line."""
+        """Convert node IDs to path records with name, file_path, line.
+
+        Ids are stable text strings (hex), so the ORDER BY CASE must bind them as
+        parameters — interpolating a raw hex id would be invalid SQL.
+        """
 
         placeholders = ",".join("?" for _ in ids)
+        case_clause = " ".join(f"WHEN ? THEN {pos}" for pos in range(len(ids)))
         rows = conn.execute(
             f"""
-            SELECT name, file_path, line
+            SELECT id, name, file_path, line
             FROM nodes
             WHERE id IN ({placeholders})
             ORDER BY CASE id
-            {" ".join(f"WHEN {i} THEN {pos}" for pos, i in enumerate(ids))}
+            {case_clause}
             END
             """,
-            ids,
+            [*ids, *ids],
         ).fetchall()
         return [{"name": r["name"], "file_path": r["file_path"], "line": r["line"]} for r in rows]
 
-    def get_callers(self, node_id: int, depth: int = 1) -> list[dict[str, Any]]:
+    def get_callers(self, node_id: int | str, depth: int = 1) -> list[dict[str, Any]]:
         """Find all symbols that call the given node.
 
         Args:
@@ -138,11 +148,11 @@ class CallGraphAnalyzer:
         """
 
         results: list[dict[str, Any]] = []
-        visited: set[int] = set()
-        self._get_callers_recursive(node_id, depth, 1, results, visited)
+        visited: set[str] = set()
+        self._get_callers_recursive(str(node_id), depth, 1, results, visited)
         return results
 
-    def get_callees(self, node_id: int, depth: int = 1) -> list[dict[str, Any]]:
+    def get_callees(self, node_id: int | str, depth: int = 1) -> list[dict[str, Any]]:
         """Find all symbols called by the given node.
 
         Args:
@@ -154,17 +164,17 @@ class CallGraphAnalyzer:
         """
 
         results: list[dict[str, Any]] = []
-        visited: set[int] = set()
-        self._get_callees_recursive(node_id, depth, 1, results, visited)
+        visited: set[str] = set()
+        self._get_callees_recursive(str(node_id), depth, 1, results, visited)
         return results
 
     def _get_callers_recursive(
         self,
-        node_id: int,
+        node_id: str,
         max_depth: int,
         current_depth: int,
         results: list[dict[str, Any]],
-        visited: set[int],
+        visited: set[str],
     ) -> None:
         if current_depth > max_depth or node_id in visited:
             return
@@ -183,7 +193,7 @@ class CallGraphAnalyzer:
         ).fetchall()
 
         for row in rows:
-            caller_id = row["source_node_id"]
+            caller_id = str(row["source_node_id"])
             if caller_id not in visited:
                 results.append(
                     {
@@ -200,11 +210,11 @@ class CallGraphAnalyzer:
 
     def _get_callees_recursive(
         self,
-        node_id: int,
+        node_id: str,
         max_depth: int,
         current_depth: int,
         results: list[dict[str, Any]],
-        visited: set[int],
+        visited: set[str],
     ) -> None:
         if current_depth > max_depth or node_id in visited:
             return
@@ -223,7 +233,7 @@ class CallGraphAnalyzer:
         ).fetchall()
 
         for row in rows:
-            callee_id = row["target_node_id"]
+            callee_id = str(row["target_node_id"])
             if callee_id and callee_id not in visited:
                 results.append(
                     {

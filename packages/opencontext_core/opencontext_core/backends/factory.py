@@ -35,6 +35,7 @@ class BackendFactory:
             return TerseCompressionBackend()
         elif strategy == "efficient":
             from opencontext_core.backends.compression.efficient import EfficientCompressionBackend
+
             return EfficientCompressionBackend()
         elif strategy == "none":
             return NullCompressionBackend()
@@ -56,23 +57,68 @@ class BackendFactory:
             return LocalVectorBackend(storage)
 
     @classmethod
-    def create_memory_store(cls, config: Any, storage_path: Path) -> Any:
+    def create_memory_store(
+        cls, config: Any, storage_path: Path, *, engram_client: Any = None
+    ) -> Any:
+        """Resolve exactly one AgentMemoryStore from ``memory.provider``.
+
+        ``engram`` -> ``EngramMemoryStore`` over the injected ``engram_client``;
+        any other provider -> ``LocalMemoryStore``; disabled -> ``Null``.
+
+        Degrades gracefully (never raises): if the engram client is missing or
+        constructing it fails, falls back to ``LocalMemoryStore``. In
+        ``AIR_GAPPED`` security mode no engram/MCP call may be issued, so the
+        engram provider is force-degraded to the local store (whose methods
+        never touch the injected client).
+        """
         from opencontext_core.memory.agent import NullAgentMemoryStore
+        from opencontext_core.memory.graph import LocalMemoryStore
 
         memory_cfg = getattr(config, "memory", None)
         if memory_cfg is None or not getattr(memory_cfg, "enabled", True):
             return NullAgentMemoryStore()
 
+        def _local() -> Any:
+            return LocalMemoryStore(storage_path / "memory.db")
+
         provider = getattr(memory_cfg, "provider", "local")
-        if provider == "remote":
+        if provider == "engram":
+            if cls._is_air_gapped(config):
+                # Air-gapped: never issue an engram/MCP call — use local only.
+                return _local()
+            client = cls._resolve_engram_client(engram_client)
+            if client is None:
+                return _local()
             try:
-                from opencontext_core.memory.engram_store import EngramMemoryAdapter
+                from opencontext_core.memory.engram_mcp_store import EngramMemoryStore
 
-                endpoint = getattr(memory_cfg, "endpoint", "http://localhost:4242")
-                return EngramMemoryAdapter(endpoint)
+                return EngramMemoryStore(client)
             except Exception:
-                pass
+                return _local()
 
-        from opencontext_core.memory.graph import LocalMemoryStore
+        return _local()
 
-        return LocalMemoryStore(storage_path / "memory.db")
+    @staticmethod
+    def _is_air_gapped(config: Any) -> bool:
+        security = getattr(config, "security", None)
+        mode = getattr(security, "mode", None)
+        return str(getattr(mode, "value", mode)) == "air_gapped"
+
+    @staticmethod
+    def _resolve_engram_client(engram_client: Any) -> Any:
+        """Resolve the injected engram client, never raising.
+
+        Accepts either a ready client instance or a zero-arg factory callable.
+        Returns ``None`` (caller degrades) when unavailable or construction
+        fails.
+        """
+        if engram_client is None:
+            return None
+        if callable(engram_client) and not (
+            hasattr(engram_client, "mem_search") or hasattr(engram_client, "mem_save")
+        ):
+            try:
+                return engram_client()
+            except Exception:
+                return None
+        return engram_client

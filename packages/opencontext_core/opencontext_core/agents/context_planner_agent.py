@@ -1,4 +1,5 @@
 """Context planner agent — builds ContextContract using v2 runtime."""
+
 from __future__ import annotations
 
 from typing import Any

@@ -4,11 +4,17 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from opencontext_core.context.planning.expansion import ContextItem, ProgressiveExpander, EXPANSION_ORDER
+from opencontext_core.context.planning.expansion import (
+    EXPANSION_ORDER,
+    ContextItem,
+    ProgressiveExpander,
+)
 
 
 def make_plan(rounds: int = 2, radius: int = 1, include_memory: bool = False):
-    return SimpleNamespace(expansion_rounds=rounds, graph_radius=radius, include_memory=include_memory)
+    return SimpleNamespace(
+        expansion_rounds=rounds, graph_radius=radius, include_memory=include_memory
+    )
 
 
 def make_contract(required_symbols: list[str] | None = None):

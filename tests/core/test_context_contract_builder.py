@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
 from opencontext_core.context.planning.classifier import TaskClassifier
-from opencontext_core.context.planning.contract import ContextContractBuilder, TIER_BUDGET
+from opencontext_core.context.planning.contract import TIER_BUDGET, ContextContractBuilder
 
 
 def make_builder() -> ContextContractBuilder:

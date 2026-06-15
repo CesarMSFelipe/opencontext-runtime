@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from opencontext_core.memory.contradictions import ContradictionDetector
 from opencontext_core.models.agent_memory import DecayPolicy, MemoryLayer, MemoryRecord
@@ -14,7 +14,7 @@ def make_record(
     content: str = "some content",
     confidence: float = 0.9,
 ) -> MemoryRecord:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     return MemoryRecord(
         id=record_id,
         layer=MemoryLayer.EPISODIC,
@@ -32,8 +32,12 @@ def make_record(
 
 def test_same_key_different_content_detected() -> None:
     detector = ContradictionDetector()
-    new_rec = make_record("new", key="proc:auth", content="auth needs token refresh", confidence=0.9)
-    existing = [make_record("old", key="proc:auth", content="auth never needs refresh", confidence=0.5)]
+    new_rec = make_record(
+        "new", key="proc:auth", content="auth needs token refresh", confidence=0.9
+    )
+    existing = [
+        make_record("old", key="proc:auth", content="auth never needs refresh", confidence=0.5)
+    ]
     contradicted = detector.detect(new_rec, existing)
     assert "old" in contradicted
 

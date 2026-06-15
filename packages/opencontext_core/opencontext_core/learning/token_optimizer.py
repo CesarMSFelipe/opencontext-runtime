@@ -183,25 +183,47 @@ class TokenOptimizer:
 
         return self._budgets.get(operation_type)
 
-    def report_savings(self) -> dict[str, Any]:
-        """Calculate potential token savings from optimization."""
+    def report_savings(self, applied_budgets: dict[str, int] | None = None) -> dict[str, Any]:
+        """Report token savings, honestly separating projected from realized.
 
-        total_savings = 0
+        ``projected_savings_tokens`` is the hypothetical waste reduction the
+        optimizer estimates from observed efficiency — it is a projection, not a
+        realized gain. ``realized_savings_tokens`` is only non-zero for operation
+        types whose optimized budget has actually been *applied* (passed in via
+        ``applied_budgets``); with nothing applied it is exactly 0 rather than a
+        fabricated number.
+        """
+
+        applied = applied_budgets or {}
+        projected_total = 0
+        realized_total = 0
         details: dict[str, Any] = {}
 
         for op_type, profile in self._budgets.items():
             if profile.avg_actual_usage > 0 and profile.efficiency_score < 0.9:
                 waste = (1.0 - profile.efficiency_score) * profile.avg_actual_usage
-                savings = int(waste * profile.confidence)
-                total_savings += savings
+                projected = int(waste * profile.confidence)
+                projected_total += projected
+
+                # Realized savings: only when this op type's budget is applied.
+                realized = projected if op_type in applied else 0
+                realized_total += realized
+
                 details[op_type] = {
                     "avg_usage": profile.avg_actual_usage,
                     "efficiency": round(profile.efficiency_score, 2),
-                    "potential_savings": savings,
+                    "projected_savings": projected,
+                    "realized_savings": realized,
+                    "applied": op_type in applied,
+                    # Backward-compatible alias.
+                    "potential_savings": projected,
                 }
 
         return {
-            "total_potential_savings_tokens": total_savings,
+            "realized_savings_tokens": realized_total,
+            "projected_savings_tokens": projected_total,
+            # Backward-compatible key (== projected; labeled potential).
+            "total_potential_savings_tokens": projected_total,
             "by_operation_type": details,
             "recommendation": ("Run optimize_budgets() regularly to reduce token waste."),
         }

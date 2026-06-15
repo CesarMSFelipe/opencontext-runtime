@@ -105,6 +105,18 @@ class EvidenceRequest(BaseModel):
     risk_level: str = Field(default="normal", description="Risk level for trust decisions.")
     refresh_policy: str = Field(default="default", description="Freshness policy for the request.")
     trace_parent: str | None = Field(default=None, description="Optional parent trace id.")
+    expansion_rounds: int = Field(
+        default=1,
+        ge=0,
+        le=10,
+        description="Progressive graph-expansion rounds (0 disables expansion).",
+    )
+    graph_radius: int = Field(
+        default=1,
+        ge=0,
+        le=10,
+        description="Graph neighbor radius per expansion round.",
+    )
 
 
 class EvidenceItem(BaseModel):

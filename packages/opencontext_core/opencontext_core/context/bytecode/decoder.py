@@ -42,19 +42,24 @@ class AICXDecoder:
                 continue
             a = _args_dict(instr.args)
             mode = ExpandMode(a.get("mode", "handle"))
-            evidence.append(EvidenceItem(
-                id=a.get("id", ""),
-                content="",  # lazy — expand explicitly when needed
-                source=bc.get(a.get("src", "")),
-                source_type=a.get("type", "file"),
-                provenance={"aicx_decoded": True, "expand_mode": mode.value},
-                confidence=float(a.get("conf", "0.5")),
-                freshness=FreshnessStatus(a.get("fresh", "unknown")),
-                surface=request.surface,
-                tokens=int(a.get("tok", "0")),
-                protected=a.get("protected", "0") == "1",
-                classification=DataClassification.INTERNAL,
-            ))
+            # INLINE/protected items carry their content in the dictionary (key "c");
+            # reference-only items decode to "" (resolved lazily if ever needed).
+            content = bc.get(a["c"]) if "c" in a else ""
+            evidence.append(
+                EvidenceItem(
+                    id=a.get("id", ""),
+                    content=content,
+                    source=bc.get(a.get("src", "")),
+                    source_type=a.get("type", "file"),
+                    provenance={"aicx_decoded": True, "expand_mode": mode.value},
+                    confidence=float(a.get("conf", "0.5")),
+                    freshness=FreshnessStatus(a.get("fresh", "unknown")),
+                    surface=request.surface,
+                    tokens=int(a.get("tok", "0")),
+                    protected=a.get("protected", "0") == "1",
+                    classification=DataClassification.INTERNAL,
+                )
+            )
 
         trust_args = _parse_instr(bc, OpCode.TRUST)
         trust = TrustDecision(

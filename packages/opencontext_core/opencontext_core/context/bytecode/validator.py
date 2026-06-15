@@ -43,9 +43,7 @@ class AICXValidator:
             if instr.op == OpCode.REQUEST:
                 args = {a.split(":")[0]: a.split(":", 1)[1] for a in instr.args if ":" in a}
                 if args.get("risk") == "high":
-                    gate_names = [
-                        i.args[0] for i in bc.instructions if i.op == OpCode.GATE
-                    ]
+                    gate_names = [i.args[0] for i in bc.instructions if i.op == OpCode.GATE]
                     if "security" not in gate_names:
                         warnings.append("high-risk request missing security gate")
 

@@ -19,8 +19,9 @@ class TestHarnessRunnerV2:
 
     def test_explore_only_run_completes(self, tmp_path: Path) -> None:
         """HarnessRunner.run('explore-only', task) completes without crash."""
-        from opencontext_core.config import default_config_data
         import yaml
+
+        from opencontext_core.config import default_config_data
 
         config_path = tmp_path / "opencontext.yaml"
         data = default_config_data()

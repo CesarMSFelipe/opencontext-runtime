@@ -15,7 +15,6 @@ from opencontext_core.harness.config import PhaseConfig
 from opencontext_core.harness.gates import (
     ArtifactPersistedGate,
     ContextPackCreatedGate,
-    FailingTestExistsGate,
     ProjectIndexExistsGate,
     TokenBudgetGate,
 )
@@ -149,9 +148,7 @@ class ExplorePhase(HarnessPhase):
             HarnessArtifact(
                 id=f"explore-pack-{state.run_id[:8]}",
                 phase="explore",
-                path=str(
-                    state.root / ".opencontext" / "runs" / state.run_id / "context-pack.json"
-                ),
+                path=str(state.root / ".opencontext" / "runs" / state.run_id / "context-pack.json"),
                 kind="context-pack",
                 description=f"Context pack with {len(pack.included)} items",
             )
@@ -501,24 +498,291 @@ class ProposePhase(HarnessPhase):
         )
 
 
+@dataclass
+class ExecutorOutcome:
+    """Result of attempting to run a real executor for a work-producing phase.
+
+    Mirrors the honest-ApplyPhase contract for the planning phases (spec/design/
+    tasks): a phase MUST NOT present a static template scaffold as a successful
+    AI-produced artifact.
+
+    Attributes:
+        executor: ``"real"`` when a registered executor produced the output,
+            ``"absent"`` when no executor/LLM was wired, ``"error"`` when an
+            executor was wired but failed.
+        output: The executor's produced content (only meaningful when
+            ``executor == "real"``); ``None`` otherwise so the caller falls back
+            to its scaffold.
+        error: The executor error message when ``executor == "error"``.
+    """
+
+    executor: str
+    output: str | None = None
+    error: str | None = None
+
+    @property
+    def is_real(self) -> bool:
+        return self.executor == "real" and self.output is not None
+
+    @property
+    def artifact_status(self) -> str:
+        """Domain status for the phase artifact/manifest.
+
+        ``"completed"`` only when a real executor produced the artifact; never
+        over a static scaffold or a failed executor.
+        """
+        return "completed" if self.is_real else "planned"
+
+    @property
+    def gate_status(self) -> GateStatus:
+        """PhaseResult status: PASSED only on a real executor success.
+
+        When the executor is absent or errored the phase reports WARNING — a
+        non-PASSED status that honestly signals "no real artifact produced"
+        without hard-failing the run (which is reserved for budget/gate
+        violations and blocked writes).
+        """
+        return GateStatus.PASSED if self.is_real else GateStatus.WARNING
+
+
+def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
+    """Invoke the wired executor for a work-producing phase, honestly.
+
+    Looks for a delegation layer on the run ``state`` (``state.delegate`` — a
+    :class:`opencontext_core.agents.delegation.SubAgentDelegate`-shaped object
+    exposing ``delegate(phase, context) -> SubAgentResult``). This mirrors how
+    :class:`ApplyPhase` reads ``state.apply_edits``: the executor/delegation
+    layer is supplied on the state, never fabricated by the phase.
+
+    Returns an :class:`ExecutorOutcome` describing whether a real executor ran.
+    The phase uses the outcome to decide between reporting a real, completed
+    artifact and an honest ``planned`` scaffold — it NEVER labels a static
+    template as a successful AI-produced artifact.
+    """
+    delegate = getattr(state, "delegate", None)
+    if delegate is None or not callable(getattr(delegate, "delegate", None)):
+        return ExecutorOutcome(executor="absent")
+
+    context = {
+        "task": getattr(state, "task", ""),
+        "phase": phase,
+        "run_id": getattr(state, "run_id", ""),
+        "root": str(getattr(state, "root", "")),
+    }
+    try:
+        result = delegate.delegate(phase, context)
+    except Exception as exc:  # delegation layer raised — report, do not fake
+        return ExecutorOutcome(executor="error", error=str(exc))
+
+    status = getattr(result, "status", "error")
+    output = getattr(result, "output", "") or ""
+    if status == "success" and output.strip():
+        return ExecutorOutcome(executor="real", output=output)
+    # Executor was wired but did not produce usable output.
+    return ExecutorOutcome(
+        executor="error",
+        error=getattr(result, "error", None) or f"executor returned status={status!r}",
+    )
+
+
+def _write_phase_manifest(
+    run_dir: Path,
+    phase: str,
+    artifact_path: Path,
+    task: str,
+    outcome: ExecutorOutcome,
+) -> Path:
+    """Persist an honest manifest side-car for a work-producing phase.
+
+    Records the artifact ``status`` (``"completed"`` only when a real executor
+    ran, otherwise ``"planned"``) and which executor produced it, so the
+    distinction between a real artifact and a static scaffold is inspectable
+    on disk. Returns the manifest path.
+    """
+    manifest = {
+        "run_id": run_dir.name,
+        "task": task,
+        "created_at": datetime.now(UTC).isoformat(),
+        "phase": phase,
+        "status": outcome.artifact_status,
+        "executor": outcome.executor,
+        "artifact_path": str(artifact_path),
+        "summary": (
+            f"{phase} produced by real executor for: {task}"
+            if outcome.is_real
+            else (
+                f"{phase} executor errored — scaffold only for: {task}"
+                if outcome.executor == "error"
+                else f"No executor — {phase} scaffold (planned) only for: {task}"
+            )
+        ),
+    }
+    if outcome.error is not None:
+        manifest["error"] = outcome.error
+    manifest_path = run_dir / f"{phase}-manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest_path
+
+
+@dataclass
+class FileEdit:
+    """A single concrete file edit produced by an executor.
+
+    ``content`` is the full intended file content after the edit (whole-file
+    replacement / create). ``path`` is an absolute or root-relative path.
+    """
+
+    path: str
+    content: str
+
+
+@dataclass
+class AppliedChange:
+    """Record of a file that was actually written during apply."""
+
+    path: str
+    created: bool
+    bytes_written: int
+
+
+class CodeEditExecutor:
+    """Minimal honest code-edit executor: write whole-file edits with rollback.
+
+    Applies a list of :class:`FileEdit` to disk. On any failure mid-apply, ALL
+    files touched so far are restored to their pre-apply state (created files are
+    removed, modified files are reverted to their original bytes), then the
+    original exception is re-raised. Returns the list of changed files only when
+    the whole batch succeeds.
+    """
+
+    def __init__(self, root: Path) -> None:
+        self.root = Path(root)
+
+    def _resolve(self, raw_path: str) -> Path:
+        p = Path(raw_path)
+        if not p.is_absolute():
+            p = self.root / p
+        return p
+
+    def apply(self, edits: list[FileEdit]) -> list[AppliedChange]:
+        """Apply edits atomically with rollback on failure."""
+        applied: list[AppliedChange] = []
+        # (path, original_bytes_or_None_if_created)
+        rollback: list[tuple[Path, bytes | None]] = []
+        try:
+            for edit in edits:
+                target = self._resolve(edit.path)
+                existed = target.exists()
+                original = target.read_bytes() if existed and target.is_file() else None
+                # Record rollback intent BEFORE mutating so partial writes revert.
+                rollback.append((target, original if existed else None))
+                target.parent.mkdir(parents=True, exist_ok=True)
+                data = edit.content.encode("utf-8")
+                target.write_bytes(data)
+                applied.append(
+                    AppliedChange(
+                        path=str(target),
+                        created=not existed,
+                        bytes_written=len(data),
+                    )
+                )
+            return applied
+        except Exception:
+            self._rollback(rollback)
+            raise
+
+    @staticmethod
+    def _rollback(rollback: list[tuple[Path, bytes | None]]) -> None:
+        """Restore every touched path to its pre-apply state."""
+        for target, original in reversed(rollback):
+            try:
+                if original is None:
+                    # File was created (or absent) before failure — remove it.
+                    if target.exists() and target.is_file():
+                        target.unlink()
+                else:
+                    target.write_bytes(original)
+            except Exception:
+                # Best-effort restore of the remaining files; keep going.
+                continue
+
+
 class ApplyPhase(HarnessPhase):
-    """Apply phase: apply changes defined in the proposal."""
+    """Apply phase: apply concrete executor edits to disk, honestly.
+
+    Contract (honest reporting):
+      - When the executor produced concrete file edits, write them to disk, list
+        each changed file in the manifest, and report ``status="applied"``.
+      - When no edits were produced, report ``status="planned"`` and make ZERO
+        filesystem mutation. The manifest is NEVER ``"applied"`` over an empty
+        ``changes`` list.
+      - On a mid-apply failure, all touched files are rolled back and the phase
+        reports ``status="failed"``.
+
+    Edits are read from ``state.apply_edits`` (a list of ``{"path", "content"}``
+    dicts or :class:`FileEdit`), which the executor/delegation layer populates.
+    """
 
     id = "apply"
+
+    @staticmethod
+    def _collect_edits(state: Any) -> list[FileEdit]:
+        raw = getattr(state, "apply_edits", None) or []
+        edits: list[FileEdit] = []
+        for item in raw:
+            if isinstance(item, FileEdit):
+                edits.append(item)
+            elif isinstance(item, dict) and "path" in item and "content" in item:
+                edits.append(FileEdit(path=str(item["path"]), content=str(item["content"])))
+        return edits
 
     def run(self, state: Any) -> PhaseResult:
         run_dir = state.root / ".opencontext" / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
-
         apply_manifest_path = run_dir / "apply-manifest.json"
+
+        edits = self._collect_edits(state)
+        changes: list[dict[str, Any]] = []
+        apply_status = "planned"
+        phase_status = GateStatus.PASSED
+        error: str | None = None
+
+        if edits:
+            executor = CodeEditExecutor(state.root)
+            try:
+                applied = executor.apply(edits)
+                changes = [
+                    {
+                        "path": c.path,
+                        "created": c.created,
+                        "bytes_written": c.bytes_written,
+                    }
+                    for c in applied
+                ]
+                apply_status = "applied"
+            except Exception as exc:  # rollback already performed by executor
+                error = str(exc)
+                apply_status = "failed"
+                phase_status = GateStatus.FAILED
+
         apply_manifest = {
             "run_id": state.run_id,
             "task": state.task,
             "created_at": datetime.now(UTC).isoformat(),
-            "status": "applied",
-            "changes": [],
-            "summary": f"Applied changes for: {state.task}",
+            "status": apply_status,
+            "changes": changes,
+            "summary": (
+                f"Applied {len(changes)} file edit(s) for: {state.task}"
+                if apply_status == "applied"
+                else (
+                    f"Apply failed and rolled back for: {state.task}"
+                    if apply_status == "failed"
+                    else f"No executor edits — planned only for: {state.task}"
+                )
+            ),
         }
+        if error is not None:
+            apply_manifest["error"] = error
         apply_manifest_path.write_text(json.dumps(apply_manifest, indent=2), encoding="utf-8")
 
         gates: list[PhaseGate] = [
@@ -531,15 +795,12 @@ class ApplyPhase(HarnessPhase):
             budget_mode=self.budget_mode,
         )
 
-        status = (
-            GateStatus.FAILED
-            if any(g.status == GateStatus.FAILED for g in gates)
-            else GateStatus.PASSED
-        )
+        if any(g.status == GateStatus.FAILED for g in gates):
+            phase_status = GateStatus.FAILED
 
         return PhaseResult(
             phase="apply",
-            status=status,
+            status=phase_status,
             ledger=ledger,
             gates=gates,
             artifacts=[
@@ -551,7 +812,11 @@ class ApplyPhase(HarnessPhase):
                     description="Apply manifest with change tracking",
                 )
             ],
-            metadata={"manifest_path": str(apply_manifest_path)},
+            metadata={
+                "manifest_path": str(apply_manifest_path),
+                "apply_status": apply_status,
+                "changed_files": [c["path"] for c in changes],
+            },
         )
 
 
@@ -580,8 +845,18 @@ class SpecPhase(HarnessPhase):
         task = proposal.get("task", state.task)
         approach = proposal.get("approach", {})
 
-        # Generate spec content with ADDED/MODIFIED sections and GIVEN/WHEN/THEN scenarios
-        spec_content = f"""# Delta Spec: {task}
+        # Honest executor contract: run the real executor when wired, otherwise
+        # emit a clearly-marked scaffold reported as "planned" (NOT a success).
+        outcome = run_phase_executor(state, "spec")
+        if outcome.is_real:
+            spec_content = outcome.output or ""
+        else:
+            # Static template SCAFFOLD — explicitly NOT a real AI-produced spec.
+            spec_content = f"""# Delta Spec: {task}
+
+> SCAFFOLD — generated by a static template, not an executor. No agent/LLM was
+> wired for the spec phase, so this is a planning placeholder, not a completed
+> artifact. Wire an executor (state.delegate) to produce a real spec.
 
 ## ADDED Requirements
 
@@ -612,6 +887,7 @@ _None._
 - Spec artifact is persisted to `.opencontext/runs/{{run_id}}/spec.md`
 """
         spec_path.write_text(spec_content, encoding="utf-8")
+        manifest_path = _write_phase_manifest(run_dir, "spec", spec_path, task, outcome)
 
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(spec_path),
@@ -627,7 +903,7 @@ _None._
         status = (
             GateStatus.FAILED
             if any(g.status == GateStatus.FAILED for g in gates)
-            else GateStatus.PASSED
+            else outcome.gate_status
         )
 
         return PhaseResult(
@@ -644,7 +920,11 @@ _None._
                     description=f"Spec for: {task}",
                 )
             ],
-            metadata={"spec_path": str(spec_path)},
+            metadata={
+                "spec_path": str(spec_path),
+                "manifest_path": str(manifest_path),
+                "executor": outcome.executor,
+            },
         )
 
 
@@ -672,19 +952,28 @@ class DesignPhase(HarnessPhase):
         spec_content = spec_path.read_text(encoding="utf-8")
         task = state.task
 
-        # Extract requirements from spec content
-        requirements = []
-        for line in spec_content.split("\n"):
-            if "### Requirement:" in line or "### " in line:
-                requirements.append(line.lstrip("# ").strip())
+        # Honest executor contract: run the real executor when wired, otherwise
+        # emit a clearly-marked scaffold reported as "planned" (NOT a success).
+        outcome = run_phase_executor(state, "design")
+        if outcome.is_real:
+            design_content = outcome.output or ""
+        else:
+            # Extract requirements from spec content for the scaffold body.
+            requirements = []
+            for line in spec_content.split("\n"):
+                if "### Requirement:" in line or "### " in line:
+                    requirements.append(line.lstrip("# ").strip())
+            req_lines = (
+                "\n".join(f"- {r}" for r in requirements[:5])
+                if requirements
+                else "- (analyze spec.md for details)"
+            )
+            # Static template SCAFFOLD — explicitly NOT a real AI-produced design.
+            design_content = f"""# Design: {task}
 
-        # Generate design content
-        req_lines = (
-            "\n".join(f"- {r}" for r in requirements[:5])
-            if requirements
-            else "- (analyze spec.md for details)"
-        )
-        design_content = f"""# Design: {task}
+> SCAFFOLD — generated by a static template, not an executor. No agent/LLM was
+> wired for the design phase, so this is a planning placeholder, not a completed
+> artifact. Wire an executor (state.delegate) to produce a real design.
 
 ## Architecture
 
@@ -716,6 +1005,7 @@ This section describes the high-level architecture for implementing: {task}.
 - Provider-neutral test fixtures
 """
         design_path.write_text(design_content, encoding="utf-8")
+        manifest_path = _write_phase_manifest(run_dir, "design", design_path, task, outcome)
 
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(design_path),
@@ -731,7 +1021,7 @@ This section describes the high-level architecture for implementing: {task}.
         status = (
             GateStatus.FAILED
             if any(g.status == GateStatus.FAILED for g in gates)
-            else GateStatus.PASSED
+            else outcome.gate_status
         )
 
         return PhaseResult(
@@ -748,7 +1038,11 @@ This section describes the high-level architecture for implementing: {task}.
                     description=f"Design for: {task}",
                 )
             ],
-            metadata={"design_path": str(design_path)},
+            metadata={
+                "design_path": str(design_path),
+                "manifest_path": str(manifest_path),
+                "executor": outcome.executor,
+            },
         )
 
 
@@ -776,44 +1070,72 @@ class TasksPhase(HarnessPhase):
         design_content = design_path.read_text(encoding="utf-8")
         task = state.task
 
-        # Parse files from design content
-        file_pattern = re.compile(r"[-*] (.+\.(?:py|ts|js|go|rs))")
-        files = file_pattern.findall(design_content)
-
-        # Build task breakdown
-        tasks = []
-        if files:
-            for i, f in enumerate(files, 1):
+        # Honest executor contract: run the real executor when wired, otherwise
+        # emit a clearly-marked scaffold reported as "planned" (NOT a success).
+        outcome = run_phase_executor(state, "tasks")
+        task_count = 0
+        if outcome.is_real:
+            # The executor owns the breakdown format. Persist its output as-is,
+            # preferring structured JSON when it parsed, else wrap it verbatim.
+            raw = outcome.output or ""
+            try:
+                parsed = json.loads(raw)
+                tasks_path.write_text(json.dumps(parsed, indent=2), encoding="utf-8")
+                task_count = len(parsed) if isinstance(parsed, list) else 1
+            except json.JSONDecodeError:
+                tasks_path.write_text(
+                    json.dumps({"executor_output": raw}, indent=2), encoding="utf-8"
+                )
+                task_count = 1
+        else:
+            # Parse files from design content for the scaffold breakdown.
+            file_pattern = re.compile(r"[-*] (.+\.(?:py|ts|js|go|rs))")
+            files = file_pattern.findall(design_content)
+            tasks: list[dict[str, Any]] = []
+            if files:
+                for i, f in enumerate(files, 1):
+                    tasks.append(
+                        {
+                            "id": f"task-{i}",
+                            "description": f"Implement {f} per design",
+                            "file_paths": [f],
+                            "complexity": "medium",
+                        }
+                    )
+            else:
+                # Default task if no files extracted
                 tasks.append(
                     {
-                        "id": f"task-{i}",
-                        "description": f"Implement {f} per design",
-                        "file_paths": [f],
+                        "id": "task-1",
+                        "description": f"Implement feature: {task}",
+                        "file_paths": ["harness/gates.py", "tests/harness/test_harness_gates.py"],
                         "complexity": "medium",
                     }
                 )
-        else:
-            # Default task if no files extracted
+            # Always include a test task
             tasks.append(
                 {
-                    "id": "task-1",
-                    "description": f"Implement feature: {task}",
-                    "file_paths": ["harness/gates.py", "tests/harness/test_harness_gates.py"],
-                    "complexity": "medium",
+                    "id": "task-test",
+                    "description": "Write failing test before implementation",
+                    "file_paths": ["tests/"],
+                    "complexity": "low",
                 }
             )
-
-        # Always include a test task
-        tasks.append(
-            {
-                "id": "task-test",
-                "description": "Write failing test before implementation",
-                "file_paths": ["tests/"],
-                "complexity": "low",
+            # Wrap the scaffold so the artifact is explicitly NOT a real
+            # AI-produced breakdown — it is a planning placeholder.
+            scaffold = {
+                "_scaffold": True,
+                "_note": (
+                    "SCAFFOLD — static template, not an executor. No agent/LLM was "
+                    "wired for the tasks phase; this is a planning placeholder, not "
+                    "a completed artifact. Wire an executor (state.delegate)."
+                ),
+                "tasks": tasks,
             }
-        )
+            tasks_path.write_text(json.dumps(scaffold, indent=2), encoding="utf-8")
+            task_count = len(tasks)
 
-        tasks_path.write_text(json.dumps(tasks, indent=2), encoding="utf-8")
+        manifest_path = _write_phase_manifest(run_dir, "tasks", tasks_path, task, outcome)
 
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(tasks_path),
@@ -829,7 +1151,7 @@ class TasksPhase(HarnessPhase):
         status = (
             GateStatus.FAILED
             if any(g.status == GateStatus.FAILED for g in gates)
-            else GateStatus.PASSED
+            else outcome.gate_status
         )
 
         return PhaseResult(
@@ -846,7 +1168,11 @@ class TasksPhase(HarnessPhase):
                     description=f"Task breakdown for: {task}",
                 )
             ],
-            metadata={"task_count": len(tasks)},
+            metadata={
+                "task_count": task_count,
+                "manifest_path": str(manifest_path),
+                "executor": outcome.executor,
+            },
         )
 
 
@@ -861,17 +1187,9 @@ class VerifyPhase(HarnessPhase):
 
         verify_report_path = run_dir / "verify-report.json"
 
-        # Strict TDD enforcement: check for failing test before running tests
-        if self.budget_mode == BudgetMode.STRICT:
-            test_gate = FailingTestExistsGate()
-            test_gate_result = test_gate.evaluate(state.task, state.root)
-            if test_gate_result.status == GateStatus.FAILED:
-                return PhaseResult(
-                    phase="verify",
-                    status=GateStatus.FAILED,
-                    gates=[test_gate_result],
-                    metadata={"strict_tdd_blocked": True},
-                )
+        # NOTE: TDD failing-test ordering is enforced as an apply PRE-gate by the
+        # runner (driven by harness.tdd_mode), NOT here in VerifyPhase. See
+        # HarnessRunner._evaluate_apply_pre_gates.
 
         # Provider-neutral verification: run pytest and capture results
         test_result = self._run_tests(state.root)

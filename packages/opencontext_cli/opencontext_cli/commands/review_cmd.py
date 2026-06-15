@@ -5,6 +5,77 @@ from __future__ import annotations
 import os
 from typing import Any
 
+# Providers that never leave the machine — not gated as external sends.
+_LOCAL_PROVIDERS = {"mock", "local"}
+
+
+class ProviderBlockedError(RuntimeError):
+    """Raised when an external review send is blocked by safety policy."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(f"External review send blocked: {reason}")
+
+
+def guard_external_send(provider: str, content: str, *, config: Any | None = None) -> str:
+    """Gate an external review send through firewall + provider policy + redaction.
+
+    Returns the (redacted) payload safe to send when allowed. Raises
+    :class:`ProviderBlockedError` when secure/air-gapped mode, provider policy,
+    a disabled external-provider switch, or a raw secret blocks the send.
+
+    Local providers (mock/local) are never treated as external sends and pass
+    through unchanged. Before this guard existed, ``review --party`` sent code to
+    external LLMs with no secure-mode, provider-policy, or redaction checks.
+    """
+
+    if provider in _LOCAL_PROVIDERS:
+        return content
+
+    from opencontext_core.config import load_config_or_defaults
+    from opencontext_core.models.context import (
+        ContextItem,
+        ContextPriority,
+        DataClassification,
+    )
+    from opencontext_core.safety.firewall import ContextFirewall
+    from opencontext_core.safety.redaction import SinkGuard
+    from opencontext_core.safety.secrets import SecretScanner
+
+    cfg = config if config is not None else load_config_or_defaults()
+
+    # A raw secret in the source must block the send outright — never sent, even
+    # though redaction would mask it — so the policy decision is honest.
+    if SecretScanner().scan(content):
+        raise ProviderBlockedError("raw_secret_detected_before_provider_call")
+
+    # Redact secrets/PII so the payload that crosses the boundary is sanitized.
+    redacted, _ = SinkGuard().redact(content)
+
+    item = ContextItem(
+        id="review:context",
+        content=redacted,
+        source="review-cli",
+        source_type="review",
+        priority=ContextPriority.P1,
+        tokens=max(1, len(redacted) // 4),
+        score=1.0,
+        classification=DataClassification.INTERNAL,
+        redacted=True,
+        metadata={"redacted": True},
+    )
+
+    decision = ContextFirewall(cfg).check_provider_call(
+        provider,
+        [item],
+        provider_metadata=None,
+    )
+    if not decision.allowed:
+        raise ProviderBlockedError(decision.reason)
+
+    return redacted
+
+
 PARTY_ROLES = {
     "architect": (
         "You are a Senior Software Architect with 15+ years of experience. "
@@ -149,12 +220,16 @@ def handle_review(args: Any) -> None:
 
     rich_console.print(f"[bold]Party Mode Review[/] — {len(roles)} independent reviewers")
 
+    from opencontext_core.config import load_config_or_defaults
+
+    config = load_config_or_defaults()
+
     reports: list[dict[str, Any]] = []
 
     with Status("[bold green]Spawning reviewers...", console=rich_console):
         for role in roles:
             prompt = generate_role_prompt(role, context)
-            report = _run_reviewer(role, prompt)
+            report = _run_reviewer(role, prompt, context=context, config=config)
             reports.append(report)
             rich_console.print(
                 f"  [green]✓[/] {role}: {len(report.get('findings', []))} finding(s)"
@@ -171,8 +246,8 @@ def handle_review(args: Any) -> None:
         rich_console.print(merged)
 
 
-def _get_adapter() -> Any | None:
-    """Return the first available LLM provider adapter, or None."""
+def _get_adapter() -> tuple[Any, str] | None:
+    """Return (adapter, provider_name) for the first available provider, or None."""
     from opencontext_core.providers.adapters import (
         AnthropicAdapter,
         OpenRouterAdapter,
@@ -180,29 +255,56 @@ def _get_adapter() -> Any | None:
     )
 
     if os.environ.get("ANTHROPIC_API_KEY"):
-        return AnthropicAdapter(
-            ProviderConfig(name="anthropic", api_key=os.environ["ANTHROPIC_API_KEY"])
+        return (
+            AnthropicAdapter(
+                ProviderConfig(name="anthropic", api_key=os.environ["ANTHROPIC_API_KEY"])
+            ),
+            "anthropic",
         )
     if os.environ.get("OPENROUTER_API_KEY"):
-        return OpenRouterAdapter(
-            ProviderConfig(name="openrouter", api_key=os.environ["OPENROUTER_API_KEY"])
+        return (
+            OpenRouterAdapter(
+                ProviderConfig(name="openrouter", api_key=os.environ["OPENROUTER_API_KEY"])
+            ),
+            "openrouter",
         )
     return None
 
 
-def _run_reviewer(role: str, prompt: str) -> dict[str, Any]:
+def _run_reviewer(
+    role: str,
+    prompt: str,
+    *,
+    context: str | None = None,
+    config: Any | None = None,
+) -> dict[str, Any]:
     """Run a single reviewer via LLM if a provider is configured.
 
     Returns a dict with role, findings, and summary keys.
-    Falls back to a scaffold result when no provider is available.
+    Falls back to a scaffold result when no provider is available. Every
+    external send is gated through :func:`guard_external_send` (firewall +
+    provider policy + redaction); a blocked send is reported, never silently
+    sent.
     """
-    adapter = _get_adapter()
-    if adapter is None:
+    selected = _get_adapter()
+    if selected is None:
         return {
             "role": role,
             "findings": [],
             "summary": f"{role.title()} review: LLM provider not configured. "
             "Set a provider in your opencontext config to enable automated review.",
+        }
+
+    adapter, provider = selected
+
+    # Fail-closed safety gate before any external send.
+    try:
+        guard_external_send(provider, context if context is not None else prompt, config=config)
+    except ProviderBlockedError as exc:
+        return {
+            "role": role,
+            "findings": [],
+            "summary": f"{role.title()} review blocked by policy: {exc.reason}",
         }
 
     try:

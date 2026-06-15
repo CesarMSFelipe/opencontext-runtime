@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from opencontext_core.context.planning.classifier import (
-    TaskClassification,
     TaskClassifier,
     TaskClassifierProtocol,
 )

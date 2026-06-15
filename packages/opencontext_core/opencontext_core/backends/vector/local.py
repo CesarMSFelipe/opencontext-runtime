@@ -49,8 +49,7 @@ class LocalVectorBackend:
 
         scores.sort(reverse=True)
         return [
-            {"item_id": iid, "score": sc, **self._meta.get(iid, {})}
-            for sc, iid in scores[:top_k]
+            {"item_id": iid, "score": sc, **self._meta.get(iid, {})} for sc, iid in scores[:top_k]
         ]
 
     def delete(self, item_id: str) -> None:

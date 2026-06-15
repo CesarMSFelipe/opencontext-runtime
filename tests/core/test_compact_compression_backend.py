@@ -10,12 +10,12 @@ def test_compact_name():
 
 def test_compact_python_signature_preserved_body_removed():
     backend = CompactCompressionBackend()
-    text = '''```python
+    text = """```python
 def process(self, data: dict) -> Result:
     x = 1
     y = 2
     return Result(x + y)
-```'''
+```"""
     result = backend.compress(text, [])
     assert "def process" in result
     assert "data: dict" in result
@@ -51,6 +51,9 @@ def test_compact_protected_span_verbatim():
 def test_compact_non_code_text_shorter():
     backend = CompactCompressionBackend()
     # Repeated prose to ensure terse compression reduces length
-    text = "In order to do this, and due to the fact that there are many items, we should in order to proceed handle it. " * 5
+    text = (
+        "In order to do this, and due to the fact that there are many items, we should in order to proceed handle it. "
+        * 5
+    )
     result = backend.compress(text, [])
     assert len(result) < len(text)

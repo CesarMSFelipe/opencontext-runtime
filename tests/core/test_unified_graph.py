@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from opencontext_core.graph.edges import EdgeKind
@@ -20,7 +20,7 @@ def make_store() -> LocalMemoryStore:
 
 
 def make_failure_record(record_id: str = "fail-1") -> MemoryRecord:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     return MemoryRecord(
         id=record_id,
         layer=MemoryLayer.FAILURE,
@@ -59,6 +59,7 @@ def test_get_memory_enriched_neighbors_includes_memory_nodes() -> None:
 
 def test_two_symbols_same_name_different_files_get_different_ids() -> None:
     from opencontext_core.indexing.knowledge_graph import _stable_symbol_id
+
     id1 = _stable_symbol_id("proj", "src/a.py", "process", "function")
     id2 = _stable_symbol_id("proj", "src/b.py", "process", "function")
     assert id1 != id2

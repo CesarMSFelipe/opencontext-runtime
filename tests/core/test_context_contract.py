@@ -4,7 +4,6 @@ import pytest
 import yaml
 
 from opencontext_core.models.context_contract import ContextContract, VerificationGate
-from opencontext_core.models.evidence import EvidenceRef
 
 
 def _make_contract(**overrides) -> ContextContract:

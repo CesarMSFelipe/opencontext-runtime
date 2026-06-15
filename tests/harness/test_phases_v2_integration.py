@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from opencontext_core.harness.config import HarnessConfig, PhaseConfig
+from opencontext_core.harness.config import PhaseConfig
 from opencontext_core.harness.models import BudgetMode, GateStatus
 from opencontext_core.harness.phases import ArchivePhase, ExplorePhase
 from opencontext_core.memory.agent import NullAgentMemoryStore
@@ -34,8 +32,9 @@ class TestExplorePhaseWithNullMemory:
         """ExplorePhase with NullAgentMemoryStore runs without crash."""
         # Create a minimal opencontext.yaml so the runtime can load
         config_path = tmp_path / "opencontext.yaml"
-        from opencontext_core.config import default_config_data
         import yaml
+
+        from opencontext_core.config import default_config_data
 
         data = default_config_data()
         data["project"]["name"] = "test-project"
@@ -56,8 +55,9 @@ class TestExplorePhaseWithNullMemory:
     def test_explore_produces_artifacts(self, tmp_path: Path) -> None:
         """ExplorePhase produces at least one artifact (or skips gracefully)."""
         config_path = tmp_path / "opencontext.yaml"
-        from opencontext_core.config import default_config_data
         import yaml
+
+        from opencontext_core.config import default_config_data
 
         data = default_config_data()
         data["project"]["name"] = "test-project"

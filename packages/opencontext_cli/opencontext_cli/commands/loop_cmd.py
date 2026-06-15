@@ -1,4 +1,5 @@
 """Interactive agentic loop — SDD workflow with user checkpoints."""
+
 from __future__ import annotations
 
 import argparse
@@ -6,9 +7,9 @@ import sys
 from pathlib import Path
 
 FLOWS = {
-    "quick":     ["explore", "apply", "verify"],
-    "standard":  ["explore", "spec", "design", "apply", "verify"],
-    "full":      ["explore", "propose", "spec", "design", "tasks", "apply", "verify", "archive"],
+    "quick": ["explore", "apply", "verify"],
+    "standard": ["explore", "spec", "design", "apply", "verify"],
+    "full": ["explore", "propose", "spec", "design", "tasks", "apply", "verify", "archive"],
     "autonomous": None,  # all phases, no user prompts
 }
 
@@ -22,26 +23,36 @@ def add_loop_commands(subparsers: argparse._SubParsersAction) -> None:
     )
     loop.add_argument("--task", "-t", required=True, help="Task description")
     loop.add_argument(
-        "--flow", choices=list(FLOWS.keys()), default="full",
+        "--flow",
+        choices=list(FLOWS.keys()),
+        default="full",
         help="Workflow track: quick/standard/full/autonomous",
     )
     loop.add_argument(
-        "--compress", choices=COMPRESSION_MODES, default="efficient",
+        "--compress",
+        choices=COMPRESSION_MODES,
+        default="efficient",
         help="Compression mode for agent output (default: efficient)",
     )
     loop.add_argument(
-        "--root", default=".", help="Project root directory",
+        "--root",
+        default=".",
+        help="Project root directory",
     )
     loop.add_argument(
-        "--max-rounds", type=int, default=1,
+        "--max-rounds",
+        type=int,
+        default=1,
         help="Max loop iterations (>1 = retry on failure)",
     )
     loop.add_argument(
-        "--autonomous", action="store_true",
+        "--autonomous",
+        action="store_true",
         help="Skip user prompts — gates decide (same as --flow autonomous)",
     )
     loop.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Plan phases but do not execute",
     )
 
@@ -75,6 +86,7 @@ def handle_loop(args: argparse.Namespace, config=None) -> int:
     # Build compressor for output
     try:
         from opencontext_core.backends.factory import BackendFactory
+
         compressor = BackendFactory.create_compression_backend(compress_mode)
     except Exception:
         compressor = None
@@ -141,7 +153,7 @@ def _print_header(task: str, flow: str, compress: str) -> None:
     width = 60
     print("-" * width)
     print(f"  OpenContext Loop  [{flow}]  compress:{compress}")
-    print(f"  Task: {task[:width - 8]}")
+    print(f"  Task: {task[: width - 8]}")
     print("-" * width)
 
 

@@ -1,4 +1,5 @@
 """Context contract CLI commands."""
+
 from __future__ import annotations
 
 import argparse
@@ -36,6 +37,7 @@ def _handle_contract_build(args: argparse.Namespace, config=None) -> int:
 
         if args.output == "json":
             import json
+
             print(json.dumps(contract.model_dump(), indent=2, default=str))
         else:
             print(contract.to_yaml())

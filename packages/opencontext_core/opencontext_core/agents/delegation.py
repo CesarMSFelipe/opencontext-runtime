@@ -53,6 +53,7 @@ class SubAgentDelegate:
         self._compression_mode = compression_mode
         try:
             from opencontext_core.backends.factory import BackendFactory
+
             self._compressor = BackendFactory.create_compression_backend(compression_mode)
         except Exception:
             self._compressor = None
@@ -68,6 +69,7 @@ class SubAgentDelegate:
             if _is_evidence_plan(v):
                 try:
                     from opencontext_core.context.bytecode import AICXCompiler, AICXRenderer
+
                     bc = AICXCompiler().compile(v)
                     result[k] = AICXRenderer().render_compact(bc)
                     continue
@@ -78,14 +80,6 @@ class SubAgentDelegate:
             else:
                 result[k] = v
         return result
-
-
-def _is_evidence_plan(v: object) -> bool:
-    try:
-        from opencontext_core.retrieval.contracts import EvidencePlan
-        return isinstance(v, EvidencePlan)
-    except Exception:
-        return False
 
     def register_handler(self, phase: str, handler: Any) -> None:
         """Register a local handler for a phase."""
@@ -257,3 +251,13 @@ def _is_evidence_plan(v: object) -> bool:
             output=f"Remote {phase} execution scaffold",
             metadata={"mode": "remote", "phase": phase},
         )
+
+
+def _is_evidence_plan(v: object) -> bool:
+    """Return True when ``v`` is a retrieval ``EvidencePlan`` (AICX-encodable)."""
+    try:
+        from opencontext_core.retrieval.contracts import EvidencePlan
+
+        return isinstance(v, EvidencePlan)
+    except Exception:
+        return False

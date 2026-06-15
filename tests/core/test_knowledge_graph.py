@@ -40,18 +40,21 @@ class UserService:
         config = KnowledgeGraphConfig(enabled=False)
         graph = KnowledgeGraph(config=config, db_path=tmp_path / "kg2.db")
         stats = graph.index_file("src/test.py", "x = 1")
-        assert stats == {"nodes": 0, "edges": 0}
+        assert stats["nodes"] == 0
+        assert stats["edges"] == 0
         graph.close()
 
     def test_skips_excluded_pattern(self, kg: KnowledgeGraph) -> None:
         kg.config.exclude = ["vendor/**"]
         stats = kg.index_file("vendor/lib.py", "x = 1")
-        assert stats == {"nodes": 0, "edges": 0}
+        assert stats["nodes"] == 0
+        assert stats["edges"] == 0
 
     def test_skips_oversized_file(self, kg: KnowledgeGraph) -> None:
         kg.config.max_file_size = 10
         stats = kg.index_file("src/big.py", "x = 1\n" * 100)
-        assert stats == {"nodes": 0, "edges": 0}
+        assert stats["nodes"] == 0
+        assert stats["edges"] == 0
 
 
 class TestIndexProject:

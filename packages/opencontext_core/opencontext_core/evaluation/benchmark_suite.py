@@ -316,9 +316,9 @@ class BenchmarkCase:
 # ── v2 Quality Metrics Schema ───────────────────────────────────────────────
 
 V2_QUALITY_METRICS: dict[str, object] = {
-    "context_contract_completeness": 0.0,    # % contracts with is_complete() == True
-    "validation_gate_pass_rate": 0.0,        # % gates that passed
-    "memory_hit_rate": 0.0,                  # % memory retrievals in final pack
+    "context_contract_completeness": 0.0,  # % contracts with is_complete() == True
+    "validation_gate_pass_rate": 0.0,  # % gates that passed
+    "memory_hit_rate": 0.0,  # % memory retrievals in final pack
     "tier_distribution": {"cheap": 0, "precise": 0, "critical": 0},
 }
 
@@ -326,6 +326,7 @@ V2_QUALITY_METRICS: dict[str, object] = {
 def contract_build_latency_benchmark() -> dict[str, object]:
     """Measure time to build a ContextContract. Returns timing metadata."""
     import time
+
     try:
         from opencontext_core.context.planning.classifier import TaskClassifier
         from opencontext_core.context.planning.contract import ContextContractBuilder

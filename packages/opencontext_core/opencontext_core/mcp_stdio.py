@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from opencontext_core.indexing.call_graph import CallGraphAnalyzer
 from opencontext_core.indexing.context_builder import ContextBuilder
@@ -17,6 +17,19 @@ from opencontext_core.indexing.graph_db import GraphDatabase
 from opencontext_core.indexing.impact_analysis import ImpactAnalyzer
 from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 from opencontext_core.tools.policy import ToolPermissionPolicy
+
+if TYPE_CHECKING:
+    from opencontext_core.runtime import OpenContextRuntime
+
+
+def _impact_risk_level(affected: int) -> str:
+    """Derive a real risk level from impact blast-radius (never 'unknown')."""
+    if affected >= 10:
+        return "high"
+    if affected >= 1:
+        return "normal"
+    return "low"
+
 
 # Adaptive max_nodes tiers based on indexed file count
 _MAX_NODES_TIERS: list[tuple[int, int]] = [
@@ -55,7 +68,12 @@ class MCPServer:
         self,
         db_path: str | Path = ".storage/opencontext/context_graph.db",
         policy: ToolPermissionPolicy | None = None,
+        runtime: OpenContextRuntime | None = None,
     ) -> None:
+        # When a runtime is provided, context/impact route through the verified
+        # pipeline (gates/trust/trace). Without it, the legacy raw behavior is kept
+        # for backward compatibility.
+        self.runtime = runtime
         self.db = GraphDatabase(db_path=db_path)
         self.call_graph = CallGraphAnalyzer(db=self.db)
         self.impact = ImpactAnalyzer(db=self.db)
@@ -286,10 +304,30 @@ class MCPServer:
             ]
         }
 
+    def _verified_context(self, task: str) -> dict[str, Any]:
+        """Build context through the runtime's verified pipeline (gates/trust/trace)."""
+
+        from opencontext_core.retrieval.contracts import VerifiedContextRequest
+
+        assert self.runtime is not None  # only called when a runtime is wired
+        result = self.runtime.verify_context(VerifiedContextRequest(query=task))
+        return {
+            "context": result.context,
+            "gates": [gate.model_dump(mode="json") for gate in result.gates],
+            "risk_level": result.risk_level.value,
+            "trust_decision": result.trust_decision.model_dump(mode="json"),
+            "trace_id": result.trace_id,
+            "estimated_tokens": result.token_usage.get("final_context_pack", 0),
+        }
+
     def _handle_context(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle context building tool."""
 
         task = params.get("task", "")
+        # Route through the verified pipeline when a runtime is wired (surface parity).
+        if self.runtime is not None:
+            return self._verified_context(task)
+
         max_nodes = params.get("max_nodes", 20)
         format = params.get("format", "markdown")
 
@@ -378,12 +416,13 @@ class MCPServer:
             return {"error": f"Symbol not found: {symbol}"}
 
         impact = self.impact.analyze(node_id, depth=radius)
+        affected = len(impact.direct_callers) + len(impact.transitive_dependents)
         return {
             "symbol": symbol,
-            "affected_nodes": len(impact.direct_callers) + len(impact.transitive_dependents),
+            "affected_nodes": affected,
             "affected_files": list(impact.affected_files),
             "test_files": list(impact.affected_tests),
-            "risk_level": "unknown",
+            "risk_level": _impact_risk_level(affected),
         }
 
     def _handle_node(self, params: dict[str, Any]) -> dict[str, Any]:

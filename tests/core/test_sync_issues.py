@@ -46,7 +46,7 @@ def test_parse_ignores_non_task_lines(tmp_path: Path) -> None:
     """Non-task lines (headers, prose, code) are ignored."""
     tasks_file = tmp_path / "tasks.md"
     tasks_file.write_text(
-        "## Phase 1\n- Regular bullet\n- [ ] Real task\n```\ncode\n```\n",
+        "## \n- Regular bullet\n- [ ] Real task\n```\ncode\n```\n",
         encoding="utf-8",
     )
     tasks = parse_tasks_from_md(tasks_file)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -18,7 +18,7 @@ def make_record(
     content: str = "some test content",
     layer: MemoryLayer = MemoryLayer.EPISODIC,
 ) -> MemoryRecord:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     return MemoryRecord(
         id=record_id,
         layer=layer,
@@ -48,8 +48,12 @@ def test_store_and_search_round_trip(backend: SQLiteMemoryBackend) -> None:
 
 
 def test_layer_filter(backend: SQLiteMemoryBackend) -> None:
-    backend.store(make_record(record_id="ep", layer=MemoryLayer.EPISODIC, content="episodic memory"))
-    backend.store(make_record(record_id="pr", layer=MemoryLayer.PROCEDURAL, content="episodic memory"))
+    backend.store(
+        make_record(record_id="ep", layer=MemoryLayer.EPISODIC, content="episodic memory")
+    )
+    backend.store(
+        make_record(record_id="pr", layer=MemoryLayer.PROCEDURAL, content="episodic memory")
+    )
     results = backend.search("episodic memory", layer=MemoryLayer.EPISODIC)
     assert all(r.layer == MemoryLayer.EPISODIC for r in results)
 

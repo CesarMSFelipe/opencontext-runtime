@@ -55,6 +55,7 @@ def handle_bytecode(args: argparse.Namespace) -> int:
 
 # ── compile ────────────────────────────────────────────────────────────────────
 
+
 def _compile(args: argparse.Namespace) -> int:
     from opencontext_core.context.bytecode import (
         AICXCompiler,
@@ -90,9 +91,7 @@ def _compile(args: argparse.Namespace) -> int:
     return 0 if report.passed else 1
 
 
-def _plan_from_runtime(
-    query: str, root: Path, risk: str, budget: int
-) -> object | None:
+def _plan_from_runtime(query: str, root: Path, risk: str, budget: int) -> object | None:
     try:
         from opencontext_core.retrieval.contracts import EvidenceRequest, RetrievalSurface
         from opencontext_core.retrieval.planner import RetrievalPlanner
@@ -102,6 +101,7 @@ def _plan_from_runtime(
             return None
 
         from opencontext_core.runtime import OpenContextRuntime
+
         rt = OpenContextRuntime(storage_path=root / ".storage" / "opencontext")
         manifest = rt.load_manifest()
         planner = RetrievalPlanner(
@@ -129,6 +129,7 @@ def _stub_plan(query: str, root: Path, risk: str, budget: int):
         RetrievalSurface,
         TrustDecision,
     )
+
     request = EvidenceRequest(
         query=query,
         root=root,
@@ -151,6 +152,7 @@ def _stub_plan(query: str, root: Path, risk: str, budget: int):
 
 
 # ── inspect ────────────────────────────────────────────────────────────────────
+
 
 def _inspect(args: argparse.Namespace) -> int:
     from opencontext_core.context.bytecode import (
@@ -198,6 +200,7 @@ def _inspect(args: argparse.Namespace) -> int:
 
 # ── decode ─────────────────────────────────────────────────────────────────────
 
+
 def _decode(args: argparse.Namespace) -> int:
     from opencontext_core.context.bytecode.decoder import AICXDecoder
 
@@ -218,8 +221,10 @@ def _decode(args: argparse.Namespace) -> int:
     print(f"Trust     : {plan.trust_decision.status} — {plan.trust_decision.reason}")
     print(f"Evidence  : {len(plan.evidence)} items (content lazy — not expanded)")
     for item in plan.evidence:
-        print(f"  [{item.id[:6]}] {item.source}  conf:{item.confidence:.2f}"
-              f"  fresh:{item.freshness.value}")
+        print(
+            f"  [{item.id[:6]}] {item.source}  conf:{item.confidence:.2f}"
+            f"  fresh:{item.freshness.value}"
+        )
     if plan.omissions:
         print(f"Omissions : {', '.join(plan.omissions)}")
     if plan.fallback_actions:
@@ -228,6 +233,7 @@ def _decode(args: argparse.Namespace) -> int:
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
+
 
 def _load_bc(path: str | None):
     from opencontext_core.context.bytecode import ContextBytecode
@@ -247,6 +253,7 @@ def _load_bc(path: str | None):
     # Try latest trace metadata
     try:
         from opencontext_core.runtime import OpenContextRuntime
+
         rt = OpenContextRuntime()
         trace = rt.latest_trace()
         bc_data = trace.metadata.get("aicx", {}).get("bytecode")
@@ -263,6 +270,7 @@ def _normalize_bc_json(data: dict) -> dict:
     """Accept both verbose (version/request_id) and compact (v/r) JSON formats."""
     if "v" in data and "version" not in data:
         from opencontext_core.context.bytecode.models import BytecodeInstruction
+
         instructions = []
         for row in data.get("i", []):
             instructions.append(BytecodeInstruction(op=row[0], args=row[1:]))

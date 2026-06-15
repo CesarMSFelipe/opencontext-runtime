@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from opencontext_core.memory.agent import AgentMemoryStore, NullAgentMemoryStore
 from opencontext_core.models.agent_memory import DecayPolicy, MemoryLayer, MemoryRecord
@@ -19,8 +19,8 @@ def make_record(record_id: str = "test-id") -> MemoryRecord:
         decay_policy=DecayPolicy(enabled=False),
         tags=[],
         linked_nodes=[],
-        created_at=datetime.now(tz=timezone.utc),
-        updated_at=datetime.now(tz=timezone.utc),
+        created_at=datetime.now(tz=UTC),
+        updated_at=datetime.now(tz=UTC),
     )
 
 

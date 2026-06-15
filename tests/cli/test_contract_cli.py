@@ -1,13 +1,12 @@
 """Smoke tests for contract CLI commands."""
+
 import argparse
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 
 def test_import_handle_contract():
     """Import handle_contract without crash."""
-    from opencontext_cli.commands.contract_cmd import handle_contract, add_contract_commands
+    from opencontext_cli.commands.contract_cmd import add_contract_commands, handle_contract
+
     assert callable(handle_contract)
     assert callable(add_contract_commands)
 
@@ -35,6 +34,7 @@ def test_add_contract_commands_registers_parser():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command")
     from opencontext_cli.commands.contract_cmd import add_contract_commands
+
     add_contract_commands(subparsers)
     parsed = parser.parse_args(["contract", "build", "--query", "test task"])
     assert parsed.query == "test task"

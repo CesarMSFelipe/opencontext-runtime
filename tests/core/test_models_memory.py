@@ -1,9 +1,10 @@
 """Tests for MemoryLayer, DecayPolicy, MemoryRecord in opencontext_core.models.agent_memory."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from opencontext_core.models.agent_memory import MemoryLayer, DecayPolicy, MemoryRecord
+import pytest
+
+from opencontext_core.models.agent_memory import DecayPolicy, MemoryLayer, MemoryRecord
 from opencontext_core.models.evidence import EvidenceRef
 
 
@@ -24,7 +25,7 @@ def test_decay_policy_defaults():
 
 
 def test_memory_record_defaults():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     record = MemoryRecord(
         id="rec-1",
         layer=MemoryLayer.EPISODIC,
@@ -43,8 +44,9 @@ def test_memory_record_defaults():
 
 
 def test_confidence_bounds():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     from pydantic import ValidationError
+
     with pytest.raises(ValidationError):
         MemoryRecord(
             id="bad",

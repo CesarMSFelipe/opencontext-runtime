@@ -6,7 +6,6 @@ from pathlib import Path
 from opencontext_core.sdd_runtime import (
     build_sdd_context,
     detect_test_capabilities,
-    phase_token_ledger,
     write_sdd_context,
 )
 
@@ -55,15 +54,6 @@ def test_build_sdd_context_recommends_harness_when_missing(tmp_path: Path) -> No
 
     assert context.strict_tdd is False
     assert any("No test harness" in instruction for instruction in context.instructions)
-
-
-def test_phase_token_ledger_tracks_budget_per_phase(tmp_path: Path) -> None:
-    context = build_sdd_context(tmp_path, token_budget_per_phase=1000)
-
-    ledger = phase_token_ledger(context, used_tokens=125)
-
-    assert ledger[0] == {"phase": "explore", "budget": 1000, "used": 125, "remaining": 875}
-    assert ledger[-1]["phase"] == "archive"
 
 
 def test_build_sdd_context_respects_tdd_mode_off(tmp_path: Path) -> None:

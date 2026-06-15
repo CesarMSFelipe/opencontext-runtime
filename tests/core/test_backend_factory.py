@@ -4,8 +4,6 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
 from opencontext_core.backends.compression.compact import CompactCompressionBackend
 from opencontext_core.backends.compression.null import NullCompressionBackend
 from opencontext_core.backends.compression.terse import TerseCompressionBackend

@@ -1,4 +1,5 @@
 """TDD enforcer agent — verifies red→green→refactor cycle."""
+
 from __future__ import annotations
 
 import subprocess
@@ -17,14 +18,17 @@ class TDDEnforcerAgent(BaseAgent):
 
         result = subprocess.run(
             f"{test_cmd} {test_path} --tb=short -q".split(),
-            capture_output=True, text=True,
-            cwd=self.project_root, timeout=120,
+            capture_output=True,
+            text=True,
+            cwd=self.project_root,
+            timeout=120,
         )
         passed = result.returncode == 0
         # Parse counts from pytest output
         import re
-        m = re.search(r'(\d+) passed', result.stdout)
-        f = re.search(r'(\d+) failed', result.stdout)
+
+        m = re.search(r"(\d+) passed", result.stdout)
+        f = re.search(r"(\d+) failed", result.stdout)
         return {
             "passed": passed,
             "test_count": int(m.group(1)) if m else 0,

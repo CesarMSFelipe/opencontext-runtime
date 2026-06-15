@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from opencontext_core.context.budgeting import estimate_tokens
+from opencontext_core.context.planning.expansion import ContextItem as ExpansionItem
+from opencontext_core.context.planning.expansion import ProgressiveExpander
+from opencontext_core.graph.unified import UnifiedGraph
 from opencontext_core.indexing.context_builder import ContextBuilder, ContextNode
 from opencontext_core.models.context import ContextItem, ContextPriority
 from opencontext_core.models.project import ProjectManifest
@@ -20,6 +25,7 @@ from opencontext_core.retrieval.contracts import (
     evidence_trace_id,
 )
 from opencontext_core.retrieval.retriever import ProjectRetriever
+from opencontext_core.retrieval.scoring import RetrievalWeights, compute_hybrid_score
 
 
 class RetrievalSource(Protocol):
@@ -82,6 +88,57 @@ class GraphRetrievalSource:
             builder.close()
 
 
+class VectorRetrievalSource:
+    """Optional semantic retrieval source backed by a vector store.
+
+    Embeds the query with the configured generator and returns nearest-neighbor
+    candidates from the vector store as :class:`ContextItem`s. Attached only when
+    ``config.embedding.enabled`` is true (see :meth:`RetrievalPlanner.from_config`),
+    so the default-off config leaves planner behavior unchanged.
+    """
+
+    name = "vector"
+
+    def __init__(self, store: Any, generator: Any, *, project_name: str = "") -> None:
+        self._store = store
+        self._generator = generator
+        self._project_name = project_name
+
+    def retrieve(self, query: str, limit: int) -> list[ContextItem]:
+        """Return up to ``limit`` semantic candidates for ``query``."""
+
+        if limit <= 0 or not query.strip():
+            return []
+        query_vector = _embed_query(self._generator, query)
+        if not query_vector:
+            return []
+        # NOTE: the store's ``filters`` apply to each item's inner ``metadata``
+        # dict, not the top-level ``project_name`` field, so project scoping is
+        # done post-search against the stored record instead of via a store
+        # filter (which would silently drop every match).
+        try:
+            results = self._store.search(query_vector, top_k=limit)
+        except TypeError:
+            results = self._store.search(query_vector, top_k=limit, filter=None)
+        if self._project_name:
+            results = [r for r in results if self._result_in_project(r)]
+        return [_vector_result_to_item(result, query) for result in results]
+
+    def _result_in_project(self, result: Any) -> bool:
+        """Best-effort check that a search result belongs to this project."""
+
+        getter = getattr(self._store, "get", None)
+        if getter is None:
+            return True
+        try:
+            record = getter(result.item_id)
+        except Exception:
+            return True
+        if record is None:
+            return True
+        return getattr(record, "project_name", self._project_name) == self._project_name
+
+
 class RetrievalPlanner:
     """Composes retrieval sources and returns deduplicated context candidates."""
 
@@ -90,6 +147,7 @@ class RetrievalPlanner:
         manifest_or_sources: ProjectManifest | Sequence[RetrievalSource],
         *,
         graph_db_path: str | Path | None = None,
+        memory_store: Any | None = None,
     ) -> None:
         if isinstance(manifest_or_sources, ProjectManifest):
             sources: list[RetrievalSource] = [ManifestRetrievalSource(manifest_or_sources)]
@@ -98,7 +156,44 @@ class RetrievalPlanner:
             self.sources = sources
         else:
             self.sources = list(manifest_or_sources)
+        # Retained for progressive graph expansion in plan(); a missing path
+        # means expansion is a strict no-op (manifest/graph fallback unchanged).
+        self.graph_db_path = Path(graph_db_path) if graph_db_path is not None else None
+        self._memory_store = memory_store
         self.omissions: list[str] = []
+
+    @classmethod
+    def from_config(
+        cls,
+        manifest: ProjectManifest,
+        config: Any,
+        *,
+        storage_path: str | Path,
+        memory_store: Any | None = None,
+    ) -> RetrievalPlanner:
+        """Build a planner with config-gated graph + optional semantic sources.
+
+        The vector (semantic) source is attached only when
+        ``config.embedding.enabled`` is true; default off => identical behavior
+        to the manifest(+graph) planner, so nothing changes unless vector data
+        and the flag both exist.
+        """
+
+        storage = Path(storage_path)
+        graph_db_path = storage / "context_graph.db"
+        sources: list[RetrievalSource] = [ManifestRetrievalSource(manifest)]
+        if graph_db_path.exists():
+            sources.append(GraphRetrievalSource(graph_db_path, manifest.root))
+
+        embedding = getattr(config, "embedding", None)
+        if embedding is not None and getattr(embedding, "enabled", False):
+            vector_source = _build_vector_source(config, storage, manifest.project_name)
+            if vector_source is not None:
+                sources.append(vector_source)
+
+        planner = cls(sources, memory_store=memory_store)
+        planner.graph_db_path = graph_db_path if graph_db_path.exists() else None
+        return planner
 
     def retrieve(self, query: str, top_k: int) -> list[ContextItem]:
         """Retrieve candidates from all sources without letting additive sources block fallback."""
@@ -118,12 +213,77 @@ class RetrievalPlanner:
                 continue
 
         deduped = _deduplicate(candidates)
-        return sorted(deduped, key=lambda item: (-item.score, item.tokens, item.id))[:top_k]
+        return self.rank(deduped)[:top_k]
+
+    def rank(
+        self,
+        items: list[ContextItem],
+        *,
+        memory_boost_map: dict[str, float] | None = None,
+        graph_distance_map: dict[str, int] | None = None,
+    ) -> list[ContextItem]:
+        """Order candidates by the hybrid score (semantic + provenance + graph +
+        memory failure-boost + test-affinity, minus token/staleness penalties).
+
+        ``memory_boost_map`` / ``graph_distance_map`` are optional signals the
+        runtime can supply (from the memory store and call graph); they default to
+        empty so the ranker is a pure, deterministic re-rank of the candidates.
+        """
+
+        mb = memory_boost_map or {}
+        gd = graph_distance_map or {}
+        weights = RetrievalWeights()
+
+        def _score(item: ContextItem) -> float:
+            modified = item.metadata.get("modified_at")
+            return compute_hybrid_score(
+                candidate_id=item.id,
+                candidate_source=item.source,
+                candidate_source_type=item.source_type,
+                candidate_source_trust=item.source_trust,
+                candidate_modified_at=modified if isinstance(modified, str) else None,
+                candidate_tokens=item.tokens,
+                lexical_score=item.score,
+                memory_boost_map=mb,
+                graph_distance_map=gd,
+                is_required=item.priority == ContextPriority.P0,
+                is_test=_looks_like_test(item.source),
+                weights=weights,
+            )
+
+        return sorted(items, key=lambda item: (-_score(item), item.tokens, item.id))
 
     def plan(self, request: EvidenceRequest, top_k: int) -> EvidencePlan:
-        """Return a traceable evidence plan for a converged retrieval request."""
+        """Return a traceable evidence plan for a converged retrieval request.
 
-        context_items = self.retrieve(request.query, top_k)
+        After the base manifest/graph retrieval, when a graph DB is available and
+        ``request.expansion_rounds``/``graph_radius`` allow it, candidates are
+        expanded via :class:`ProgressiveExpander` over a :class:`UnifiedGraph`
+        built from the planner's graph DB. Expansion is additive and gated: with
+        no graph DB it is a strict no-op and the existing fallback is untouched.
+        The graph distance discovered by expansion (seeds=0, neighbors=1) is fed
+        into :meth:`rank` so graph centrality actually shapes the ordering.
+        """
+
+        if top_k <= 0:
+            base_items: list[ContextItem] = []
+        else:
+            base_items = []
+            self.omissions = []
+            for source in self.sources:
+                try:
+                    base_items.extend(source.retrieve(request.query, top_k))
+                except Exception:
+                    if source.name == ManifestRetrievalSource.name:
+                        raise
+                    self.omissions.append(f"{source.name}_unavailable")
+                    continue
+            base_items = _deduplicate(base_items)
+
+        expanded_items, graph_distance_map = self._expand_with_graph(request, base_items)
+        all_items = _deduplicate([*base_items, *expanded_items])
+        context_items = self.rank(all_items, graph_distance_map=graph_distance_map or None)[:top_k]
+
         evidence = [_context_item_to_evidence(item, request.surface) for item in context_items]
         fallback_actions = _fallback_actions_for(request, evidence)
         trust_decision = _trust_decision(request, evidence, fallback_actions)
@@ -136,6 +296,80 @@ class RetrievalPlanner:
             omissions=list(self.omissions),
             source_surfaces=_source_surfaces(evidence, request.surface),
         )
+
+    def _expand_with_graph(
+        self, request: EvidenceRequest, seeds: list[ContextItem]
+    ) -> tuple[list[ContextItem], dict[str, int]]:
+        """Run ProgressiveExpander over a UnifiedGraph built from the graph DB.
+
+        Returns ``(new_neighbor_items, graph_distance_map)``. Strict no-op (empty,
+        empty) when there is no graph DB, no seeds, or expansion is disabled.
+        """
+
+        rounds = getattr(request, "expansion_rounds", 0)
+        radius = getattr(request, "graph_radius", 1)
+        if self.graph_db_path is None or not seeds or rounds <= 0:
+            return [], {}
+        if not Path(self.graph_db_path).exists():
+            return [], {}
+
+        from opencontext_core.indexing.graph_db import GraphDatabase
+        from opencontext_core.memory.agent import NullAgentMemoryStore
+
+        db = GraphDatabase(db_path=self.graph_db_path)
+        try:
+            # Map each seed to its graph node id when resolvable so the expander
+            # traverses real call edges (else fall back to the seed's own id).
+            id_to_seed: dict[str, ContextItem] = {}
+            expansion_seeds: list[ExpansionItem] = []
+            graph_distance_map: dict[str, int] = {}
+            for item in seeds:
+                node_id = _resolve_seed_node_id(db, item)
+                key = node_id or item.id
+                graph_distance_map[item.id] = 0
+                if node_id:
+                    graph_distance_map[node_id] = 0
+                id_to_seed[key] = item
+                expansion_seeds.append(ExpansionItem(id=key, source=item.source))
+
+            if not expansion_seeds:
+                return [], graph_distance_map
+
+            memory = self._memory_store or NullAgentMemoryStore()
+            graph = UnifiedGraph(graph_db=db, memory_store=memory)
+            plan_obj = _ExpansionPlan(
+                expansion_rounds=rounds,
+                graph_radius=radius,
+                include_memory=self._memory_store is not None,
+            )
+            contract = _ExpansionContract(required_symbols=[])
+            result = ProgressiveExpander().expand(
+                expansion_seeds, plan_obj, contract, graph=graph, memory=memory, round_num=1
+            )
+
+            new_items: list[ContextItem] = []
+            seen_ids = set(graph_distance_map)
+            for exp_item in result:
+                if exp_item.id in id_to_seed or exp_item.id in seen_ids:
+                    continue
+                neighbor = _expansion_item_to_context_item(db, exp_item)
+                if neighbor is None:
+                    continue
+                graph_distance_map[neighbor.id] = 1
+                seen_ids.add(exp_item.id)
+                new_items.append(neighbor)
+            return new_items, graph_distance_map
+        except Exception:
+            # Expansion is best-effort; never break the base retrieval contract.
+            self.omissions.append("graph_expansion_unavailable")
+            return [], {}
+        finally:
+            db.close()
+
+
+def _looks_like_test(source: str) -> bool:
+    base = source.rsplit("/", 1)[-1].lower()
+    return base.startswith("test_") or base.endswith("_test.py") or "/tests/" in source.lower()
 
 
 def _with_source_metadata(item: ContextItem, source_name: str) -> ContextItem:
@@ -267,3 +501,176 @@ def _deduplicate(items: list[ContextItem]) -> list[ContextItem]:
         if current is None or item.score > current.score:
             by_id[item.id] = item
     return list(by_id.values())
+
+
+# ---- progressive graph expansion helpers ------------------------------------
+
+
+@dataclass
+class _ExpansionPlan:
+    """Minimal plan shape consumed by ProgressiveExpander.expand."""
+
+    expansion_rounds: int
+    graph_radius: int
+    include_memory: bool = False
+
+
+@dataclass
+class _ExpansionContract:
+    """Minimal contract shape consumed by ProgressiveExpander.expand."""
+
+    required_symbols: list[str]
+
+
+def _resolve_seed_node_id(db: Any, item: ContextItem) -> str | None:
+    """Resolve a retrieved candidate to a stable graph node id, if it maps to one.
+
+    Tries (in order): the item id used directly as a node id; the
+    ``graph_provenance``/``retrieval`` metadata (file_path + line + node name);
+    and finally a name lookup. Returns ``None`` when nothing resolves so the
+    expander falls back to the item's own id.
+    """
+
+    conn = db._connect()
+    # 1) Item id is itself a stable node id.
+    row = conn.execute("SELECT id FROM nodes WHERE id = ?", (item.id,)).fetchone()
+    if row is not None:
+        return str(row["id"])
+
+    # 2) Graph-sourced items carry file_path/line/name provenance.
+    provenance = item.metadata.get("graph_provenance")
+    retrieval = item.metadata.get("retrieval")
+    name = None
+    file_path = None
+    line = None
+    if isinstance(retrieval, dict):
+        name = retrieval.get("node")
+    if isinstance(provenance, dict):
+        file_path = provenance.get("file_path")
+        line = provenance.get("line")
+    if name and file_path is not None and line is not None:
+        row = conn.execute(
+            "SELECT id FROM nodes WHERE name = ? AND file_path = ? AND line = ?",
+            (name, file_path, line),
+        ).fetchone()
+        if row is not None:
+            return str(row["id"])
+
+    # 3) Last resort: unique name match.
+    if name:
+        rows = conn.execute("SELECT id FROM nodes WHERE name = ?", (name,)).fetchall()
+        if len(rows) == 1:
+            return str(rows[0]["id"])
+    return None
+
+
+def _expansion_item_to_context_item(db: Any, exp_item: Any) -> ContextItem | None:
+    """Convert an expander neighbor (by node id) into an additive ContextItem."""
+
+    conn = db._connect()
+    row = conn.execute(
+        "SELECT id, name, kind, file_path, line, signature, docstring FROM nodes WHERE id = ?",
+        (exp_item.id,),
+    ).fetchone()
+    if row is None:
+        return None
+    name = row["name"] or ""
+    kind = row["kind"] or "symbol"
+    file_path = row["file_path"] or ""
+    line = row["line"] if row["line"] is not None else 0
+    signature = row["signature"] or ""
+    header = f"{kind} {name} in {file_path}:{line}"
+    content = f"{header}\n{signature}".strip() if signature else header
+    return ContextItem(
+        id=f"graph:{file_path}:{line}:{name}",
+        content=content,
+        source=f"{file_path}:{line}",
+        source_type="graph_symbol",
+        priority=ContextPriority.P2,
+        tokens=estimate_tokens(content),
+        score=0.0,
+        metadata={
+            "retrieval_source": "graph_expansion",
+            "retrieval_rationale": ["source_type:graph_expansion", f"symbol_kind:{kind}"],
+            "source_type": "graph",
+            "freshness": "unknown",
+            "graph_provenance": {"file_path": file_path, "line": line, "node_id": str(row["id"])},
+            "symbol_kind": kind,
+        },
+        trusted=True,
+        source_trust=0.7,
+    )
+
+
+# ---- semantic (vector) source helpers ---------------------------------------
+
+
+def _embed_query(generator: Any, query: str) -> list[float]:
+    """Embed a single query string, bridging the async generator API to sync.
+
+    ``RetrievalSource.retrieve`` is synchronous, so we drive the async embedder
+    on a private loop. Returns an empty list on any failure so the planner
+    treats it as "no semantic candidates" rather than raising.
+    """
+
+    try:
+        vectors = asyncio.run(generator.embed([query]))
+    except RuntimeError:
+        # Already inside a running loop: use a dedicated loop instead.
+        loop = asyncio.new_event_loop()
+        try:
+            vectors = loop.run_until_complete(generator.embed([query]))
+        finally:
+            loop.close()
+    except Exception:
+        return []
+    return list(vectors[0]) if vectors else []
+
+
+def _vector_result_to_item(result: Any, query: str) -> ContextItem:
+    """Convert a VectorSearchResult into a planner ContextItem."""
+
+    content = result.content or ""
+    item_id = result.item_id or result.source_path or "vector"
+    score = max(0.0, min(1.0, float(result.score)))
+    metadata = {
+        "retrieval_source": "vector",
+        "retrieval_rationale": ["source_type:vector", f"score:{score:.4f}"],
+        "source_type": "vector",
+        "freshness": "unknown",
+        "vector_provenance": {
+            "query": query,
+            "source_path": result.source_path,
+            "item_type": result.source_type,
+        },
+    }
+    if isinstance(getattr(result, "metadata", None), dict):
+        metadata["vector_metadata"] = result.metadata
+    return ContextItem(
+        id=str(item_id),
+        content=content,
+        source=result.source_path or str(item_id),
+        source_type="vector",
+        priority=ContextPriority.P2,
+        tokens=estimate_tokens(content) if content else 0,
+        score=score,
+        metadata=metadata,
+        trusted=False,
+        source_trust=0.6,
+    )
+
+
+def _build_vector_source(
+    config: Any, storage_path: Path, project_name: str
+) -> VectorRetrievalSource | None:
+    """Construct a VectorRetrievalSource from config, or None if unavailable."""
+
+    try:
+        from opencontext_core.embeddings.generators import create_generator
+        from opencontext_core.embeddings.stores import LocalVectorStore
+
+        generator = create_generator(config)
+        store = LocalVectorStore(storage_path)
+    except Exception:
+        return None
+    return VectorRetrievalSource(store, generator, project_name=project_name)

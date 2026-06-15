@@ -1,9 +1,10 @@
 """Tests for EfficientCompressionBackend."""
-import pytest
+
 
 
 def test_compresses_code_to_signatures():
     from opencontext_core.backends.compression.efficient import EfficientCompressionBackend
+
     backend = EfficientCompressionBackend()
     text = """```python
 def authenticate(user, password):
@@ -20,6 +21,7 @@ def authenticate(user, password):
 
 def test_applies_extended_dict_substitutions():
     from opencontext_core.backends.compression.efficient import EfficientCompressionBackend
+
     backend = EfficientCompressionBackend()
     text = "This function implements authentication functionality without configuration"
     compressed = backend.compress(text, [])
@@ -30,6 +32,7 @@ def test_applies_extended_dict_substitutions():
 def test_preserves_protected_spans():
     from opencontext_core.backends.compression.efficient import EfficientCompressionBackend
     from opencontext_core.models.context import ProtectedSpan
+
     backend = EfficientCompressionBackend()
     protected_text = "MUST_KEEP_THIS_VERBATIM"
     full_text = f"Some implementation details here. {protected_text} More function details."
@@ -41,8 +44,9 @@ def test_preserves_protected_spans():
 
 
 def test_produces_fewer_tokens_than_compact_alone():
-    from opencontext_core.backends.compression.efficient import EfficientCompressionBackend
     from opencontext_core.backends.compression.compact import CompactCompressionBackend
+    from opencontext_core.backends.compression.efficient import EfficientCompressionBackend
+
     efficient = EfficientCompressionBackend()
     compact = CompactCompressionBackend()
     text = (

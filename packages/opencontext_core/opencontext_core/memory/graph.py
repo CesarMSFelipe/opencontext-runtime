@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from opencontext_core.memory.backends import SQLiteMemoryBackend
+from opencontext_core.memory.contradictions import ContradictionDetector
 from opencontext_core.models.agent_memory import MemoryLayer, MemoryRecord
 from opencontext_core.models.evidence import EvidenceRef
 
@@ -18,9 +19,10 @@ class LocalMemoryStore:
     Implements AgentMemoryStore Protocol.
     """
 
-    def __init__(self, db_path: Path | str) -> None:
+    def __init__(self, db_path: Path | str, detector: ContradictionDetector | None = None) -> None:
         self._backend = SQLiteMemoryBackend(db_path)
         self._path = str(db_path)
+        self._detector = detector or ContradictionDetector()
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path)
@@ -34,6 +36,18 @@ class LocalMemoryStore:
         return self._backend.search(query, layer=scope, limit=limit)
 
     def write(self, memory: MemoryRecord) -> str:
+        # Contradiction-on-write: down-weight conflicting prior records sharing
+        # this key before persisting the new one (no silent duplication).
+        existing = self._backend.get_by_key(memory.key)
+        contradicted_ids = self._detector.detect(memory, existing)
+        if contradicted_ids:
+            evidence = EvidenceRef(
+                source=memory.id,
+                source_type="memory",
+                confidence=memory.confidence,
+            )
+            for contradicted_id in contradicted_ids:
+                self.contradict(contradicted_id, evidence)
         self._backend.store(memory)
         return memory.id
 
@@ -88,9 +102,7 @@ class LocalMemoryStore:
                     age_days = (now - created).days
                     # Default half_life = 90 days
                     if age_days > 90:
-                        conn.execute(
-                            "DELETE FROM memory_records WHERE id = ?", (row["id"],)
-                        )
+                        conn.execute("DELETE FROM memory_records WHERE id = ?", (row["id"],))
                         pruned += 1
                 except Exception:
                     pass
@@ -103,9 +115,7 @@ class LocalMemoryStore:
         """
         boosts: dict[str, float] = {}
         for symbol in symbols:
-            records = self._backend.search(
-                symbol, layer=MemoryLayer.FAILURE, limit=20
-            )
+            records = self._backend.search(symbol, layer=MemoryLayer.FAILURE, limit=20)
             if not records:
                 boosts[symbol] = 0.0
                 continue

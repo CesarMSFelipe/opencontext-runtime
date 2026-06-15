@@ -175,9 +175,7 @@ def _opencontext_instructions(budget: int = 3000) -> dict[str, str]:
             "Follow `context.json` TDD mode. In strict mode: failing test first, then code. "
             "Use OpenContext packs for missing context."
         ),
-        "verify": (
-            "Run focused tests first, then lint/type checks. Report commands and outcomes."
-        ),
+        "verify": ("Run focused tests first, then lint/type checks. Report commands and outcomes."),
         "archive": (
             "Persist decisions, verification evidence, and next steps to the configured "
             "artifact/memory mode."

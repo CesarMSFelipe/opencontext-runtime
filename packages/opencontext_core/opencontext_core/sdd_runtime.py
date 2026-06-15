@@ -232,24 +232,6 @@ def write_sdd_context(
     return context, [context_path, testing_path]
 
 
-def phase_token_ledger(context: SDDContext, used_tokens: int = 0) -> list[dict[str, int | str]]:
-    """Build a per-phase token ledger for SDD reporting."""
-
-    return [
-        {
-            "phase": phase,
-            "budget": context.token_budget_per_phase,
-            "used": used_tokens if phase in {"explore", "propose"} else 0,
-            "remaining": max(
-                context.token_budget_per_phase
-                - (used_tokens if phase in {"explore", "propose"} else 0),
-                0,
-            ),
-        }
-        for phase in context.phases
-    ]
-
-
 def _pyproject_mentions(root: Path, text: str) -> bool:
     path = root / "pyproject.toml"
     if not path.exists():

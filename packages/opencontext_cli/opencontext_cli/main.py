@@ -161,7 +161,6 @@ __version__ = _get_version()
 
 def main() -> None:
     """CLI entry point."""
-
     parser = _build_parser()
     _enable_shell_completion(parser)
     args = parser.parse_args()
@@ -1301,7 +1300,6 @@ def _template_config(template: str) -> dict[str, Any]:
 
 def _install(args: argparse.Namespace) -> None:
     """Quick project setup wizard with auto-detection and step-by-step progress."""
-
     from rich.prompt import Confirm
     from rich.status import Status
 
@@ -1511,6 +1509,7 @@ def _install(args: argparse.Namespace) -> None:
     console.print()
     try:
         import yaml as _yaml
+
         _cfg = _yaml.safe_load((Path(".") / "opencontext.yaml").read_text(encoding="utf-8"))
         _provider = _cfg.get("models", {}).get("default", {}).get("provider", "mock")
         if str(_provider) == "mock":
@@ -2011,13 +2010,12 @@ def _doctor(
 
 def _clean(root: str, dry_run: bool, force: bool) -> None:
     """Remove OpenContext data from a project directory."""
-
     import shutil
     from pathlib import Path
 
     project_root = Path(root).resolve()
 
-    # Phase 1: scan — find what exists
+    # scan — find what exists
     candidates: list[Path] = []
     for name in (".storage", ".opencontext", ".opencontexthints"):
         path = project_root / name
@@ -2040,7 +2038,7 @@ def _clean(root: str, dry_run: bool, force: bool) -> None:
         print("\nDry run: no files were removed.")
         return
 
-    # Phase 2: confirm (unless --force)
+    # confirm (unless --force)
     if not force:
         try:
             response = input("\nRemove all OpenContext data? [y/N]: ")
@@ -2051,7 +2049,7 @@ def _clean(root: str, dry_run: bool, force: bool) -> None:
             print("Aborted.")
             return
 
-    # Phase 3: remove
+    # remove
     for c in candidates:
         if c.is_dir():
             shutil.rmtree(c, ignore_errors=True)
@@ -2279,10 +2277,21 @@ def _checkpoint(action: str) -> None:
 
 def _mcp_serve(db_path: str) -> None:
     """Start MCP server for agent integration."""
+    from pathlib import Path
 
     from opencontext_core.mcp_stdio import MCPServer
 
-    server = MCPServer(db_path=db_path)
+    # Wire a runtime so context/impact route through the verified pipeline
+    # (gates/trust/trace). Fall back to the raw graph server if it can't be built.
+    runtime = None
+    try:
+        from opencontext_core.runtime import OpenContextRuntime
+
+        runtime = OpenContextRuntime(storage_path=Path(db_path).parent)
+    except Exception:
+        runtime = None
+
+    server = MCPServer(db_path=db_path, runtime=runtime)
     try:
         server.run()
     except KeyboardInterrupt:
@@ -2293,7 +2302,6 @@ def _mcp_serve(db_path: str) -> None:
 
 def _setup_mcp_for_opencode() -> None:
     """Configure MCP integration for OpenCode."""
-
     import json
     from pathlib import Path
 

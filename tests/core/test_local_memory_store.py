@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -21,7 +21,7 @@ def make_record(
     layer: MemoryLayer = MemoryLayer.EPISODIC,
     confidence: float = 0.9,
 ) -> MemoryRecord:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     return MemoryRecord(
         id=record_id,
         layer=layer,
@@ -69,7 +69,7 @@ def test_reinforce_increases_confidence(store: LocalMemoryStore) -> None:
     results = store.search(record.content)
     rec = next((r for r in results if r.id == "reinf-1"), None)
     # Re-fetch via key
-    from opencontext_core.memory.backends import SQLiteMemoryBackend
+
     backend = store._backend
     recs = backend.get_by_key(record.key)
     updated = next((r for r in recs if r.id == "reinf-1"), None)
@@ -104,7 +104,9 @@ def test_null_agent_memory_store_satisfies_protocol() -> None:
 
 def test_search_with_scope_filter(store: LocalMemoryStore) -> None:
     store.write(make_record(record_id="ep", layer=MemoryLayer.EPISODIC, content="graph db failure"))
-    store.write(make_record(record_id="pr", layer=MemoryLayer.PROCEDURAL, content="graph db failure"))
+    store.write(
+        make_record(record_id="pr", layer=MemoryLayer.PROCEDURAL, content="graph db failure")
+    )
     results = store.search("graph db failure", scope=MemoryLayer.EPISODIC)
     assert all(r.layer == MemoryLayer.EPISODIC for r in results)
 

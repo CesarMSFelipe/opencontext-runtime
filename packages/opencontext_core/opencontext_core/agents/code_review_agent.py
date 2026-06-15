@@ -1,4 +1,5 @@
 """Code review agent — graph analysis local, summary generation via host LLM."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -8,8 +9,8 @@ from opencontext_core.agents.base import BaseAgent
 
 class CodeReviewAgent(BaseAgent):
     """
-    Phase 1 (local): extract changed symbols, callers, test coverage from graph.
-    Phase 2 (prompt): emit structured prompt for host LLM to generate review.
+    (local): extract changed symbols, callers, test coverage from graph.
+    (prompt): emit structured prompt for host LLM to generate review.
     If provider configured → call directly. Else → return prompt for host.
     """
 
@@ -17,10 +18,10 @@ class CodeReviewAgent(BaseAgent):
         scope = self.config.scope or {}
         changed_files = scope.get("changed_files", [])
 
-        # Phase 1: local graph analysis
+        # local graph analysis
         graph_context = self._analyze_locally(changed_files)
 
-        # Phase 2: generate review prompt (host executes)
+        # generate review prompt (host executes)
         prompt = self._build_review_prompt(graph_context, changed_files)
 
         return {
@@ -41,6 +42,7 @@ class CodeReviewAgent(BaseAgent):
 
     def _build_review_prompt(self, context: dict, files: list[str]) -> str:
         from opencontext_core.backends.compression.efficient import EfficientCompressionBackend
+
         compressor = EfficientCompressionBackend()
         ctx_str = compressor.compress(str(context), [])
         files_str = "\n".join(f"- {f}" for f in files)

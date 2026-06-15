@@ -1,12 +1,13 @@
 """Smoke tests for mutation CLI commands."""
+
 import argparse
-import sys
 from unittest.mock import MagicMock, patch
 
 
 def test_import_handle_mutation():
     """Import handle_mutation without crash."""
-    from opencontext_cli.commands.mutation_cmd import handle_mutation, add_mutation_commands
+    from opencontext_cli.commands.mutation_cmd import add_mutation_commands, handle_mutation
+
     assert callable(handle_mutation)
     assert callable(add_mutation_commands)
 
@@ -43,6 +44,7 @@ def test_add_mutation_commands_registers_parser():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command")
     from opencontext_cli.commands.mutation_cmd import add_mutation_commands
+
     add_mutation_commands(subparsers)
     parsed = parser.parse_args(["mutation", "run", "--threshold", "90"])
     assert parsed.threshold == 90

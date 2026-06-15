@@ -20,6 +20,30 @@ from typing import Any
 from opencontext_core.compat import UTC
 
 
+def _coerce_success(value: Any) -> bool | None:
+    """Normalize a stored success flag (SQLite 0/1/NULL) to bool | None."""
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    return bool(value)
+
+
+def _coerce_metadata(value: Any) -> dict[str, Any]:
+    """Normalize stored metadata to a dict (DB may return a JSON string)."""
+
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            loaded = json.loads(value)
+            return loaded if isinstance(loaded, dict) else {}
+        except (json.JSONDecodeError, ValueError):
+            return {}
+    return {}
+
+
 @dataclass
 class OperationMetrics:
     """Metrics captured for a single runtime operation."""
@@ -168,8 +192,8 @@ class FeedbackCollector:
                         files_consulted=record.get("files_consulted", 0) or 0,
                         symbols_consulted=record.get("symbols_consulted", 0) or 0,
                         task_type=record.get("task_type"),
-                        success=record.get("success"),
-                        metadata=json.loads(record.get("metadata", "{}")),
+                        success=_coerce_success(record.get("success")),
+                        metadata=_coerce_metadata(record.get("metadata", "{}")),
                     )
                 )
             except (KeyError, ValueError):

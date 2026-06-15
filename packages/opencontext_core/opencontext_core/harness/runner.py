@@ -5,11 +5,23 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
+from opencontext_core.agents.sdd_orchestrator import (
+    PHASE_DEPENDENCIES,
+    WORKFLOW_TRACKS,
+)
 from opencontext_core.harness.budget import TokenBudgetEnforcer
 from opencontext_core.harness.config import HarnessConfig
-from opencontext_core.harness.gates import ConfidenceGate, PrivacyGate
+from opencontext_core.harness.gates import (
+    ApprovalRequiredForWritesGate,
+    ConfidenceGate,
+    FailingTestExistsGate,
+    NoHighRiskExportsGate,
+    PrivacyGate,
+    ProviderPolicyPassedGate,
+    SecurityScanPassedGate,
+)
 from opencontext_core.harness.models import (
     BudgetMode,
     GateStatus,
@@ -50,6 +62,11 @@ class HarnessState:
         self.decisions: list[HarnessDecision] = []
         self.trace_ids: list[str] = []
         self.warnings: list[str] = []
+        # Concrete file edits produced by the executor for ApplyPhase to write.
+        # List of {"path": ..., "content": ...} dicts (or FileEdit instances).
+        self.apply_edits: list[Any] = []
+        # Phases for which human approval has been granted (e.g. {"apply"}).
+        self.approved_phases: set[str] = set()
 
 
 class HarnessRunner:
@@ -87,39 +104,122 @@ class HarnessRunner:
             max_tokens=6000,
         )
 
+    # ------------------------------------------------------------------
+    # Phase scheduling — the single live spine.
+    #
+    # Folded from SDDOrchestrator: phase ordering, track selection and
+    # dependency resolution now live here and drive HarnessRunner.run, replacing
+    # the previous hardcoded ``phase_ids`` list. SDDOrchestrator's
+    # PHASE_DEPENDENCIES / WORKFLOW_TRACKS remain the shared DAG declaration.
+    # ------------------------------------------------------------------
+
+    # Maps a runner ``workflow`` name to a declared WORKFLOW_TRACKS track.
+    _WORKFLOW_TRACK_ALIASES: ClassVar[dict[str, str]] = {
+        "sdd": "full",
+        "full": "full",
+        "standard": "standard",
+        "quick": "quick",
+    }
+
+    @staticmethod
+    def resolve_dag(phases: list[str], deps: dict[str, list[str]]) -> list[str]:
+        """Topologically order ``phases`` by ``deps`` (Kahn's algorithm).
+
+        Only in-set dependencies are considered. A phase whose dependencies
+        cannot all be satisfied within ``phases`` (e.g. a dep absent from the
+        set, or a cycle) is dropped rather than run out of order. Ordering is
+        deterministic: ready phases are emitted in their declared ``phases``
+        order.
+        """
+        phase_set = set(phases)
+        # In-set dependency map.
+        in_deps: dict[str, set[str]] = {
+            p: {d for d in deps.get(p, []) if d in phase_set} for p in phases
+        }
+        ordered: list[str] = []
+        completed: set[str] = set()
+        # Iterate to a fixpoint, emitting newly-ready phases in declared order.
+        progressed = True
+        while progressed:
+            progressed = False
+            for p in phases:
+                if p in completed:
+                    continue
+                if in_deps[p] <= completed:
+                    ordered.append(p)
+                    completed.add(p)
+                    progressed = True
+        # Anything still unresolved had an unsatisfiable dependency → drop it.
+        return ordered
+
+    def schedule_phases(self, workflow: str) -> list[str]:
+        """Resolve the phase execution order for ``workflow`` via the DAG.
+
+        Track selection: known track aliases (``sdd``→full, ``standard``,
+        ``quick``) use that track's declared phases + deps. Custom runner
+        workflows (``explore-only``, ``apply-only``, and the default) select a
+        phase subset and resolve it through the shared PHASE_DEPENDENCIES DAG.
+        """
+        track_name = self._WORKFLOW_TRACK_ALIASES.get(workflow)
+        if track_name is not None:
+            track = WORKFLOW_TRACKS[track_name]
+            phases = track["phases"]
+            deps = track["deps"]
+            assert isinstance(phases, list)
+            assert isinstance(deps, dict)
+            return self.resolve_dag(list(phases), dict(deps))
+
+        # Custom workflows: pick a subset, resolve via the canonical DAG.
+        if workflow == "explore-only":
+            subset = ["explore"]
+        elif workflow == "apply-only":
+            subset = ["apply", "verify", "archive"]
+        else:
+            subset = ["explore", "archive"]
+
+        # Restrict PHASE_DEPENDENCIES to the subset so ordering stays DAG-driven.
+        # ``apply-only`` intentionally omits apply's upstream deps; dropping
+        # out-of-subset deps keeps the requested phases runnable while
+        # resolve_dag still enforces the in-subset ordering.
+        deps_subset = {p: [d for d in PHASE_DEPENDENCIES.get(p, []) if d in subset] for p in subset}
+        return self.resolve_dag(subset, deps_subset)
+
     def run(
         self,
         workflow: str,
         task: str,
         budget_mode: BudgetMode = BudgetMode.WARN,
+        *,
+        apply_edits: list[Any] | None = None,
+        approved_phases: set[str] | None = None,
     ) -> HarnessRunResult:
-        """Execute a full workflow with all phases."""
+        """Execute a full workflow with all phases.
+
+        Args:
+            workflow: Workflow name (sdd / explore-only / apply-only / ...).
+            task: Task / change name.
+            budget_mode: Token budget enforcement mode.
+            apply_edits: Concrete file edits the executor produced, handed to
+                ApplyPhase. Each item is a ``{"path", "content"}`` dict.
+            approved_phases: Phases for which human approval has been granted.
+                Used by the ``approval_required_for_writes`` pre-gate.
+        """
         state = self.create_run(workflow, task)
+        if apply_edits:
+            state.apply_edits = list(apply_edits)
+        state.approved_phases = set(approved_phases or set())
         results: list[PhaseResult] = []
         final_status = GateStatus.PASSED
+        # A hard failure (e.g. an apply pre-gate blocking a write) must not be
+        # downgraded to WARNING by subsequent non-strict phase outcomes.
+        hard_failed = False
 
         # Warn if knowledge graph has not been indexed (ExplorePhase depends on it)
         self._warn_if_kg_not_indexed(state)
 
-        # Determine which phases to run based on workflow
-        if workflow == "sdd":
-            phase_ids = [
-                "explore",
-                "propose",
-                "spec",
-                "design",
-                "tasks",
-                "apply",
-                "verify",
-                "review",
-                "archive",
-            ]
-        elif workflow == "explore-only":
-            phase_ids = ["explore"]
-        elif workflow == "apply-only":
-            phase_ids = ["apply", "verify", "archive"]
-        else:
-            phase_ids = ["explore", "archive"]
+        # Single spine: resolve the phases to run through the folded DAG/track
+        # scheduler (PHASE_DEPENDENCIES / WORKFLOW_TRACKS), not a hardcoded list.
+        phase_ids = self.schedule_phases(workflow)
 
         for phase_id in phase_ids:
             # Evaluate ConfidenceGate before running the phase
@@ -163,6 +263,20 @@ class HarnessRunner:
                     if final_status == GateStatus.FAILED:
                         break
 
+            # Apply PRE-gates: human-approval + TDD failing-test ordering MUST be
+            # evaluated and able to BLOCK before ApplyPhase touches any file.
+            if phase_id == "apply":
+                pre_gates, blocked = self._evaluate_apply_pre_gates(state, phase_config)
+                state.gates.extend(pre_gates)
+                if blocked:
+                    for g in pre_gates:
+                        if g.status == GateStatus.FAILED:
+                            state.warnings.append(f"apply: blocked by pre-gate '{g.id}'")
+                    final_status = GateStatus.FAILED
+                    hard_failed = True
+                    # Do NOT build/run ApplyPhase — no filesystem mutation occurs.
+                    continue
+
             phase_obj = self._build_phase(phase_id, budget_mode)
             if phase_obj is None:
                 continue
@@ -193,7 +307,18 @@ class HarnessRunner:
             if result.trace_id:
                 state.trace_ids.append(result.trace_id)
 
-            if result.status in (GateStatus.FAILED, GateStatus.WARNING):
+            # Config-driven gate dispatch: run the per-phase declared gates that
+            # the phase itself did not already emit (e.g. security_scan_passed,
+            # no_high_risk_exports, provider_policy_passed).
+            dispatched = self._dispatch_declared_gates(state, phase_id, phase_config, result)
+            state.gates.extend(dispatched)
+            if any(g.status == GateStatus.FAILED for g in dispatched):
+                if budget_mode is BudgetMode.STRICT:
+                    final_status = GateStatus.FAILED
+                elif not hard_failed:
+                    final_status = GateStatus.WARNING
+
+            if result.status in (GateStatus.FAILED, GateStatus.WARNING) and not hard_failed:
                 final_status = GateStatus.WARNING
             if result.status == GateStatus.FAILED and budget_mode is BudgetMode.STRICT:
                 final_status = GateStatus.FAILED
@@ -214,6 +339,173 @@ class HarnessRunner:
 
         self.persist_run(state, run_result)
         return run_result
+
+    def _harness_governance(self) -> tuple[str, bool]:
+        """Resolve effective (tdd_mode, approval_required_for_writes).
+
+        Prefers the harness dataclass config; when those are at their defaults,
+        falls back to the top-level ``opencontext.yaml`` ``harness:`` section so
+        TDD/approval can be configured from the main config too. Decoupled from
+        token ``budget_mode``.
+        """
+        tdd_mode = getattr(self.config, "tdd_mode", "ask")
+        approval_required = bool(getattr(self.config, "approval_required_for_writes", False))
+
+        # Merge from the top-level config only to fill in non-overridden defaults.
+        if tdd_mode == "ask" and not approval_required:
+            try:
+                from opencontext_core.config import load_config_or_defaults
+
+                cfg = load_config_or_defaults(self.root / "opencontext.yaml")
+                harness_cfg = getattr(cfg, "harness", None)
+                if harness_cfg is not None:
+                    if tdd_mode == "ask":
+                        tdd_mode = getattr(harness_cfg, "tdd_mode", tdd_mode)
+                    if not approval_required:
+                        approval_required = bool(
+                            getattr(harness_cfg, "approval_required_for_writes", False)
+                        )
+            except Exception:
+                pass  # config is optional; fall back to harness-config defaults
+
+        return tdd_mode, approval_required
+
+    def _evaluate_apply_pre_gates(
+        self, state: HarnessState, phase_config: Any
+    ) -> tuple[list[PhaseGate], bool]:
+        """Evaluate the apply PRE-gates (approval + TDD) before any file edit.
+
+        Returns the list of evaluated pre-gates and whether the apply phase MUST
+        be blocked (any pre-gate FAILED). Driven by config, not budget_mode.
+        """
+        gates: list[PhaseGate] = []
+        blocked = False
+        declared = set(getattr(phase_config, "gates", []) or [])
+        tdd_mode, approval_required = self._harness_governance()
+
+        # Human-approval pre-gate. Runs when declared OR when approval is required.
+        if "approval_required_for_writes" in declared or approval_required:
+            approved = "apply" in getattr(state, "approved_phases", set())
+            gate = ApprovalRequiredForWritesGate().evaluate(
+                approval_required=approval_required, approved=approved
+            )
+            gates.append(gate)
+            if gate.status == GateStatus.FAILED:
+                blocked = True
+
+        # TDD failing-test pre-gate (red before green). Only blocks in strict mode.
+        if "failing_test_exists" in declared or tdd_mode == "strict":
+            gate = FailingTestExistsGate().evaluate(state.task, state.root)
+            # Only strict mode enforces blocking; otherwise downgrade to WARNING.
+            if tdd_mode == "strict":
+                gates.append(gate)
+                if gate.status == GateStatus.FAILED:
+                    blocked = True
+            elif tdd_mode == "off":
+                # tdd off: do not gate apply on tests at all.
+                pass
+            else:  # "ask": surface as a non-blocking signal
+                if gate.status == GateStatus.FAILED:
+                    gates.append(
+                        PhaseGate(
+                            id=gate.id,
+                            phase="apply",
+                            status=GateStatus.WARNING,
+                            message=gate.message,
+                            metadata=gate.metadata,
+                        )
+                    )
+                else:
+                    gates.append(gate)
+
+        return gates, blocked
+
+    def _dispatch_declared_gates(
+        self,
+        state: HarnessState,
+        phase_id: str,
+        phase_config: Any,
+        result: PhaseResult,
+    ) -> list[PhaseGate]:
+        """Run the config-declared gates for a phase via the existing gate classes.
+
+        Skips gates already emitted by the phase or handled as apply pre-gates
+        (approval/TDD), and gates that have no dispatch binding here.
+        """
+        if phase_config is None:
+            return []
+        declared = list(getattr(phase_config, "gates", []) or [])
+        if not declared:
+            return []
+
+        already = {g.id for g in result.gates}
+        # Approval + TDD are dispatched as apply PRE-gates, never here.
+        skip = {"approval_required_for_writes", "failing_test_exists"}
+
+        dispatched: list[PhaseGate] = []
+        for gate_id in declared:
+            if gate_id in already or gate_id in skip:
+                continue
+            gate = self._dispatch_one_gate(gate_id, phase_id, state, result)
+            if gate is not None:
+                dispatched.append(gate)
+        return dispatched
+
+    def _dispatch_one_gate(
+        self,
+        gate_id: str,
+        phase_id: str,
+        state: HarnessState,
+        result: PhaseResult,
+    ) -> PhaseGate | None:
+        """Invoke a single declared gate class with state-derived inputs.
+
+        Inputs are derived deterministically from run state. Gates that require
+        external context default to safe, passing inputs (no external provider,
+        no confidential export) so a declared-but-uninstrumented gate does not
+        fabricate a failure. Returns None for gate ids with no binding here.
+        """
+        operation = self._operation_for_phase(phase_id)
+        provider = operation.get("provider", "local")
+        is_external = provider not in ("local", "opencontext-kg", "pytest")
+        classification = operation.get("data_classification", "internal")
+        has_confidential = classification in ("confidential", "secret", "regulated")
+
+        if gate_id == "security_scan_passed":
+            findings = self._scan_phase_artifacts(state, result)
+            return SecurityScanPassedGate().evaluate(findings)
+        if gate_id == "no_high_risk_exports":
+            # No external send happens on the local path → no high-risk export.
+            return NoHighRiskExportsGate().evaluate(
+                has_confidential=has_confidential, is_external_provider=is_external
+            )
+        if gate_id == "provider_policy_passed":
+            items_count = len(result.artifacts)
+            return ProviderPolicyPassedGate().evaluate(
+                provider=provider, is_external=is_external, items_count=items_count
+            )
+        # Unknown / unbound declared gate: do not fabricate a result.
+        return None
+
+    @staticmethod
+    def _scan_phase_artifacts(state: HarnessState, result: PhaseResult) -> list[str]:
+        """Scan this phase's artifact files for secret findings (best-effort)."""
+        try:
+            from opencontext_core.safety.secrets import SecretScanner
+
+            scanner = SecretScanner()
+        except Exception:
+            return []
+        findings: list[str] = []
+        for artifact in result.artifacts:
+            path = Path(artifact.path)
+            try:
+                if path.exists() and path.is_file() and path.stat().st_size < 200_000:
+                    hits = scanner.scan(path.read_text(encoding="utf-8", errors="ignore"))
+                    findings.extend(str(h) for h in hits)
+            except Exception:
+                continue
+        return findings
 
     def _build_phase(self, phase_id: str, budget_mode: BudgetMode) -> HarnessPhase | None:
         """Build a phase instance by ID."""

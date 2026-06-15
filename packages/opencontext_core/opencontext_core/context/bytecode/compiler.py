@@ -47,18 +47,22 @@ class AICXCompiler:
 
         # REQ instruction
         q_key = _short(plan.request.query, "q")
-        instructions.append(BytecodeInstruction(
-            op=OpCode.REQUEST,
-            args=[
-                f"id:{request_id}",
-                f"surface:{plan.request.surface.value}",
-                f"risk:{plan.request.risk_level}",
-                f"budget:{plan.request.max_tokens}",
-                f"q:{q_key}",
-            ],
-        ))
+        instructions.append(
+            BytecodeInstruction(
+                op=OpCode.REQUEST,
+                args=[
+                    f"id:{request_id}",
+                    f"surface:{plan.request.surface.value}",
+                    f"risk:{plan.request.risk_level}",
+                    f"budget:{plan.request.max_tokens}",
+                    f"q:{q_key}",
+                ],
+            )
+        )
 
-        # EVID instructions — reference only, no content inlined
+        # EVID instructions — references by default. INLINE/protected items inline
+        # their content into the dictionary so the roundtrip is lossless for the
+        # last-mile evidence that must survive to the LLM boundary.
         for item in plan.evidence:
             src_key = _short(item.source, "s")
             mode = ExpandMode.INLINE if item.protected else default_expand_mode
@@ -71,42 +75,52 @@ class AICXCompiler:
                 f"tok:{item.tokens}",
                 f"mode:{mode.value}",
             ]
+            if mode is ExpandMode.INLINE and item.content:
+                args.append(f"c:{_short(item.content, 'c')}")
             if item.protected:
                 args.append("protected:1")
             instructions.append(BytecodeInstruction(op=OpCode.EVIDENCE, args=args))
 
         # GATE instructions
         for gate_name in _infer_gates(plan):
-            instructions.append(BytecodeInstruction(
-                op=OpCode.GATE,
-                args=[gate_name],
-            ))
+            instructions.append(
+                BytecodeInstruction(
+                    op=OpCode.GATE,
+                    args=[gate_name],
+                )
+            )
 
         # OMIT instructions
         for omission in plan.omissions:
             omit_key = _short(omission, "o")
-            instructions.append(BytecodeInstruction(
-                op=OpCode.OMIT,
-                args=[f"reason:{omit_key}"],
-            ))
+            instructions.append(
+                BytecodeInstruction(
+                    op=OpCode.OMIT,
+                    args=[f"reason:{omit_key}"],
+                )
+            )
 
         # FALLBACK instructions
         for action in plan.fallback_actions:
             fb_key = _short(action, "f")
-            instructions.append(BytecodeInstruction(
-                op=OpCode.FALLBACK,
-                args=[f"action:{fb_key}"],
-            ))
+            instructions.append(
+                BytecodeInstruction(
+                    op=OpCode.FALLBACK,
+                    args=[f"action:{fb_key}"],
+                )
+            )
 
         # TRUST instruction
         trust_key = _short(plan.trust_decision.reason, "t")
-        instructions.append(BytecodeInstruction(
-            op=OpCode.TRUST,
-            args=[
-                f"status:{plan.trust_decision.status}",
-                f"why:{trust_key}",
-            ],
-        ))
+        instructions.append(
+            BytecodeInstruction(
+                op=OpCode.TRUST,
+                args=[
+                    f"status:{plan.trust_decision.status}",
+                    f"why:{trust_key}",
+                ],
+            )
+        )
 
         checksum = _compute_checksum(VERSION, dictionary, instructions)
 

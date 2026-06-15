@@ -6,8 +6,6 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import pytest
-
 from opencontext_core.memory.agent import NullAgentMemoryStore
 from opencontext_core.memory.graph import LocalMemoryStore
 from opencontext_core.memory.harvester import MemoryHarvester

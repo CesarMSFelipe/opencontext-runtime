@@ -1,8 +1,7 @@
 """Tests for opencontext_core.exceptions."""
 
-import pytest
 
-from opencontext_core.exceptions import BackendUnavailableError, BackendNotConfiguredError
+from opencontext_core.exceptions import BackendNotConfiguredError, BackendUnavailableError
 
 
 def test_backend_unavailable_instantiates():

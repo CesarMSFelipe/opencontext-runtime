@@ -59,12 +59,35 @@ class ParsedSymbol:
 
 @dataclass
 class ParsedEdge:
-    """A relationship edge extracted from source code."""
+    """A relationship edge extracted from source code.
+
+    ``target_name`` is the full call target text (e.g. ``self._step``, ``b.helper``,
+    ``foo``). ``attr`` and ``receiver`` decompose a dotted target so the resolver can
+    bind method/attribute calls: for ``b.helper`` -> attr=``helper`` receiver=``b``;
+    for a bare ``foo`` -> attr=``foo`` receiver=``None``.
+    """
 
     source_name: str
     target_name: str
     kind: str
     call_site_line: int | None
+    attr: str | None = None
+    receiver: str | None = None
+
+
+@dataclass
+class ParseFileResult:
+    """Outcome of parsing a single file, including parse-mode provenance."""
+
+    symbols: list[ParsedSymbol]
+    edges: list[ParsedEdge]
+    mode: str  # "tree_sitter" | "regex" | "none"
+    language: str | None
+
+    @property
+    def degraded(self) -> bool:
+        """True when the file did not get a precise tree-sitter parse."""
+        return self.mode != "tree_sitter"
 
 
 class TreeSitterParser:
@@ -154,16 +177,31 @@ class TreeSitterParser:
             Tuple of (symbols, edges).
         """
 
+        result = self.parse_file_status(file_path, content)
+        return result.symbols, result.edges
+
+    def parse_file_status(self, file_path: str, content: str) -> ParseFileResult:
+        """Parse a file, returning symbols, edges, and the parse-mode provenance.
+
+        Distinguishes a precise tree-sitter parse from a degraded regex fallback so
+        callers can surface a per-file parse status instead of silently presenting
+        regex output (which emits zero edges) as a fully-resolved index.
+        """
+
         language = self.detect_language(file_path)
         if language is None:
-            return [], []
+            return ParseFileResult(symbols=[], edges=[], mode="none", language=None)
 
         # Use tree-sitter if available and language grammar loaded
         if self._available and language in self._languages:
-            return self._parse_with_tree_sitter(file_path, content, language)
+            symbols, edges = self._parse_with_tree_sitter(file_path, content, language)
+            return ParseFileResult(
+                symbols=symbols, edges=edges, mode="tree_sitter", language=language
+            )
 
-        # Fallback to regex-based extraction for Python/PHP
-        return self._parse_with_fallback(file_path, content, language)
+        # No loaded grammar -> degraded regex fallback (symbols only, zero edges).
+        symbols, edges = self._parse_with_fallback(file_path, content, language)
+        return ParseFileResult(symbols=symbols, edges=edges, mode="regex", language=language)
 
     def _parse_with_tree_sitter(
         self, file_path: str, content: str, language: str
@@ -509,10 +547,61 @@ class TreeSitterParser:
     def _extract_php(
         self, file_path: str, content: str, root: Any
     ) -> tuple[list[ParsedSymbol], list[ParsedEdge]]:
-        """Extract symbols from PHP AST."""
+        """Extract symbols from PHP AST via tree-sitter (not hard-routed to regex)."""
 
-        # PHP parsing with tree-sitter is complex; fallback to regex for now
-        return self._parse_with_fallback(file_path, content, "php")
+        symbols: list[ParsedSymbol] = []
+        edges: list[ParsedEdge] = []
+        current_class: str | None = None
+
+        def walk(node: Any) -> None:
+            nonlocal current_class
+
+            if node.type in ("class_declaration", "interface_declaration", "trait_declaration"):
+                name_node = node.child_by_field_name("name")
+                if name_node:
+                    current_class = name_node.text.decode("utf-8")
+                    symbols.append(
+                        ParsedSymbol(
+                            name=current_class,
+                            kind="class",
+                            line=node.start_point[0] + 1,
+                            column=node.start_point[1],
+                            end_line=node.end_point[0] + 1,
+                            container=None,
+                            docstring=None,
+                            signature=None,
+                            is_exported=True,
+                        )
+                    )
+
+            elif node.type in ("function_definition", "method_declaration"):
+                name_node = node.child_by_field_name("name")
+                if name_node:
+                    func_name = name_node.text.decode("utf-8")
+                    in_class = node.type == "method_declaration"
+                    symbols.append(
+                        ParsedSymbol(
+                            name=func_name,
+                            kind="method" if in_class else "function",
+                            line=node.start_point[0] + 1,
+                            column=node.start_point[1],
+                            end_line=node.end_point[0] + 1,
+                            container=current_class if in_class else None,
+                            docstring=None,
+                            signature=None,
+                            is_exported=True,
+                        )
+                    )
+                    edges.extend(self._extract_calls(node, func_name, file_path))
+
+            for child in node.children:
+                walk(child)
+
+            if node.type in ("class_declaration", "interface_declaration", "trait_declaration"):
+                current_class = None
+
+        walk(root)
+        return symbols, edges
 
     def _extract_docstring(self, node: Any, content: str) -> str | None:
         """Extract docstring from a node."""
@@ -550,12 +639,31 @@ class TreeSitterParser:
                 func_node = child.child_by_field_name("function")
                 if func_node:
                     target = func_node.text.decode("utf-8")
+                    receiver: str | None = None
+                    attr = target
+                    # Decompose attribute/method targets: receiver.attr(...)
+                    if func_node.type in ("attribute", "member_expression", "field_expression"):
+                        obj_node = func_node.child_by_field_name(
+                            "object"
+                        ) or func_node.child_by_field_name("argument")
+                        attr_node = func_node.child_by_field_name(
+                            "attribute"
+                        ) or func_node.child_by_field_name("field")
+                        if attr_node is not None:
+                            attr = attr_node.text.decode("utf-8")
+                        if obj_node is not None:
+                            receiver = obj_node.text.decode("utf-8")
+                    if "." in attr and receiver is None:
+                        # Fallback decomposition from the raw dotted text.
+                        receiver, attr = attr.rsplit(".", 1)
                     edges.append(
                         ParsedEdge(
                             source_name=caller_name,
                             target_name=target,
                             kind="calls",
                             call_site_line=child.start_point[0] + 1,
+                            attr=attr,
+                            receiver=receiver,
                         )
                     )
 

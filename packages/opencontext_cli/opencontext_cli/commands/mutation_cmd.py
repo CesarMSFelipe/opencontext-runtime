@@ -1,4 +1,5 @@
 """Mutation analysis CLI commands."""
+
 from __future__ import annotations
 
 import argparse
@@ -27,6 +28,7 @@ def handle_mutation(args: argparse.Namespace, config=None) -> int:
 def _handle_mutation_run(args: argparse.Namespace) -> int:
     try:
         from opencontext_core.mutation.runner import MutationRunner
+
         root = Path(getattr(args, "root", "."))
         threshold = getattr(args, "threshold", 80)
         scope = getattr(args, "scope", "changed")

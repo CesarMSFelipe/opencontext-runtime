@@ -203,19 +203,20 @@ class TestProviderPolicyPassedGate:
 
 
 class TestApprovalRequiredForWritesGate:
-    def test_fails_strict_without_approval(self) -> None:
+    # Decoupled from budget_mode: gating is driven by approval_required + approved.
+    def test_fails_when_required_without_approval(self) -> None:
         gate = ApprovalRequiredForWritesGate()
-        result = gate.evaluate(budget_mode="strict", approved=False)
+        result = gate.evaluate(approval_required=True, approved=False)
         assert result.status == GateStatus.FAILED
 
-    def test_passes_strict_with_approval(self) -> None:
+    def test_passes_when_required_with_approval(self) -> None:
         gate = ApprovalRequiredForWritesGate()
-        result = gate.evaluate(budget_mode="strict", approved=True)
+        result = gate.evaluate(approval_required=True, approved=True)
         assert result.status == GateStatus.PASSED
 
-    def test_passes_non_strict_without_approval(self) -> None:
+    def test_passes_when_not_required(self) -> None:
         gate = ApprovalRequiredForWritesGate()
-        result = gate.evaluate(budget_mode="warn", approved=False)
+        result = gate.evaluate(approval_required=False, approved=False)
         assert result.status == GateStatus.PASSED
 
 

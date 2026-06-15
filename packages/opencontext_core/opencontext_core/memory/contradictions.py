@@ -11,9 +11,7 @@ class ContradictionDetector:
     Heuristic: same key + different content + confidence_diff > 0.3.
     """
 
-    def detect(
-        self, new_record: MemoryRecord, existing: list[MemoryRecord]
-    ) -> list[str]:
+    def detect(self, new_record: MemoryRecord, existing: list[MemoryRecord]) -> list[str]:
         """Returns IDs of contradicted records."""
         if not existing:
             return []

@@ -81,7 +81,7 @@ class TestContextRelevance:
 
 class TestSDDCompliance:
     def test_phase5_artifacts_exist(self) -> None:
-        """Phase 5 SDD artifacts should all be present in archive or changes dir."""
+        """SDD artifacts should all be present in archive or changes dir."""
         change_dir = PROJECT_ROOT / "openspec" / "changes" / "competitive-phase5"
         if not (change_dir / "proposal.md").exists():
             pytest.skip("competitive-phase5 artifacts not available")
