@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from rich.console import Console
@@ -13,6 +14,7 @@ from rich.text import Text
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
 from opencontext_core.agent_installer import AgentInstaller
 from opencontext_core.agent_installer import AgentTarget as GlobalAgentTarget
+from opencontext_core.configurator import KNOWN_AGENTS, Configurator
 from opencontext_core.runtime import OpenContextRuntime
 from opencontext_core.sdd_runtime import write_sdd_context
 from opencontext_core.setup.plan import InstallAction, build_plan
@@ -72,14 +74,60 @@ def _check_first_run() -> bool:
 
 
 def add_setup_parser(subparsers: Any) -> None:
-    """Add setup command parser."""
+    """Add setup command parser.
+
+    ``setup`` is the headline "configure my agent(s)" action. Given agent ids
+    (or ``--all``, or nothing — in which case installed agents are detected) it
+    writes each agent's MCP entry and managed instructions block via
+    ``Configurator``. The preset/profile/component flags below drive the older
+    plan-based project installer and remain available for back-compat.
+    """
     setup_parser = subparsers.add_parser(
-        "setup", help="Interactive or automated setup with presets and profiles."
+        "setup",
+        help="Configure your AI agent(s) — MCP + instructions. Use --all or name agents.",
+        description=(
+            "Configure existing AI coding agents to use OpenContext.\n\n"
+            "  opencontext setup                 Configure every detected agent\n"
+            "  opencontext setup claude-code      Configure one agent\n"
+            "  opencontext setup --all            Configure every known agent\n"
+            "  opencontext setup --scope local    Write project-local config (default)\n"
+            "  opencontext setup --dry-run        Show what would be written\n\n"
+            f"Known agents: {', '.join(KNOWN_AGENTS)}"
+        ),
+    )
+    setup_parser.add_argument(
+        "agents",
+        nargs="*",
+        metavar="AGENT",
+        help="Agent id(s) to configure (e.g. claude-code opencode codex).",
+    )
+    setup_parser.add_argument(
+        "--all",
+        dest="all_agents",
+        action="store_true",
+        help="Configure every known agent.",
+    )
+    setup_parser.add_argument(
+        "--scope",
+        choices=["global", "local"],
+        default="local",
+        help="Where instructions are written: local (project) or global (home).",
+    )
+    setup_parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Skip confirmation prompts.",
+    )
+    setup_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit the configuration report as JSON.",
     )
     setup_parser.add_argument(
         "--preset",
         choices=["full", "context-essential", "enterprise", "air-gapped", "context-first"],
-        help="Preset to install (skips interactive selection).",
+        help="Preset to install (legacy plan-based installer).",
     )
     setup_parser.add_argument(
         "--profile",
@@ -148,10 +196,21 @@ def add_setup_parser(subparsers: Any) -> None:
 
 
 def handle_setup(args: Any) -> None:
-    """Handle setup command."""
+    """Handle setup command.
+
+    Routes to one of two flows. When the invocation looks like an
+    agent-configuration request (positional agents, ``--all``, or no
+    preset/profile/component selectors) it runs the ``Configurator`` flow.
+    Otherwise it falls back to the legacy plan-based installer.
+    """
     preset = getattr(args, "preset", None)
     profile = getattr(args, "profile", None)
     components = getattr(args, "components", None)
+
+    if _is_configurator_request(args):
+        _run_configurator(args)
+        return
+
     dry_run = getattr(args, "dry_run", False)
     non_interactive = getattr(args, "non_interactive", False)
     agents = _parse_agents(getattr(args, "agent", None))
@@ -193,6 +252,149 @@ def handle_setup(args: Any) -> None:
             execution_mode,
             artifact_mode,
         )
+
+
+def _is_configurator_request(args: Any) -> bool:
+    """Decide whether to use the agent ``Configurator`` flow.
+
+    The legacy plan-based installer owns any invocation that selects a preset,
+    profile, or explicit component. Everything else — naming agents, ``--all``,
+    or a bare ``opencontext setup`` — is an agent-configuration request.
+    """
+    if getattr(args, "preset", None) or getattr(args, "profile", None):
+        return False
+    if getattr(args, "components", None):
+        return False
+    return True
+
+
+def _run_configurator(args: Any) -> None:
+    """Configure agents via ``Configurator`` and print a clean report."""
+    # Deferred import avoids a circular import at module load (main imports us).
+    from opencontext_cli.main import _resolve_flag
+
+    root = getattr(args, "root", ".")
+    scope = getattr(args, "scope", "local")
+    dry_run = _resolve_flag(getattr(args, "dry_run", False), "OPENCONTEXT_DRY_RUN")
+    json_output = _resolve_flag(getattr(args, "json", False), "OPENCONTEXT_JSON")
+    requested = _parse_setup_agents(getattr(args, "agents", None))
+    want_all = getattr(args, "all_agents", False)
+
+    configurator = Configurator(project_root=root)
+
+    if want_all:
+        agents = list(KNOWN_AGENTS)
+        source = "all"
+    elif requested:
+        agents = requested
+        source = "named"
+    else:
+        agents = configurator.detect_installed()
+        source = "detected"
+
+    known = set(KNOWN_AGENTS)
+    unknown = [a for a in agents if a not in known]
+    valid = [a for a in agents if a in known]
+
+    if not valid:
+        _report_no_agents(source, unknown, json_output)
+        return
+
+    if dry_run:
+        _report_dry_run(valid, unknown, scope, root, json_output)
+        return
+
+    yes = _resolve_flag(getattr(args, "yes", False), "OPENCONTEXT_YES")
+    if not _confirm_configure(valid, scope, yes=yes, json_output=json_output):
+        console.print("[yellow]Setup cancelled.[/]")
+        return
+
+    report = configurator.configure(valid, scope=scope)
+    if unknown:
+        report["skipped"] = unknown
+    _report_configured(report, unknown, json_output)
+
+
+def _confirm_configure(agents: list[str], scope: str, *, yes: bool, json_output: bool) -> bool:
+    """Confirm before writing, unless --yes/--json or a non-interactive stdin."""
+    import sys
+
+    if yes or json_output or not sys.stdin.isatty():
+        return True
+    console.print(f"About to configure: [bold]{', '.join(agents)}[/] (scope: {scope})")
+    return bool(Confirm.ask("Proceed?", default=True))
+
+
+def _parse_setup_agents(values: list[str] | None) -> list[str]:
+    """Normalize positional/comma-separated agent ids, de-duplicating order."""
+    if not values:
+        return []
+    agents: list[str] = []
+    for raw in values:
+        for item in raw.split(","):
+            normalized = item.strip()
+            if normalized and normalized not in agents:
+                agents.append(normalized)
+    return agents
+
+
+def _report_no_agents(source: str, unknown: list[str], json_output: bool) -> None:
+    if json_output:
+        print(json.dumps({"status": "no_agents", "agents_configured": 0, "skipped": unknown}))
+        return
+    if unknown:
+        console.print(f"[yellow]Unknown agent(s), skipped:[/] {', '.join(unknown)}")
+    elif source == "detected":
+        console.print("[yellow]No installed agents detected.[/]")
+    else:
+        console.print("[yellow]No agents to configure.[/]")
+    console.print(f"  Name an agent or use [cyan]--all[/]. Known agents: {', '.join(KNOWN_AGENTS)}")
+
+
+def _report_dry_run(
+    agents: list[str], unknown: list[str], scope: str, root: str, json_output: bool
+) -> None:
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "status": "dry_run",
+                    "scope": scope,
+                    "project": str(root),
+                    "would_configure": agents,
+                    "skipped": unknown,
+                },
+                indent=2,
+            )
+        )
+        return
+    console.print("[bold yellow]Dry run — no changes made.[/]")
+    console.print(f"  Scope: [cyan]{scope}[/]")
+    console.print("  Would configure:")
+    for agent in agents:
+        console.print(f"    • {agent}")
+    for agent in unknown:
+        console.print(f"    [dim]- {agent} (unknown, skipped)[/]")
+
+
+def _report_configured(report: dict[str, Any], unknown: list[str], json_output: bool) -> None:
+    if json_output:
+        print(json.dumps(report, indent=2))
+        return
+    count = report.get("agents_configured", 0)
+    console.print(
+        Panel.fit(
+            f"[bold green]Configured {count} agent(s)[/bold green]   "
+            f"scope: [cyan]{report.get('scope')}[/]",
+            border_style="green",
+        )
+    )
+    for result in report.get("results", []):
+        console.print(f"  [bold]{result['agent']}[/]")
+        for file_path in result.get("files", []):
+            console.print(f"    [dim]{file_path}[/]")
+    for agent in unknown:
+        console.print(f"  [yellow]- {agent} (unknown, skipped)[/]")
 
 
 def _run_interactive(

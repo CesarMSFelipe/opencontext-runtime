@@ -259,7 +259,7 @@ def _notify_outdated(args: argparse.Namespace) -> None:
     """
     if not sys.stdout.isatty():
         return
-    if getattr(args, "json", False):
+    if _resolve_flag(getattr(args, "json", False), "OPENCONTEXT_JSON"):
         return
     check = UpdateChecker.check()
     if check.is_outdated and check.latest_version != check.current_version:
@@ -914,7 +914,32 @@ def _build_parser() -> argparse.ArgumentParser:
     add_loop_commands(subparsers)
     add_bytecode_commands(subparsers)
 
+    # Additive shorthand namespaces. The flat commands keep working; these are
+    # extra entry points that resolve to the same parser (see _ALIAS_TARGETS).
+    _register_command_alias(subparsers, "kg", "knowledge-graph")
+    _register_command_alias(subparsers, "context", "verified-context")
+
     return parser
+
+
+# Shorthand command -> canonical command. Aliases reuse the canonical parser,
+# so ``args.command`` arrives as the alias and is normalized in _dispatch.
+_ALIAS_TARGETS: dict[str, str] = {
+    "kg": "knowledge-graph",
+    "context": "verified-context",
+}
+
+
+def _register_command_alias(subparsers: Any, alias: str, canonical: str) -> None:
+    """Make ``alias`` resolve to the same subparser as ``canonical``.
+
+    Registers the existing parser object under a second key so the alias parses
+    identical arguments without duplicating the definition or shadowing the
+    original flat command.
+    """
+    parser_map = subparsers._name_parser_map
+    if canonical in parser_map and alias not in parser_map:
+        parser_map[alias] = parser_map[canonical]
 
 
 _config_path_cache: str | None = None
@@ -944,8 +969,31 @@ def _default_config_path() -> str:
     return _config_path_cache
 
 
+_FALSEY_ENV = frozenset({"", "0", "false", "no", "off"})
+
+
+def _resolve_flag(flag: bool, env_var: str, *, default: bool = False) -> bool:
+    """Resolve a boolean flag with ``flag > env > default`` precedence.
+
+    An explicit flag (``True``) always wins. Otherwise the environment variable
+    is consulted: any value that is not falsey (``0``/``false``/``no``/``off``/
+    empty) enables the flag. When neither is set, ``default`` is returned.
+    """
+    if flag:
+        return True
+    raw = os.environ.get(env_var)
+    if raw is not None:
+        return raw.strip().lower() not in _FALSEY_ENV
+    return default
+
+
 def _dispatch(args: argparse.Namespace) -> None:
     command = getattr(args, "command", None)
+
+    # Normalize shorthand aliases to their canonical command before dispatch.
+    if command in _ALIAS_TARGETS:
+        command = _ALIAS_TARGETS[command]
+        args.command = command
 
     # First-run detection for commands that can benefit from onboarding
     if command and command not in ("init", "install", "onboard", "--help", None):
