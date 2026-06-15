@@ -47,10 +47,18 @@ class TestHarnessRunnerPhases:
         assert len(result.ledgers) >= 0
 
     def test_run_strict_mode_fails_on_error(self, tmp_path: Path) -> None:
-        """In strict mode with no project manifest, should fail."""
+        """In strict mode with no project index, the run fails on the index gate.
+
+        Asserting only ``status == FAILED`` would pass for any failure cause (an
+        unrelated crash, a budget issue); pin that the blocking gate is the
+        missing-index gate so the test fails for the documented reason.
+        """
         runner = HarnessRunner(root=tmp_path)
         result = runner.run("explore-only", "fail test", BudgetMode.STRICT)
         assert result.status == GateStatus.FAILED
+        # The empty project yields no context pack — that is the blocking gate.
+        pack_gates = [g for g in result.gates if g.id == "context_pack_created"]
+        assert pack_gates and pack_gates[0].status == GateStatus.FAILED
 
 
 class TestHarnessRunnerConfig:

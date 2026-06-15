@@ -118,9 +118,11 @@ class TestPhaseScheduling:
         result = runner.run("sdd", "scheduling task", BudgetMode.OFF)
 
         executed = [ledger.phase for ledger in result.ledgers]
-        # Executed phases are a prefix-consistent subsequence of the schedule
-        # (a phase may be skipped by a gate, but order must match the DAG).
-        positions = [expected.index(p) for p in executed if p in expected]
-        assert positions == sorted(positions), (
-            f"executed order {executed} not consistent with DAG schedule {expected}"
+        # Executed phases must EQUAL the DAG schedule restricted to the phases that
+        # actually ran, in that exact order — not merely be monotonic (two phases
+        # are trivially sorted, hiding a scheduler that dropped the middle six).
+        assert executed == [p for p in expected if p in set(executed)], (
+            f"executed order {executed} != DAG schedule {expected} filtered to executed"
         )
+        assert len(executed) == len(set(executed)), f"a phase ran more than once: {executed}"
+        assert executed[0] == expected[0]  # the entry phase (explore) ran first
