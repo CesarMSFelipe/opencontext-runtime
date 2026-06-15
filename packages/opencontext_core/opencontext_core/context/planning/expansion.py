@@ -36,8 +36,8 @@ class ProgressiveExpander:
         seeds: list[ContextItem],
         plan: Any,
         contract: Any,
-        graph=None,
-        memory=None,
+        graph: Any = None,
+        memory: Any = None,
         round_num: int = 1,
     ) -> list[ContextItem]:
         """One expansion round. Returns enriched candidates."""

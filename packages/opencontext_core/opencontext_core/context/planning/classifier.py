@@ -6,7 +6,7 @@ Deterministic keyword-based classification. Never calls an LLM.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass
@@ -27,7 +27,7 @@ class TaskClassification:
 
 @runtime_checkable
 class TaskClassifierProtocol(Protocol):
-    def classify(self, query: str, manifest=None) -> TaskClassification: ...
+    def classify(self, query: str, manifest: Any = None) -> TaskClassification: ...
 
 
 @dataclass(frozen=True)
@@ -151,7 +151,7 @@ class TaskClassifier:
     def __init__(self, rules: tuple[ClassificationRule, ...] | None = None) -> None:
         self._rules = rules or DEFAULT_RULES
 
-    def classify(self, query: str, manifest=None) -> TaskClassification:
+    def classify(self, query: str, manifest: Any = None) -> TaskClassification:
         normalized = query.lower()
         task_type = "feature"
         risk_level = "medium"

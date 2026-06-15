@@ -16,7 +16,7 @@ class DeepCompressionBackend:
 
     def __init__(self) -> None:
         try:
-            import llmlingua as _  # noqa: F401
+            import llmlingua as _  # type: ignore[import-not-found]  # noqa: F401
         except ImportError as exc:
             raise BackendUnavailableError(
                 "deep-compression",

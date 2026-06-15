@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from opencontext_core.models.context_contract import ContextContract
 from opencontext_core.models.context_plan import ContextPlan
 
@@ -28,8 +30,8 @@ class ContextPlanner:
 
     def __init__(
         self,
-        graph=None,
-        memory=None,
+        graph: Any = None,
+        memory: Any = None,
         semantic_available: bool = False,
     ) -> None:
         self._graph = graph
@@ -48,7 +50,7 @@ class ContextPlanner:
 
         return ContextPlan(
             mode=mode,  # type: ignore[arg-type]
-            tier=tier,  # type: ignore[arg-type]
+            tier=tier,
             budget_tokens=budget,
             must_read=list(contract.required_files),
             should_read=[],

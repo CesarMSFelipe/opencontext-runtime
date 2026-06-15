@@ -17,7 +17,7 @@ class SemanticVectorBackend:
         collection: str = "opencontext",
     ) -> None:
         try:
-            from qdrant_client import QdrantClient as _QC  # noqa: F401
+            import qdrant_client  # type: ignore[import-not-found]  # noqa: F401
         except ImportError as exc:
             raise BackendUnavailableError(
                 "semantic-search",
@@ -34,7 +34,7 @@ class SemanticVectorBackend:
         )
 
     def search(
-        self, query_vector: list[float], top_k: int, filter: dict | None
+        self, query_vector: list[float], top_k: int, filter: dict[str, Any] | None
     ) -> list[dict[str, Any]]:
         raise BackendUnavailableError(  # pragma: no cover
             "semantic-search",

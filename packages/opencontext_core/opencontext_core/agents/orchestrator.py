@@ -3,7 +3,7 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, Field
 
@@ -257,7 +257,7 @@ class AgentOrchestrator:
 
         AgentClass = AGENT_REGISTRY.get(config.type)
         if AgentClass is not None:
-            return AgentClass(config, self.project_root)
+            return cast(BaseAgent, AgentClass(config, self.project_root))
         return None
 
     @staticmethod

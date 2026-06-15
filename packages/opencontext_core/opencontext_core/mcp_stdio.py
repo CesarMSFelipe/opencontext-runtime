@@ -10,7 +10,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from opencontext_core.configurator.filemerge import write_text_atomic
 from opencontext_core.indexing.call_graph import CallGraphAnalyzer
@@ -307,7 +307,7 @@ class MCPServer:
             return {"error": f"Unknown tool: {name}"}
 
         try:
-            return handler(params)
+            return cast("dict[str, Any]", handler(params))
         except Exception as exc:
             return {"error": str(exc)}
 

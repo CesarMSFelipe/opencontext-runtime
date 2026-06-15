@@ -102,12 +102,12 @@ class CompactCompressionBackend:
             return False
 
         # Process fenced python code blocks
-        def _replace_code(m: re.Match) -> str:
+        def _replace_code(m: re.Match[str]) -> str:
             block_start = m.start()
             block_end = m.end()
             if _is_protected(block_start, block_end):
-                return m.group(0)
-            header, code, footer = m.group(1), m.group(2), m.group(3)
+                return str(m.group(0))
+            header, code, footer = str(m.group(1)), str(m.group(2)), str(m.group(3))
             return header + _compact_python_block(code) + footer
 
         processed = _FENCED_CODE.sub(_replace_code, text)
@@ -134,7 +134,7 @@ class CompactCompressionBackend:
             return "".join(parts)
 
         # No protected spans: terse-compress prose sections outside code blocks
-        def _compress_prose(m: re.Match) -> str:
+        def _compress_prose(m: re.Match[str]) -> str:
             # Between code blocks
             return self._terse.compress(m.group(0))
 

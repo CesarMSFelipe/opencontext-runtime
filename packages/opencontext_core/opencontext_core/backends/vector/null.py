@@ -10,7 +10,7 @@ class NullVectorBackend:
         return
 
     def search(
-        self, query_vector: list[float], top_k: int, filter: dict | None
+        self, query_vector: list[float], top_k: int, filter: dict[str, Any] | None
     ) -> list[dict[str, Any]]:
         return []
 

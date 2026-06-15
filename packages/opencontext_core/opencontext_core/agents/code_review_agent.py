@@ -40,7 +40,7 @@ class CodeReviewAgent(BaseAgent):
             "test_coverage": "unknown",
         }
 
-    def _build_review_prompt(self, context: dict, files: list[str]) -> str:
+    def _build_review_prompt(self, context: dict[str, Any], files: list[str]) -> str:
         from opencontext_core.backends.compression.efficient import EfficientCompressionBackend
 
         compressor = EfficientCompressionBackend()

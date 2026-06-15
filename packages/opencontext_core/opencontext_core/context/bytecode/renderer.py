@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from opencontext_core.context.bytecode.models import ContextBytecode
 
@@ -30,7 +31,7 @@ class AICXRenderer:
             separators=(",", ":"),
         )
 
-    def render_compact(self, bc: ContextBytecode) -> dict:
+    def render_compact(self, bc: ContextBytecode) -> dict[str, Any]:
         """Return Python dict suitable for inter-agent transport (no JSON serialization cost)."""
         return {
             "v": bc.version,

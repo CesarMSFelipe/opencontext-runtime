@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from opencontext_core.context.planning.classifier import (
     TaskClassification,
     TaskClassifierProtocol,
@@ -23,7 +25,7 @@ TIER_GATES: dict[str, list[str]] = {
 }
 
 
-def _extract_known_facts(manifest) -> list[EvidenceRef]:
+def _extract_known_facts(manifest: Any) -> list[EvidenceRef]:
     """Extract known facts from a project manifest."""
     facts: list[EvidenceRef] = []
     if manifest is None:
@@ -115,7 +117,7 @@ class ContextContractBuilder:
         self,
         classifier: TaskClassifierProtocol,
         risk_classifier: RiskClassifier | None = None,
-        memory=None,
+        memory: Any = None,
     ) -> None:
         self._classifier = classifier
         self._risk_classifier = risk_classifier or RiskClassifier()
@@ -124,8 +126,8 @@ class ContextContractBuilder:
     def build(
         self,
         query: str,
-        manifest=None,
-        memory_context=None,
+        manifest: Any = None,
+        memory_context: Any = None,
     ) -> ContextContract:
         classification: TaskClassification = self._classifier.classify(query, manifest)
         risk_tier = self._risk_classifier.classify(

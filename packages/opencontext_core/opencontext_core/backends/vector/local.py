@@ -23,7 +23,7 @@ class LocalVectorBackend:
         self._meta[item_id] = metadata
 
     def search(
-        self, query_vector: list[float], top_k: int, filter: dict | None
+        self, query_vector: list[float], top_k: int, filter: dict[str, Any] | None
     ) -> list[dict[str, Any]]:
         import math
 

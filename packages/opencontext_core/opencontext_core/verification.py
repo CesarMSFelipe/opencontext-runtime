@@ -205,6 +205,7 @@ def check_harness_phases() -> CheckResult:
             ArchivePhase,
             DesignPhase,
             ExplorePhase,
+            HarnessPhase,
             ProposePhase,
             ReviewPhase,
             SpecPhase,
@@ -212,7 +213,7 @@ def check_harness_phases() -> CheckResult:
             VerifyPhase,
         )
 
-        phases = {
+        phases: dict[str, type[HarnessPhase]] = {
             "explore": ExplorePhase,
             "propose": ProposePhase,
             "spec": SpecPhase,

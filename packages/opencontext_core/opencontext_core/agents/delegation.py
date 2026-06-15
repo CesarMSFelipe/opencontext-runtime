@@ -12,7 +12,10 @@ import subprocess
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from opencontext_core.backends.protocols import CompressionBackend
 
 
 class DelegationMode(StrEnum):
@@ -51,6 +54,7 @@ class SubAgentDelegate:
         self.timeout = timeout
         self._local_handlers: dict[str, Any] = {}
         self._compression_mode = compression_mode
+        self._compressor: CompressionBackend | None
         try:
             from opencontext_core.backends.factory import BackendFactory
 
@@ -58,13 +62,13 @@ class SubAgentDelegate:
         except Exception:
             self._compressor = None
 
-    def _compress_context(self, context: dict) -> dict:
+    def _compress_context(self, context: dict[str, Any]) -> dict[str, Any]:
         """Compress context for inter-agent transport.
 
         EvidencePlan values are AICX-encoded (reference-only, no content inlined).
         Other large text values fall back to terse compression.
         """
-        result = {}
+        result: dict[str, Any] = {}
         for k, v in context.items():
             if _is_evidence_plan(v):
                 try:

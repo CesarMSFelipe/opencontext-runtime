@@ -87,7 +87,7 @@ class VerifiedContextResult(BaseModel):
     trust_decision: TrustDecision = Field(description="Planner trust outcome.")
     token_usage: dict[str, int] = Field(description="Token usage summary.")
     omitted_sources: list[str] = Field(description="Sources omitted with traceable reasons.")
-    aicx: dict | None = Field(
+    aicx: dict[str, Any] | None = Field(
         default=None,
         description="AICX bytecode compact dict for transport (lazy, no content inlined).",
     )
