@@ -62,6 +62,93 @@ def plan_mcp_servers(
     raise ValueError(f"unsupported MCP shape: {shape}")
 
 
+def remove_mcp_server(path: Path, name: str, *, shape: McpShape) -> bool:
+    """Remove a single MCP server entry from the config, preserving the rest.
+
+    Returns ``True`` if the file changed. The user's other servers and keys are
+    untouched; an absent entry (or missing file) is a no-op.
+    """
+
+    path = Path(path)
+    if not path.exists():
+        return False
+    if shape in (McpShape.JSON_MCP_SERVERS, McpShape.JSON_SERVERS):
+        root_key = "mcpServers" if shape is McpShape.JSON_MCP_SERVERS else "servers"
+        content = _plan_remove_json(path, name, root_key=root_key)
+    elif shape is McpShape.YAML_MCP_SERVERS:
+        content = _plan_remove_yaml(path, name)
+    elif shape is McpShape.TOML_MCP_SERVERS:
+        content = _plan_remove_toml(path, name)
+    else:
+        raise ValueError(f"unsupported MCP shape: {shape}")
+    if content is None:
+        return False
+    return write_text_atomic(path, content)
+
+
+def _plan_remove_json(path: Path, name: str, *, root_key: str) -> str | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    servers = data.get(root_key)
+    if not isinstance(servers, dict) or name not in servers:
+        return None
+    del servers[name]
+    if not servers:
+        del data[root_key]
+    content = json.dumps(data, indent=2) + "\n"
+    return None if _unchanged(path, content) else content
+
+
+def _plan_remove_yaml(path: Path, name: str) -> str | None:
+    import yaml
+
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (yaml.YAMLError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    servers = data.get("mcpServers")
+    if not isinstance(servers, dict) or name not in servers:
+        return None
+    del servers[name]
+    if not servers:
+        del data["mcpServers"]
+    content: str = yaml.safe_dump(data, sort_keys=False)
+    return None if _unchanged(path, content) else content
+
+
+def _plan_remove_toml(path: Path, name: str) -> str | None:
+    """Delete the ``[mcp_servers.<name>]`` table block from TOML text.
+
+    Text-based to match the append-only writer and preserve everything else
+    byte-for-byte. Removes from the table header through the line before the next
+    top-level ``[`` table (or EOF).
+    """
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    header = f"[mcp_servers.{name}]"
+    lines = text.splitlines()
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == header), None)
+    if start is None:
+        return None
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].lstrip().startswith("["):
+            end = i
+            break
+    del lines[start:end]
+    while lines and lines[-1].strip() == "":
+        lines.pop()
+    content = ("\n".join(lines) + "\n") if lines else ""
+    return None if _unchanged(path, content) else content
+
+
 def _unchanged(path: Path, content: str) -> bool:
     if not path.exists():
         return False

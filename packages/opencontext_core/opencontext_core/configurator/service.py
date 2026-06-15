@@ -24,7 +24,11 @@ from opencontext_core.configurator.filemerge import (
     merge_mcp_config_file,
     write_text_atomic,
 )
-from opencontext_core.configurator.mcp_strategy import plan_mcp_servers, write_mcp_servers
+from opencontext_core.configurator.mcp_strategy import (
+    plan_mcp_servers,
+    remove_mcp_server,
+    write_mcp_servers,
+)
 
 InstructionsBuilder = Callable[[str], str]
 
@@ -105,6 +109,99 @@ class Configurator:
         }
 
     # ------------------------------------------------------------------
+
+    def deconfigure(
+        self, agents: list[str], scope: str = "local", *, dry_run: bool = False
+    ) -> dict[str, Any]:
+        """Remove OpenContext's managed config from ``agents``, leaving user content.
+
+        The inverse of :meth:`configure`: strips the managed instructions block and
+        the ``opencontext`` MCP entry (and agent-specific extras) without touching
+        anything the developer authored.
+        """
+
+        results = [self.deconfigure_one(agent_id, scope, dry_run=dry_run) for agent_id in agents]
+        status_key = "planned" if dry_run else "removed"
+        removed = sum(1 for r in results if r["status"] == status_key)
+        return {
+            "status": "planned" if dry_run else "removed",
+            "scope": scope,
+            "project": str(self.project_root),
+            "agents_removed": removed,
+            "dry_run": dry_run,
+            "results": results,
+        }
+
+    def deconfigure_one(
+        self, agent_id: str, scope: str = "local", *, dry_run: bool = False
+    ) -> dict[str, Any]:
+        """Remove a single agent's managed OpenContext config; return its result."""
+
+        adapter = get_adapter(agent_id)
+        instructions_path = adapter.instructions_path(self.project_root)
+        touched = [p for p in (adapter.mcp_config_path, instructions_path) if p.exists()]
+
+        if dry_run:
+            return {"agent": agent_id, "status": "planned", "plan": plan_actions(touched)}
+
+        backup = BackupStore().create([agent_id], touched, source="uninstall")
+        try:
+            changed: list[str] = []
+            # 1. Strip our managed instructions block (empty content removes it).
+            if instructions_path.exists():
+                existing = instructions_path.read_text(encoding="utf-8")
+                stripped = inject_managed_section(existing, "instructions", "")
+                if stripped != existing:
+                    if stripped.strip():
+                        write_text_atomic(instructions_path, stripped)
+                    else:
+                        instructions_path.unlink()  # file held only our block
+                    changed.append(str(instructions_path))
+            # 2. Remove our MCP server entry in the agent's native shape.
+            if remove_mcp_server(
+                adapter.mcp_config_path, constants.MCP_LABEL, shape=adapter.mcp_shape
+            ):
+                changed.append(str(adapter.mcp_config_path))
+            # 3. Reverse agent-specific extras.
+            changed.extend(self._remove_extras(adapter))
+        except Exception:
+            if backup is not None:
+                BackupStore().restore(backup.id)
+            raise
+
+        return {
+            "agent": agent_id,
+            "status": "removed",
+            "files": changed,
+            "backup_id": backup.id if backup is not None else None,
+        }
+
+    def _remove_extras(self, adapter: Adapter) -> list[str]:
+        """Reverse the agent-specific extras written by :meth:`configure_one`."""
+        changed: list[str] = []
+        if adapter.agent_id == "claude-code":
+            path = adapter.config_dir / "settings.json"
+            if path.exists():
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    data = {}
+                allow = data.get("permissions", {}).get("allow")
+                if isinstance(allow, list):
+                    kept = [t for t in allow if t not in set(constants.ALLOWED_TOOLS)]
+                    if kept != allow:
+                        if kept:
+                            data["permissions"]["allow"] = kept
+                        else:
+                            data["permissions"].pop("allow", None)
+                        write_text_atomic(path, json.dumps(data, indent=2) + "\n")
+                        changed.append(str(path))
+        if adapter.agent_id == "opencode":
+            path = adapter.config_dir / "agents" / "sdd-orchestrator.json"
+            if path.exists():
+                path.unlink()  # we created this file
+                changed.append(str(path))
+        return changed
 
     def _plan(self, adapter: Adapter) -> list[PlanEntry]:
         """Compute every file this agent would touch and its merged content.

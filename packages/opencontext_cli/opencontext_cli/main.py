@@ -32,6 +32,7 @@ from opencontext_cli.commands.setup_cmd import add_setup_parser, handle_setup
 from opencontext_cli.commands.skill_cmd import add_skill_parser, handle_skill
 from opencontext_cli.commands.sync_cmd import add_sync_parser, handle_sync
 from opencontext_cli.commands.telemetry_cmd import add_telemetry_parser, handle_telemetry
+from opencontext_cli.commands.uninstall_cmd import add_uninstall_parser, handle_uninstall
 from opencontext_cli.commands.update_cmd import (
     add_update_parser,
     add_upgrade_parser,
@@ -629,6 +630,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_config_parser(subparsers)
     add_plugin_parser(subparsers)
     add_setup_parser(subparsers)
+    add_uninstall_parser(subparsers)
     add_privacy_parser(subparsers)
     add_sync_parser(subparsers)
     add_verify_parser(subparsers)
@@ -1171,6 +1173,9 @@ def _dispatch(args: argparse.Namespace) -> None:
         return
     if command == "setup":
         handle_setup(args)
+        return
+    if command == "uninstall":
+        handle_uninstall(args)
         return
     if command == "privacy":
         handle_privacy(args)
