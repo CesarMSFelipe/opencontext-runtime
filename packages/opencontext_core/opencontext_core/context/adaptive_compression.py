@@ -21,8 +21,14 @@ class AdaptiveCompressionController:
         source_type: str,
         token_pressure: float,
         priority: ContextPriority,
+        prefer_signature_for_code: bool = False,
     ) -> CompressionDecision:
-        """Return a deterministic compression decision."""
+        """Return a deterministic compression decision.
+
+        When ``prefer_signature_for_code`` is set, low-priority code sources use
+        signature-level compression instead of extractive head/tail. The flag
+        defaults off so the standard policy is unchanged.
+        """
 
         del query_complexity
         normalized_risk = task_risk.lower()
@@ -48,6 +54,13 @@ class AdaptiveCompressionController:
                 reason="low_token_pressure",
             )
         if source_type in {"code", "file", "symbol"} and priority <= ContextPriority.P3:
+            if prefer_signature_for_code:
+                return CompressionDecision(
+                    strategy=CompressionStrategy.SIGNATURE,
+                    max_ratio=0.75 if retrieval_confidence < 0.5 else 0.6,
+                    allow_lossy=True,
+                    reason="code_uses_signature_compression",
+                )
             return CompressionDecision(
                 strategy=CompressionStrategy.EXTRACTIVE_HEAD_TAIL,
                 max_ratio=0.75 if retrieval_confidence < 0.5 else 0.6,

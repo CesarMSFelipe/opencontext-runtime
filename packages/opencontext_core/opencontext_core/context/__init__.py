@@ -9,6 +9,11 @@ from opencontext_core.context.packing import ContextPackBuilder
 from opencontext_core.context.prompt_cache import PromptPrefixCachePlanner
 from opencontext_core.context.protection import ProtectedSpanManager
 from opencontext_core.context.ranking import ContextRanker
+from opencontext_core.context.signature_compression import SignatureCompressor
+from opencontext_core.context.tokenization import (
+    accurate_tokenizer_available,
+    count_tokens,
+)
 
 __all__ = [
     "AdaptiveCompressionController",
@@ -19,6 +24,9 @@ __all__ = [
     "PromptAssembler",
     "PromptPrefixCachePlanner",
     "ProtectedSpanManager",
+    "SignatureCompressor",
     "TokenBudgetManager",
+    "accurate_tokenizer_available",
+    "count_tokens",
     "estimate_tokens",
 ]
