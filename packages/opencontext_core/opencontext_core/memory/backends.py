@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 from opencontext_core.models.agent_memory import DecayPolicy, MemoryLayer, MemoryRecord
@@ -22,7 +23,10 @@ CREATE TABLE IF NOT EXISTS memory_records (
     supersedes TEXT NOT NULL DEFAULT '[]',
     contradicted_by TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    valid_from TEXT,
+    invalid_at TEXT,
+    superseded_by TEXT
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
     USING fts5(id UNINDEXED, layer, key, content, tags,
@@ -46,11 +50,14 @@ END;
 """
 
 
-def _row_to_record(row: sqlite3.Row) -> MemoryRecord:
-    from datetime import datetime
+def _parse_dt(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value) if value else None
 
+
+def _row_to_record(row: sqlite3.Row) -> MemoryRecord:
     source_refs_data = json.loads(row["source_refs"])
     source_refs = [EvidenceRef(**ref) if isinstance(ref, dict) else ref for ref in source_refs_data]
+    columns = row.keys()
     return MemoryRecord(
         id=row["id"],
         layer=MemoryLayer(row["layer"]),
@@ -65,6 +72,9 @@ def _row_to_record(row: sqlite3.Row) -> MemoryRecord:
         updated_at=datetime.fromisoformat(row["updated_at"]),
         supersedes=json.loads(row["supersedes"]),
         contradicted_by=json.loads(row["contradicted_by"]),
+        valid_from=_parse_dt(row["valid_from"]) if "valid_from" in columns else None,
+        invalid_at=_parse_dt(row["invalid_at"]) if "invalid_at" in columns else None,
+        superseded_by=row["superseded_by"] if "superseded_by" in columns else None,
     )
 
 
@@ -86,6 +96,15 @@ class SQLiteMemoryBackend:
             conn.executescript(_SCHEMA)
             conn.executescript(_FTS_INSERT_TRIGGER)
             conn.executescript(_FTS_DELETE_TRIGGER)
+            self._migrate(conn)
+
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Add bi-temporal columns to databases created before they existed."""
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(memory_records)")}
+        for column in ("valid_from", "invalid_at", "superseded_by"):
+            if column not in existing:
+                conn.execute(f"ALTER TABLE memory_records ADD COLUMN {column} TEXT")
 
     def store(self, record: MemoryRecord) -> None:
         """Upsert a MemoryRecord."""
@@ -95,8 +114,9 @@ class SQLiteMemoryBackend:
                 """
                 INSERT OR REPLACE INTO memory_records
                 (id, layer, key, content, confidence, source_refs, tags,
-                 linked_nodes, supersedes, contradicted_by, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 linked_nodes, supersedes, contradicted_by, created_at, updated_at,
+                 valid_from, invalid_at, superseded_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record.id,
@@ -111,6 +131,26 @@ class SQLiteMemoryBackend:
                     json.dumps(record.contradicted_by),
                     record.created_at.isoformat(),
                     record.updated_at.isoformat(),
+                    record.valid_from.isoformat() if record.valid_from else None,
+                    record.invalid_at.isoformat() if record.invalid_at else None,
+                    record.superseded_by,
+                ),
+            )
+
+    def mark_superseded(self, record_id: str, *, superseded_by: str, invalid_at: datetime) -> None:
+        """Mark a record invalid as of a timestamp without deleting it."""
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE memory_records
+                SET invalid_at = ?, superseded_by = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    invalid_at.isoformat(),
+                    superseded_by,
+                    datetime.now(tz=UTC).isoformat(),
+                    record_id,
                 ),
             )
 

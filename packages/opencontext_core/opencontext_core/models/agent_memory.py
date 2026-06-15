@@ -51,3 +51,14 @@ class MemoryRecord(BaseModel):
     contradicted_by: list[str] = Field(
         default_factory=list, description="IDs of records that contradict this one."
     )
+    valid_from: datetime | None = Field(
+        default=None,
+        description="Belief-validity start (UTC). Defaults to created_at when unset.",
+    )
+    invalid_at: datetime | None = Field(
+        default=None,
+        description="When this belief stopped being valid (UTC). None means still valid.",
+    )
+    superseded_by: str | None = Field(
+        default=None, description="ID of the record that replaced this one, if any."
+    )
