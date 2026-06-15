@@ -1226,6 +1226,7 @@ def _dispatch(args: argparse.Namespace) -> None:
             args.mode,
             args.copy,
             args.output,
+            root=args.root,
         )
     elif command == "verified-context":
         _verified_context(runtime, args)
@@ -3076,6 +3077,7 @@ def _pack(
     mode: str = "plan",
     copy: bool = False,
     output_path: str | None = None,
+    root: str | Path = ".",
 ) -> None:
     pack = runtime.build_context_pack(query, max_tokens)
     if output_format == "json":
@@ -3105,7 +3107,10 @@ def _pack(
 
         from opencontext_core.evaluation.telemetry import TelemetryEvent, record_event
 
-        root = Path.cwd()
+        # Estimate the naive baseline from the project being packed, not the cwd
+        # (otherwise --root would measure the wrong tree and overstate the win).
+        naive_root = Path(root)
+        naive_root = naive_root if naive_root.exists() else Path.cwd()
         naive_chars = 0
         text_exts = {
             ".py",
@@ -3133,7 +3138,7 @@ def _pack(
             "tmp",
             ".opencontext",
         }
-        for p in root.rglob("*"):
+        for p in naive_root.rglob("*"):
             if not p.is_file() or p.suffix not in text_exts:
                 continue
             if any(part in _skip or part.endswith(".egg-info") for part in p.parts):
@@ -3145,6 +3150,18 @@ def _pack(
         naive_tokens = max(naive_chars // 4, 1)
         optimized_tokens = pack.used_tokens or 1
         reduction_pct = round(max(0.0, 1.0 - optimized_tokens / naive_tokens) * 100, 1)
+        # Show the win on every pack. stderr keeps stdout clean for --copy / JSON / pipes.
+        # Cap the displayed percent below 100 — "100% fewer" reads as fake even when
+        # the rounding is honest; the absolute counts carry the real story.
+        if reduction_pct > 0 and naive_tokens > optimized_tokens:
+            import sys as _sys
+
+            shown_pct = min(reduction_pct, 99.9)
+            print(
+                f"  ↓ {shown_pct}% fewer tokens than reading the whole project "
+                f"({naive_tokens:,} → {optimized_tokens:,})",
+                file=_sys.stderr,
+            )
         record_event(
             TelemetryEvent(
                 timestamp=time.time(),
@@ -3154,7 +3171,7 @@ def _pack(
                 reduction_pct=reduction_pct,
                 scenario="pack",
             ),
-            root=root,
+            root=naive_root,
         )
     except Exception:
         pass
