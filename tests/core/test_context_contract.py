@@ -51,7 +51,7 @@ def test_to_yaml_contains_task_type():
 
 
 def test_risk_tier_validation():
-    with pytest.raises(Exception):
+    with pytest.raises((ValueError, KeyError)):
         _make_contract(risk_tier="ultra")  # invalid value
 
 

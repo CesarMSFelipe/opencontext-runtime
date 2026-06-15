@@ -23,7 +23,7 @@ class TestMutationResult:
         assert result.error is None
 
     def test_score_range(self) -> None:
-        """Score must stay within 0.0–100.0."""
+        """Score must stay within 0.0-100.0."""
         result = MutationResult(
             score=85.0, killed=17, survivors=3, available=True, framework="some-tool"
         )

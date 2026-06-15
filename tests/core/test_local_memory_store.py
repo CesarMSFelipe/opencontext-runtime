@@ -67,7 +67,7 @@ def test_reinforce_increases_confidence(store: LocalMemoryStore) -> None:
     evidence = EvidenceRef(source="test", source_type="code", confidence=1.0)
     store.reinforce("reinf-1", evidence)
     results = store.search(record.content)
-    rec = next((r for r in results if r.id == "reinf-1"), None)
+    assert any(r.id == "reinf-1" for r in results)
     # Re-fetch via key
 
     backend = store._backend

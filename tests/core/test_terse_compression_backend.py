@@ -8,7 +8,8 @@ def test_terse_reduces_length():
     backend = TerseCompressionBackend()
     # Use repeated hedging words that terse definitely strips at word level via phrase compression
     text = (
-        "In order to do this, and due to the fact that there are many cases, we should in order to proceed handle it. "
+        "In order to do this, and due to the fact that there are many cases, "
+        "we should in order to proceed handle it. "
         * 5
     )
     result = backend.compress(text, [])
