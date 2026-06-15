@@ -1,7 +1,7 @@
 # OpenContext Runtime Makefile
 # Common development tasks
 
-.PHONY: help install dev test lint format type-check clean docs e2e validate
+.PHONY: help install dev test lint format type-check clean docs e2e validate binary
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -21,6 +21,7 @@ help:
 	@echo "  make validate   Run all validation (test + lint + type-check)"
 	@echo "  make docs       Build documentation"
 	@echo "  make e2e        Run end-to-end tests"
+	@echo "  make binary     Build single-file dist/opencontext.pyz"
 	@echo "  make clean      Clean build artifacts"
 	@echo "  make ci-check   Run CI checks"
 
@@ -54,6 +55,9 @@ docs:
 e2e:
 	bash scripts/e2e-validate.sh
 
+binary:
+	$(PYTHON) scripts/build_binary.py
+
 ci-check:
 	opencontext ci-check run
 
@@ -62,6 +66,7 @@ clean:
 	rm -rf .mypy_cache
 	rm -rf **/__pycache__
 	rm -rf packages/**/build
+	rm -rf dist
 	rm -rf packages/**/dist
 	rm -rf packages/**/*.egg-info
 	find . -name "*.pyc" -delete

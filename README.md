@@ -701,11 +701,17 @@ print(result["cycle_status"])    # "green" | "red"
 | Method | Command |
 |--------|---------|
 | pip | `pip install opencontext-cli` |
+| Isolated tool | `pipx install opencontext-cli` (or `uv tool install opencontext-cli`) |
 | Linux/macOS | `curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh \| bash` |
 | Windows | `irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 \| iex` |
+| Single file | `make binary` → `dist/opencontext.pyz`, run with `python3 opencontext.pyz` |
 | Source | `git clone … && pip install -e packages/*` |
 
 Requires **Python 3.12+**. No API key required for core functionality.
+
+`make binary` produces one portable file (`dist/opencontext.pyz`, ~640 KB) that
+bundles the OpenContext source and runs anywhere a compatible Python is present —
+copy it to a server, an air-gapped box, or a CI image, no install step.
 
 ```bash
 pytest                          # 1500+ tests
