@@ -120,7 +120,9 @@ class OnboardingService:
         # 3. Save user preferences
         store = UserConfigStore()
         prefs = store.load()
-        prefs.security_mode = options.security_mode
+        # Normalize here too: prefs must never hold a value the config rejected,
+        # otherwise prefs and the written config disagree on the security mode.
+        prefs.security_mode = _normalize_security_mode(options.security_mode)
         prefs.sdd.tdd_mode = options.tdd_mode
         prefs.sdd.sdd_model_profile = options.sdd_model_profile
         prefs.sdd.orchestrator_profile = options.orchestrator_profile

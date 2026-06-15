@@ -358,7 +358,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     init_parser.add_argument(
         "--security-mode",
-        choices=["private_project", "cross_project", "open"],
+        choices=[m.value for m in SecurityMode],
         default=None,
         help="Security mode for the project.",
     )
