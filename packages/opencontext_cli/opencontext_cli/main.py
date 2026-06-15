@@ -1435,6 +1435,25 @@ def _install(args: argparse.Namespace) -> None:
                     from opencontext_core.workspace.layout import ensure_workspace
 
                     ensure_workspace(root)
+                    # Write the project config so the runtime, `status`, and the
+                    # provider tip all see a real opencontext.yaml (init/wizard do
+                    # this too; install must converge with them).
+                    config_path = root / "opencontext.yaml"
+                    if not config_path.exists():
+                        import yaml as _yaml
+
+                        from opencontext_core.config import default_config_data
+
+                        cfg_data = default_config_data()
+                        project = cfg_data.get("project")
+                        if isinstance(project, dict):
+                            project["name"] = root.resolve().name or project.get("name", "project")
+                        security = cfg_data.get("security")
+                        if isinstance(security, dict):
+                            security["mode"] = "private_project"
+                        config_path.write_text(
+                            _yaml.safe_dump(cfg_data, sort_keys=False), encoding="utf-8"
+                        )
                     store = UserConfigStore()
                     prefs = store.load()
                     prefs.security_mode = "private_project"
@@ -1559,7 +1578,7 @@ def _install(args: argparse.Namespace) -> None:
     try:
         import yaml as _yaml
 
-        _cfg = _yaml.safe_load((Path(".") / "opencontext.yaml").read_text(encoding="utf-8"))
+        _cfg = _yaml.safe_load((root / "opencontext.yaml").read_text(encoding="utf-8"))
         _provider = _cfg.get("models", {}).get("default", {}).get("provider", "mock")
         if str(_provider) == "mock":
             console.print(
