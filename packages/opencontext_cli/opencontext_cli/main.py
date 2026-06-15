@@ -169,7 +169,12 @@ def main() -> None:
         return
     try:
         _dispatch(args)
-        _notify_outdated(args)
+        # Post-command update notice is best-effort: it must never turn a
+        # successful command into a failure (e.g. a first-run cache miss).
+        try:
+            _notify_outdated(args)
+        except Exception:
+            pass
     except OpenContextError as exc:
         print(f"Error: {exc}", file=__import__("sys").stderr)
         _print_suggestion(args.command if hasattr(args, "command") else "")
