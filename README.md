@@ -12,7 +12,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/up_to_95%25_token_reduction-benchmarked-00C9A7?style=flat-square" alt="Up to 95% token reduction">
   <img src="https://img.shields.io/badge/offline--first-no_API_key-00A8E8?style=flat-square&logo=python&logoColor=white" alt="Works offline">
-  <img src="https://img.shields.io/badge/1125%2B_tests-passing-00C9A7?style=flat-square" alt="1125+ tests passing">
+  <img src="https://img.shields.io/badge/1300%2B_tests-passing-00C9A7?style=flat-square" alt="1300+ tests passing">
   <img src="https://img.shields.io/badge/14%2B_agents-Claude_%7C_Cursor_%7C_Copilot-845EC2?style=flat-square" alt="14+ agents">
   <img src="https://img.shields.io/badge/license-MIT-gray?style=flat-square" alt="MIT">
 </p>
@@ -74,7 +74,7 @@ opencontext loop --task "fix crash in auth middleware" --flow full
 1. **Detects your stack** — Python, Node, Go, Rust, Terraform, and more
 2. **Builds the knowledge graph** — symbols, call chains, imports, framework routes
 3. **Configures your agent** — generates the right instruction file for your editor
-4. **Sets up MCP tools** — pre-approves 8 knowledge graph tools
+4. **Sets up MCP tools** — pre-approves 9 knowledge graph tools (now routed through the verified pipeline)
 5. **Verifies the setup** — health check before finishing
 
 > **No API keys. No external services.** Everything runs offline on your machine.
@@ -409,7 +409,7 @@ Inter-agent handoffs also compress automatically — context dictionaries are co
 
 ### AICX — Context Bytecode
 
-Between agents and at the LLM boundary, OpenContext uses AICX (Agent Incremental Context Exchange): a compact, verifiable, lazy transport format. Evidence travels as references; content expands only when the LLM actually needs it.
+AICX (Agent Incremental Context Exchange) is a compact, checksum-verified representation of an evidence plan — a transport/telemetry **side-channel** carried alongside the verified context. It encodes the plan as deduplicated references (with content inlined for protected evidence), giving you a tamper-evident fingerprint and a real token-reduction metric **without** stripping content from the context the agent actually receives.
 
 ```bash
 $ opencontext bytecode compile --query "fix auth bug"
@@ -558,7 +558,7 @@ opencontext preset apply air-gapped   # Fully offline
 | OpenCode / Kilo Code | MCP + agent profile |
 | Any agent | `opencontext agent-context` emits reusable context block |
 
-**MCP tools** (8 tools, pre-approved after `opencontext install`):
+**MCP tools** (9 tools, pre-approved after `opencontext install`):
 
 ```
 opencontext_search    opencontext_context   opencontext_callers
@@ -701,7 +701,7 @@ print(result["cycle_status"])    # "green" | "red"
 Requires **Python 3.12+**. No API key required for core functionality.
 
 ```bash
-pytest                          # 1125+ tests
+pytest                          # 1300+ tests
 ruff check .                    # Lint
 mypy packages/opencontext_core  # Types
 ```
