@@ -48,6 +48,7 @@ def add_uninstall_parser(subparsers: Any) -> None:
     parser.add_argument(
         "--dry-run", action="store_true", help="Preview the removal without changing anything."
     )
+    parser.add_argument("--root", default=".", help="Project root (for project-scoped agents).")
 
 
 def handle_uninstall(args: Any) -> None:
