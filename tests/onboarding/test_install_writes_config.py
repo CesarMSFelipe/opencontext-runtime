@@ -9,26 +9,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from opencontext_core.config import SecurityMode, load_config
 from opencontext_core.install_manager import InstallationManager, InstallProfile
 
 # The SDD agentic skill set the developer drives, plus the agent SKILL.md template.
+# Home isolation (so install-state never lands in the real ~/.config) is provided
+# by the autouse fixture in this package's conftest.
 REQUIRED_SDD_SKILLS = ("sdd-new", "sdd-apply", "sdd-verify", "sdd-archive")
-
-
-@pytest.fixture(autouse=True)
-def _isolate_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Redirect Path.home() to a tmp dir.
-
-    InstallationManager writes its install-state under ``Path.home()`` (and mkdirs
-    it in ``__init__``), so without this every run would pollute the real
-    ``~/.config/opencontext/``.
-    """
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setattr(Path, "home", lambda: home)
 
 
 def test_install_writes_loadable_config(tmp_path: Path) -> None:

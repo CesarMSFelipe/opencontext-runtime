@@ -1,4 +1,4 @@
-"""/4.6 — first_run and setup_completed agree across entry points.
+"""first_run and setup_completed agree across entry points.
 
 RED first: ``OnboardingService.run`` set ``setup_completed=True`` but left
 ``first_run=True``; the root ``run_wizard`` set ``first_run=False`` but left

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from opencontext_core.config import SecurityMode, load_config
 from opencontext_core.onboarding.wizard import OnboardingWizard
+from opencontext_core.user_prefs import UserConfigStore
 
 
 class TestOnboardingWizard:
@@ -49,13 +53,33 @@ class TestOnboardingWizard:
             data = json.loads(sdd_path.read_text(encoding="utf-8"))
             assert data["tdd_mode"] == "strict"
 
-    def test_wizard_accepts_security_override(self, tmp_path: Path) -> None:
-        """Security mode override should be respected."""
-        wizard = OnboardingWizard(root=tmp_path)
-        wizard.run(
-            non_interactive=True,
-            security_mode="cross_project",
-        )
+    @pytest.mark.parametrize(
+        "requested", ["air-gapped", "enterprise", "developer", "private_project"]
+    )
+    def test_wizard_persists_valid_security_mode(self, tmp_path: Path, requested: str) -> None:
+        """A valid (or legacy-hyphenated) mode is written to config AND prefs."""
+        OnboardingWizard(root=tmp_path).run(non_interactive=True, security_mode=requested)
+
+        config = load_config(tmp_path / "opencontext.yaml")  # must not raise
+        expected = SecurityMode(requested.replace("-", "_"))
+        assert config.security.mode == expected
+        assert UserConfigStore().load().security_mode == expected.value
+
+    @pytest.mark.parametrize("bogus", ["cross_project", "open", "garbage"])
+    def test_wizard_never_persists_invalid_security_mode(self, tmp_path: Path, bogus: str) -> None:
+        """An unrecognised mode is coerced consistently — never stored raw.
+
+        Regression for the split where the config was coerced to a valid value
+        but user prefs kept the raw invalid string, leaving the two disagreeing.
+        """
+        OnboardingWizard(root=tmp_path).run(non_interactive=True, security_mode=bogus)
+
+        config = load_config(tmp_path / "opencontext.yaml")  # must not raise
+        valid = {m.value for m in SecurityMode}
+        assert config.security.mode.value in valid
+        prefs_mode = UserConfigStore().load().security_mode
+        assert prefs_mode in valid  # FAILED before the fix: prefs held the raw string
+        assert prefs_mode == config.security.mode.value  # config and prefs agree
 
     def test_wizard_accepts_agents_override(self, tmp_path: Path) -> None:
         """Agent list override should be respected."""
