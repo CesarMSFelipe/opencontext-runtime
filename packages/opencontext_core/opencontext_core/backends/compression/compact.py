@@ -15,8 +15,16 @@ _DEF_OR_CLASS = re.compile(
 )
 
 
+_SIG_START = re.compile(r"(@|(?:async\s+)?(?:def|class)\s)")
+
+
 def _compact_python_block(code: str) -> str:
-    """Replace function/class bodies with signature + first docstring line only."""
+    """Replace function/class bodies with signature + first docstring line only.
+
+    Statement bodies are dropped and replaced with an ``...`` placeholder, but
+    nested ``def``/``class`` signatures are preserved (the outer loop re-processes
+    them), so a class collapses to its method signatures rather than vanishing.
+    """
     lines = code.splitlines(keepends=True)
     result: list[str] = []
     i = 0
@@ -24,7 +32,8 @@ def _compact_python_block(code: str) -> str:
         line = lines[i]
         stripped = line.lstrip()
         # Detect decorator or def/class line
-        if re.match(r"(@|(?:async\s+)?(?:def|class)\s)", stripped):
+        if _SIG_START.match(stripped):
+            sig_indent = len(line) - len(line.lstrip())
             # Collect decorator+signature block
             sig_lines: list[str] = []
             while i < len(lines):
@@ -34,29 +43,38 @@ def _compact_python_block(code: str) -> str:
                     break
                 i += 1
             result.extend(sig_lines)
-            # Determine indent of body
-            if i < len(lines):
-                indent = len(lines[i]) - len(lines[i].lstrip())
-                # Optionally capture first docstring line
-                if i < len(lines) and lines[i].lstrip().startswith('"""'):
-                    doc_line = lines[i].strip().removeprefix('"""').removesuffix('"""').strip()
-                    result.append(lines[i].split('"""')[0] + '"""' + doc_line + '..."""\n')
-                    # Skip rest of docstring and body
-                    if '"""' in lines[i][lines[i].index('"""') + 3 :]:
-                        i += 1  # single-line docstring
-                    else:
+            body_indent = sig_indent + 4
+            # Optionally capture first docstring line
+            if i < len(lines) and lines[i].lstrip().startswith('"""'):
+                body_indent = len(lines[i]) - len(lines[i].lstrip())
+                doc_line = lines[i].strip().removeprefix('"""').removesuffix('"""').strip()
+                result.append(lines[i].split('"""')[0] + '"""' + doc_line + '..."""\n')
+                # Skip rest of docstring
+                if '"""' in lines[i][lines[i].index('"""') + 3 :]:
+                    i += 1  # single-line docstring
+                else:
+                    i += 1
+                    while i < len(lines) and '"""' not in lines[i]:
                         i += 1
-                        while i < len(lines) and '"""' not in lines[i]:
-                            i += 1
-                        i += 1  # closing """
-                # Skip body
-                while i < len(lines):
-                    cur_indent = len(lines[i]) - len(lines[i].lstrip())
-                    if lines[i].strip() == "" or cur_indent > indent:
-                        i += 1
-                    else:
-                        break
-                result.append("    ...\n")
+                    i += 1  # closing """
+            # Skip the statement body: blank lines and lines indented past the
+            # signature, but STOP at a nested signature (kept) or a dedent.
+            removed = False
+            while i < len(lines):
+                cur = lines[i]
+                cur_stripped = cur.strip()
+                if cur_stripped == "":
+                    i += 1
+                    continue
+                cur_indent = len(cur) - len(cur.lstrip())
+                if cur_indent <= sig_indent:
+                    break  # sibling or dedent: this block is done
+                if _SIG_START.match(cur.lstrip()):
+                    break  # nested signature: let the outer loop keep it
+                removed = True
+                i += 1
+            if removed:
+                result.append(" " * body_indent + "...\n")
         else:
             result.append(line)
             i += 1
