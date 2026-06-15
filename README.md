@@ -159,8 +159,8 @@ receive task
   → build ContextContract (known / unknown / must verify)
   → plan context (budget: 8k / 16k / 28k tokens by risk tier)
   → retrieve from knowledge graph
-  → score with multiple signals (graph centrality, call distance, risk...)
-  → pack minimum sufficient context
+  → score with multiple signals (graph centrality, call distance, git working set, risk...)
+  → pack minimum sufficient context (diversity-aware: distinct facets, not duplicates)
   → compress (terse / compact / efficient / none by risk tier)
   → validate 16 quality gates
   → deliver verified context to agent
@@ -599,6 +599,8 @@ opencontext_insert_after_symbol   opencontext_rename_symbol
 # Setup
 opencontext install                              # Auto-detect, build graph, configure agent
 opencontext install --yes                        # Non-interactive (CI)
+opencontext setup claude-code cursor             # Configure specific agents (MCP + instructions)
+opencontext uninstall --all                      # Cleanly remove OpenContext from agents (backup first)
 opencontext doctor                               # Health check
 opencontext update && opencontext upgrade
 
