@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -20,8 +20,10 @@ def make_record(
     content: str = "some content",
     layer: MemoryLayer = MemoryLayer.EPISODIC,
     confidence: float = 0.9,
+    created_at: datetime | None = None,
 ) -> MemoryRecord:
     now = datetime.now(tz=UTC)
+    ts = created_at or now
     return MemoryRecord(
         id=record_id,
         layer=layer,
@@ -32,8 +34,8 @@ def make_record(
         decay_policy=DecayPolicy(enabled=False),
         tags=[],
         linked_nodes=[],
-        created_at=now,
-        updated_at=now,
+        created_at=ts,
+        updated_at=ts,
     )
 
 
@@ -89,12 +91,25 @@ def test_contradict_decreases_confidence(store: LocalMemoryStore) -> None:
     assert updated.confidence < 0.8
 
 
-def test_decay_prunes_old_records(store: LocalMemoryStore) -> None:
-    # Decay only prunes if confidence < 0.3 AND age > 90 days
-    # We can test that decay runs without error and returns int
-    count = store.decay()
-    assert isinstance(count, int)
-    assert count >= 0
+def test_decay_prunes_only_old_and_low_confidence(store: LocalMemoryStore) -> None:
+    """decay() deletes records that are BOTH stale (>90d) and low-confidence
+    (<0.3); everything failing either condition must survive."""
+    old = datetime.now(tz=UTC) - timedelta(days=120)
+    recent = datetime.now(tz=UTC) - timedelta(days=1)
+
+    store.write(make_record("stale-weak", key="k:a", confidence=0.2, created_at=old))  # pruned
+    store.write(make_record("stale-strong", key="k:b", confidence=0.9, created_at=old))  # kept
+    store.write(make_record("fresh-weak", key="k:c", confidence=0.2, created_at=recent))  # kept
+
+    pruned = store.decay()
+
+    assert pruned == 1
+    survivors = {
+        r.id
+        for key in ("k:a", "k:b", "k:c")
+        for r in store._backend.get_by_key(key)
+    }
+    assert survivors == {"stale-strong", "fresh-weak"}  # only stale+weak removed
 
 
 def test_null_agent_memory_store_satisfies_protocol() -> None:

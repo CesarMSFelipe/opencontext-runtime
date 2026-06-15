@@ -136,14 +136,32 @@ def test_duplicate_write_is_noop(store: LocalMemoryStore) -> None:
 
 
 def test_near_duplicate_write_updates_in_place(store: LocalMemoryStore) -> None:
-    """A near-duplicate (same key, trivially different content) consolidates rather
-    than accreting a second near-identical record."""
-    store.write(make_record("u1", key="k:near", content="use bearer token for auth"))
+    """A near-duplicate (same key, high token overlap but NOT a normalized exact
+    match) refreshes the existing record in place rather than inserting a second
+    row or superseding. Exercises the UPDATE path / _apply_update — distinct from
+    the NO_OP exact-duplicate path."""
+    # 8 shared tokens; the second adds exactly one -> jaccard 8/9 ~ 0.89 (>= 0.85)
+    # while normalizing differently (so it is a near-dup UPDATE, never a NO_OP).
     store.write(
-        make_record("u2", key="k:near", content="use bearer token for auth.", confidence=0.95)
+        make_record("u1", key="k:near", content="configure the auth retry backoff to five seconds")
     )
-    active = [r for r in store._backend.get_by_key("k:near") if r.invalid_at is None]
-    assert len(active) == 1
+    returned = store.write(
+        make_record(
+            "u2",
+            key="k:near",
+            content="configure the auth retry backoff to five seconds now",
+            confidence=0.95,
+        )
+    )
+
+    rows = store._backend.get_by_key("k:near")
+    assert len(rows) == 1  # updated in place: no second row, no supersession history
+    updated = rows[0]
+    assert updated.id == "u1"  # the existing record was refreshed, u2 not inserted
+    assert returned == "u1"
+    assert updated.content == "configure the auth retry backoff to five seconds now"  # refreshed
+    assert updated.confidence == 0.95  # max(0.9, 0.95)
+    assert updated.invalid_at is None  # still the active belief
 
 
 # --- Bi-temporal supersession ---------------------------------------------
