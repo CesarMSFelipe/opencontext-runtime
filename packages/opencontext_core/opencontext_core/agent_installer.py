@@ -11,6 +11,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, ClassVar
 
+from opencontext_core.configurator.filemerge import inject_managed_section, write_text_atomic
+
 
 class AgentTarget(StrEnum):
     """Supported AI coding agents."""
@@ -192,7 +194,7 @@ class AgentInstaller:
         instructions = self._build_agent_instructions("claude")
         instr_name = "CLAUDE.md" if target == AgentTarget.CLAUDE_CODE else "AGENTS.md"
         instructions_path = agent_dir / instr_name
-        instructions_path.write_text(instructions, encoding="utf-8")
+        self._write_managed_instructions(instructions_path, instructions)
 
         files_created = [str(mcp_path), str(instructions_path)]
 
@@ -267,7 +269,7 @@ class AgentInstaller:
         # Instructions
         instr_type = "opencode"
         instr_path = config_dir / "AGENTS.md"
-        instr_path.write_text(self._build_agent_instructions(instr_type), encoding="utf-8")
+        self._write_managed_instructions(instr_path, self._build_agent_instructions(instr_type))
         files_created.append(str(instr_path))
 
         return {
@@ -292,7 +294,7 @@ class AgentInstaller:
 
         rules = self._build_agent_instructions("cursor")
         rules_path = rules_dir / "opencontext.mdc"
-        rules_path.write_text(rules, encoding="utf-8")
+        write_text_atomic(rules_path, rules)  # namespaced file we own
 
         return {
             "agent": agent_name,
@@ -312,7 +314,7 @@ class AgentInstaller:
 
         agents_md = agent_dir / "AGENTS.md"
         instr_type = "codex" if target == AgentTarget.CODEX else "generic"
-        agents_md.write_text(self._build_agent_instructions(instr_type), encoding="utf-8")
+        self._write_managed_instructions(agents_md, self._build_agent_instructions(instr_type))
 
         return {
             "agent": agent_name,
@@ -404,7 +406,16 @@ class AgentInstaller:
 
         # Deep merge
         merged = self._deep_merge(existing, new_config)
-        path.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+        write_text_atomic(path, json.dumps(merged, indent=2))
+
+    @staticmethod
+    def _write_managed_instructions(path: Path, instructions: str) -> None:
+        """Write our instructions into a shared agent file without clobbering the
+        developer's own content: only the marked managed block is replaced."""
+
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        merged = inject_managed_section(existing, "instructions", instructions)
+        write_text_atomic(path, merged)
 
     @staticmethod
     def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
