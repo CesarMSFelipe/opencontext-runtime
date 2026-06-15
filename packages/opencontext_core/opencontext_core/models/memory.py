@@ -71,27 +71,6 @@ class MemoryItem(BaseModel):
     )
 
 
-class MemoryLayerStats(BaseModel):
-    """Statistics for a memory layer."""
-
-    layer: int = Field(description="Layer number (0-3).")
-    name: str = Field(description="Layer name.")
-    token_count: int = Field(
-        default=0,
-        description="Current token count in this layer.",
-        ge=0,
-    )
-    item_count: int = Field(
-        default=0,
-        description="Number of items in this layer.",
-        ge=0,
-    )
-    last_accessed: datetime | None = Field(
-        default=None,
-        description="Last time this layer was accessed.",
-    )
-
-
 class ProjectMemorySnapshot(BaseModel):
     """A project memory snapshot combining manifest, facts, and decisions."""
 

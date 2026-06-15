@@ -140,11 +140,6 @@ CATALOGUE: list[GuardrailEntry] = [
 ]
 
 
-def get_catalogue() -> list[GuardrailEntry]:
-    """Return the full guardrail catalogue."""
-    return list(CATALOGUE)
-
-
 def get_guardrails_for_phase(phase: str) -> list[GuardrailEntry]:
     """Get all guardrail entries that apply to the given phase.
 

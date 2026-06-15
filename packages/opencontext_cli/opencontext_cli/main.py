@@ -40,7 +40,6 @@ from opencontext_cli.commands.update_cmd import (
     handle_upgrade,
 )
 from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
-from opencontext_core.actions import ActionRequest, ActionType, evaluate_action
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
 from opencontext_core.config import SecurityMode, default_config_data, load_config
 from opencontext_core.context.modes import ContextMode
@@ -2972,18 +2971,6 @@ def _quality(command: str, query: str, target: str) -> None:
 
 def _report(command: str) -> None:
     print(json.dumps(TeamReportGenerator().generate(command), indent=2))
-
-
-def _action_decision(
-    action: ActionType,
-    security_mode: SecurityMode,
-    **kwargs: Any,
-) -> dict[str, Any]:
-    decision = evaluate_action(
-        ActionRequest(action=action, **kwargs),
-        security_mode=security_mode,
-    )
-    return decision.model_dump(mode="json")
 
 
 def _pack_diff(base: str, head: str) -> None:

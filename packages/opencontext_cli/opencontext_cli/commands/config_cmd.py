@@ -168,11 +168,6 @@ def _resolve_config_path(prefs: Any, dotted: str) -> tuple[Any, str] | None:
     return (obj, parts[-1])
 
 
-def _get_all_config_paths() -> list[str]:
-    """Return all available config paths sorted."""
-    return sorted(CONFIG_PATHS.keys())
-
-
 def _coerce_value(value: str, target_type: type) -> object:
     """Coerce a string value to the target type."""
     if target_type is bool:

@@ -21,13 +21,11 @@ from opencontext_core.configurator.adapter import Adapter, get_adapter, iter_ada
 from opencontext_core.configurator.backup import BackupStore, plan_actions
 from opencontext_core.configurator.filemerge import (
     inject_managed_section,
-    merge_mcp_config_file,
     write_text_atomic,
 )
 from opencontext_core.configurator.mcp_strategy import (
     plan_mcp_servers,
     remove_mcp_server,
-    write_mcp_servers,
 )
 
 InstructionsBuilder = Callable[[str], str]
@@ -282,20 +280,6 @@ class Configurator:
         path = adapter.config_dir / "agents" / "sdd-orchestrator.json"
         content = json.dumps(profile, indent=2) + "\n"
         return path, _content_if_changed(path, content)
-
-
-def configure_mcp_only(agent_id: str, servers: dict[str, Any]) -> bool:
-    """Write only the MCP config for ``agent_id`` in its native shape."""
-
-    adapter = get_adapter(agent_id)
-    adapter.mcp_config_path.parent.mkdir(parents=True, exist_ok=True)
-    return write_mcp_servers(adapter.mcp_config_path, servers, shape=adapter.mcp_shape)
-
-
-def merge_json_mcp(path: Path, servers: dict[str, Any], *, root_key: str = "mcpServers") -> bool:
-    """Backwards-compatible JSON MCP merge helper."""
-
-    return merge_mcp_config_file(path, servers, root_key=root_key)
 
 
 def _content_if_changed(path: Path, content: str) -> str | None:
