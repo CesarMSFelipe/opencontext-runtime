@@ -572,6 +572,29 @@ class OpenContextRuntime:
             ),
             self.config.retrieval.top_k,
         )
+        # AICX: compile to bytecode → validate → decode back (lazy transport layer)
+        _bytecode = None
+        _bytecode_report = None
+        _bytecode_metrics = None
+        try:
+            from opencontext_core.context.bytecode import (
+                AICXCompiler,
+                AICXDecoder,
+                AICXValidator,
+                compute_metrics,
+            )
+            _bc = AICXCompiler().compile(plan)
+            _bytecode_report = AICXValidator().validate(_bc)
+            if _bytecode_report.passed:
+                import time as _time
+                _t0 = _time.monotonic()
+                plan = AICXDecoder().decode(_bc)
+                _decode_ms = (_time.monotonic() - _t0) * 1000
+                _bytecode_metrics = compute_metrics(plan, _bc, decode_time_ms=_decode_ms)
+                _bytecode = _bc
+        except Exception:
+            pass  # ponytail: AICX is optional — never block the main pipeline
+
         candidates = [evidence_to_context_item(item) for item in plan.evidence]
         ranked = candidates
         sanitized_pack = ContextCompiler(

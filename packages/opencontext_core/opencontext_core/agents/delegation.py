@@ -58,16 +58,34 @@ class SubAgentDelegate:
             self._compressor = None
 
     def _compress_context(self, context: dict) -> dict:
-        """Compress text values in context dict to reduce inter-agent token cost."""
-        if self._compressor is None:
-            return context
+        """Compress context for inter-agent transport.
+
+        EvidencePlan values are AICX-encoded (reference-only, no content inlined).
+        Other large text values fall back to terse compression.
+        """
         result = {}
         for k, v in context.items():
-            if isinstance(v, str) and len(v) > 200:
+            if _is_evidence_plan(v):
+                try:
+                    from opencontext_core.context.bytecode import AICXCompiler, AICXRenderer
+                    bc = AICXCompiler().compile(v)
+                    result[k] = AICXRenderer().render_compact(bc)
+                    continue
+                except Exception:
+                    pass
+            if isinstance(v, str) and len(v) > 200 and self._compressor is not None:
                 result[k] = self._compressor.compress(v, [])
             else:
                 result[k] = v
         return result
+
+
+def _is_evidence_plan(v: object) -> bool:
+    try:
+        from opencontext_core.retrieval.contracts import EvidencePlan
+        return isinstance(v, EvidencePlan)
+    except Exception:
+        return False
 
     def register_handler(self, phase: str, handler: Any) -> None:
         """Register a local handler for a phase."""
