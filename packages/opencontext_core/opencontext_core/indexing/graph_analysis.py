@@ -1,9 +1,11 @@
 """Deterministic graph analysis over the persisted ``nodes``/``edges`` tables.
 
 Computes in/out-degree centrality, flags high-centrality "god nodes" above a
-configurable threshold, partitions nodes into communities by connectivity
-(connected components refined by label propagation), and exposes name-resolving
-``path``/``explain`` queries built on :class:`CallGraphAnalyzer`.
+configurable threshold, partitions nodes into modularity-scored communities
+(deterministic label propagation), detects broker "hubs" by a deterministic
+betweenness approximation, ranks nodes with a query-seeded personalized
+PageRank, and exposes name-resolving ``path``/``explain`` queries built on
+:class:`CallGraphAnalyzer`.
 
 Zero new hard dependencies: everything runs on the standard library and the
 existing :class:`GraphDatabase` SQLite connection. ``networkx`` is used only if
@@ -20,6 +22,7 @@ from typing import Any
 
 from opencontext_core.indexing.call_graph import CallGraphAnalyzer, PathResult
 from opencontext_core.indexing.graph_db import GraphDatabase
+from opencontext_core.retrieval.scoring import personalized_pagerank
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,15 @@ class GodNode:
     name: str
     in_degree: int
     out_degree: int
+    score: float
+
+
+@dataclass(frozen=True)
+class Hub:
+    """A broker node ranked by a deterministic betweenness approximation."""
+
+    node_id: str
+    name: str
     score: float
 
 
@@ -98,6 +110,27 @@ class GraphAnalyzer:
         conn = self.db._connect()
         rows = conn.execute("SELECT id, name FROM nodes").fetchall()
         return {str(r["id"]): (r["name"] or "") for r in rows}
+
+    def _undirected_adjacency(
+        self, names: dict[str, str], edges: list[tuple[str, str]]
+    ) -> dict[str, set[str]]:
+        """Symmetric adjacency (no self-loops) restricted to known nodes."""
+        adjacency: dict[str, set[str]] = {nid: set() for nid in names}
+        for src, dst in edges:
+            if src in adjacency and dst in adjacency and src != dst:
+                adjacency[src].add(dst)
+                adjacency[dst].add(src)
+        return adjacency
+
+    def _directed_adjacency(
+        self, names: dict[str, str], edges: list[tuple[str, str]]
+    ) -> dict[str, set[str]]:
+        """Directed adjacency (source -> targets) restricted to known nodes."""
+        adjacency: dict[str, set[str]] = {nid: set() for nid in names}
+        for src, dst in edges:
+            if src in adjacency and dst in adjacency and src != dst:
+                adjacency[src].add(dst)
+        return adjacency
 
     # ---- centrality / god nodes ---------------------------------------
 
@@ -157,70 +190,84 @@ class GraphAnalyzer:
     # ---- community detection ------------------------------------------
 
     def detect_communities(self, *, max_iterations: int = 100) -> dict[str, int]:
-        """Partition nodes into communities by connectivity.
+        """Partition nodes into modularity-scored communities.
 
-        Connected components (treating call edges as undirected) bound the
-        partition — nodes in different components never share a community — and
-        label propagation refines each component. Both phases iterate in sorted
-        order with deterministic tie-breaks, so the assignment is identical
-        across repeated runs on the same graph. Community ids are small ints
-        assigned in ascending order of each community's smallest node id.
+        Uses deterministic, modularity-gain label propagation over the
+        undirected call graph: each node adopts the neighbor label that most
+        increases modularity, with ties broken on the smallest label. Unlike a
+        plain connected-components partition, this splits dense clusters that are
+        joined by a single bridge edge (the bridge does not justify merging two
+        otherwise-cohesive groups). Nodes iterate in sorted order so the result
+        is identical across repeated runs. Community ids are small ints assigned
+        in ascending order of each community's smallest node id.
         """
         names = self._load_node_names()
         edges = self._load_edges()
-        adjacency: dict[str, set[str]] = {nid: set() for nid in names}
-        for src, dst in edges:
-            if src in adjacency and dst in adjacency:
-                adjacency[src].add(dst)
-                adjacency[dst].add(src)
+        adjacency = self._undirected_adjacency(names, edges)
+        labels = _modularity_label_propagation(names, adjacency, max_iterations=max_iterations)
+        return _canonicalize_labels(names, labels)
 
-        # connected components (deterministic BFS over sorted nodes).
-        component: dict[str, int] = {}
-        comp_id = 0
-        for start in sorted(names):
-            if start in component:
-                continue
-            queue: deque[str] = deque([start])
-            component[start] = comp_id
-            while queue:
-                node = queue.popleft()
-                for neighbor in sorted(adjacency[node]):
-                    if neighbor not in component:
-                        component[neighbor] = comp_id
-                        queue.append(neighbor)
-            comp_id += 1
+    def modularity(self, partition: dict[str, int]) -> float:
+        """Newman modularity of ``partition`` over the undirected call graph.
 
-        # label propagation, seeded by component + node id and bounded
-        # to its component so labels never leak across components.
-        labels: dict[str, str] = {nid: nid for nid in sorted(names)}
-        for _ in range(max_iterations):
-            changed = False
-            for node in sorted(names):
-                neighbor_labels: dict[str, int] = defaultdict(int)
-                for neighbor in adjacency[node]:
-                    neighbor_labels[labels[neighbor]] += 1
-                if not neighbor_labels:
-                    continue
-                # Pick the most frequent neighbor label; tie-break on the
-                # lexicographically smallest label for reproducibility.
-                best = min(neighbor_labels.items(), key=lambda kv: (-kv[1], kv[0]))[0]
-                if best != labels[node]:
-                    labels[node] = best
-                    changed = True
-            if not changed:
-                break
+        Ranges roughly in ``[-0.5, 1.0]``; higher means denser intra-community
+        connectivity than expected by chance. Returns ``0.0`` for an edgeless
+        graph.
+        """
+        names = self._load_node_names()
+        edges = self._load_edges()
+        adjacency = self._undirected_adjacency(names, edges)
+        return _modularity(adjacency, partition)
 
-        # Canonicalize: a community is (component, propagated label). Number them
-        # by the smallest member node id so ids are stable and contiguous.
-        raw_groups: dict[tuple[int, str], list[str]] = defaultdict(list)
-        for node in sorted(names):
-            raw_groups[(component[node], labels[node])].append(node)
-        ordered = sorted(raw_groups.values(), key=lambda members: min(members))
-        partition: dict[str, int] = {}
-        for community_id, members in enumerate(ordered):
-            for node in members:
-                partition[node] = community_id
-        return partition
+    # ---- hubs / personalized pagerank ---------------------------------
+
+    def detect_hubs(self, *, top_k: int | None = None, min_score: float = 0.0) -> list[Hub]:
+        """Detect broker "hub" nodes by a deterministic betweenness approximation.
+
+        Computes unweighted shortest-path betweenness over the directed call
+        graph (Brandes' algorithm, nodes processed in sorted order). Nodes that
+        lie on many shortest paths between other nodes score highest. Returned in
+        descending score (then node id), optionally truncated to ``top_k`` and
+        filtered to ``score > min_score``. Deterministic for identical graphs.
+        """
+        names = self._load_node_names()
+        edges = self._load_edges()
+        adjacency = self._directed_adjacency(names, edges)
+        betweenness = _betweenness_centrality(names, adjacency)
+        hubs = [
+            Hub(node_id=nid, name=names[nid], score=betweenness.get(nid, 0.0))
+            for nid in sorted(names)
+            if betweenness.get(nid, 0.0) > min_score
+        ]
+        hubs.sort(key=lambda h: (-h.score, h.node_id))
+        if top_k is not None:
+            hubs = hubs[:top_k]
+        return hubs
+
+    def personalized_pagerank(
+        self,
+        *,
+        seed_names: list[str] | None = None,
+        seed_ids: list[str] | None = None,
+        damping: float = 0.85,
+    ) -> dict[str, float]:
+        """Personalized PageRank over the call graph (undirected), keyed by node id.
+
+        Edges are treated as undirected because for relevance ranking a symbol's
+        callers are as pertinent as its callees, so the random surfer should be
+        able to reach both. Seeds are the union of ``seed_ids`` and every node id
+        resolved from ``seed_names``; restart mass concentrates on them so their
+        graph neighborhood is lifted. With no resolvable seeds the restart
+        distribution is uniform (classic PageRank). Deterministic for identical
+        graph content.
+        """
+        names = self._load_node_names()
+        edges = self._load_edges()
+        adjacency = self._undirected_adjacency(names, edges)
+        seeds: set[str] = set(seed_ids or [])
+        for name in seed_names or []:
+            seeds.update(self._resolve_name(name))
+        return personalized_pagerank(adjacency, seeds, damping=damping)
 
     # ---- name-resolving path / explain --------------------------------
 
@@ -282,3 +329,150 @@ class GraphAnalyzer:
             god_node=is_god,
             centrality=score,
         )
+
+
+# ---- community / modularity helpers (pure, deterministic) -------------------
+
+
+def _modularity_label_propagation(
+    names: dict[str, str],
+    adjacency: dict[str, set[str]],
+    *,
+    max_iterations: int,
+) -> dict[str, str]:
+    """Label propagation that moves each node to the modularity-maximizing label.
+
+    Each node starts in its own community (label == node id). On every sweep
+    (nodes in sorted order) a node adopts the neighbor community whose adoption
+    yields the greatest modularity gain, approximated locally as
+    ``edges_to_community - (degree * community_degree) / (2m)``. Ties break on the
+    smallest label. Converges when no node moves.
+    """
+    labels: dict[str, str] = {nid: nid for nid in sorted(names)}
+    degree: dict[str, int] = {nid: len(adjacency[nid]) for nid in names}
+    total_degree = sum(degree.values())
+    if total_degree == 0:
+        return labels
+    two_m = float(total_degree)
+
+    # Running sum of degrees per community label, kept in sync with moves.
+    community_degree: dict[str, int] = defaultdict(int)
+    for nid in names:
+        community_degree[labels[nid]] += degree[nid]
+
+    for _ in range(max_iterations):
+        changed = False
+        for node in sorted(names):
+            neighbors = adjacency[node]
+            if not neighbors:
+                continue
+            current = labels[node]
+            links: dict[str, int] = defaultdict(int)
+            for neighbor in neighbors:
+                links[labels[neighbor]] += 1
+
+            # Evaluate staying vs. moving; remove self-contribution so a node is
+            # never compared against its own degree inside the target community.
+            best_label = current
+            best_gain = float("-inf")
+            for label in sorted({current, *links}):
+                self_degree = degree[node] if label == current else 0
+                resident_degree = community_degree[label] - self_degree
+                gain = links.get(label, 0) - (degree[node] * resident_degree) / two_m
+                if gain > best_gain or (gain == best_gain and label < best_label):
+                    best_gain = gain
+                    best_label = label
+
+            if best_label != current:
+                community_degree[current] -= degree[node]
+                community_degree[best_label] += degree[node]
+                labels[node] = best_label
+                changed = True
+        if not changed:
+            break
+    return labels
+
+
+def _canonicalize_labels(names: dict[str, str], labels: dict[str, str]) -> dict[str, int]:
+    """Number communities by their smallest member id for stable, contiguous ids."""
+    groups: dict[str, list[str]] = defaultdict(list)
+    for node in sorted(names):
+        groups[labels[node]].append(node)
+    ordered = sorted(groups.values(), key=lambda members: min(members))
+    partition: dict[str, int] = {}
+    for community_id, members in enumerate(ordered):
+        for node in members:
+            partition[node] = community_id
+    return partition
+
+
+def _modularity(adjacency: dict[str, set[str]], partition: dict[str, int]) -> float:
+    """Newman modularity ``Q`` for an undirected unweighted graph."""
+    degree = {nid: len(neighbors) for nid, neighbors in adjacency.items()}
+    two_m = float(sum(degree.values()))
+    if two_m == 0.0:
+        return 0.0
+
+    intra_edges = 0.0
+    for src, neighbors in adjacency.items():
+        for dst in neighbors:
+            if partition.get(src) == partition.get(dst):
+                intra_edges += 1.0
+    # Each undirected edge counted twice above; keep as 2*A_ij sum.
+
+    degree_by_community: dict[int, int] = defaultdict(int)
+    for nid, deg in degree.items():
+        degree_by_community[partition.get(nid, -1)] += deg
+
+    q = intra_edges / two_m
+    for total_degree in degree_by_community.values():
+        q -= (total_degree / two_m) ** 2
+    return q
+
+
+# ---- betweenness (Brandes, deterministic) ----------------------------------
+
+
+def _betweenness_centrality(
+    names: dict[str, str], adjacency: dict[str, set[str]]
+) -> dict[str, float]:
+    """Unweighted shortest-path betweenness over a directed graph.
+
+    Brandes' algorithm with deterministic ordering (sources and adjacency walked
+    in sorted order). Endpoints are excluded, matching the conventional
+    definition, so pure source/sink nodes score ``0.0``.
+    """
+    betweenness: dict[str, float] = {nid: 0.0 for nid in names}
+    nodes = sorted(names)
+    out_links = {nid: sorted(adjacency[nid]) for nid in nodes}
+
+    for source in nodes:
+        stack: list[str] = []
+        predecessors: dict[str, list[str]] = {nid: [] for nid in nodes}
+        sigma: dict[str, float] = {nid: 0.0 for nid in nodes}
+        distance: dict[str, int] = {nid: -1 for nid in nodes}
+        sigma[source] = 1.0
+        distance[source] = 0
+        queue: deque[str] = deque([source])
+
+        while queue:
+            v = queue.popleft()
+            stack.append(v)
+            for w in out_links[v]:
+                if distance[w] < 0:
+                    distance[w] = distance[v] + 1
+                    queue.append(w)
+                if distance[w] == distance[v] + 1:
+                    sigma[w] += sigma[v]
+                    predecessors[w].append(v)
+
+        delta: dict[str, float] = {nid: 0.0 for nid in nodes}
+        while stack:
+            w = stack.pop()
+            for v in predecessors[w]:
+                if sigma[w] > 0.0:
+                    delta[v] += (sigma[v] / sigma[w]) * (1.0 + delta[w])
+            if w != source:
+                betweenness[w] += delta[w]
+
+    return betweenness

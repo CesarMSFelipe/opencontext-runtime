@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,7 +26,12 @@ from opencontext_core.retrieval.contracts import (
     evidence_trace_id,
 )
 from opencontext_core.retrieval.retriever import ProjectRetriever
-from opencontext_core.retrieval.scoring import RetrievalWeights, compute_hybrid_score
+from opencontext_core.retrieval.scoring import (
+    RetrievalWeights,
+    compute_hybrid_score,
+    identifier_quality_score,
+    personalized_pagerank,
+)
 
 
 class RetrievalSource(Protocol):
@@ -213,7 +219,7 @@ class RetrievalPlanner:
                 continue
 
         deduped = _deduplicate(candidates)
-        return self.rank(deduped)[:top_k]
+        return self.rank(deduped, query=query)[:top_k]
 
     def rank(
         self,
@@ -221,18 +227,27 @@ class RetrievalPlanner:
         *,
         memory_boost_map: dict[str, float] | None = None,
         graph_distance_map: dict[str, int] | None = None,
+        query: str | None = None,
     ) -> list[ContextItem]:
         """Order candidates by the hybrid score (semantic + provenance + graph +
-        memory failure-boost + test-affinity, minus token/staleness penalties).
+        memory failure-boost + test-affinity + personalization, minus
+        token/staleness penalties).
 
         ``memory_boost_map`` / ``graph_distance_map`` are optional signals the
         runtime can supply (from the memory store and call graph); they default to
         empty so the ranker is a pure, deterministic re-rank of the candidates.
+
+        When ``query`` is provided, a personalized graph ranking signal is added:
+        a query-seeded personalized PageRank over the candidates' call graph,
+        blended with identifier-quality heuristics (query-mention boost, well-named
+        boost, private/over-common downweighting, sqrt reference-count dampening).
+        Omitting ``query`` leaves the ordering identical to the prior behavior.
         """
 
         mb = memory_boost_map or {}
         gd = graph_distance_map or {}
         weights = RetrievalWeights()
+        personalization = _personalization_map(items, query) if query else None
 
         def _score(item: ContextItem) -> float:
             modified = item.metadata.get("modified_at")
@@ -249,6 +264,7 @@ class RetrievalPlanner:
                 is_required=item.priority == ContextPriority.P0,
                 is_test=_looks_like_test(item.source),
                 weights=weights,
+                personalization_map=personalization,
             )
 
         return sorted(items, key=lambda item: (-_score(item), item.tokens, item.id))
@@ -282,7 +298,11 @@ class RetrievalPlanner:
 
         expanded_items, graph_distance_map = self._expand_with_graph(request, base_items)
         all_items = _deduplicate([*base_items, *expanded_items])
-        context_items = self.rank(all_items, graph_distance_map=graph_distance_map or None)[:top_k]
+        context_items = self.rank(
+            all_items,
+            graph_distance_map=graph_distance_map or None,
+            query=request.query,
+        )[:top_k]
 
         evidence = [_context_item_to_evidence(item, request.surface) for item in context_items]
         fallback_actions = _fallback_actions_for(request, evidence)
@@ -370,6 +390,101 @@ class RetrievalPlanner:
 def _looks_like_test(source: str) -> bool:
     base = source.rsplit("/", 1)[-1].lower()
     return base.startswith("test_") or base.endswith("_test.py") or "/tests/" in source.lower()
+
+
+# ---- personalized graph ranking ---------------------------------------------
+
+
+def _query_terms(query: str) -> set[str]:
+    """Lowercase alphanumeric tokens of ``query``, length >= 2."""
+    tokens: set[str] = set()
+    word = ""
+    for ch in query:
+        if ch.isalnum():
+            word += ch
+        else:
+            if len(word) >= 2:
+                tokens.add(word.lower())
+            word = ""
+    if len(word) >= 2:
+        tokens.add(word.lower())
+    return tokens
+
+
+def _candidate_name(item: ContextItem) -> str:
+    """Best-effort symbol name for a candidate from its metadata, else its source."""
+    retrieval = item.metadata.get("retrieval")
+    if isinstance(retrieval, dict):
+        node = retrieval.get("node")
+        if isinstance(node, str) and node:
+            return node
+    source = item.source.rsplit("/", 1)[-1]
+    return source.split(":", 1)[0].removesuffix(".py")
+
+
+def _candidate_relationships(item: ContextItem) -> list[str]:
+    """Related symbol names declared in a candidate's graph metadata."""
+    out: list[str] = []
+    retrieval = item.metadata.get("retrieval")
+    if isinstance(retrieval, dict):
+        rels = retrieval.get("relationships")
+        if isinstance(rels, list):
+            out.extend(str(r) for r in rels)
+    provenance = item.metadata.get("graph_provenance")
+    if isinstance(provenance, dict):
+        rels = provenance.get("relationships")
+        if isinstance(rels, list):
+            out.extend(str(r) for r in rels)
+    return out
+
+
+def _personalization_map(items: list[ContextItem], query: str) -> dict[str, float]:
+    """Build a per-candidate personalization signal in ``[0, 1]``.
+
+    Combines a query-seeded personalized PageRank over the candidates' call graph
+    with per-identifier quality heuristics, so candidates that are both
+    well-named/query-mentioned and graph-central rise. Pure and deterministic.
+    """
+    terms = _query_terms(query)
+    if not items:
+        return {}
+
+    names = {item.id: _candidate_name(item) for item in items}
+    name_to_ids: dict[str, list[str]] = defaultdict(list)
+    for item_id, name in names.items():
+        name_to_ids[name].append(item_id)
+
+    # Reference counts: how often each candidate's name is referenced by peers
+    # (used to dampen over-common symbols via sqrt in the quality heuristic).
+    reference_count: dict[str, int] = defaultdict(int)
+    adjacency: dict[str, set[str]] = {item.id: set() for item in items}
+    for item in items:
+        for rel in _candidate_relationships(item):
+            for target_id in name_to_ids.get(rel, ()):
+                if target_id != item.id:
+                    adjacency[item.id].add(target_id)
+                    adjacency[target_id].add(item.id)
+                    reference_count[target_id] += 1
+
+    quality = {
+        item.id: identifier_quality_score(
+            names[item.id], terms, reference_count=reference_count.get(item.id, 0)
+        )
+        for item in items
+    }
+
+    seeds = {item_id for item_id, name in names.items() if _query_terms(name) & terms}
+    pagerank = personalized_pagerank(adjacency, seeds)
+    max_pr = max(pagerank.values(), default=0.0)
+
+    blended: dict[str, float] = {}
+    for item in items:
+        pr = (pagerank.get(item.id, 0.0) / max_pr) if max_pr > 0.0 else 0.0
+        # Weight identifier quality (carries the direct query-mention signal)
+        # slightly above raw graph mass so a tie on the graph still surfaces the
+        # query-relevant symbol.
+        blended[item.id] = max(0.0, min(1.0, 0.6 * quality[item.id] + 0.4 * pr))
+    return blended
 
 
 def _with_source_metadata(item: ContextItem, source_name: str) -> ContextItem:
