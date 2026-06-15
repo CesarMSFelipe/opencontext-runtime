@@ -23,7 +23,7 @@ from opencontext_core.models.project import (
     RepoMapEntry,
     Symbol,
 )
-from opencontext_core.models.trace import RuntimeTrace, TraceEvent, TraceSpan
+from opencontext_core.models.trace import RunEvent, RuntimeTrace, TraceEvent, TraceSpan
 from opencontext_core.models.workflow import WorkflowInput, WorkflowRunState, WorkflowStepResult
 
 __all__ = [
@@ -47,6 +47,7 @@ __all__ = [
     "ProtectedSpan",
     "RepoMap",
     "RepoMapEntry",
+    "RunEvent",
     "RuntimeTrace",
     "Symbol",
     "TokenBudget",

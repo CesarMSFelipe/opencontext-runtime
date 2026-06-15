@@ -46,6 +46,7 @@ from opencontext_core.harness.phases import (
     TasksPhase,
     VerifyPhase,
 )
+from opencontext_core.models.trace import RunEvent
 
 
 class HarnessState:
@@ -294,6 +295,10 @@ class HarnessRunner:
             state.apply_edits = list(apply_edits)
         state.approved_phases = set(approved_phases or set())
         results: list[PhaseResult] = []
+        # Append-only typed event ledger: one immutable action/observation record
+        # per executed phase (and per phase blocked before execution), so a run
+        # can be inspected and replayed deterministically.
+        events: list[RunEvent] = []
         final_status = GateStatus.PASSED
         # A hard failure (e.g. an apply pre-gate blocking a write) must not be
         # downgraded to WARNING by subsequent non-strict phase outcomes.
@@ -354,9 +359,22 @@ class HarnessRunner:
                 pre_gates, blocked = self._evaluate_apply_pre_gates(state, phase_config)
                 state.gates.extend(pre_gates)
                 if blocked:
-                    for g in pre_gates:
-                        if g.status == GateStatus.FAILED:
-                            state.warnings.append(f"apply: blocked by pre-gate '{g.id}'")
+                    blocking = [g.id for g in pre_gates if g.status == GateStatus.FAILED]
+                    for gate_id in blocking:
+                        state.warnings.append(f"apply: blocked by pre-gate '{gate_id}'")
+                    events.append(
+                        RunEvent(
+                            index=len(events),
+                            phase="apply",
+                            action="blocked_pre_gate",
+                            inputs_summary=self._inputs_summary(state),
+                            status=GateStatus.FAILED.value,
+                            observation=(
+                                f"apply blocked before write by pre-gate(s): {', '.join(blocking)}"
+                            ),
+                            metadata={"blocking_gates": blocking},
+                        )
+                    )
                     final_status = GateStatus.FAILED
                     hard_failed = True
                     # Do NOT build/run ApplyPhase — no filesystem mutation occurs.
@@ -403,6 +421,9 @@ class HarnessRunner:
                 elif not hard_failed:
                     final_status = GateStatus.WARNING
 
+            # Record one typed event for this executed phase (action + observation).
+            events.append(self._phase_event(len(events), phase_id, state, result, dispatched))
+
             if result.status in (GateStatus.FAILED, GateStatus.WARNING) and not hard_failed:
                 final_status = GateStatus.WARNING
             if result.status == GateStatus.FAILED and budget_mode is BudgetMode.STRICT:
@@ -420,10 +441,49 @@ class HarnessRunner:
             decisions=list(state.decisions),
             trace_ids=list(state.trace_ids),
             warnings=list(state.warnings),
+            events=list(events),
         )
 
         self.persist_run(state, run_result)
         return run_result
+
+    @staticmethod
+    def _inputs_summary(state: HarnessState) -> str:
+        """Deterministic one-line summary of a phase action's inputs."""
+        return f"task={state.task!r} edits={len(getattr(state, 'apply_edits', []) or [])}"
+
+    def _phase_event(
+        self,
+        index: int,
+        phase_id: str,
+        state: HarnessState,
+        result: PhaseResult,
+        dispatched: list[PhaseGate],
+    ) -> RunEvent:
+        """Build the typed action/observation event for an executed phase."""
+        status = result.status.value if hasattr(result.status, "value") else str(result.status)
+        gate_total = len(result.gates) + len(dispatched)
+        failed = sum(1 for g in (*result.gates, *dispatched) if g.status == GateStatus.FAILED)
+        observation = (
+            f"phase '{phase_id}' -> {status}; "
+            f"{len(result.artifacts)} artifact(s), {gate_total} gate(s), {failed} failed"
+        )
+        metadata: dict[str, Any] = {
+            "artifacts": len(result.artifacts),
+            "gates": gate_total,
+            "failed_gates": failed,
+        }
+        if result.trace_id:
+            metadata["trace_id"] = result.trace_id
+        return RunEvent(
+            index=index,
+            phase=phase_id,
+            action="run_phase",
+            inputs_summary=self._inputs_summary(state),
+            status=status,
+            observation=observation,
+            metadata=metadata,
+        )
 
     def _harness_governance(self) -> tuple[str, bool]:
         """Resolve effective (tdd_mode, approval_required_for_writes).
@@ -753,6 +813,7 @@ class HarnessRunner:
             "gates.json": {"gates": _serialize(result.gates)},
             "artifacts.json": {"artifacts": _serialize(result.artifacts)},
             "decisions.json": {"decisions": _serialize(result.decisions)},
+            "events.json": {"events": _serialize(result.events)},
         }
         for filename, data in files.items():
             (run_dir / filename).write_text(

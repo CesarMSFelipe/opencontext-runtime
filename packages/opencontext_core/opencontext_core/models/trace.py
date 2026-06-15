@@ -12,6 +12,39 @@ from opencontext_core.compat import UTC
 from opencontext_core.models.context import ContextItem, PromptSection, TokenBudget
 
 
+class RunEvent(BaseModel):
+    """One immutable typed step in a run's deterministic event ledger.
+
+    Each event pairs an action (what the run set out to do for a phase) with its
+    observation (what happened). Events are append-only and ordered by ``index``
+    so a completed run can be inspected or replayed step by step. The model is
+    frozen: once appended, an event never changes.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    index: int = Field(description="Zero-based position of this event in the run ledger.")
+    phase: str = Field(description="Phase id this event belongs to (e.g. 'apply').")
+    action: str = Field(description="Action kind performed for the phase (e.g. 'run_phase').")
+    inputs_summary: str = Field(
+        default="",
+        description="Short, deterministic summary of the action's inputs.",
+    )
+    status: str = Field(description="Outcome status (passed/warning/failed/skipped).")
+    observation: str = Field(
+        default="",
+        description="What was observed after the action ran.",
+    )
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(tz=UTC),
+        description="UTC timestamp when the event was recorded.",
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional structured detail for replay/inspection.",
+    )
+
+
 class TraceEvent(BaseModel):
     """OpenTelemetry-compatible span event."""
 
@@ -85,4 +118,8 @@ class RuntimeTrace(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Additional trace metadata.",
+    )
+    event_ledger: list[RunEvent] = Field(
+        default_factory=list,
+        description="Append-only typed action/observation events for deterministic replay.",
     )

@@ -6,11 +6,13 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from opencontext_core.harness.checkpoint import CheckpointStore
 from opencontext_core.harness.config import PhaseConfig
 from opencontext_core.harness.gates import (
     ArtifactPersistedGate,
@@ -719,11 +721,33 @@ class ApplyPhase(HarnessPhase):
       - On a mid-apply failure, all touched files are rolled back and the phase
         reports ``status="failed"``.
 
+    Checkpoint safety: before any write the phase snapshots exactly the target
+    files into a harness-owned checkpoint, so the write is ``snapshot -> apply ->
+    (on gate/approval failure or error) restore``. When ``verify_after_apply`` is
+    supplied it runs after a successful write; if it returns ``False`` (a gate or
+    approval rejected the change) the workspace is restored to the checkpoint
+    byte-for-byte and the phase reports ``status="rolled_back"`` / FAILED. The
+    checkpoint id and computed diff are exposed in the result metadata for
+    inspection and replay.
+
     Edits are read from ``state.apply_edits`` (a list of ``{"path", "content"}``
     dicts or :class:`FileEdit`), which the executor/delegation layer populates.
     """
 
     id = "apply"
+
+    def __init__(
+        self,
+        config: PhaseConfig,
+        budget_mode: BudgetMode = BudgetMode.WARN,
+        *,
+        verify_after_apply: Callable[[list[dict[str, Any]]], bool] | None = None,
+    ) -> None:
+        super().__init__(config, budget_mode)
+        # Optional post-apply check. Returns True to keep the write, False to
+        # roll back to the checkpoint (e.g. a post-write gate/approval rejected
+        # the change). When None, a successful write is always kept.
+        self._verify_after_apply = verify_after_apply
 
     @staticmethod
     def _collect_edits(state: Any) -> list[FileEdit]:
@@ -736,6 +760,12 @@ class ApplyPhase(HarnessPhase):
                 edits.append(FileEdit(path=str(item["path"]), content=str(item["content"])))
         return edits
 
+    @staticmethod
+    def _edit_targets(state: Any, edits: list[FileEdit]) -> list[Path]:
+        """Resolve the on-disk targets the edits will write, for checkpointing."""
+        executor = CodeEditExecutor(state.root)
+        return [executor._resolve(e.path) for e in edits]
+
     def run(self, state: Any) -> PhaseResult:
         run_dir = state.root / ".opencontext" / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -746,8 +776,13 @@ class ApplyPhase(HarnessPhase):
         apply_status = "planned"
         phase_status = GateStatus.PASSED
         error: str | None = None
+        checkpoint = None
+        diff_changes: list[dict[str, str]] = []
 
         if edits:
+            # Snapshot exactly the files about to change BEFORE touching them, so
+            # a post-apply rejection (or error) can restore them byte-for-byte.
+            checkpoint = CheckpointStore(state.root).create(self._edit_targets(state, edits))
             executor = CodeEditExecutor(state.root)
             try:
                 applied = executor.apply(edits)
@@ -760,10 +795,26 @@ class ApplyPhase(HarnessPhase):
                     for c in applied
                 ]
                 apply_status = "applied"
-            except Exception as exc:  # rollback already performed by executor
+                if checkpoint is not None:
+                    diff_changes = [{"path": c.path, "change": c.change} for c in checkpoint.diff()]
+                # Post-apply verification: a False result (gate/approval rejected
+                # the write) rolls the workspace back to the checkpoint.
+                if self._verify_after_apply is not None and not self._verify_after_apply(changes):
+                    if checkpoint is not None:
+                        checkpoint.restore()
+                    apply_status = "rolled_back"
+                    phase_status = GateStatus.FAILED
+                    error = "post-apply verification failed — rolled back to checkpoint"
+                    changes = []
+            except Exception as exc:
+                # The executor rolls back its own partial writes; also restore the
+                # checkpoint so the workspace is guaranteed pre-apply state.
+                if checkpoint is not None:
+                    checkpoint.restore()
                 error = str(exc)
                 apply_status = "failed"
                 phase_status = GateStatus.FAILED
+                changes = []
 
         apply_manifest = {
             "run_id": state.run_id,
@@ -771,13 +822,19 @@ class ApplyPhase(HarnessPhase):
             "created_at": datetime.now(UTC).isoformat(),
             "status": apply_status,
             "changes": changes,
+            "checkpoint_id": checkpoint.id if checkpoint is not None else None,
+            "diff": diff_changes,
             "summary": (
                 f"Applied {len(changes)} file edit(s) for: {state.task}"
                 if apply_status == "applied"
                 else (
-                    f"Apply failed and rolled back for: {state.task}"
-                    if apply_status == "failed"
-                    else f"No executor edits — planned only for: {state.task}"
+                    f"Apply rolled back to checkpoint for: {state.task}"
+                    if apply_status == "rolled_back"
+                    else (
+                        f"Apply failed and rolled back for: {state.task}"
+                        if apply_status == "failed"
+                        else f"No executor edits — planned only for: {state.task}"
+                    )
                 )
             ),
         }
@@ -816,6 +873,8 @@ class ApplyPhase(HarnessPhase):
                 "manifest_path": str(apply_manifest_path),
                 "apply_status": apply_status,
                 "changed_files": [c["path"] for c in changes],
+                "checkpoint_id": checkpoint.id if checkpoint is not None else None,
+                "diff": diff_changes,
             },
         )
 

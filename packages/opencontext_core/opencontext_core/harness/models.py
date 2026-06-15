@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from opencontext_core.compat import StrEnum
+from opencontext_core.models.trace import RunEvent
 
 
 class BudgetMode(StrEnum):
@@ -202,4 +203,5 @@ class HarnessRunResult:
     decisions: list[HarnessDecision] = field(default_factory=list)
     trace_ids: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    events: list[RunEvent] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
