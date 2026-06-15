@@ -5,8 +5,9 @@
 <h2 align="center">OpenContext Runtime</h2>
 
 <p align="center">
-  <b>The verified context runtime for AI agents.</b><br>
-  <sub>Plans · Verifies · Remembers · Learns · Ships minimum sufficient context</sub>
+  <b>Your AI agent reads the whole directory to change two files.<br>
+  OpenContext hands it the few that matter — verified, offline, in one MCP call.</b><br>
+  <sub>The token-verified context runtime for AI coding agents. Plans · Verifies · Remembers · Learns.</sub>
 </p>
 
 <p align="center">
@@ -18,7 +19,8 @@
 </p>
 
 <p align="center">
-  <a href="#-quick-start"><b>Quick Start</b></a> &nbsp;·&nbsp;
+  <a href="#why-opencontext"><b>Why</b></a> &nbsp;·&nbsp;
+  <a href="#-quick-start--60-seconds-to-verified-context"><b>Quick Start</b></a> &nbsp;·&nbsp;
   <a href="#-how-it-works">How It Works</a> &nbsp;·&nbsp;
   <a href="#-agentic-loop">Agentic Loop</a> &nbsp;·&nbsp;
   <a href="#-sdd--tdd">SDD + TDD</a> &nbsp;·&nbsp;
@@ -52,20 +54,29 @@ Dry run — phases that would execute:
 
 ---
 
-## ⚡ Quick Start
+## Why OpenContext
+
+- **Up to 96% fewer tokens.** Your agent gets the *minimum sufficient* context — the symbols and call chains the task actually needs, not the whole directory. Benchmarked on this repo, reproducible in one command.
+- **Verified, not guessed.** Every context pack passes 16 quality gates (coverage, freshness, secret-leakage, budget) and ships a trace ID you can audit. This is a runtime, not a RAG wrapper.
+- **Offline & MCP-native.** No API key, no network egress. 13 MCP tools your agent already speaks — drop-in for Claude Code, Cursor, Copilot, and 11 more editors.
+- **It gets smarter.** Past failures boost the right symbols next time; decisions and conventions persist in local memory across sessions.
+
+---
+
+## ⚡ Quick Start — 60 seconds to verified context
 
 ```bash
-# Install
+# 1. Install (no API key, nothing leaves your machine)
 pip install opencontext-cli
 
-# Set up your project (auto-detects stack, builds graph, configures agent)
+# 2. Set up your project — auto-detects stack, builds the graph, wires your agent
 cd your-project
 opencontext install
 
-# Run your first verified context pack
+# 3. Get your first verified, minimal context pack (copied to clipboard)
 opencontext pack . --query "How does authentication work?" --copy
 
-# Or launch the full agentic loop
+# Or hand the whole task to the agentic loop
 opencontext loop --task "fix crash in auth middleware" --flow full
 ```
 
