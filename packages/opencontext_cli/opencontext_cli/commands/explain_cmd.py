@@ -90,4 +90,18 @@ def handle_explain(runtime: Any, args: Any) -> int:
             reason = reasons.get(item.id, "below the budget/diversity cut")
             console.print(f"  [dim]✗[/] {item.source}  [dim]{item.tokens:,} tok — {reason}[/]")
 
+    freshness_nudge(runtime, root)
     return 0
+
+
+def freshness_nudge(runtime: Any, root: Path) -> None:
+    """Warn if the index drifted from disk (stale context erodes trust). Best-effort."""
+    try:
+        report = runtime.knowledge_graph.stale_files(root)
+    except Exception:
+        return
+    if report.total:
+        console.print(
+            f"\n[yellow]⚠ Index is {report.total} files behind the working tree[/] — "
+            "run [cyan]opencontext index .[/] for fresh context."
+        )

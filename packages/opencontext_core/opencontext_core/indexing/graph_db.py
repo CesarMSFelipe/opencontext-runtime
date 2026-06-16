@@ -533,6 +533,22 @@ class GraphDatabase:
             size=row["size"],
         )
 
+    def all_files(self) -> list[FileRecord]:
+        """Every indexed file record (used to detect staleness vs disk)."""
+        conn = self._connect()
+        rows = conn.execute("SELECT * FROM files ORDER BY path").fetchall()
+        return [
+            FileRecord(
+                id=row["id"],
+                path=row["path"],
+                language=row["language"],
+                last_modified=row["last_modified"],
+                hash=row["hash"],
+                size=row["size"],
+            )
+            for row in rows
+        ]
+
     # FTS5 search
 
     def search_fts(self, query: str, limit: int = 20) -> list[dict[str, Any]]:

@@ -140,6 +140,7 @@ class ComponentDoctor:
                             ),
                         )
                     )
+                    checks.append(self._check_freshness(db_path))
 
                 # Check if FTS5 is working
                 if stats.get("nodes", 0) > 0:
@@ -204,6 +205,40 @@ class ComponentDoctor:
         )
 
         return checks
+
+    def _check_freshness(self, db_path: Path) -> ComponentCheck:
+        """Flag indexed files that changed or were deleted since the last index.
+
+        A stale graph silently feeds the agent context for code that no longer
+        exists — the kind of quiet wrongness that erodes trust in verified
+        context. Surfaces it with a one-command fix.
+        """
+        from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+
+        try:
+            kg = KnowledgeGraph(db_path=db_path)
+            report = kg.stale_files(Path("."))
+            kg.close()
+        except Exception as exc:
+            return ComponentCheck(
+                name="kg_freshness", ok=True, status="unknown",
+                details=f"Could not check freshness: {exc}",
+            )
+        if report.total == 0:
+            return ComponentCheck(
+                name="kg_freshness", ok=True, status="fresh",
+                details="Index is up to date with the working tree.",
+            )
+        bits = []
+        if report.changed:
+            bits.append(f"{len(report.changed)} changed")
+        if report.deleted:
+            bits.append(f"{len(report.deleted)} deleted")
+        return ComponentCheck(
+            name="kg_freshness", ok=False, status="stale",
+            details=f"Index is behind the working tree ({', '.join(bits)} files).",
+            recommendation="Re-run `opencontext index .` to refresh the graph.",
+        )
 
     def check_mcp_server(self) -> list[ComponentCheck]:
         """Check MCP server health."""

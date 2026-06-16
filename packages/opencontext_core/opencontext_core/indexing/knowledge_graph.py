@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,18 @@ def _stable_symbol_id(project_id: str, file_path: str, qualified_name: str, kind
     """Return a 16-char deterministic hex ID for a symbol, unique across files."""
     payload = f"{project_id}:{file_path}:{qualified_name}:{kind}"
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+@dataclass(frozen=True)
+class StaleReport:
+    """Indexed files that drifted from disk since the last index."""
+
+    changed: list[str] = field(default_factory=list)
+    deleted: list[str] = field(default_factory=list)
+
+    @property
+    def total(self) -> int:
+        return len(self.changed) + len(self.deleted)
 
 
 class KnowledgeGraph:
@@ -82,14 +95,15 @@ class KnowledgeGraph:
         parsed = self.parser.parse_file_status(file_path, content)
         parsed_symbols, parsed_edges = parsed.symbols, parsed.edges
 
-        # Insert file record
+        # Insert file record. The content hash powers staleness detection (has the
+        # file changed since it was indexed?); it was previously stored empty.
         self.db.upsert_file(
             FileRecord(
                 id=None,
                 path=file_path,
                 language=language,
                 last_modified=0,
-                hash="",
+                hash=hashlib.sha256(content.encode("utf-8")).hexdigest(),
                 size=len(content),
             )
         )
@@ -510,6 +524,32 @@ class KnowledgeGraph:
         """Get database statistics."""
 
         return self.db.get_stats()
+
+    def stale_files(self, root: Path) -> StaleReport:
+        """Indexed files whose content changed on disk, or were deleted.
+
+        Compares each indexed file's stored content hash against the file on disk.
+        A stale index silently degrades retrieval (the agent gets context for code
+        that no longer exists), so this powers a freshness warning. Files indexed
+        before hashes were stored (empty hash) are skipped — a reindex enables
+        tracking. New, never-indexed files are out of scope here.
+        """
+        changed: list[str] = []
+        deleted: list[str] = []
+        for record in self.db.all_files():
+            path = root / record.path
+            if not path.exists():
+                deleted.append(record.path)
+                continue
+            if not record.hash:
+                continue  # pre-hash index; reindex to enable tracking
+            try:
+                content = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if hashlib.sha256(content.encode("utf-8")).hexdigest() != record.hash:
+                changed.append(record.path)
+        return StaleReport(changed=changed, deleted=deleted)
 
     def close(self) -> None:
         """Close the database connection."""
