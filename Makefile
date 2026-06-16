@@ -1,7 +1,7 @@
 # OpenContext Runtime Makefile
 # Common development tasks
 
-.PHONY: help install dev test lint format type-check clean docs e2e validate binary
+.PHONY: help install dev test lint format type-check clean docs e2e validate binary ci ci-clean
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -23,6 +23,7 @@ help:
 	@echo "  make e2e        Run end-to-end tests"
 	@echo "  make binary     Build single-file dist/opencontext.pyz"
 	@echo "  make clean      Clean build artifacts"
+	@echo "  make ci         Reproduce the GitHub test pipeline EXACTLY (pinned, fresh venv)"
 	@echo "  make ci-check   Run CI checks"
 
 install:
@@ -57,6 +58,35 @@ e2e:
 
 binary:
 	$(PYTHON) scripts/build_binary.py
+
+CI_VENV ?= .ci-venv
+
+# Reproduce the GitHub `test` job byte-for-byte: a fresh venv with the pinned
+# toolchain (requirements-ci.txt — the same file CI installs) and the same steps,
+# in the same order. If `make ci` is green, the pipeline is green. Requires `uv`.
+ci:
+	uv venv $(CI_VENV)
+	uv pip install --python $(CI_VENV)/bin/python -q -r requirements-ci.txt
+	uv pip install --python $(CI_VENV)/bin/python -q \
+		-e packages/opencontext_core \
+		-e packages/opencontext_profiles \
+		-e packages/opencontext_providers \
+		-e packages/opencontext_cli \
+		-e packages/opencontext_api
+	$(CI_VENV)/bin/ruff check .
+	$(CI_VENV)/bin/ruff format --check .
+	$(CI_VENV)/bin/mypy packages/opencontext_core
+	$(CI_VENV)/bin/python -m pytest
+	$(CI_VENV)/bin/python -m build packages/opencontext_core
+	$(CI_VENV)/bin/python -m build packages/opencontext_profiles
+	$(CI_VENV)/bin/python -m build packages/opencontext_providers
+	$(CI_VENV)/bin/python -m build packages/opencontext_cli
+	$(CI_VENV)/bin/python -m build packages/opencontext_api
+	@echo ""
+	@echo "make ci passed — matches the GitHub test pipeline."
+
+ci-clean:
+	rm -rf $(CI_VENV)
 
 ci-check:
 	opencontext ci-check run
