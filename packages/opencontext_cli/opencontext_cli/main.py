@@ -3460,8 +3460,10 @@ def _memory(args: argparse.Namespace) -> None:
         return
     if command == "search":
         results = repo.search(args.query)
+        if not results:
+            print(f"No memories match '{args.query}'.")
         for item in results:
-            print(f"{item.id}: {item.content[:100]}...")
+            print(f"{item.id} [{item.kind}]: {item.content[:100]}...")
         return
     if command == "show":
         item = repo.get(args.memory_id)
