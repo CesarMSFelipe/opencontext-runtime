@@ -105,17 +105,34 @@ class ComponentDoctor:
                 stats = db.get_stats()
                 db.close()
 
-                checks.append(
-                    ComponentCheck(
-                        name="kg_database",
-                        ok=True,
-                        status="healthy",
-                        details=(
-                            f"Database exists with {stats.get('nodes', 0)} nodes, "
-                            f"{stats.get('edges', 0)} edges"
-                        ),
+                node_count = stats.get("nodes", 0)
+                if node_count == 0:
+                    # Tables present but empty — the classic signature of an
+                    # interrupted/failed index. Retrieval silently degrades to
+                    # manifest-only (no call graph, no docstring search) with no
+                    # error, so surface it as unhealthy.
+                    checks.append(
+                        ComponentCheck(
+                            name="kg_database",
+                            ok=False,
+                            status="empty",
+                            details="Knowledge graph database exists but has 0 nodes "
+                            "(likely an interrupted index).",
+                            recommendation="Re-run `opencontext index .` to rebuild the graph.",
+                        )
                     )
-                )
+                else:
+                    checks.append(
+                        ComponentCheck(
+                            name="kg_database",
+                            ok=True,
+                            status="healthy",
+                            details=(
+                                f"Database exists with {node_count} nodes, "
+                                f"{stats.get('edges', 0)} edges"
+                            ),
+                        )
+                    )
 
                 # Check if FTS5 is working
                 if stats.get("nodes", 0) > 0:
