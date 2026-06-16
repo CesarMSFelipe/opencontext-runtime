@@ -224,6 +224,16 @@ class Configurator:
                 if path.exists():
                     path.unlink()  # whole file we created
                     changed.append(str(path))
+        persona_rel = constants.persona_dir(adapter.agent_id)
+        if persona_rel:
+            from opencontext_core.personas import PERSONAS
+
+            persona_dir = self.project_root / persona_rel
+            for persona in PERSONAS:
+                path = persona_dir / f"{persona.id}.md"
+                if path.exists():
+                    path.unlink()  # whole file we created
+                    changed.append(str(path))
         return changed
 
     def _plan(self, adapter: Adapter) -> list[PlanEntry]:
@@ -283,6 +293,23 @@ class Configurator:
             entries.append(self._plan_ignore(adapter))
         if constants.command_dir(adapter.agent_id):
             entries.extend(self._plan_commands(adapter))
+        if constants.persona_dir(adapter.agent_id):
+            entries.extend(self._plan_personas(adapter))
+        return entries
+
+    def _plan_personas(self, adapter: Adapter) -> list[PlanEntry]:
+        """Plan the agent's persona/subagent files (OC Orchestrator/Professor/Reviewer)."""
+        from opencontext_core.personas import PERSONAS
+
+        persona_dir = self.project_root / str(constants.persona_dir(adapter.agent_id))
+        entries: list[PlanEntry] = []
+        for persona in PERSONAS:
+            path = persona_dir / f"{persona.id}.md"
+            content = (
+                f"---\nname: {persona.name}\ndescription: {persona.description}\n---\n\n"
+                f"{persona.system_prompt}\n"
+            )
+            entries.append((path, _content_if_changed(path, content)))
         return entries
 
     def _plan_commands(self, adapter: Adapter) -> list[PlanEntry]:

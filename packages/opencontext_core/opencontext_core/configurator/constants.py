@@ -166,6 +166,18 @@ def command_dir(agent_id: str) -> str | None:
     return _COMMAND_DIR.get(agent_id)
 
 
+# Agents with a project-scoped subagent/persona directory (relative to project root).
+_PERSONA_DIR: dict[str, str] = {
+    "claude-code": ".claude/agents",
+}
+
+
+def persona_dir(agent_id: str) -> str | None:
+    """Project-relative persona (subagent) directory for an agent, or None."""
+
+    return _PERSONA_DIR.get(agent_id)
+
+
 # Agents whose instructions root is the project tree rather than the agent's
 # home directory (e.g. AGENTS.md / CLAUDE.md live next to the code).
 PROJECT_SCOPED_INSTRUCTIONS: frozenset[str] = frozenset(
