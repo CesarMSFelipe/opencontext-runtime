@@ -6,6 +6,10 @@
 ruff==0.15.17
 mypy==1.20.2
 pytest==9.0.3
+# Surfaces pytest failures as GitHub annotations (readable via the public API),
+# so a failure on a runner we can't reproduce locally (e.g. Windows) is
+# diagnosable without log access. No-op outside GitHub Actions.
+pytest-github-actions-annotate-failures==0.4.0
 build==1.5.0
 types-PyYAML==6.0.12.20260518
 types-requests==2.33.0.20260518
