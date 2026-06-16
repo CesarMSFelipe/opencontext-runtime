@@ -14,6 +14,8 @@ import asyncio
 import json
 import sqlite3
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -77,11 +79,18 @@ class LocalMemoryStore:
         self._vector_store = vector_store
         self._embedder = embedder
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        # Closes on exit (see SQLiteMemoryBackend._connect): `with sqlite3.connect()`
+        # only commits, leaving the handle open and the .db locked on Windows.
         conn = sqlite3.connect(self._path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")
-        return conn
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
 
     @property
     def semantic_enabled(self) -> bool:

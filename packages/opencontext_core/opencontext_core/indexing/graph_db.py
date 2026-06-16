@@ -266,6 +266,15 @@ class GraphDatabase:
             self._conn.close()
             self._conn = None
 
+    def __del__(self) -> None:
+        # Close the cached connection when the object is collected, so a caller
+        # that forgets to call close() doesn't leave the .db locked on Windows
+        # (PermissionError WinError 32). Guarded for interpreter shutdown.
+        try:
+            self.close()
+        except Exception:
+            pass
+
     # Node operations
 
     def insert_node(self, node: Node) -> str:
