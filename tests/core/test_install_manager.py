@@ -14,9 +14,10 @@ class TestInstallationManager:
 
     @pytest.fixture
     def manager(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> InstallationManager:
-        """Create manager with temp state dir."""
+        """Create manager with a temp state dir and an isolated working dir."""
         state_dir = tmp_path / ".config" / "opencontext"
         monkeypatch.setattr(InstallationManager, "STATE_DIR", str(state_dir))
+        monkeypatch.chdir(tmp_path)
         return InstallationManager()
 
     def test_init(self, manager: InstallationManager) -> None:

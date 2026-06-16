@@ -10,6 +10,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from opencontext_core.state import StateStore
 from opencontext_core.user_prefs import UserConfigStore
@@ -69,7 +70,6 @@ class VerificationReport:
 
 def check_python_version() -> CheckResult:
     """Verify Python 3.12+."""
-
     import sys
 
     major, minor = sys.version_info[:2]
@@ -82,7 +82,6 @@ def check_python_version() -> CheckResult:
 
 def check_user_config() -> CheckResult:
     """Verify user config exists and is valid."""
-
     store = UserConfigStore()
     path = store.CONFIG_FILE
     if not path.exists():
@@ -101,12 +100,11 @@ def check_user_config() -> CheckResult:
 
 def check_knowledge_graph() -> CheckResult:
     """Verify KG database exists."""
-
     prefs = UserConfigStore().load()
     if not prefs.features.knowledge_graph:
         return CheckResult("Knowledge Graph", "skipped", "Not enabled")
 
-    db_path = Path(prefs.custom_storage_path) / "codegraph.db"
+    db_path = Path(prefs.custom_storage_path) / "context_graph.db"
     if not db_path.exists():
         return CheckResult(
             "Knowledge Graph",
@@ -129,7 +127,6 @@ def check_knowledge_graph() -> CheckResult:
 
 def check_mcp_config() -> CheckResult:
     """Verify MCP configuration."""
-
     prefs = UserConfigStore().load()
     if not prefs.features.mcp_server:
         return CheckResult("MCP Server", "skipped", "Not enabled")
@@ -153,7 +150,6 @@ def check_mcp_config() -> CheckResult:
 
 def check_plugins() -> CheckResult:
     """Verify installed plugins."""
-
     from opencontext_core.plugin_system import PluginRegistry
 
     registry = PluginRegistry()
@@ -172,7 +168,6 @@ def check_plugins() -> CheckResult:
 
 def check_state() -> CheckResult:
     """Verify state tracking."""
-
     state = StateStore.load()
     total = len(state.components)
     if total == 0:
@@ -188,7 +183,6 @@ def check_state() -> CheckResult:
 
 def check_disk_space() -> CheckResult:
     """Verify sufficient disk space."""
-
     import shutil
 
     storage_path = Path(UserConfigStore().load().custom_storage_path)
@@ -205,13 +199,13 @@ def check_disk_space() -> CheckResult:
 
 def check_harness_phases() -> CheckResult:
     """Verify all 9 SDD harness phases are available."""
-
     try:
         from opencontext_core.harness.phases import (
             ApplyPhase,
             ArchivePhase,
             DesignPhase,
             ExplorePhase,
+            HarnessPhase,
             ProposePhase,
             ReviewPhase,
             SpecPhase,
@@ -219,7 +213,7 @@ def check_harness_phases() -> CheckResult:
             VerifyPhase,
         )
 
-        phases = {
+        phases: dict[str, type[HarnessPhase]] = {
             "explore": ExplorePhase,
             "propose": ProposePhase,
             "spec": SpecPhase,
@@ -253,7 +247,6 @@ def check_harness_phases() -> CheckResult:
 
 def check_harness_runner() -> CheckResult:
     """Verify HarnessRunner can be instantiated."""
-
     try:
         from pathlib import Path
 
@@ -280,7 +273,6 @@ def check_adapters() -> CheckResult:
     Checks that LocalAdapter, PythonAdapter, and AiderAdapter
     are importable and their availability can be queried.
     """
-
     try:
         from opencontext_core.adapters.aider import AiderAdapter
         from opencontext_core.adapters.local import LocalAdapter, PythonAdapter
@@ -318,7 +310,6 @@ def check_boundary_service() -> CheckResult:
     Does NOT run a workflow — only validates that the service can be
     instantiated and build a valid request model.
     """
-
     try:
         from opencontext_core.adapters.boundary import (
             AdapterRequest,
@@ -369,7 +360,6 @@ CHECK_REGISTRY: list[tuple[str, Callable[[], CheckResult], str]] = [
 
 def run_all_checks() -> VerificationReport:
     """Run all verification checks."""
-
     from datetime import datetime
 
     report = VerificationReport(timestamp=datetime.now().isoformat())
@@ -390,3 +380,91 @@ def run_all_checks() -> VerificationReport:
             pass
 
     return report
+
+
+# ── Savings + gate-status surface () ─────────────────────────────────
+
+
+def _zero_savings() -> dict[str, Any]:
+    """Honest empty savings — zero, never fabricated."""
+    return {
+        "realized_savings_tokens": 0,
+        "projected_savings_tokens": 0,
+        "total_potential_savings_tokens": 0,
+        "by_operation_type": {},
+    }
+
+
+def collect_savings(storage_path: str | Path | None = None) -> dict[str, Any]:
+    """Return honest token-savings figures from recorded learning metrics.
+
+    Realized savings are zero unless an optimized budget has actually been
+    applied (read from ``config.auto_improve.applied_budgets``). With no recorded
+    operations every figure is zero rather than an invented number.
+    """
+    try:
+        from opencontext_core.config import load_config_or_defaults
+        from opencontext_core.learning.learning_orchestrator import LearningOrchestrator
+
+        if storage_path is None:
+            base = Path(UserConfigStore().load().custom_storage_path)
+        else:
+            base = Path(storage_path)
+        learning_path = base / "learning"
+
+        orch = LearningOrchestrator(
+            storage_path=learning_path,
+            kg_db_path=base / "context_graph.db",
+        )
+        orch.optimizer.optimize_budgets()
+
+        applied: dict[str, int] = {}
+        try:
+            applied = dict(load_config_or_defaults().auto_improve.applied_budgets)
+        except Exception:
+            applied = {}
+
+        return orch.optimizer.report_savings(applied_budgets=applied)
+    except Exception:
+        return _zero_savings()
+
+
+def collect_gates(report: VerificationReport) -> list[dict[str, Any]]:
+    """Return per-gate pass/fail status for the verification report.
+
+    Each entry carries a ``name`` and a boolean ``passed`` flag. The health-check
+    results are surfaced as the gate set when no live verified-context gates are
+    available, so the developer always sees a machine-readable per-gate status.
+    """
+    return [
+        {
+            "name": r.name,
+            "passed": r.status == "passed",
+            "status": r.status,
+        }
+        for r in report.results
+    ]
+
+
+def build_report_payload(report: VerificationReport) -> dict[str, Any]:
+    """Build the machine-readable verify payload, including savings + gates."""
+    return {
+        "timestamp": report.timestamp,
+        "healthy": report.is_healthy,
+        "summary": {
+            "passed": report.passed,
+            "warnings": report.warnings,
+            "failures": report.failures,
+        },
+        "checks": [
+            {
+                "name": r.name,
+                "status": r.status,
+                "message": r.message,
+                "details": r.details,
+            }
+            for r in report.results
+        ],
+        "savings": collect_savings(),
+        "gates": collect_gates(report),
+    }

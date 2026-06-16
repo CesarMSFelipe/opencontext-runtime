@@ -11,6 +11,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
+from opencontext_core.config import SecurityMode
 from opencontext_core.plugin_system import (
     PluginInstaller,
     PluginRegistry,
@@ -19,7 +20,12 @@ from opencontext_core.plugin_system import (
 from opencontext_core.user_prefs import (
     UserConfigStore,
     UserPreferences,
+    mark_setup_complete,
 )
+
+# Enum-aligned security choices; deriving from SecurityMode guarantees the
+# saved preference is always a value the runtime config can load.
+_SECURITY_MODE_CHOICES = [mode.value for mode in SecurityMode]
 
 console = Console()
 
@@ -212,7 +218,7 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
     prefs = store.load()
 
     if non_interactive:
-        prefs.first_run = False
+        mark_setup_complete(prefs)
         store.save(prefs)
         return prefs
 
@@ -223,18 +229,21 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
     # Step 1: Security Mode
     _print_section("Step 1: Security & Privacy")
     console.print("\nChoose your security mode:")
+    console.print("  developer        - Local dev posture, fewest restrictions")
     console.print("  private_project  - Local only, no external APIs")
     console.print("  enterprise       - Team sharing with governance")
-    console.print("  air-gapped       - Completely offline")
+    console.print("  air_gapped       - Completely offline")
 
+    default_index = _SECURITY_MODE_CHOICES.index(SecurityMode.PRIVATE_PROJECT.value)
     security_choice = _ask_choice(
         "Security mode:",
-        ["private_project", "enterprise", "air-gapped"],
-        default=0,
+        _SECURITY_MODE_CHOICES,
+        default=default_index,
     )
     prefs.security_mode = security_choice
 
-    if security_choice == "air-gapped":
+    air_gapped = security_choice == SecurityMode.AIR_GAPPED.value
+    if air_gapped:
         prefs.features.mcp_server = False
         prefs.features.embeddings = False
         prefs.features.semantic_search = False
@@ -257,7 +266,7 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
         "Governance (audit trails & policies)?", prefs.features.governance
     )
 
-    if security_choice != "air-gapped":
+    if not air_gapped:
         prefs.features.embeddings = _ask_bool(
             "Embeddings (semantic search)?", prefs.features.embeddings
         )
@@ -321,11 +330,18 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
             console.print("Configuration discarded. Re-run with: opencontext config wizard")
             return store.load()
 
-    prefs.first_run = False
+    mark_setup_complete(prefs)
     store.save(prefs)
+    # Mirror runtime-affecting choices into the project config so the wizard
+    # actually changes runtime behavior, not just user-prefs.
+    from opencontext_core.config_sync import sync_runtime_prefs_to_yaml
+
+    applied = sync_runtime_prefs_to_yaml(prefs)
 
     console.print("\nConfiguration saved!")
     console.print(f"Location: {store.CONFIG_FILE}")
+    if applied:
+        console.print(f"Applied to opencontext.yaml: {', '.join(applied)}")
     console.print("\nNext steps:")
     console.print("  1. cd your-project")
     console.print("  2. opencontext install")
@@ -345,10 +361,15 @@ def reconfigure(section: str | None = None) -> None:
     prefs = store.load()
 
     if section == "security":
+        current = (
+            _SECURITY_MODE_CHOICES.index(prefs.security_mode)
+            if prefs.security_mode in _SECURITY_MODE_CHOICES
+            else _SECURITY_MODE_CHOICES.index(SecurityMode.PRIVATE_PROJECT.value)
+        )
         prefs.security_mode = _ask_choice(
             "Security mode:",
-            ["private_project", "enterprise", "air-gapped"],
-            0 if prefs.security_mode == "private_project" else 1,
+            _SECURITY_MODE_CHOICES,
+            current,
         )
     elif section == "features":
         prefs.features.knowledge_graph = _ask_bool(

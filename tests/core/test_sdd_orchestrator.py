@@ -154,7 +154,7 @@ class TestWorkflowTracks:
             orch.run_phase(phase, f"# {phase}\n")
         assert orch.is_complete()
 
-    def test_full_track_eight_phases(self, tmp_path: Path) -> None:
+    def test_full_track_all_phases(self, tmp_path: Path) -> None:
         config = SDDConfig(
             artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}, track="full"
         )
@@ -169,6 +169,7 @@ class TestWorkflowTracks:
             "tasks",
             "apply",
             "verify",
+            "review",
             "archive",
         ]:
             orch.run_phase(phase, f"# {phase}\n")
@@ -202,6 +203,7 @@ class TestWorkflowTracks:
             "tasks",
             "apply",
             "verify",
+            "review",
             "archive",
         ]:
             orch.run_phase(phase, f"# {phase}\n")
@@ -266,6 +268,7 @@ class TestSDDOrchestrator:
             "tasks",
             "apply",
             "verify",
+            "review",
             "archive",
         ]:
             orch.run_phase(phase, f"# {phase}\n")

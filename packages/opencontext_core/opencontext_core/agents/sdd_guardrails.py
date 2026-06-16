@@ -6,7 +6,35 @@ output, helping agents avoid shallow or premature work.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)?")
+
+
+def _tokenize(text: str) -> list[str]:
+    """Split text into normalized, whole word/number tokens (lower-cased)."""
+
+    return _TOKEN_RE.findall(text.lower())
+
+
+def _contains_token_sequence(haystack: list[str], needle: list[str]) -> bool:
+    """Return True if ``needle`` appears as a contiguous run of whole tokens.
+
+    Unlike naive substring containment, this never matches a token against a
+    superstring word: ``["too", "broad"]`` does not match the token stream of
+    "too broadcast" because ``broad != broadcast``.
+    """
+
+    if not needle:
+        return False
+    if len(needle) > len(haystack):
+        return False
+    last_start = len(haystack) - len(needle)
+    for start in range(last_start + 1):
+        if haystack[start : start + len(needle)] == needle:
+            return True
+    return False
 
 
 @dataclass
@@ -112,11 +140,6 @@ CATALOGUE: list[GuardrailEntry] = [
 ]
 
 
-def get_catalogue() -> list[GuardrailEntry]:
-    """Return the full guardrail catalogue."""
-    return list(CATALOGUE)
-
-
 def get_guardrails_for_phase(phase: str) -> list[GuardrailEntry]:
     """Get all guardrail entries that apply to the given phase.
 
@@ -133,7 +156,11 @@ def get_guardrails_for_phase(phase: str) -> list[GuardrailEntry]:
 def evaluate_guardrails(phase: str, context: str) -> list[GuardrailHit]:
     """Evaluate guardrails for a given phase against the provided context text.
 
-    Uses case-insensitive substring matching against rationalization strings.
+    Uses case-insensitive, whole-token (structural) matching: a rationalization
+    fires only when its normalized token sequence appears as a contiguous run of
+    whole words in the context. This avoids the naive ``substring in text``
+    weakness that fired on superstring words (for example "too broad" inside
+    "too broadcast", or "task is too vague" inside "too vagueness").
 
     Args:
         phase: Phase name.
@@ -146,13 +173,16 @@ def evaluate_guardrails(phase: str, context: str) -> list[GuardrailHit]:
     if not context:
         return []
 
-    hits: list[GuardrailHit] = []
-    context_lower = context.lower()
+    context_tokens = _tokenize(context)
+    if not context_tokens:
+        return []
 
+    hits: list[GuardrailHit] = []
     for entry in CATALOGUE:
         if phase not in entry.phases:
             continue
-        if entry.rationalization.lower() in context_lower:
+        rationalization_tokens = _tokenize(entry.rationalization)
+        if _contains_token_sequence(context_tokens, rationalization_tokens):
             hits.append(
                 GuardrailHit(
                     name=entry.name,

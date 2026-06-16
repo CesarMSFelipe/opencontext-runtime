@@ -1,7 +1,7 @@
 # OpenContext Runtime Makefile
 # Common development tasks
 
-.PHONY: help install dev test lint format type-check clean docs e2e validate
+.PHONY: help install dev test lint format type-check clean docs e2e validate binary ci ci-clean
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -21,7 +21,9 @@ help:
 	@echo "  make validate   Run all validation (test + lint + type-check)"
 	@echo "  make docs       Build documentation"
 	@echo "  make e2e        Run end-to-end tests"
+	@echo "  make binary     Build single-file dist/opencontext.pyz"
 	@echo "  make clean      Clean build artifacts"
+	@echo "  make ci         Reproduce the GitHub test pipeline EXACTLY (pinned, fresh venv)"
 	@echo "  make ci-check   Run CI checks"
 
 install:
@@ -54,6 +56,40 @@ docs:
 e2e:
 	bash scripts/e2e-validate.sh
 
+binary:
+	$(PYTHON) scripts/build_binary.py
+
+CI_VENV ?= .ci-venv
+
+# Reproduce the GitHub `test` job byte-for-byte: a fresh venv built with the same
+# tools CI uses (python -m venv + pip), the pinned toolchain (requirements-ci.txt
+# — the same file CI installs), and the same steps in the same order. If `make ci`
+# is green, the pipeline is green.
+ci:
+	$(PYTHON) -m venv $(CI_VENV)
+	$(CI_VENV)/bin/python -m pip install -q --upgrade pip
+	$(CI_VENV)/bin/python -m pip install -q -r requirements-ci.txt
+	$(CI_VENV)/bin/python -m pip install -q \
+		-e packages/opencontext_core \
+		-e packages/opencontext_profiles \
+		-e packages/opencontext_providers \
+		-e packages/opencontext_cli \
+		-e packages/opencontext_api
+	$(CI_VENV)/bin/ruff check .
+	$(CI_VENV)/bin/ruff format --check .
+	$(CI_VENV)/bin/mypy packages/opencontext_core
+	$(CI_VENV)/bin/python -m pytest
+	$(CI_VENV)/bin/python -m build packages/opencontext_core
+	$(CI_VENV)/bin/python -m build packages/opencontext_profiles
+	$(CI_VENV)/bin/python -m build packages/opencontext_providers
+	$(CI_VENV)/bin/python -m build packages/opencontext_cli
+	$(CI_VENV)/bin/python -m build packages/opencontext_api
+	@echo ""
+	@echo "make ci passed — matches the GitHub test pipeline."
+
+ci-clean:
+	rm -rf $(CI_VENV)
+
 ci-check:
 	opencontext ci-check run
 
@@ -62,6 +98,7 @@ clean:
 	rm -rf .mypy_cache
 	rm -rf **/__pycache__
 	rm -rf packages/**/build
+	rm -rf dist
 	rm -rf packages/**/dist
 	rm -rf packages/**/*.egg-info
 	find . -name "*.pyc" -delete

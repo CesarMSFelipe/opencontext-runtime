@@ -42,7 +42,8 @@ class TestNodeOperations:
 
         node_id = db.insert_node(node)
 
-        assert node_id > 0
+        # Node ids are now stable content-derived text ids (not autoincrement ints).
+        assert isinstance(node_id, str) and node_id
         retrieved = db.get_node_by_id(node_id)
         assert retrieved is not None
         assert retrieved.name == "UserService"

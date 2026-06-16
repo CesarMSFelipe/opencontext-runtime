@@ -5,9 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from opencontext_core.harness.gates import (
+    ApprovalRequiredForWritesGate,
     ArtifactPersistedGate,
     ContextPackCreatedGate,
+    IncludedSourcesPresentGate,
+    NoHighRiskExportsGate,
+    NoSecretLeakageGate,
+    OmissionsRecordedGate,
     ProjectIndexExistsGate,
+    ProviderPolicyPassedGate,
+    ReviewArtifactCreatedGate,
     SecurityScanPassedGate,
     TokenBudgetGate,
     TraceIdCreatedGate,
@@ -128,3 +135,116 @@ class TestArtifactPersistedGate:
         gate = ArtifactPersistedGate()
         result = gate.evaluate(None)
         assert result.status == GateStatus.FAILED
+
+
+class TestNoSecretLeakageGate:
+    def test_passes_on_clean_content(self) -> None:
+        gate = NoSecretLeakageGate()
+        result = gate.evaluate("This is normal content without secrets.")
+        assert result.status == GateStatus.PASSED
+
+    def test_message_on_pass(self) -> None:
+        gate = NoSecretLeakageGate()
+        result = gate.evaluate("clean text")
+        assert "sensitive" in result.message.lower() or "detected" in result.message.lower()
+
+
+class TestIncludedSourcesPresentGate:
+    def test_warning_when_source_missing(self) -> None:
+        gate = IncludedSourcesPresentGate()
+        result = gate.evaluate(
+            required_sources=["AuthMiddleware"],
+            included_sources={"OtherClass"},
+        )
+        assert result.status == GateStatus.WARNING
+        assert "AuthMiddleware" in result.message
+
+    def test_passes_when_all_present(self) -> None:
+        gate = IncludedSourcesPresentGate()
+        result = gate.evaluate(
+            required_sources=["AuthMiddleware"],
+            included_sources={"AuthMiddleware", "OtherClass"},
+        )
+        assert result.status == GateStatus.PASSED
+
+
+class TestOmissionsRecordedGate:
+    def test_warning_when_omitted_without_recording(self) -> None:
+        gate = OmissionsRecordedGate()
+        result = gate.evaluate(omitted_count=5, omissions_recorded=0)
+        assert result.status == GateStatus.WARNING
+
+    def test_passes_when_omissions_recorded(self) -> None:
+        gate = OmissionsRecordedGate()
+        result = gate.evaluate(omitted_count=5, omissions_recorded=5)
+        assert result.status == GateStatus.PASSED
+
+    def test_passes_when_nothing_omitted(self) -> None:
+        gate = OmissionsRecordedGate()
+        result = gate.evaluate(omitted_count=0, omissions_recorded=0)
+        assert result.status == GateStatus.PASSED
+
+
+class TestProviderPolicyPassedGate:
+    def test_warning_for_external_provider(self) -> None:
+        gate = ProviderPolicyPassedGate()
+        result = gate.evaluate(provider="some-external", is_external=True, items_count=10)
+        assert result.status == GateStatus.WARNING
+
+    def test_passes_for_local_provider(self) -> None:
+        gate = ProviderPolicyPassedGate()
+        result = gate.evaluate(provider="local", is_external=False, items_count=10)
+        assert result.status == GateStatus.PASSED
+
+    def test_passes_when_no_items(self) -> None:
+        gate = ProviderPolicyPassedGate()
+        result = gate.evaluate(provider="external", is_external=True, items_count=0)
+        assert result.status == GateStatus.PASSED
+
+
+class TestApprovalRequiredForWritesGate:
+    # Decoupled from budget_mode: gating is driven by approval_required + approved.
+    def test_fails_when_required_without_approval(self) -> None:
+        gate = ApprovalRequiredForWritesGate()
+        result = gate.evaluate(approval_required=True, approved=False)
+        assert result.status == GateStatus.FAILED
+
+    def test_passes_when_required_with_approval(self) -> None:
+        gate = ApprovalRequiredForWritesGate()
+        result = gate.evaluate(approval_required=True, approved=True)
+        assert result.status == GateStatus.PASSED
+
+    def test_passes_when_not_required(self) -> None:
+        gate = ApprovalRequiredForWritesGate()
+        result = gate.evaluate(approval_required=False, approved=False)
+        assert result.status == GateStatus.PASSED
+
+
+class TestNoHighRiskExportsGate:
+    def test_fails_confidential_plus_external(self) -> None:
+        gate = NoHighRiskExportsGate()
+        result = gate.evaluate(has_confidential=True, is_external_provider=True)
+        assert result.status == GateStatus.FAILED
+
+    def test_passes_confidential_local(self) -> None:
+        gate = NoHighRiskExportsGate()
+        result = gate.evaluate(has_confidential=True, is_external_provider=False)
+        assert result.status == GateStatus.PASSED
+
+    def test_passes_no_confidential_external(self) -> None:
+        gate = NoHighRiskExportsGate()
+        result = gate.evaluate(has_confidential=False, is_external_provider=True)
+        assert result.status == GateStatus.PASSED
+
+
+class TestReviewArtifactCreatedGate:
+    def test_fails_when_no_review_json(self, tmp_path: Path) -> None:
+        gate = ReviewArtifactCreatedGate()
+        result = gate.evaluate(run_dir=tmp_path)
+        assert result.status == GateStatus.FAILED
+
+    def test_passes_when_review_json_exists(self, tmp_path: Path) -> None:
+        (tmp_path / "review.json").write_text("{}")
+        gate = ReviewArtifactCreatedGate()
+        result = gate.evaluate(run_dir=tmp_path)
+        assert result.status == GateStatus.PASSED

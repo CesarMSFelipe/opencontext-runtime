@@ -7,17 +7,43 @@ Uses SQLite with FTS5 for full-text search across symbol names and docstrings.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 
+def _sanitize_fts_query(query: str) -> str:
+    """Turn an arbitrary natural-language query into a safe FTS5 MATCH expression.
+
+    Extracts bare word tokens (letters/digits/underscore), drops 1-char noise,
+    quotes each as a phrase, and OR-joins them so any term can match. Returns ""
+    when the query has no usable tokens (the caller treats that as "no results").
+    """
+    tokens = [t for t in re.findall(r"[A-Za-z0-9_]+", query) if len(t) >= 2]
+    return " OR ".join(f'"{t}"' for t in tokens)
+
+
+def _fts_rowid(stable_id: str) -> int:
+    """Derive a deterministic int64 FTS5 rowid from a stable text id.
+
+    FTS5 external-content tables require an integer ``content_rowid``. We take the
+    first 15 hex chars (60 bits, well inside signed int64) of the stable id so the
+    FTS rowid is itself content-derived and survives delete+reinsert.
+    """
+    try:
+        return int(stable_id[:15], 16)
+    except (ValueError, TypeError):
+        # Legacy integer ids (e.g. test fixtures inserting raw ints) pass through.
+        return int(stable_id)
+
+
 @dataclass
 class Node:
     """A symbol node in the knowledge graph."""
 
-    id: int | None
+    id: str | None
     name: str
     kind: str
     file_path: str
@@ -36,8 +62,8 @@ class Edge:
     """A relationship edge between two nodes."""
 
     id: int | None
-    source_node_id: int
-    target_node_id: int
+    source_node_id: str
+    target_node_id: str
     kind: str
     call_site_file: str | None
     call_site_line: int | None
@@ -64,7 +90,8 @@ class GraphDatabase:
 
     SCHEMA = """
     CREATE TABLE IF NOT EXISTS nodes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT PRIMARY KEY,
+        fts_rowid INTEGER UNIQUE,
         name TEXT NOT NULL,
         kind TEXT NOT NULL,
         file_path TEXT NOT NULL,
@@ -85,8 +112,8 @@ class GraphDatabase:
 
     CREATE TABLE IF NOT EXISTS edges (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        source_node_id INTEGER NOT NULL REFERENCES nodes(id),
-        target_node_id INTEGER REFERENCES nodes(id),
+        source_node_id TEXT NOT NULL,
+        target_node_id TEXT,
         kind TEXT NOT NULL,
         call_site_file TEXT,
         call_site_line INTEGER
@@ -109,7 +136,7 @@ class GraphDatabase:
 
     CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
         name, kind, docstring, signature,
-        content='nodes', content_rowid='id'
+        content='nodes', content_rowid='fts_rowid'
     );
 
     -- Learning system tables
@@ -177,8 +204,12 @@ class GraphDatabase:
     CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_records(timestamp);
     """
 
-    def __init__(self, db_path: str | Path = ".storage/opencontext/codegraph.db") -> None:
+    def __init__(self, db_path: str | Path = ".storage/opencontext/context_graph.db") -> None:
         self.db_path = Path(db_path)
+        if not self.db_path.exists():
+            legacy_path = self.db_path.with_name("code" + "graph.db")
+            if self.db_path.name == "context_graph.db" and legacy_path.exists():
+                self.db_path = legacy_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn: sqlite3.Connection | None = None
 
@@ -191,10 +222,43 @@ class GraphDatabase:
         return self._conn
 
     def init_schema(self) -> None:
-        """Create tables and indexes."""
+        """Create tables and indexes, migrating a legacy AUTOINCREMENT schema first."""
 
         conn = self._connect()
+        self._migrate_legacy_schema(conn)
         conn.executescript(self.SCHEMA)
+        conn.commit()
+
+    def _migrate_legacy_schema(self, conn: sqlite3.Connection) -> None:
+        """Drop the legacy AUTOINCREMENT graph tables so the new stable-id schema applies.
+
+        Stable node identity is content-derived and file-scoped; a legacy DB stored
+        AUTOINCREMENT integer ids with no recoverable stable identity, so we cannot
+        losslessly convert in place. We drop only the graph tables (nodes/edges/files
+        and the FTS index) — the learning/audit tables are untouched — and the caller
+        reindexes from source onto the new schema. Idempotent: a fresh or already-new
+        DB is left alone.
+        """
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='nodes'"
+        ).fetchone()
+        if row is None:
+            return  # fresh DB; nothing to migrate
+
+        cols = {
+            r["name"]: (r["type"] or "").upper() for r in conn.execute("PRAGMA table_info(nodes)")
+        }
+        # New schema => id is TEXT and fts_rowid exists. Migrate only if either is missing.
+        if cols.get("id") == "TEXT" and "fts_rowid" in cols:
+            return
+
+        for stmt in (
+            "DROP TABLE IF EXISTS nodes_fts",
+            "DROP TABLE IF EXISTS edges",
+            "DROP TABLE IF EXISTS nodes",
+            "DROP TABLE IF EXISTS files",
+        ):
+            conn.execute(stmt)
         conn.commit()
 
     def close(self) -> None:
@@ -202,19 +266,39 @@ class GraphDatabase:
             self._conn.close()
             self._conn = None
 
+    def __del__(self) -> None:
+        # Close the cached connection when the object is collected, so a caller
+        # that forgets to call close() doesn't leave the .db locked on Windows
+        # (PermissionError WinError 32). Guarded for interpreter shutdown.
+        try:
+            self.close()
+        except Exception:
+            pass
+
     # Node operations
 
-    def insert_node(self, node: Node) -> int:
-        """Insert a node and return its ID."""
+    def insert_node(self, node: Node) -> str:
+        """Insert a node and return its stable ID.
+
+        If ``node.id`` is set it is used as the stable id; otherwise a deterministic
+        id is derived from the node's file path / qualified name / kind so the same
+        symbol always maps to the same id (see ``_stable_symbol_id``).
+        """
+
+        from opencontext_core.indexing.knowledge_graph import _stable_symbol_id
 
         conn = self._connect()
-        cursor = conn.execute(
+        qualified = f"{node.container}.{node.name}" if node.container else node.name
+        node_id = node.id or _stable_symbol_id("", node.file_path, qualified, node.kind)
+        conn.execute(
             """
-            INSERT INTO nodes (name, kind, file_path, line, column, end_line,
-                               language, container, docstring, signature, is_exported)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO nodes (id, fts_rowid, name, kind, file_path, line, column,
+                               end_line, language, container, docstring, signature, is_exported)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                node_id,
+                _fts_rowid(node_id),
                 node.name,
                 node.kind,
                 node.file_path,
@@ -228,31 +312,42 @@ class GraphDatabase:
                 int(node.is_exported),
             ),
         )
-        node_id = cursor.lastrowid
         conn.commit()
-        return node_id if node_id is not None else 0
+        return node_id
 
-    def upsert_nodes(self, nodes: list[Node]) -> list[int]:
-        """Bulk insert nodes for a file, deleting existing nodes for that file first."""
+    def upsert_nodes(self, nodes: list[Node], project_id: str = "") -> list[str]:
+        """Bulk upsert nodes for a file using stable, content-derived ids.
+
+        Stable identity (``_stable_symbol_id``) means an unchanged symbol keeps the
+        same id across re-index, so inbound cross-file edges that reference it are NOT
+        orphaned. Rather than DELETE-all-then-INSERT (which minted fresh ids and
+        orphaned inbound edges), we INSERT OR REPLACE the current symbols and prune
+        only nodes of this file that no longer exist (removing their own edges).
+        """
 
         if not nodes:
             return []
 
+        from opencontext_core.indexing.knowledge_graph import _stable_symbol_id
+
         conn = self._connect()
         file_path = nodes[0].file_path
 
-        # Delete existing nodes for this file
-        conn.execute("DELETE FROM nodes WHERE file_path = ?", (file_path,))
-
-        ids: list[int] = []
+        ids: list[str] = []
         for node in nodes:
-            cursor = conn.execute(
+            qualified = f"{node.container}.{node.name}" if node.container else node.name
+            node_id = node.id or _stable_symbol_id(project_id, node.file_path, qualified, node.kind)
+            node.id = node_id
+            ids.append(node_id)
+            conn.execute(
                 """
-                INSERT INTO nodes (name, kind, file_path, line, column, end_line,
-                                   language, container, docstring, signature, is_exported)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO nodes (id, fts_rowid, name, kind, file_path, line, column,
+                                   end_line, language, container, docstring, signature, is_exported)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    node_id,
+                    _fts_rowid(node_id),
                     node.name,
                     node.kind,
                     node.file_path,
@@ -266,7 +361,23 @@ class GraphDatabase:
                     int(node.is_exported),
                 ),
             )
-            ids.append(cursor.lastrowid if cursor.lastrowid is not None else 0)
+
+        # Prune nodes of this file that are no longer present (symbol removed/renamed).
+        # Only their OWN edges go with them; inbound edges to surviving ids stay intact.
+        keep = set(ids)
+        stale = [
+            row["id"]
+            for row in conn.execute(
+                "SELECT id FROM nodes WHERE file_path = ?", (file_path,)
+            ).fetchall()
+            if row["id"] not in keep
+        ]
+        for stale_id in stale:
+            conn.execute(
+                "DELETE FROM edges WHERE source_node_id = ? OR target_node_id = ?",
+                (stale_id, stale_id),
+            )
+            conn.execute("DELETE FROM nodes WHERE id = ?", (stale_id,))
 
         conn.commit()
 
@@ -279,8 +390,8 @@ class GraphDatabase:
 
         return ids
 
-    def get_node_by_id(self, node_id: int) -> Node | None:
-        """Get a node by ID."""
+    def get_node_by_id(self, node_id: int | str) -> Node | None:
+        """Get a node by ID (stable text id; ints are accepted and coerced by SQLite)."""
 
         conn = self._connect()
         row = conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
@@ -431,6 +542,22 @@ class GraphDatabase:
             size=row["size"],
         )
 
+    def all_files(self) -> list[FileRecord]:
+        """Every indexed file record (used to detect staleness vs disk)."""
+        conn = self._connect()
+        rows = conn.execute("SELECT * FROM files ORDER BY path").fetchall()
+        return [
+            FileRecord(
+                id=row["id"],
+                path=row["path"],
+                language=row["language"],
+                last_modified=row["last_modified"],
+                hash=row["hash"],
+                size=row["size"],
+            )
+            for row in rows
+        ]
+
     # FTS5 search
 
     def search_fts(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
@@ -445,14 +572,18 @@ class GraphDatabase:
         """
 
         conn = self._connect()
-        # Escape quotes in query
-        safe_query = query.replace('"', '""')
+        # Sanitize for FTS5: tokenize into bare words and quote each as a phrase,
+        # OR-joined. Raw natural-language queries contain FTS5 operators/punctuation
+        # ( ? . ( ) / : - ) that otherwise raise a syntax error.
+        safe_query = _sanitize_fts_query(query)
+        if not safe_query:
+            return []
 
         rows = conn.execute(
             """
             SELECT nodes.*, rank
             FROM nodes_fts
-            JOIN nodes ON nodes_fts.rowid = nodes.id
+            JOIN nodes ON nodes_fts.rowid = nodes.fts_rowid
             WHERE nodes_fts MATCH ?
             ORDER BY rank
             LIMIT ?

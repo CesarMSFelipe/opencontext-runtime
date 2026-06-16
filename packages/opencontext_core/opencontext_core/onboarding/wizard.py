@@ -17,6 +17,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt
 
+from opencontext_core.config import SecurityMode
 from opencontext_core.onboarding.service import (
     OnboardingOptions,
     OnboardingResult,
@@ -24,6 +25,10 @@ from opencontext_core.onboarding.service import (
 )
 
 console = Console()
+
+# Config templates the wizard can apply. ``air_gapped`` mirrors the
+# SecurityMode enum value exactly (no hyphen) so the written config loads.
+_TEMPLATE_CHOICES = ("generic", "enterprise", "air_gapped")
 
 
 class OnboardingWizard:
@@ -51,6 +56,21 @@ class OnboardingWizard:
     def is_interactive(self) -> bool:
         """Whether the wizard can use interactive prompts."""
         return self._interactive
+
+    @staticmethod
+    def security_mode_choices() -> list[str]:
+        """Valid security-mode choices, derived from the SecurityMode enum.
+
+        Deriving from the enum guarantees the wizard can never emit a value
+        that fails to load (the previous ``cross_project`` / ``open`` choices
+        were not enum members and produced unloadable configs).
+        """
+        return [mode.value for mode in SecurityMode]
+
+    @staticmethod
+    def template_choices() -> list[str]:
+        """Valid config-template choices (enum-aligned, no hyphenated names)."""
+        return list(_TEMPLATE_CHOICES)
 
     def run(self, **overrides: Any) -> OnboardingResult:
         """Run the full onboarding wizard.
@@ -154,20 +174,21 @@ class OnboardingWizard:
 
         return Prompt.ask(
             "Choose a template",
-            choices=["generic", "enterprise", "air-gapped"],
+            choices=self.template_choices(),
             default="generic",
         )
 
     def _choose_security_mode(self) -> str:
         """Step 3: Choose security mode."""
         if not self._interactive:
-            return "private_project"
+            return SecurityMode.PRIVATE_PROJECT.value
 
         help_panel = Panel(
             "[bold]Security modes[/]\n\n"
-            "[cyan]Private project[/]  — Redaction on, external providers ask (default)\n"
-            "[cyan]Cross-project[/]   — Sandboxed sharing between OpenContext projects\n"
-            "[cyan]Open[/]            — Minimal restrictions, use with trusted code only",
+            "[cyan]developer[/]        — Local dev posture, fewest restrictions\n"
+            "[cyan]private_project[/]  — Redaction on, external providers off (default)\n"
+            "[cyan]enterprise[/]       — Team sharing with governance\n"
+            "[cyan]air_gapped[/]       — Completely offline, no external access",
             title="Security Modes",
             border_style="blue",
             padding=(1, 1),
@@ -176,8 +197,8 @@ class OnboardingWizard:
 
         return Prompt.ask(
             "Choose security mode",
-            choices=["private_project", "cross_project", "open"],
-            default="private_project",
+            choices=self.security_mode_choices(),
+            default=SecurityMode.PRIVATE_PROJECT.value,
         )
 
     def _choose_tdd_mode(self) -> str:

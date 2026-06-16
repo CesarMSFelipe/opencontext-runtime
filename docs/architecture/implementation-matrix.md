@@ -15,6 +15,6 @@
 | Context/action modes | Ask/plan/architect/act/review/audit/debug/implement-pack/validate/orchestrate/enterprise/air-gapped/custom enum and CLI mode choices | mode-specific output contracts and workflow step presets |
 | Permissioned action layer | Typed action classes with allow/ask/deny defaults; writes/network/MCP denied by default; safe commands/tests/linters require approval | approved command execution and sandbox boundary |
 | Tool runtime | registry + deny-by-default policy + strict-mode explicit permission + read/write/network permission pipeline + untrusted/sanitized outputs | MCP adapter execution implementation |
-| CLI/API scaffold surface | orchestrate, validate, debug, propose patch, provider simulate, governance/evidence, packs, Drupal test planning, and matching API scaffolds | full implementations behind policies |
+| CLI/API scaffold surface | harness run, provider simulate, reports, release evidence, Drupal test planning, and matching API scaffolds | full implementations behind policies |
 | Observability | local JSON traces + sanitizer | optional OTel exporter |
 | Evaluation | eval models + basic evaluator | security regression suites and leakage benchmarks |

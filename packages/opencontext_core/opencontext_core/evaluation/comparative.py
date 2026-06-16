@@ -26,14 +26,6 @@ def _file_tokens(path: Path) -> int:
         return 0
 
 
-def _dir_tokens(root: Path, glob: str = "**/*.py") -> int:
-    total = 0
-    for f in root.glob(glob):
-        if "__pycache__" not in str(f) and f.is_file():
-            total += _file_tokens(f)
-    return total
-
-
 # ── Scenario definition ───────────────────────────────────────────────────────
 
 

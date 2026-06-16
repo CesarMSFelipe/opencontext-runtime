@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from opencontext_core.context.budgeting import estimate_tokens
 from opencontext_core.context.prompt_cache import PromptPrefixCachePlanner
 from opencontext_core.models.context import (
@@ -15,6 +17,9 @@ from opencontext_core.safety.prompt_injection import (
     render_untrusted_context,
 )
 from opencontext_core.safety.redaction import SinkGuard
+
+if TYPE_CHECKING:
+    from opencontext_core.rules.loader import ResolvedRules
 
 
 class PromptAssembler:
@@ -33,8 +38,16 @@ class PromptAssembler:
         workflow_contract: str = "",
         memory: str = "",
         conversation: str = "",
+        rules: ResolvedRules | None = None,
     ) -> AssembledPrompt:
-        """Assemble a prompt with traceable sections."""
+        """Assemble a prompt with traceable sections.
+
+        When ``rules`` carries resolved developer-authored rules, a dedicated
+        high-priority, trusted ``rules`` section is injected so conventions,
+        personas, and output styles reach the model. The section is additive and
+        gated: callers that do not pass ``rules`` (or pass an empty set) get the
+        exact same sections as before, preserving backward compatibility.
+        """
 
         context_lines = []
         scanner = PromptInjectionScanner()
@@ -65,6 +78,7 @@ class PromptAssembler:
         context_content, retrieved_redacted = sink_guard.redact(
             "\n\n".join(context_lines) if context_lines else "No project context selected."
         )
+        rules_section = _build_rules_section(sink_guard, rules)
         sections = [
             _section(
                 sink_guard,
@@ -157,6 +171,12 @@ class PromptAssembler:
                 redacted=user_redacted,
             ),
         ]
+        if rules_section is not None:
+            # Inject the rules/persona section right after the instructions
+            # section so it sits in the high-priority, trusted, cache-stable
+            # prefix. Gated on non-empty resolved rules so callers that pass no
+            # rules see exactly the legacy section set.
+            sections.insert(2, rules_section)
         measured_sections = [
             section.model_copy(update={"tokens": estimate_tokens(section.content)})
             for section in sections
@@ -171,6 +191,48 @@ class PromptAssembler:
             sections=measured_sections,
             total_tokens=estimate_tokens(prompt),
         )
+
+
+def _build_rules_section(
+    sink_guard: SinkGuard, rules: ResolvedRules | None
+) -> PromptSection | None:
+    """Render resolved (winning) rules into a trusted, high-priority section.
+
+    Returns ``None`` when there are no resolved rules so the section is omitted
+    entirely (additive + backward compatible). Only applied rules are rendered;
+    overridden rules are deliberately excluded so the prompt reflects exactly
+    the winning layer, matching what the trace records as applied.
+    """
+
+    if rules is None or rules.is_empty():
+        return None
+
+    by_category: dict[str, list[str]] = {}
+    source_ids: list[str] = []
+    for rule in rules.applied:
+        by_category.setdefault(rule.category, []).append(rule.content)
+        source_ids.append(f"{rule.layer}:{rule.category}:{rule.key}")
+
+    lines: list[str] = [
+        "Developer-authored project rules (trusted; follow these conventions):",
+    ]
+    for category in sorted(by_category):
+        lines.append(f"\n{category.title()}:")
+        for content in by_category[category]:
+            lines.append(f"  - {content}")
+    rendered = "\n".join(lines)
+
+    safe_content, redacted = sink_guard.redact(rendered)
+    return PromptSection(
+        name="rules",
+        content=safe_content,
+        stable=True,
+        tokens=0,
+        priority=ContextPriority.P1,
+        trusted=True,
+        redacted=redacted,
+        source_ids=source_ids,
+    )
 
 
 def _section(

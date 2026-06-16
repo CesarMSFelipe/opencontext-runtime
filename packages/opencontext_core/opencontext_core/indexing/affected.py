@@ -37,7 +37,7 @@ class AffectedTestFinder:
 
     def __init__(
         self,
-        db_path: str | Path = ".storage/opencontext/codegraph.db",
+        db_path: str | Path = ".storage/opencontext/context_graph.db",
     ) -> None:
         self.db = GraphDatabase(db_path=db_path)
 

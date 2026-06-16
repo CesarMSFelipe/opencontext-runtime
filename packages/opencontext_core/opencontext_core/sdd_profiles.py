@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 
 from opencontext_core.config import SDDConfig
 
-ORCHESTRATOR_TYPES = ("multi-phase", "subagent-native", "solo-compact")
+ORCHESTRATOR_TYPES = ("opencontext", "multi-phase", "subagent-native", "solo-compact")
 
 
 @dataclass
@@ -151,34 +151,65 @@ def _solo_compact_instructions(budget: int = 3000) -> dict[str, str]:
     }
 
 
+def _opencontext_instructions(budget: int = 3000) -> dict[str, str]:
+    return {
+        "explore": (
+            f'Use `opencontext pack . --query "<task>" --max-tokens {budget} --mode plan` '
+            "before broad file reads. Answer with the smallest useful evidence set."
+        ),
+        "propose": (
+            "State intent, scope, risks, and whether apply can continue automatically. "
+            "Keep it direct."
+        ),
+        "spec": (
+            "Write acceptance criteria with MUST/SHOULD language. "
+            "Use project-local SDD artifact mode from `context.json`."
+        ),
+        "design": (
+            "Design only the changed path. Include affected files, decisions, and rollback."
+        ),
+        "tasks": (
+            "Break work into ordered, testable file-level tasks. Ask only on risk or ambiguity."
+        ),
+        "apply": (
+            "Follow `context.json` TDD mode. In strict mode: failing test first, then code. "
+            "Use OpenContext packs for missing context."
+        ),
+        "verify": ("Run focused tests first, then lint/type checks. Report commands and outcomes."),
+        "archive": (
+            "Persist decisions, verification evidence, and next steps to the configured "
+            "artifact/memory mode."
+        ),
+    }
+
+
 CLIENT_ORCHESTRATOR_PROFILES: dict[str, ClientOrchestratorProfile] = {
     "opencode": ClientOrchestratorProfile(
         client="opencode",
-        orchestrator_type="multi-phase",
-        phase_instructions=_multi_phase_instructions(),
+        orchestrator_type="opencontext",
+        phase_instructions=_opencontext_instructions(),
         kg_lookup_first=True,
         delegation_hint=(
-            "OpenCode supports multi-file orchestration. "
-            "Use `opencode.json` instruction files to reference AGENTS.md and context packs."
+            "OpenCode consumes the OpenContext profile. Use `opencode.json` to reference "
+            "AGENTS.md and compact context packs; keep OpenContext rules authoritative."
         ),
         tdd_integration=(
-            "OpenCode respects AGENTS.md TDD rules. "
-            "In 'ask' mode, prompt the user before apply. "
-            "In 'strict' mode, enforce test-first automatically."
+            "OpenContext TDD rules apply. In ask mode, prompt before apply; "
+            "in strict mode, enforce test-first automatically."
         ),
     ),
     "kilo-code": ClientOrchestratorProfile(
         client="kilo-code",
-        orchestrator_type="multi-phase",
-        phase_instructions=_multi_phase_instructions(),
+        orchestrator_type="opencontext",
+        phase_instructions=_opencontext_instructions(),
         kg_lookup_first=True,
         delegation_hint=(
             "Kilo Code shares the OpenCode instruction format. "
-            "Uses AGENTS.md + opencode.json. Supports multi-agent mode natively."
+            "Uses AGENTS.md + opencode.json with OpenContext rules."
         ),
         tdd_integration=(
-            "Same as OpenCode: AGENTS.md TDD rules apply. "
-            "Kilo Code will ask per-change in 'ask' mode."
+            "OpenContext TDD rules apply. Kilo Code asks per-change in ask mode "
+            "and enforces test-first in strict mode."
         ),
     ),
     "cursor": ClientOrchestratorProfile(
@@ -214,16 +245,17 @@ CLIENT_ORCHESTRATOR_PROFILES: dict[str, ClientOrchestratorProfile] = {
     ),
     "codex": ClientOrchestratorProfile(
         client="codex",
-        orchestrator_type="solo-compact",
-        phase_instructions=_solo_compact_instructions(),
+        orchestrator_type="opencontext",
+        phase_instructions=_opencontext_instructions(),
         kg_lookup_first=True,
         compact_pack_cmd='opencontext pack . --query "{task}" --max-tokens {budget} --mode plan',
         delegation_hint=(
-            "Codex runs as a single agent. "
-            "One compact context pack per task is sufficient; do not spawn sub-agents."
+            "Codex uses the OpenContext profile in a single coordinator thread. "
+            "Use compact context packs per phase and avoid sub-agent delegation unless configured."
         ),
         tdd_integration=(
-            "AGENTS.md TDD rules apply. Codex will ask once before apply in 'ask' mode."
+            "OpenContext AGENTS.md TDD rules apply. Codex asks before apply in ask mode "
+            "and enforces test-first in strict mode."
         ),
     ),
     "windsurf": ClientOrchestratorProfile(

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import importlib
+import json
 from pathlib import Path
 
 import pytest
@@ -12,6 +15,7 @@ from opencontext_core.config import (
     load_config,
 )
 from opencontext_core.errors import ConfigurationError
+from opencontext_core.models.context import CompressionStrategy
 
 
 def test_config_loading_merges_required_ignore_patterns(tmp_path: Path) -> None:
@@ -103,3 +107,122 @@ def test_backward_compat_old_config_ignores_new_sections() -> None:
     assert config.project.name
     assert config.context.max_input_tokens
     assert config.models.default.provider
+
+
+def test_vector_defaults_are_local_noop_and_opt_in() -> None:
+    data = default_config_data()
+    config = load_config()
+
+    assert data["embedding"]["enabled"] is False
+    assert data["embedding"]["provider"] == "local"
+    assert data["embedding"]["storage_backend"] == "null"
+    assert config.embedding.enabled is False
+    assert config.embedding.storage_backend == "null"
+
+
+# Base64-encoded so the blocked names appear nowhere as plaintext in this repo or
+# its history, while the guard still decodes and blocks them in public surfaces.
+_FORBIDDEN_B64 = (
+    "Z2VudGxlLWFp",
+    "Z2VudGxlIGFp",
+    "Z2VudGxlYWk=",
+    "Z3JhcGhpZnk=",
+    "Y29kZWdyYXBo",
+    "cWRyYW50",
+    "bGxtbGluZ3Vh",
+    "Y2F2ZW1hbg==",
+    "cG9ueXRhaWw=",
+)
+
+
+def _forbidden_external_names() -> tuple[str, ...]:
+    """External product/tool names that must not appear in public surfaces.
+
+    Decoded from ``_FORBIDDEN_B64`` so the names never appear as plaintext in the
+    repository (or its history), while the guard still blocks every spelling.
+    """
+    return tuple(base64.b64decode(b).decode() for b in _FORBIDDEN_B64)
+
+
+def test_public_default_config_uses_generic_names() -> None:
+    rendered = json.dumps(default_config_data()).lower()
+
+    for forbidden in _forbidden_external_names():
+        assert forbidden not in rendered
+
+
+def test_public_surfaces_do_not_expose_external_names() -> None:
+    root = Path(__file__).parents[2]
+    public_files = [
+        root / "README.md",
+        root / "opencontext.yaml",
+        root / "packages/opencontext_cli/opencontext_cli/main.py",
+        root / "packages/opencontext_core/opencontext_core/mcp_stdio.py",
+        root / "packages/opencontext_core/opencontext_core/runtime.py",
+        *sorted((root / "packages/opencontext_core/opencontext_core/indexing").glob("*.py")),
+        *sorted((root / "docs").rglob("*.md")),
+        *sorted((root / "examples").rglob("opencontext.yaml")),
+    ]
+    public_text = "\n".join(
+        path.read_text(encoding="utf-8").lower() for path in public_files if path.exists()
+    )
+    exported = importlib.import_module("opencontext_core.compression.terse")
+    symbol_text = "\n".join(
+        [
+            *getattr(exported, "__all__", ()),
+            *[strategy.name for strategy in CompressionStrategy],
+            *[strategy.value for strategy in CompressionStrategy],
+        ]
+    ).lower()
+
+    scanned = f"{public_text}\n{symbol_text}"
+    for forbidden in _forbidden_external_names():
+        assert forbidden not in scanned
+
+
+def test_legacy_terse_intensity_key_loads_without_public_default(tmp_path: Path) -> None:
+    data = default_config_data()
+    legacy_key = "cave" + "man_intensity"
+    data["context"]["compression"][legacy_key] = "lite"
+    config_path = tmp_path / "opencontext.yaml"
+    config_path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    config = load_config(config_path)
+
+    assert config.context.compression.terse_intensity == "lite"
+
+
+def test_testing_config_defaults() -> None:
+    from opencontext_core.config import MutationConfig, TestingConfig
+
+    cfg = TestingConfig()
+    assert cfg.mutation.enabled is False
+    assert cfg.mutation.threshold == 80
+    assert cfg.mutation.fail_on_low_score is False
+    assert isinstance(cfg.mutation, MutationConfig)
+
+
+def test_context_planning_config_defaults() -> None:
+    from opencontext_core.config import ContextPlanningConfig
+
+    cfg = ContextPlanningConfig()
+    assert cfg.enabled is True
+    assert cfg.default_mode == "progressive"
+    assert cfg.contract_required is True
+    assert cfg.risk_classifier == "deterministic"
+    assert cfg.max_expansion_rounds == 3
+    assert cfg.fail_on_unverified_critical_assumptions is False
+
+
+def test_opencontext_config_accepts_new_fields() -> None:
+    from opencontext_core.config import OpenContextConfig, default_config_data
+
+    data = default_config_data()
+    config = OpenContextConfig.model_validate(data)
+    # New fields present with defaults
+    assert hasattr(config, "testing")
+    assert hasattr(config, "context_planning")
+    assert hasattr(config, "context_storage")
+    assert config.testing.mutation.enabled is False
+    assert config.context_planning.enabled is True
+    assert config.context_storage.semantic_search is False

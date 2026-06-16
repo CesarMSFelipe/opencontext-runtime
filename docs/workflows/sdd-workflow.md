@@ -1,234 +1,252 @@
 # Specification-Driven Development (SDD) Workflow
 
-The SDD workflow is OpenContext's 6-phase specification-driven development lifecycle, powered by the **harness runner**. It moves from exploration through proposal, implementation, verification, and review, with full traceability and governance via phase gates.
+SDD is OpenContext's default workflow for non-trivial changes. Eight phases. Full traceability. Quality gates at every step. Works offline with any agent.
 
 ## Overview
 
-SDD is designed to be **technology-agnostic**, **provider-neutral**, and **agent-composable**. The harness runner executes phases in sequence, evaluates gates (token budget, artifact persistence, project index, etc.), and persists results to `.opencontext/runs/<run_id>/`.
+```
+explore → propose → spec → design → tasks → apply → verify → archive
+```
+
+The harness runner executes phases in sequence (or in parallel where dependencies allow), persists artifacts, evaluates gates, and builds memory from outcomes. The agent does the work; the harness ensures nothing ships without passing verification.
 
 ### Key Principles
 
-1. **Specification-First**: Define intent, scope, and approach before implementation
-2. **Governed**: Each phase passes through gates (budget, persistence, security)
-3. **Traceable**: Every run produces ledgers, gates, and artifacts
-4. **Provider-Neutral**: No API calls — works offline with mock provider
+1. **Contract first** — every run starts with a ContextContract (known / unknown / must verify)
+2. **Minimum sufficient context** — the agent receives only what the task requires, verified by the graph
+3. **Governed** — 15 quality gates at verify; no archive without passing them
+4. **Traceable** — every run produces ledgers, gates, artifacts, and memory records
+5. **Learns** — failures update the memory graph; future similar tasks benefit from past mistakes
 
-## The Harness Workflow Phases
+## Three Ways to Run SDD
 
-The harness runner executes six phases:
-
-```
-Explore → Propose → Apply → Verify → Review → Archive
-```
-
-### 1. Explore
-
-**Purpose**: Index the project and build a context pack for the task.
-
-- Reads project structure, files, and symbols
-- Builds a compact context pack within the token budget
-- Checks: project index exists, context pack created, token budget
-
-**CLI**:
-```bash
-opencontext harness run --workflow explore-only --task "How does authentication work?"
-```
-
-**Produces**: Indexed manifest, context pack, and token ledger.
-
-### 2. Propose
-
-**Purpose**: Create a structured SDD change proposal from the exploration results.
-
-- Defines what will change and why
-- Outlines the approach and scope
-- Persists proposal to `proposal.json`
-
-**CLI**:
-```bash
-opencontext harness run --workflow sdd --task "Implement OAuth2 support"
-```
-
-**Produces**: `proposal.json` with task, scope, and approach metadata.
-
-### 3. Apply
-
-**Purpose**: Apply changes as defined in the proposal.
-
-- Creates an apply manifest tracking what was applied
-- Records change metadata for auditability
-
-**CLI**: Part of the full SDD workflow (`--workflow sdd`).
-
-**Produces**: `apply-manifest.json` with change summary.
-
-### 4. Verify
-
-**Purpose**: Run tests and validate the implementation.
-
-- Executes `pytest` in the project root
-- Captures test output, exit code, pass/fail counts
-- Reports warnings on test failures
-
-**CLI**: Part of the full SDD workflow (`--workflow sdd`).
-
-**Produces**: `verify-report.json` with test results and exit code.
-
-### 5. Review
-
-**Purpose**: Aggregate phase results and produce a review summary.
-
-- Collects ledgers, gates, artifacts, and warnings from all prior phases
-- Reports gate pass/fail counts and warnings
-
-**CLI**: Part of the full SDD workflow (`--workflow sdd`).
-
-**Produces**: `review.json` with aggregated phase data and gate statistics.
-
-### 6. Archive
-
-**Purpose**: Persist run artifacts and verify persistence.
-
-- Confirms `run.json` was saved to disk
-- Finalizes the run directory
-
-**CLI**: Part of the full SDD workflow (`--workflow sdd`).
-
-**Produces**: Archived run directory under `.opencontext/runs/<run_id>/`.
-
-## Available Workflows
+### 1. Interactive loop (recommended)
 
 ```bash
-opencontext harness list
+opencontext loop --task "Add OAuth2 login" --flow full
 ```
 
-| Workflow | Phases | Description |
-|----------|--------|-------------|
-| `sdd` | explore → propose → apply → verify → review → archive | Full SDD lifecycle |
-| `explore-only` | explore | Project indexing and context pack |
-| `apply-only` | apply → verify → archive | Apply then verify and archive |
+User checkpoints after each phase. Press `Y` to continue, `n` to abort.
 
-## Budget Modes
-
-The harness supports three token budget enforcement modes:
-
-| Mode | Behavior |
-|------|----------|
-| `off` | No budget enforcement |
-| `warn` | Log warnings when tokens exceed budget (default) |
-| `strict` | Fail the run and exit with code 1 on overage |
+### 2. Autonomous loop
 
 ```bash
-opencontext harness run --workflow sdd --task "my task" --budget-mode strict
+opencontext loop --task "Add OAuth2 login" --flow autonomous
 ```
 
-## Complete SDD Flow
+No prompts. Gates decide whether to continue. Suitable for CI/CD.
 
-Run all six phases in sequence:
+### 3. Harness directly
 
 ```bash
-opencontext harness run --workflow sdd --task "Implement OAuth2 authentication" --budget-mode warn
+opencontext harness run --workflow sdd --task "Add OAuth2 login"
+opencontext harness run --workflow sdd --task "..." --json    # CI-friendly
 ```
 
-Output:
-```
-Harness Run: sdd-a1b2c3d4e5f6
-  Workflow: sdd
-  Task: Implement OAuth2 authentication
-  Status: passed
-  Phases: 6
-    explore: 599/6000 tokens — passed
-    propose: 0/6000 tokens — passed
-    apply: 0/6000 tokens — passed
-    verify: 0/4000 tokens — passed
-    review: 0/4000 tokens — passed
-    archive: 0/2000 tokens — passed
-  Gates: 10
-  Trace IDs: 0
-```
+## The Eight Phases
 
-For JSON output (CI-friendly):
+### explore
+
+**What happens:**
+1. Index project (incremental)
+2. Query memory (PROCEDURAL + FAILURE layers) for relevant past learnings
+3. Build ContextContract: classify task → determine risk tier → populate known/unknown/gates
+4. Plan context retrieval (budget, strategy, expansion rounds)
+5. Retrieve from knowledge graph + memory, score with 9 signals, pack
+6. Persist `contract.yaml` as artifact
+
+**Outputs:** context pack, `contract.yaml`  
+**Gates:** `project-index-exists`, `context-pack-created`, `token-budget`
+
+### propose
+
+**What happens:**
+- Classify task type and risk tier
+- Produce compressed summary of what will change and why
+- Include ContextContract summary (minus detailed evidence)
+
+**Outputs:** `proposal.json`
+
+### spec
+
+**What happens:**
+- Write formal requirements as scenarios
+- Every scenario is testable and verifiable
+
+**Outputs:** `spec.yaml`
+
+### design
+
+**What happens:**
+- Architecture decisions and implementation approach
+- Can run in parallel with spec (no dependency between them)
+
+**Outputs:** `design.yaml`
+
+### tasks
+
+**What happens:**
+- Break spec+design into ordered implementation checklist
+- Each task maps to a concrete code change
+
+**Outputs:** `tasks.yaml`
+
+### apply
+
+**What happens:**
+- Execute changes according to tasks
+- Agent (or user) applies code changes
+- Apply manifest records what changed
+
+**Outputs:** `apply-manifest.json`  
+**Gates:** `approval-required-for-writes`, `no-high-risk-exports`
+
+### verify
+
+**What happens:**
+1. Run test suite (`tdd-enforcer` agent)
+2. Run lint + type-check
+3. Run security scan (`security-audit` agent)
+4. Run mutation analysis if enabled (`mutation-analyst` agent)
+5. Evaluate all 15 quality gates
+
+**Outputs:** `verify-report.json`  
+**Gates:** All 15 (see [Quality Gates](../quality/quality-gates.md))
+
+### archive
+
+**What happens:**
+1. Harvest memory via `MemoryHarvester`:
+   - Episodic record of what happened
+   - Procedural rules extracted from failures
+   - Failure patterns linked to symbols in the graph
+2. Add trace node to UnifiedGraph
+3. Finalize run directory
+4. Clear WORKING memory layer
+
+**Outputs:** `run.json`, memory records, updated failure graph
+
+## Flow Tracks
+
+| Track | Phases | Token budget | Use for |
+|-------|--------|-------------|---------|
+| `quick` | explore → apply → verify | Tier-based | Simple fixes, renames, trivial changes |
+| `standard` | explore → spec+design → apply → verify | Tier-based | Features, refactors |
+| `full` | All 8 phases | Tier-based | Architecture, security, migrations |
+| `autonomous` | All 8, no prompts | Tier-based | CI/CD, scripts |
+
+## Risk Tiers
+
+Automatically assigned by `TaskClassifier` + `RiskClassifier`:
+
+| Tier | Token budget | Compression | When |
+|------|-------------|-------------|------|
+| `cheap` | 8,000 | terse | Docs, renames, trivial fixes |
+| `precise` | 16,000 | compact | Features, refactors |
+| `critical` | 28,000 | none | Security, migrations, breaking changes |
+
+Security tasks are always `critical`. Migration tasks are always `critical`.
+
+## TDD Integration
+
+The harness enforces red→green→refactor at verify:
+
 ```bash
-opencontext harness run --workflow sdd --task "my task" --json
+opencontext preset apply strict-tdd
+opencontext loop --task "add feature X" --flow full
+# → VERIFY blocks apply if no failing test was written first
 ```
+
+With `strict-tdd`, the `FailingTestExistsGate` must pass before apply is allowed to run.
+
+## Mutation Testing
+
+```yaml
+# opencontext.yaml
+testing:
+  mutation:
+    enabled: true
+    threshold: 80
+    fail_on_low_score: false
+```
+
+When enabled, `mutation-analyst` runs at verify. Score below threshold:
+- `fail_on_low_score: false` → WARNING (default)
+- `fail_on_low_score: true` → blocks archive
+
+```bash
+opencontext mutation run --scope changed --threshold 80
+```
+
+## Phase Dependencies (DAG)
+
+```
+explore
+  └─ propose
+       └─ spec ─┐
+       └─ design ┤
+                 └─ tasks
+                      └─ apply
+                           └─ verify
+                                └─ archive
+```
+
+spec and design run in parallel (both depend only on propose).
 
 ## Run Artifacts
 
-Each harness run creates a directory under `.opencontext/runs/<run_id>/`:
+All artifacts written to `.opencontext/runs/<run_id>/`:
 
 | File | Contents |
 |------|----------|
-| `run.json` | Run metadata (id, workflow, status, created_at) |
-| `ledger.json` | Per-phase token ledger |
-| `gates.json` | Gate evaluation results |
-| `artifacts.json` | Artifacts created during the run |
-| `decisions.json` | Decisions recorded during the run |
-| `proposal.json` | Change proposal (propose phase) |
-| `apply-manifest.json` | Apply manifest (apply phase) |
-| `verify-report.json` | Test results (verify phase) |
-| `review.json` | Aggregated review (review phase) |
+| `contract.yaml` | ContextContract: known/unknown/must_verify |
+| `proposal.json` | Task classification and change approach |
+| `spec.yaml` | Formal requirements and scenarios |
+| `design.yaml` | Architecture decisions |
+| `tasks.yaml` | Ordered implementation checklist |
+| `apply-manifest.json` | What changed |
+| `verify-report.json` | Tests, mutation score, all 15 gate results |
+| `memory-harvest.json` | Memory records created at archive |
+| `run.json` | Run metadata, phase summaries, final status |
 
-## Health Checks
+## Phase Dependency Ordering (Orchestrator)
 
-Verify harness and adapter health:
-
-```bash
-opencontext verify
+```python
+PHASE_DEPENDENCIES = {
+    "explore": [],
+    "propose": ["explore"],
+    "spec": ["propose"],
+    "design": ["propose"],
+    "tasks": ["spec", "design"],
+    "apply": ["tasks"],
+    "verify": ["apply"],
+    "archive": ["verify"],
+}
 ```
 
-Relevant checks include:
-- **Harness Phases**: 6/6 phases available
-- **Harness Runner**: Runner instantiatable and run_id generated
-- **Adapters**: Core adapters ready (local, python, aider)
-- **Boundary Service**: Service accepts 6 adapter targets
+## Examples
 
-## Migration from Legacy SDD Commands
-
-The individual `sdd explore`, `sdd propose`, `sdd apply`, `sdd verify`, `sdd review`, `sdd archive`, and `sdd up-code` commands are **deprecated** in favor of the unified harness runner:
-
-| Old command | New command |
-|-------------|-------------|
-| `sdd explore "query"` | `harness run --workflow explore-only --task "query"` |
-| `sdd propose "query"` | `harness run --workflow sdd --task "query"` |
-| `sdd apply --workflow sdd` | `harness run --workflow sdd --task "task"` |
-| `sdd verify` | `harness run --workflow sdd --task "task"` |
-| `sdd review` | `harness run --workflow sdd --task "task"` |
-| `sdd archive` | `harness run --workflow explore-only --task "task"` |
-| `sdd flow "query"` | `harness run --workflow sdd --task "query"` |
-
-## Phase Dependencies (Orchestrator-Level)
-
-The SDD orchestrator enforces dependency ordering at the skill/agent level:
-
-- `explore`: no dependencies
-- `propose`: depends on `explore`
-- `apply`: depends on `propose`
-- `verify`: depends on `apply`
-- `review`: depends on all prior phases
-- `archive`: depends on `verify`
-
-## Technology Agnosticism
-
-The harness workflow works identically across all technology stacks:
-
-### Python/Django
 ```bash
-opencontext harness run --workflow sdd --task "Create user registration endpoint"
-```
+# Python/Django — full workflow
+opencontext loop --task "Create user registration endpoint" --flow full
 
-### Node.js/Express
-```bash
-opencontext harness run --workflow sdd --task "Add JWT authentication middleware"
-```
+# Node.js — quick fix
+opencontext loop --task "Fix typo in error message" --flow quick
 
-### React/TypeScript
-```bash
-opencontext harness run --workflow sdd --task "Implement login form with validation"
+# Architecture change — autonomous (CI)
+opencontext loop --task "Migrate auth from JWT to session tokens" --flow autonomous
+
+# Maximum compression (large output)
+opencontext loop --task "..." --flow standard --compress efficient
+
+# Retry up to 3 times on verify failure
+opencontext loop --task "..." --flow full --max-rounds 3
 ```
 
 ## See Also
 
-- [Harness Runner Architecture](../concepts/architecture.md)
+- [Controlled Agentic Harness](../concepts/controlled-agentic-harness.md)
+- [Quality Gates](../quality/quality-gates.md)
+- [Memory System](../memory/overview.md)
+- [Compression](../token-efficiency/compression.md)
 - [Custom Workflows](./custom-workflows.md)
-- [CLI Reference](../getting-started/cli-installation.md)
-- [Health Checks](../operations/health-checks.md)

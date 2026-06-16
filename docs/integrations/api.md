@@ -10,7 +10,6 @@ CLI/API/local SDK paths are implemented. Agent-specific integrations are documen
 ```bash
 opencontext agent-context "Review access control" --target codex --copy
 opencontext pack . --query "review auth" --copy
-opencontext ddev init
 ```
 
 ## Implemented Code

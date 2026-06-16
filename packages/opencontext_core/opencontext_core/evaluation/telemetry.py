@@ -9,6 +9,62 @@ from pathlib import Path
 
 TELEMETRY_FILE = ".opencontext/telemetry.json"
 
+_NAIVE_TEXT_EXTS = {
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".md",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".json",
+    ".txt",
+    ".go",
+    ".rs",
+    ".rb",
+    ".java",
+    ".php",
+}
+_NAIVE_SKIP_DIRS = {
+    ".git",
+    "__pycache__",
+    "build",
+    ".storage",
+    ".venv",
+    "venv",
+    "node_modules",
+    "dist",
+    "tmp",
+    ".opencontext",
+    ".mypy_cache",
+    ".ruff_cache",
+}
+
+
+def estimate_naive_tokens(root: Path) -> int:
+    """Rough token count an agent would read by ingesting the whole project.
+
+    The honest "before" baseline: every source/text file's bytes (~4 chars/token),
+    skipping vcs/build/vendored dirs. Shared by `pack`'s savings line and the
+    `demo` so both report the same number. Returns at least 1.
+    """
+    chars = 0
+    for path in root.rglob("*"):
+        if not path.is_file() or path.suffix not in _NAIVE_TEXT_EXTS:
+            continue
+        # Skip-dir check must be RELATIVE to root: an absolute prefix like /tmp
+        # would otherwise match the "tmp" skip entry and drop the whole project.
+        rel_parts = path.relative_to(root).parts
+        if any(part in _NAIVE_SKIP_DIRS or part.endswith(".egg-info") for part in rel_parts):
+            continue
+        try:
+            chars += path.stat().st_size
+        except OSError:
+            pass
+    return max(chars // 4, 1)
+
 
 @dataclass
 class TelemetryEvent:

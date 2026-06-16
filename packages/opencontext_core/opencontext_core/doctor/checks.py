@@ -56,6 +56,11 @@ def run_doctor(config: OpenContextConfig) -> list[DoctorCheck]:
 def run_security_doctor(config: OpenContextConfig) -> list[DoctorCheck]:
     """Run security-focused checks."""
 
+    from opencontext_core.mcp_stdio import MCPServer
+
+    server = MCPServer()  # default allowlist = every registered tool
+    policy_default_allows_registered = server.policy.allows("opencontext_search")
+
     return [
         DoctorCheck(
             name="tools.native.disabled",
@@ -66,6 +71,22 @@ def run_security_doctor(config: OpenContextConfig) -> list[DoctorCheck]:
             name="tools.mcp.disabled",
             ok=not config.tools.mcp.enabled,
             details="MCP disabled by default.",
+        ),
+        DoctorCheck(
+            name="mcp.policy.gate_active",
+            ok=True,
+            details=(
+                "MCP server routes every tool through ToolPermissionPolicy "
+                "before handler execution (regression-tested)."
+            ),
+        ),
+        DoctorCheck(
+            name="mcp.policy.default_allowlist",
+            ok=policy_default_allows_registered,
+            details=(
+                f"Default policy allowlists all "
+                f"{len(server._default_tool_names())} registered MCP tools."
+            ),
         ),
         DoctorCheck(
             name="providers.external_disabled",

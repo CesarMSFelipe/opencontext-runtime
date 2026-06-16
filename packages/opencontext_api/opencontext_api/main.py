@@ -24,12 +24,15 @@ from opencontext_api.schemas import (
     SetupResponse,
     TraceResponse,
     ValidateRequest,
+    VerifiedContextRequestBody,
+    VerifiedContextResponse,
 )
 from opencontext_core.actions import ActionRequest, ActionType, evaluate_action
 from opencontext_core.doctor.checks import run_doctor
 from opencontext_core.dx.security_reports import scan_project
 from opencontext_core.dx.tokens import build_token_report
 from opencontext_core.project.profiles import TechnologyProfile
+from opencontext_core.retrieval.contracts import RetrievalSurface, VerifiedContextRequest
 from opencontext_core.runtime import OpenContextRuntime
 from opencontext_core.safety.redaction import SinkGuard
 
@@ -51,7 +54,6 @@ def _runtime() -> OpenContextRuntime:
 @app.post("/v1/index", response_model=IndexResponse)
 def index_project(request: IndexRequest) -> IndexResponse:
     """Index a project root."""
-
     runtime = _runtime()
     manifest = runtime.index_project(request.root)
     return IndexResponse(
@@ -65,7 +67,6 @@ def index_project(request: IndexRequest) -> IndexResponse:
 @app.post("/v1/setup", response_model=SetupResponse)
 def setup_project(request: SetupRequest) -> SetupResponse:
     """Create project harness files and persist the project index without CLI commands."""
-
     runtime = _runtime()
     result = runtime.setup_project(
         request.root,
@@ -78,7 +79,6 @@ def setup_project(request: SetupRequest) -> SetupResponse:
 @app.post("/v1/runs", response_model=RunResponse)
 def run_workflow(request: RunRequest) -> RunResponse:
     """Run a configured workflow."""
-
     runtime = _runtime()
     result = runtime.ask(request.input, request.workflow_name)
     safe_answer, _ = SinkGuard().redact(result.answer)
@@ -93,7 +93,6 @@ def run_workflow(request: RunRequest) -> RunResponse:
 @app.get("/v1/traces/{trace_id}", response_model=TraceResponse)
 def get_trace(trace_id: str) -> TraceResponse:
     """Load a persisted trace."""
-
     runtime = _runtime()
     trace = runtime.load_trace(trace_id)
     return TraceResponse(trace=trace.model_dump(mode="json"))
@@ -102,7 +101,6 @@ def get_trace(trace_id: str) -> TraceResponse:
 @app.get("/v1/project/manifest", response_model=ManifestResponse)
 def get_manifest() -> ManifestResponse:
     """Load the persisted project manifest."""
-
     runtime = _runtime()
     manifest = runtime.load_manifest()
     return ManifestResponse(manifest=manifest.model_dump(mode="json"))
@@ -111,7 +109,6 @@ def get_manifest() -> ManifestResponse:
 @app.get("/v1/project/repomap", response_model=RepoMapResponse)
 def get_repo_map() -> RepoMapResponse:
     """Render the compact repository map."""
-
     runtime = _runtime()
     safe_repo_map, _ = SinkGuard().redact(runtime.render_repo_map())
     return RepoMapResponse(repo_map=safe_repo_map)
@@ -120,7 +117,6 @@ def get_repo_map() -> RepoMapResponse:
 @app.post("/v1/context/pack", response_model=ContextPackResponse)
 def build_context_pack(request: ContextPackRequest) -> ContextPackResponse:
     """Build a token-aware context pack."""
-
     runtime = _runtime()
     pack = runtime.build_context_pack(request.query, request.max_tokens)
     return ContextPackResponse(pack=pack.model_dump(mode="json"))
@@ -129,7 +125,6 @@ def build_context_pack(request: ContextPackRequest) -> ContextPackResponse:
 @app.post("/v1/context", response_model=PreparedContextResponse)
 def prepare_context(request: PreparedContextRequest) -> PreparedContextResponse:
     """Prepare and persist a compact context bundle for non-CLI callers."""
-
     runtime = _runtime()
     prepared = runtime.prepare_context(
         request.query,
@@ -144,6 +139,41 @@ def prepare_context(request: PreparedContextRequest) -> PreparedContextResponse:
         included_sources=prepared.included_sources,
         omitted_sources=prepared.omitted_sources,
         token_usage=prepared.token_usage,
+        trust_decision=prepared.trust_decision,
+        fallback_actions=prepared.fallback_actions,
+        source_surfaces=prepared.source_surfaces,
+    )
+
+
+@app.post("/v1/context/verify", response_model=VerifiedContextResponse)
+def verify_context(request: VerifiedContextRequestBody) -> VerifiedContextResponse:
+    """One-shot verified context: gates, trust, risk, and a persisted trace.
+
+    Surface parity with the CLI: the same gated/verified pipeline, not the raw
+    ungated context that /v1/context/pack and /v1/context return.
+    """
+    runtime = _runtime()
+    result = runtime.verify_context(
+        VerifiedContextRequest(
+            query=request.query,
+            root=Path(request.root) if request.root else None,
+            max_tokens=request.max_tokens,
+            refresh_index=request.refresh_index,
+            include_memory=request.include_memory,
+            include_vector=request.include_vector,
+        )
+    )
+    safe_context, _ = SinkGuard().redact(result.context)
+    return VerifiedContextResponse(
+        trace_id=result.trace_id,
+        context=safe_context,
+        evidence=[item.model_dump(mode="json") for item in result.evidence],
+        memory=[item.model_dump(mode="json") for item in result.memory],
+        gates=[gate.model_dump(mode="json") for gate in result.gates],
+        risk_level=result.risk_level.value,
+        trust_decision=result.trust_decision.model_dump(mode="json"),
+        token_usage=result.token_usage,
+        omitted_sources=result.omitted_sources,
     )
 
 
@@ -171,7 +201,6 @@ def tokens_report() -> dict[str, object]:
 @app.post("/v1/orchestrate", response_model=ScaffoldResponse)
 def orchestrate(request: OrchestrateRequest) -> ScaffoldResponse:
     """Plan a permissioned orchestration run without executing actions."""
-
     runtime = _runtime()
     mode = runtime.config.security.mode
     return ScaffoldResponse(
@@ -194,7 +223,6 @@ def orchestrate(request: OrchestrateRequest) -> ScaffoldResponse:
 @app.post("/v1/validate", response_model=ScaffoldResponse)
 def validate(request: ValidateRequest) -> ScaffoldResponse:
     """Plan safe validation checks without running shell commands."""
-
     runtime = _runtime()
     mode = runtime.config.security.mode
     return ScaffoldResponse(
@@ -216,13 +244,13 @@ def validate(request: ValidateRequest) -> ScaffoldResponse:
 @app.post("/v1/agent-context", response_model=ScaffoldResponse)
 def agent_context(request: AgentContextRequest) -> ScaffoldResponse:
     """Return a sanitized generic agent context envelope."""
-
     runtime = _runtime()
     prepared = runtime.prepare_context(
         request.query,
         root=request.root,
         max_tokens=request.max_tokens,
         refresh_index=request.refresh_index,
+        surface=RetrievalSurface.AGENT_TOOL,
     )
     safe_query, _ = SinkGuard().redact(prepared.query)
     safe_context, _ = SinkGuard().redact(prepared.context)
@@ -238,6 +266,9 @@ def agent_context(request: AgentContextRequest) -> ScaffoldResponse:
             "included_sources": prepared.included_sources,
             "omitted_sources": prepared.omitted_sources,
             "token_usage": prepared.token_usage,
+            "trust_decision": prepared.trust_decision,
+            "fallback_actions": prepared.fallback_actions,
+            "source_surfaces": prepared.source_surfaces,
             "raw_secrets_included": False,
         },
     )
@@ -255,21 +286,21 @@ def sdd_flow(request: PreparedContextRequest) -> ScaffoldResponse:
     agent-agnostic workflow engine to provide consistent context preparation
     regardless of the underlying technology.
     """
-
     runtime = _runtime()
 
-    # Phase 1: Explore - retrieve and rank candidates
+    # Explore - retrieve and rank candidates
     prepared = runtime.prepare_context(
         request.query,
         root=request.root,
         max_tokens=request.max_tokens,
         refresh_index=request.refresh_index,
+        surface=RetrievalSurface.WORKFLOW,
     )
 
     safe_query, _ = SinkGuard().redact(prepared.query)
     safe_context, _ = SinkGuard().redact(prepared.context)
 
-    # Phase 2: Test - validate context pack safety
+    # Test - validate context pack safety
     from opencontext_core.safety.firewall import ContextFirewall
 
     firewall = ContextFirewall(runtime.config)
@@ -278,12 +309,12 @@ def sdd_flow(request: PreparedContextRequest) -> ScaffoldResponse:
         sink="sdd_test",
     )
 
-    # Phase 3: Verify - security scan
+    # Verify - security scan
     from opencontext_core.dx.security_reports import scan_project
 
     scan = scan_project(request.root)
 
-    # Phase 4: Review - check for high-risk patterns
+    # Review - check for high-risk patterns
     manifest = runtime.load_manifest()
     high_risk_count = sum(
         1
@@ -301,6 +332,9 @@ def sdd_flow(request: PreparedContextRequest) -> ScaffoldResponse:
             "included_sources": prepared.included_sources,
             "omitted_sources": prepared.omitted_sources,
             "token_usage": prepared.token_usage,
+            "trust_decision": prepared.trust_decision,
+            "fallback_actions": prepared.fallback_actions,
+            "source_surfaces": prepared.source_surfaces,
             "raw_secrets_included": False,
             "safety": {
                 "test_allowed": test_decision.allowed,

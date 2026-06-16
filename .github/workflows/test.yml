@@ -13,9 +13,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Linux mirrors the dev environment, so `make ci` reproduces it locally.
+        # Windows is kept as a real cross-platform signal for Windows users; it is
+        # continue-on-error for now (can't be reproduced on a Linux dev box) — flip
+        # that off to make it a hard gate once it is confirmed green.
         os: [ubuntu-latest, windows-latest]
         python-version: ["3.12"]
     continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    env:
+      # Run Python in UTF-8 mode so the CLI's glyphs (↓ · — ✓) and the tests'
+      # subprocess capture work on Windows, whose default code page (cp1252) can't
+      # encode them. No-op on Linux (already UTF-8).
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,7 +34,9 @@ jobs:
       - name: Install packages and validation tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ruff mypy pytest build types-PyYAML types-requests
+          # Pinned toolchain — single source of truth shared with `make ci` so
+          # local and CI are identical and a dependency update can't break CI.
+          python -m pip install -r requirements-ci.txt
           python -m pip install -e packages/opencontext_core
           python -m pip install -e packages/opencontext_profiles
           python -m pip install -e packages/opencontext_providers

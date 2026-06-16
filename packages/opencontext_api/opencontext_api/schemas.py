@@ -141,6 +141,41 @@ class PreparedContextResponse(BaseModel):
     included_sources: list[str] = Field(description="Sources included in the context.")
     omitted_sources: list[str] = Field(description="Sources omitted from the context.")
     token_usage: dict[str, int] = Field(description="Context and prompt token accounting.")
+    trust_decision: dict[str, str] = Field(description="Planner trust decision metadata.")
+    fallback_actions: list[str] = Field(description="Planner fallback actions.")
+    source_surfaces: list[str] = Field(description="Planner source surfaces represented.")
+
+
+class VerifiedContextRequestBody(BaseModel):
+    """Request body for one-shot verified context."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(description="Task or question to prepare verified context for.")
+    root: str | None = Field(default=None, description="Optional project root to index.")
+    max_tokens: int | None = Field(default=None, gt=0, description="Optional context budget.")
+    refresh_index: bool = Field(default=False, description="Whether to rebuild the local index.")
+    include_memory: bool = Field(default=True, description="Whether local memory may be used.")
+    include_vector: bool = Field(
+        default=False,
+        description="Whether configured vector search may be used.",
+    )
+
+
+class VerifiedContextResponse(BaseModel):
+    """Response body for one-shot verified context."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    trace_id: str = Field(description="Trace id for this verification attempt.")
+    context: str = Field(description="Rendered verified context text.")
+    evidence: list[dict[str, Any]] = Field(description="Evidence used in the context.")
+    memory: list[dict[str, Any]] = Field(description="Local memory evidence used in the context.")
+    gates: list[dict[str, Any]] = Field(description="Verification gate summaries.")
+    risk_level: str = Field(description="Deterministic local risk level.")
+    trust_decision: dict[str, str] = Field(description="Planner trust outcome.")
+    token_usage: dict[str, int] = Field(description="Token usage summary.")
+    omitted_sources: list[str] = Field(description="Sources omitted with traceable reasons.")
 
 
 class OrchestrateRequest(BaseModel):

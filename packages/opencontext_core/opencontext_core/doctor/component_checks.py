@@ -40,15 +40,68 @@ class ComponentDoctor:
         checks.extend(self.check_skill_registry())
         checks.extend(self.check_memory_system())
         checks.extend(self.check_provider_adapters())
+        checks.extend(self.check_binary_path())
         return checks
+
+    def check_binary_path(self) -> list[ComponentCheck]:
+        """Detect a shadowed ``opencontext`` binary (multiple copies on PATH).
+
+        When two installs (e.g. pip and pipx) both put ``opencontext`` on PATH,
+        the first one wins and commands silently run an unexpected version. Report
+        which copy resolves first and the others it shadows.
+        """
+        import os
+
+        found: list[str] = []
+        seen: set[str] = set()
+        for directory in os.environ.get("PATH", "").split(os.pathsep):
+            if not directory:
+                continue
+            candidate = Path(directory) / "opencontext"
+            try:
+                if candidate.is_file() and os.access(candidate, os.X_OK):
+                    resolved = str(candidate.resolve())
+                    if resolved not in seen:
+                        seen.add(resolved)
+                        found.append(str(candidate))
+            except OSError:
+                continue
+
+        if len(found) <= 1:
+            details = (
+                f"opencontext resolves to {found[0]}"
+                if found
+                else "opencontext is not on PATH (running as a module)"
+            )
+            return [ComponentCheck(name="binary_path", ok=True, status="healthy", details=details)]
+        return [
+            ComponentCheck(
+                name="binary_path",
+                ok=False,
+                status="warning",
+                details=(
+                    f"{len(found)} opencontext binaries on PATH; '{found[0]}' shadows the rest: "
+                    + ", ".join(found[1:])
+                ),
+                recommendation="Remove the older copies so one version resolves "
+                "(e.g. 'pipx reinstall opencontext-cli').",
+            )
+        ]
 
     def check_knowledge_graph(self) -> list[ComponentCheck]:
         """Check knowledge graph health."""
 
         checks = []
 
-        # Check database
-        db_path = Path(".storage/opencontext/codegraph.db")
+        # Check database. Mirror GraphDatabase's legacy-name shim: when the
+        # canonical context_graph.db is absent, the runtime transparently uses an
+        # older codegraph.db, so the doctor must too — otherwise it reports a
+        # healthy legacy-named graph as "missing".
+        db_path = Path(".storage/opencontext/context_graph.db")
+        if not db_path.exists():
+            legacy_path = db_path.with_name("codegraph.db")
+            if legacy_path.exists():
+                db_path = legacy_path
         if db_path.exists():
             from opencontext_core.indexing.graph_db import GraphDatabase
 
@@ -57,17 +110,35 @@ class ComponentDoctor:
                 stats = db.get_stats()
                 db.close()
 
-                checks.append(
-                    ComponentCheck(
-                        name="kg_database",
-                        ok=True,
-                        status="healthy",
-                        details=(
-                            f"Database exists with {stats.get('nodes', 0)} nodes, "
-                            f"{stats.get('edges', 0)} edges"
-                        ),
+                node_count = stats.get("nodes", 0)
+                if node_count == 0:
+                    # Tables present but empty — the classic signature of an
+                    # interrupted/failed index. Retrieval silently degrades to
+                    # manifest-only (no call graph, no docstring search) with no
+                    # error, so surface it as unhealthy.
+                    checks.append(
+                        ComponentCheck(
+                            name="kg_database",
+                            ok=False,
+                            status="empty",
+                            details="Knowledge graph database exists but has 0 nodes "
+                            "(likely an interrupted index).",
+                            recommendation="Re-run `opencontext index .` to rebuild the graph.",
+                        )
                     )
-                )
+                else:
+                    checks.append(
+                        ComponentCheck(
+                            name="kg_database",
+                            ok=True,
+                            status="healthy",
+                            details=(
+                                f"Database exists with {node_count} nodes, "
+                                f"{stats.get('edges', 0)} edges"
+                            ),
+                        )
+                    )
+                    checks.append(self._check_freshness(db_path))
 
                 # Check if FTS5 is working
                 if stats.get("nodes", 0) > 0:
@@ -132,6 +203,46 @@ class ComponentDoctor:
         )
 
         return checks
+
+    def _check_freshness(self, db_path: Path) -> ComponentCheck:
+        """Flag indexed files that changed or were deleted since the last index.
+
+        A stale graph silently feeds the agent context for code that no longer
+        exists — the kind of quiet wrongness that erodes trust in verified
+        context. Surfaces it with a one-command fix.
+        """
+        from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+
+        try:
+            kg = KnowledgeGraph(db_path=db_path)
+            report = kg.stale_files(Path("."))
+            kg.close()
+        except Exception as exc:
+            return ComponentCheck(
+                name="kg_freshness",
+                ok=True,
+                status="unknown",
+                details=f"Could not check freshness: {exc}",
+            )
+        if report.total == 0:
+            return ComponentCheck(
+                name="kg_freshness",
+                ok=True,
+                status="fresh",
+                details="Index is up to date with the working tree.",
+            )
+        bits = []
+        if report.changed:
+            bits.append(f"{len(report.changed)} changed")
+        if report.deleted:
+            bits.append(f"{len(report.deleted)} deleted")
+        return ComponentCheck(
+            name="kg_freshness",
+            ok=False,
+            status="stale",
+            details=f"Index is behind the working tree ({', '.join(bits)} files).",
+            recommendation="Re-run `opencontext index .` to refresh the graph.",
+        )
 
     def check_mcp_server(self) -> list[ComponentCheck]:
         """Check MCP server health."""

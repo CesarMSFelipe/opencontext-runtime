@@ -8,10 +8,9 @@ Design and local scaffolds are present. Do not treat the project as a fully cert
 
 ## Related Commands
 ```bash
-opencontext governance report
-opencontext evidence pack
+opencontext report
+opencontext release evidence
 opencontext org baseline check
-opencontext run receipt last
 opencontext release gate
 ```
 

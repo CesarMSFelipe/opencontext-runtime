@@ -12,8 +12,7 @@ For new integrations, start with runtime-first setup.
 ## Installation Options
 
 - [Installation Guide](installation.md) - How to install from source or PyPI
-- [Publishing to PyPI](publishing-to-pypi.md) - Release packages to PyPI
-- [GitHub Secrets Setup](github-secrets-setup.md) - Configure automated publishing
+- [Publishing to PyPI](../guides/pypi-publishing.md) - Release packages to PyPI
 
 ## Recommended Reading Order
 
@@ -30,8 +29,7 @@ For new integrations, start with runtime-first setup.
 
 For package maintainers:
 
-1. [Publishing to PyPI](publishing-to-pypi.md) - Complete PyPI release process
-2. [GitHub Secrets Setup](github-secrets-setup.md) - One-time GitHub Actions configuration
+1. [Publishing to PyPI](../guides/pypi-publishing.md) - Complete PyPI release process
 
 The root [README](../../README.md) remains the canonical product overview and links to the full
 [documentation map](../README.md).

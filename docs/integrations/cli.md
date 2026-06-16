@@ -78,7 +78,6 @@ opencontext upgrade                  # Upgrade all packages (per-package status)
 ```bash
 opencontext agent-context "Review access control" --target codex --copy
 opencontext pack . --query "review auth" --copy
-opencontext ddev init
 ```
 
 ## Implemented Code

@@ -25,7 +25,7 @@ class LearningOrchestrator:
     def __init__(
         self,
         storage_path: Path | str = ".storage/opencontext/learning",
-        kg_db_path: Path | str = ".storage/opencontext/codegraph.db",
+        kg_db_path: Path | str = ".storage/opencontext/context_graph.db",
         default_token_budget: int = 10000,
     ) -> None:
         self.storage_path = Path(storage_path)

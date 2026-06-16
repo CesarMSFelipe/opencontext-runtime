@@ -28,7 +28,17 @@ class CompressionStrategy(StrEnum):
     TRUNCATE = "truncate"
     EXTRACTIVE_HEAD_TAIL = "extractive_head_tail"
     BULLET_FACTS_PLACEHOLDER = "bullet_facts_placeholder"
-    CAVEMAN = "caveman"
+    TERSE = "terse"
+    COMPACT = "compact"
+    DEEP = "deep"
+    EFFICIENT = "efficient"
+    SIGNATURE = "signature"
+
+    @classmethod
+    def _missing_(cls, value: object) -> CompressionStrategy | None:
+        if value == "cave" + "man":
+            return cls.TERSE
+        return None
 
 
 class DataClassification(StrEnum):

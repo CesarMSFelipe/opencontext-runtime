@@ -11,7 +11,7 @@ import json
 import sys
 from typing import Any
 
-from opencontext_core.verification import run_all_checks
+from opencontext_core.verification import build_report_payload, run_all_checks
 
 
 def add_verify_parser(subparsers: Any) -> None:
@@ -39,24 +39,7 @@ def handle_verify(args: Any) -> None:
     report = run_all_checks()
 
     if args.json:
-        data = {
-            "timestamp": report.timestamp,
-            "healthy": report.is_healthy,
-            "summary": {
-                "passed": report.passed,
-                "warnings": report.warnings,
-                "failures": report.failures,
-            },
-            "checks": [
-                {
-                    "name": r.name,
-                    "status": r.status,
-                    "message": r.message,
-                    "details": r.details,
-                }
-                for r in report.results
-            ],
-        }
+        data = build_report_payload(report)
         json.dump(data, sys.stdout, indent=2)
         sys.stdout.write("\n")
         sys.exit(0 if report.is_healthy else 1)

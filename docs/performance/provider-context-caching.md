@@ -10,8 +10,8 @@ Implemented as local deterministic scaffolds; provider-specific cache and cost i
 ```bash
 opencontext cache plan --query "review auth"
 opencontext cache warm --workflow code-review
-opencontext cost report
-opencontext workflow dry-run security-audit
+opencontext report cost
+opencontext harness run --workflow explore-only --task "security audit"
 ```
 
 ## Implemented Code

@@ -71,7 +71,7 @@ class TestAgentInstaller:
         """Install OpenCode configuration."""
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        installer = AgentInstaller()
+        installer = AgentInstaller(project_root=tmp_path)
         result = installer.install(targets=[AgentTarget.OPENCODE], location="global")
 
         assert result["status"] == "installed"
@@ -87,7 +87,7 @@ class TestAgentInstaller:
         """All 14 agents now have config generators."""
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        installer = AgentInstaller()
+        installer = AgentInstaller(project_root=tmp_path)
         result = installer.install(targets=list(AgentTarget), location="global")
 
         assert len(result["results"]) == len(list(AgentTarget))

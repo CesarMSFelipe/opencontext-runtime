@@ -1,5 +1,6 @@
 # Python environments and bytecode
 .venv/
+.ci-venv/
 venv/
 env/
 ENV/

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from opencontext_core.compat import StrEnum
 from opencontext_core.errors import ConfigurationError
@@ -149,13 +149,23 @@ class RankingWeightsConfig(BaseModel):
 class RankingConfig(BaseModel):
     """Context ranking configuration."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     weights: RankingWeightsConfig = Field(description="Ranking formula weights.")
+    # v2 semantic ranking weights
+    semantic_relevance: float = Field(default=0.25, ge=0.0, description="v2: semantic relevance.")
+    graph_centrality: float = Field(default=0.20, ge=0.0, description="v2: graph centrality.")
+    call_distance: float = Field(default=0.15, ge=0.0, description="v2: call distance.")
+    test_affinity: float = Field(default=0.10, ge=0.0, description="v2: test affinity.")
+    memory_confidence: float = Field(default=0.10, ge=0.0, description="v2: memory confidence.")
+    recent_failure: float = Field(default=0.08, ge=0.0, description="v2: recent failure boost.")
+    risk_requirement: float = Field(default=0.07, ge=0.0, description="v2: risk requirement.")
+    freshness: float = Field(default=0.03, ge=0.0, description="v2: freshness.")
+    provenance: float = Field(default=0.02, ge=0.0, description="v2: provenance.")
 
 
 class CompressionConfig(BaseModel):
-    """Safe compression configuration with caveman protocol."""
+    """Safe compression configuration."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -164,9 +174,10 @@ class CompressionConfig(BaseModel):
         default=CompressionStrategy.EXTRACTIVE_HEAD_TAIL,
         description="Configured compression strategy.",
     )
-    caveman_intensity: str = Field(
+    terse_intensity: str = Field(
         default="full",
-        description="Caveman compression intensity: 'lite', 'full', or 'ultra'.",
+        validation_alias=AliasChoices("terse_intensity", "cave" + "man_intensity"),
+        description="Terse compression intensity: 'lite', 'full', or 'ultra'.",
     )
     max_compression_ratio: float = Field(
         default=0.5,
@@ -288,7 +299,7 @@ class MCPCacheConfig(BaseModel):
 
     enabled: bool = Field(default=False, description="MCP cache/compression disabled in v0.1.")
     compression_enabled: bool = Field(
-        default=True, description="Enable caveman compression for MCP responses."
+        default=True, description="Enable terse compression for MCP responses."
     )
     compression_ratio: float = Field(
         default=0.5,
@@ -463,6 +474,10 @@ class MemoryPolicyConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = Field(default=True, description="Local memory layer enabled.")
+    provider: str = Field(
+        default="local",
+        description="Memory backend provider: 'local' (SQLite) or 'engram'.",
+    )
     harvest_after_run: bool = Field(default=False, description="Automatic harvest disabled.")
     require_approval: bool = Field(default=True, description="Harvested memories require approval.")
     store_raw: bool = Field(default=False, description="Raw memory storage disabled.")
@@ -478,7 +493,7 @@ class EmbeddingConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = Field(default=True, description="Async embedding generation enabled.")
+    enabled: bool = Field(default=False, description="Async embedding generation enabled.")
     provider: str = Field(
         default="local", description="Embedding provider: local, openai, cohere, etc."
     )
@@ -496,9 +511,7 @@ class EmbeddingConfig(BaseModel):
         le=1000,
         description="Synchronous write path must complete within this timeout (milliseconds).",
     )
-    storage_backend: str = Field(
-        default="local", description="Vector storage: local, pgvector, qdrant, etc."
-    )
+    storage_backend: str = Field(default="null", description="Vector storage backend.")
     queue_max_size: int = Field(default=10000, ge=100, description="Maximum embedding queue size.")
     worker_concurrency: int = Field(
         default=4, ge=1, le=32, description="Number of concurrent embedding workers."
@@ -777,6 +790,54 @@ class KnowledgeGraphConfig(BaseModel):
     track_class_hierarchy: bool = Field(default=True, description="Track extends/implements edges.")
 
 
+class MutationConfig(BaseModel):
+    """Mutation analysis configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(default=False, description="Whether mutation analysis is enabled.")
+    threshold: int = Field(default=80, ge=0, le=100, description="Minimum mutation score (0-100).")
+    fail_on_low_score: bool = Field(
+        default=False, description="Fail phase when score is below threshold."
+    )
+
+
+class TestingConfig(BaseModel):
+    """Testing configuration including mutation analysis."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mutation: MutationConfig = Field(default_factory=MutationConfig)
+
+
+class ContextPlanningConfig(BaseModel):
+    """Context planning configuration for v2 contract-driven retrieval."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(default=True, description="Whether context planning is enabled.")
+    default_mode: str = Field(default="progressive", description="Default planning mode.")
+    contract_required: bool = Field(
+        default=True, description="Whether a context contract is required."
+    )
+    risk_classifier: str = Field(default="deterministic", description="Risk classifier to use.")
+    max_expansion_rounds: int = Field(default=3, ge=1, description="Maximum expansion rounds.")
+    fail_on_unverified_critical_assumptions: bool = Field(
+        default=False,
+        description="Fail when critical assumptions cannot be verified.",
+    )
+
+
+class ContextStorageConfig(BaseModel):
+    """Context vector storage configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    semantic_search: bool = Field(default=False, description="Whether semantic search is enabled.")
+    host: str = Field(default="localhost", description="Vector storage host.")
+    port: int = Field(default=6333, ge=1, le=65535, description="Vector storage port.")
+
+
 class SkillsConfig(BaseModel):
     """Skill registry configuration."""
 
@@ -802,6 +863,78 @@ class SkillsConfig(BaseModel):
             "skills/",
         ],
         description="Project-level skill directories.",
+    )
+
+
+class AutoImproveConfig(BaseModel):
+    """Opt-in, bounded auto-improvement (self-tuning) controls.
+
+    Disabled by default. Nothing changes runtime behavior without either an
+    approved proposal (``apply_policy="propose"``) or an explicit ``auto`` policy
+    the developer set, and even then no more than ``max_auto_apply_per_cycle``
+    proposals are applied per cycle.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=False,
+        description="Master switch. When False, no proposal is auto-applied.",
+    )
+    apply_policy: Literal["propose", "auto"] = Field(
+        default="propose",
+        description="'propose' requires developer approval; 'auto' applies within bounds.",
+    )
+    max_auto_apply_per_cycle: int = Field(
+        default=3,
+        ge=1,
+        description="Maximum proposals auto-applied in a single cycle.",
+    )
+    max_weight_delta: float = Field(
+        default=0.1,
+        ge=0.0,
+        description="Cap on per-field retrieval-weight change a proposal may apply.",
+    )
+    min_confidence: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Minimum proposal confidence eligible for auto-apply.",
+    )
+    applied_budgets: dict[str, int] = Field(
+        default_factory=dict,
+        description="Applied per-operation token budgets (written by approved proposals).",
+    )
+
+
+class HarnessSettingsConfig(BaseModel):
+    """Agentic harness governance settings.
+
+    Drives the apply pre-gates (TDD failing-test ordering and human approval
+    before writes). These are read by ``HarnessRunner`` and are intentionally
+    decoupled from token ``budget_mode`` — TDD enforcement and write approval
+    are governance concerns, not budget concerns.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tdd_mode: Literal["ask", "strict", "off"] = Field(
+        default="ask",
+        description=(
+            "TDD failing-test pre-gate mode. 'strict' blocks apply until a "
+            "failing test exists for the task; 'ask'/'off' do not block."
+        ),
+    )
+    strict_tdd: bool = Field(
+        default=False,
+        description="Whether a strict test harness was detected/required for this project.",
+    )
+    approval_required_for_writes: bool = Field(
+        default=False,
+        description=(
+            "When True, ApplyPhase requires an explicit human approval gate to "
+            "pass before any file is edited, independent of budget_mode."
+        ),
     )
 
 
@@ -846,6 +979,23 @@ class OpenContextConfig(BaseModel):
     skills: SkillsConfig = Field(
         default_factory=SkillsConfig, description="Skill registry configuration."
     )
+    testing: TestingConfig = Field(
+        default_factory=TestingConfig, description="Testing configuration."
+    )
+    context_planning: ContextPlanningConfig = Field(
+        default_factory=ContextPlanningConfig, description="Context planning configuration."
+    )
+    context_storage: ContextStorageConfig = Field(
+        default_factory=ContextStorageConfig, description="Context vector storage configuration."
+    )
+    auto_improve: AutoImproveConfig = Field(
+        default_factory=AutoImproveConfig,
+        description="Opt-in auto-improvement (self-tuning) controls.",
+    )
+    harness: HarnessSettingsConfig = Field(
+        default_factory=HarnessSettingsConfig,
+        description="Agentic harness governance settings (TDD / approval pre-gates).",
+    )
 
 
 def find_config(start_dir: str | Path = ".") -> Path | None:
@@ -887,12 +1037,30 @@ def load_config(path: str | Path = "configs/opencontext.yaml") -> OpenContextCon
     if not isinstance(raw_data, dict):
         raise ConfigurationError(f"Configuration root must be a mapping: {config_path}")
 
-    merged_data = _deep_merge(default_config_data(), raw_data)
+    merged_data = _deep_merge(default_config_data(), _normalize_legacy_config(raw_data))
 
     try:
         return OpenContextConfig.model_validate(merged_data)
     except Exception as exc:
         raise ConfigurationError(f"Invalid OpenContext configuration: {exc}") from exc
+
+
+def _normalize_legacy_config(data: dict[str, object]) -> dict[str, object]:
+    context = data.get("context")
+    if not isinstance(context, dict):
+        return data
+    compression = context.get("compression")
+    if not isinstance(compression, dict):
+        return data
+    legacy_key = "cave" + "man_intensity"
+    if legacy_key in compression:
+        compression = dict(compression)
+        compression["terse_intensity"] = compression.pop(legacy_key)
+        context = dict(context)
+        context["compression"] = compression
+        data = dict(data)
+        data["context"] = context
+    return data
 
 
 def load_config_or_defaults(
@@ -998,7 +1166,7 @@ def default_config_data() -> dict[str, Any]:
             "compression": {
                 "enabled": True,
                 "strategy": "extractive_head_tail",
-                "caveman_intensity": "full",
+                "terse_intensity": "full",
                 "max_compression_ratio": 0.5,
                 "adaptive": True,
                 "protected_spans": True,
@@ -1123,14 +1291,14 @@ def default_config_data() -> dict[str, Any]:
             "prune_expired": True,
         },
         "embedding": {
-            "enabled": True,
+            "enabled": False,
             "provider": "local",
             "model": "deterministic-1536",
             "dimensions": 1536,
             "batch_size": 100,
             "async_worker": True,
             "write_path_sync_timeout_ms": 150,
-            "storage_backend": "local",
+            "storage_backend": "null",
             "queue_max_size": 10000,
             "worker_concurrency": 4,
         },

@@ -78,7 +78,7 @@ class TestMCPServer:
         """Server initializes with correct tools."""
 
         server = MCPServer(db_path=tmp_path / "test.db")
-        assert len(server.tools) == 9
+        assert len(server.tools) == 13
         assert "opencontext_search" in server.tools
         assert "opencontext_context" in server.tools
         assert "opencontext_callers" in server.tools
@@ -88,6 +88,10 @@ class TestMCPServer:
         assert "opencontext_files" in server.tools
         assert "opencontext_status" in server.tools
         assert "opencontext_trace" in server.tools
+        assert "opencontext_replace_symbol_body" in server.tools
+        assert "opencontext_insert_before_symbol" in server.tools
+        assert "opencontext_insert_after_symbol" in server.tools
+        assert "opencontext_rename_symbol" in server.tools
         server.close()
 
     def test_handle_initialize(self, tmp_path: Path) -> None:
@@ -112,7 +116,7 @@ class TestMCPServer:
             server._handle_request(request)
             mock_send.assert_called_once()
             result = mock_send.call_args[0][1]
-            assert len(result["tools"]) == 9
+            assert len(result["tools"]) == 13
             assert all("name" in t for t in result["tools"])
             assert all("description" in t for t in result["tools"])
         server.close()
@@ -163,4 +167,93 @@ class TestMCPServer:
             mock_send.assert_called_once()
             result = mock_send.call_args[0][1]
             assert "indexed" in result
+        server.close()
+
+
+class TestMCPPolicyEnforcement:
+    """Regression tests: every MCP tool must route through ToolPermissionPolicy.
+
+    Slice 0 (mcp-policy-hotfix). Closes the bypass where ``_call_tool`` ran
+    handlers without checking the policy. Every MCP tool is covered by the
+    same gate so no tool executes without a prior policy check.
+    """
+
+    def test_default_policy_allows_registered_tools(self, tmp_path: Path) -> None:
+        """The default policy allows every tool that the server actually exposes."""
+
+        from opencontext_core.tools.policy import ToolPermissionPolicy
+
+        server = MCPServer(db_path=tmp_path / "test.db")
+        default_policy = ToolPermissionPolicy(
+            allowed_tools=set(server.tools.keys()),
+        )
+        server.policy = default_policy
+        result = server._call_tool("opencontext_status", {})
+        assert "error" not in result or "denied" not in result.get("error", "").lower()
+        assert result.get("indexed") is False
+        server.close()
+
+    def test_unapproved_tool_is_denied_before_execution(self, tmp_path: Path) -> None:
+        """A tool that is not in the allowlist is denied without invoking the handler."""
+
+        from opencontext_core.tools.policy import ToolPermissionPolicy
+
+        server = MCPServer(db_path=tmp_path / "test.db")
+        # Empty allowlist -> nothing is allowed.
+        server.policy = ToolPermissionPolicy(allowed_tools=set())
+
+        with patch.object(server, "_handle_status") as mock_status:
+            result = server._call_tool("opencontext_status", {})
+
+        assert "error" in result
+        assert "denied" in result["error"].lower()
+        # Crucially: the handler must not have run.
+        mock_status.assert_not_called()
+        server.close()
+
+    def test_unknown_tool_still_rejected(self, tmp_path: Path) -> None:
+        """An unknown tool name is still rejected after the policy gate."""
+
+        from opencontext_core.tools.policy import ToolPermissionPolicy
+
+        server = MCPServer(db_path=tmp_path / "test.db")
+        server.policy = ToolPermissionPolicy(allowed_tools=set(server.tools.keys()))
+
+        result = server._call_tool("definitely_not_a_tool", {})
+        assert "error" in result
+        server.close()
+
+    def test_denied_tool_decision_recorded(self, tmp_path: Path) -> None:
+        """The denial result includes the policy reason for observability."""
+
+        from opencontext_core.tools.policy import ToolPermissionPolicy
+
+        server = MCPServer(db_path=tmp_path / "test.db")
+        server.policy = ToolPermissionPolicy(allowed_tools={"opencontext_status"})
+
+        result = server._call_tool("opencontext_search", {"query": "x"})
+        assert "error" in result
+        assert "opencontext_search" in result["error"]
+        assert "reason" in result
+        server.close()
+
+    def test_all_tools_routed_through_policy(self, tmp_path: Path) -> None:
+        """Every registered tool name must hit the policy gate."""
+
+        from opencontext_core.tools.policy import ToolPermissionPolicy
+
+        server = MCPServer(db_path=tmp_path / "test.db")
+        # Allow only one tool; every other registered tool must be denied.
+        server.policy = ToolPermissionPolicy(allowed_tools={"opencontext_status"})
+
+        denied = []
+        for tool_name in server.tools:
+            if tool_name == "opencontext_status":
+                continue
+            result = server._call_tool(tool_name, {})
+            if "denied" in result.get("error", "").lower():
+                denied.append(tool_name)
+
+        assert len(denied) == len(server.tools) - 1
+        assert set(denied) == set(server.tools) - {"opencontext_status"}
         server.close()

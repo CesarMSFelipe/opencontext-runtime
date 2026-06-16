@@ -12,7 +12,10 @@ import subprocess
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from opencontext_core.backends.protocols import CompressionBackend
 
 
 class DelegationMode(StrEnum):
@@ -45,10 +48,42 @@ class SubAgentDelegate:
         self,
         mode: DelegationMode = DelegationMode.LOCAL,
         timeout: int = 300,
+        compression_mode: str = "terse",
     ) -> None:
         self.mode = mode
         self.timeout = timeout
         self._local_handlers: dict[str, Any] = {}
+        self._compression_mode = compression_mode
+        self._compressor: CompressionBackend | None
+        try:
+            from opencontext_core.backends.factory import BackendFactory
+
+            self._compressor = BackendFactory.create_compression_backend(compression_mode)
+        except Exception:
+            self._compressor = None
+
+    def _compress_context(self, context: dict[str, Any]) -> dict[str, Any]:
+        """Compress context for inter-agent transport.
+
+        EvidencePlan values are AICX-encoded (reference-only, no content inlined).
+        Other large text values fall back to terse compression.
+        """
+        result: dict[str, Any] = {}
+        for k, v in context.items():
+            if _is_evidence_plan(v):
+                try:
+                    from opencontext_core.context.bytecode import AICXCompiler, AICXRenderer
+
+                    bc = AICXCompiler().compile(v)
+                    result[k] = AICXRenderer().render_compact(bc)
+                    continue
+                except Exception:
+                    pass
+            if isinstance(v, str) and len(v) > 200 and self._compressor is not None:
+                result[k] = self._compressor.compress(v, [])
+            else:
+                result[k] = v
+        return result
 
     def register_handler(self, phase: str, handler: Any) -> None:
         """Register a local handler for a phase."""
@@ -117,6 +152,7 @@ class SubAgentDelegate:
             )
 
         try:
+            context = self._compress_context(context)
             result = handler(context)
             if isinstance(result, dict):
                 return SubAgentResult(
@@ -146,6 +182,7 @@ class SubAgentDelegate:
         # Write context to temp file
         import tempfile
 
+        context = self._compress_context(context)
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(context, f)
             context_path = f.name
@@ -218,3 +255,13 @@ class SubAgentDelegate:
             output=f"Remote {phase} execution scaffold",
             metadata={"mode": "remote", "phase": phase},
         )
+
+
+def _is_evidence_plan(v: object) -> bool:
+    """Return True when ``v`` is a retrieval ``EvidencePlan`` (AICX-encodable)."""
+    try:
+        from opencontext_core.retrieval.contracts import EvidencePlan
+
+        return isinstance(v, EvidencePlan)
+    except Exception:
+        return False

@@ -7,15 +7,23 @@ Supports JSON-RPC 2.0 style communication.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
+from opencontext_core.configurator.filemerge import write_text_atomic
 from opencontext_core.indexing.call_graph import CallGraphAnalyzer
 from opencontext_core.indexing.context_builder import ContextBuilder
 from opencontext_core.indexing.graph_db import GraphDatabase
 from opencontext_core.indexing.impact_analysis import ImpactAnalyzer
 from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+from opencontext_core.tools.policy import ToolPermissionPolicy
+
+if TYPE_CHECKING:
+    from opencontext_core.indexing.graph_db import Node
+    from opencontext_core.runtime import OpenContextRuntime
+
 
 # Adaptive max_nodes tiers based on indexed file count
 _MAX_NODES_TIERS: list[tuple[int, int]] = [
@@ -43,6 +51,39 @@ def _compute_max_nodes(file_count: int) -> int:
     return _MAX_NODES_MAX
 
 
+def _replace_identifier(line: str, old: str, new: str) -> tuple[str, int]:
+    """Replace whole-word occurrences of ``old`` with ``new`` on a single line.
+
+    Word boundaries keep ``audit_login`` from matching inside ``audit_login_v2``
+    or ``my_audit_login``. Returns the rewritten line and the number of hits.
+    """
+
+    pattern = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(old)}(?![A-Za-z0-9_])")
+    return pattern.subn(new, line)
+
+
+def _split_lines(text: str) -> tuple[list[str], bool]:
+    """Split source into lines without keepends, tracking a trailing newline.
+
+    Returns ``(lines, trailing_newline)``. Re-joining with ``"\\n"`` and adding a
+    final newline iff ``trailing_newline`` round-trips the original byte content.
+    """
+
+    trailing = text.endswith("\n")
+    body = text[:-1] if trailing else text
+    lines = body.split("\n") if body else []
+    return lines, trailing
+
+
+def _join_lines(lines: list[str], trailing_newline: bool) -> str:
+    """Inverse of :func:`_split_lines`."""
+
+    text = "\n".join(lines)
+    if trailing_newline and (text or lines):
+        text += "\n"
+    return text
+
+
 class MCPServer:
     """MCP server implementing stdio transport.
 
@@ -52,13 +93,30 @@ class MCPServer:
 
     def __init__(
         self,
-        db_path: str | Path = ".storage/opencontext/codegraph.db",
+        db_path: str | Path = ".storage/opencontext/context_graph.db",
+        policy: ToolPermissionPolicy | None = None,
+        runtime: OpenContextRuntime | None = None,
+        project_root: str | Path | None = None,
     ) -> None:
+        # When a runtime is provided, context/impact route through the verified
+        # pipeline (gates/trust/trace). Without it, the legacy raw behavior is kept
+        # for backward compatibility.
+        self.runtime = runtime
+        # Symbol-level write tools resolve the graph's relative file paths against
+        # this root. Precedence: explicit argument, then the runtime's configured
+        # project root, then the current working directory.
+        self.project_root: Path = self._resolve_project_root(project_root, runtime)
         self.db = GraphDatabase(db_path=db_path)
         self.call_graph = CallGraphAnalyzer(db=self.db)
         self.impact = ImpactAnalyzer(db=self.db)
         self.context_builder = ContextBuilder(db_path=db_path)
         self.kg = KnowledgeGraph(db_path=db_path)
+        # Permission gate: every tool call goes through ``policy.allows()``
+        # before the handler runs. Default policy allowlists every tool the
+        # server exposes; callers can tighten it via the constructor.
+        self.policy: ToolPermissionPolicy = policy or ToolPermissionPolicy(
+            allowed_tools=set(self._default_tool_names())
+        )
 
         # Tool definitions
         self.tools: dict[str, dict[str, Any]] = {
@@ -125,6 +183,38 @@ class MCPServer:
                     "source": {"type": "string", "description": "Source symbol name"},
                     "target": {"type": "string", "description": "Target symbol name"},
                     "max_depth": {"type": "integer", "default": 10},
+                },
+            },
+            "opencontext_replace_symbol_body": {
+                "description": "Replace a named symbol's definition span with new source text",
+                "parameters": {
+                    "symbol": {"type": "string", "description": "Symbol name to replace"},
+                    "body": {"type": "string", "description": "Replacement source text"},
+                    "file": {"type": "string", "description": "File path (optional)"},
+                },
+            },
+            "opencontext_insert_before_symbol": {
+                "description": "Insert source text immediately before a named symbol",
+                "parameters": {
+                    "symbol": {"type": "string", "description": "Symbol name to anchor on"},
+                    "content": {"type": "string", "description": "Source text to insert"},
+                    "file": {"type": "string", "description": "File path (optional)"},
+                },
+            },
+            "opencontext_insert_after_symbol": {
+                "description": "Insert source text immediately after a named symbol",
+                "parameters": {
+                    "symbol": {"type": "string", "description": "Symbol name to anchor on"},
+                    "content": {"type": "string", "description": "Source text to insert"},
+                    "file": {"type": "string", "description": "File path (optional)"},
+                },
+            },
+            "opencontext_rename_symbol": {
+                "description": "Rename a symbol at its definition and known call-graph references",
+                "parameters": {
+                    "symbol": {"type": "string", "description": "Current symbol name"},
+                    "new_name": {"type": "string", "description": "New symbol name"},
+                    "file": {"type": "string", "description": "File path (optional)"},
                 },
             },
         }
@@ -194,9 +284,43 @@ class MCPServer:
         self._send_error(request_id, -32601, f"Method not found: {method}")
 
     def _call_tool(self, name: str, params: dict[str, Any]) -> dict[str, Any]:
-        """Execute a tool call."""
+        """Execute a tool call.
 
-        handlers = {
+        Every tool call passes through :meth:`ToolPermissionPolicy.allows`
+        before the handler runs. This is the single chokepoint for all MCP
+        tools; the handler map below is only consulted if the policy allows
+        the call.
+        """
+
+        # 1. Policy gate. No tool executes without a prior policy check.
+        if not self.policy.allows(name):
+            return {
+                "error": f"Tool '{name}' denied by policy",
+                "reason": "tool_not_allowlisted",
+                "policy": "ToolPermissionPolicy",
+            }
+
+        handlers = self._handlers()
+
+        handler = handlers.get(name)
+        if handler is None:
+            return {"error": f"Unknown tool: {name}"}
+
+        try:
+            return cast("dict[str, Any]", handler(params))
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    def _handlers(self) -> dict[str, Any]:
+        """Return the mapping of tool name -> handler. Kept as a method so
+        subclasses can override without forking :meth:`_call_tool`.
+
+        The values are bound methods; we type them as ``Any`` because the
+        return type is uniformly a ``dict[str, dict[str, Any]]`` to callers
+        and a stricter type would not help callers either way.
+        """
+
+        return {
             "opencontext_search": self._handle_search,
             "opencontext_context": self._handle_context,
             "opencontext_callers": self._handle_callers,
@@ -206,16 +330,31 @@ class MCPServer:
             "opencontext_files": self._handle_files,
             "opencontext_status": self._handle_status,
             "opencontext_trace": self._handle_trace,
+            "opencontext_replace_symbol_body": self._handle_replace_symbol_body,
+            "opencontext_insert_before_symbol": self._handle_insert_before_symbol,
+            "opencontext_insert_after_symbol": self._handle_insert_after_symbol,
+            "opencontext_rename_symbol": self._handle_rename_symbol,
         }
 
-        handler = handlers.get(name)
-        if handler is None:
-            return {"error": f"Unknown tool: {name}"}
+    def _default_tool_names(self) -> list[str]:
+        """Tool names registered at construction time. Used as the default
+        allowlist so a vanilla :class:`MCPServer` keeps working unchanged."""
 
-        try:
-            return handler(params)
-        except Exception as exc:
-            return {"error": str(exc)}
+        return [
+            "opencontext_search",
+            "opencontext_context",
+            "opencontext_callers",
+            "opencontext_callees",
+            "opencontext_impact",
+            "opencontext_node",
+            "opencontext_files",
+            "opencontext_status",
+            "opencontext_trace",
+            "opencontext_replace_symbol_body",
+            "opencontext_insert_before_symbol",
+            "opencontext_insert_after_symbol",
+            "opencontext_rename_symbol",
+        ]
 
     def _handle_search(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle search tool."""
@@ -237,10 +376,30 @@ class MCPServer:
             ]
         }
 
+    def _verified_context(self, task: str) -> dict[str, Any]:
+        """Build context through the runtime's verified pipeline (gates/trust/trace)."""
+
+        from opencontext_core.retrieval.contracts import VerifiedContextRequest
+
+        assert self.runtime is not None  # only called when a runtime is wired
+        result = self.runtime.verify_context(VerifiedContextRequest(query=task))
+        return {
+            "context": result.context,
+            "gates": [gate.model_dump(mode="json") for gate in result.gates],
+            "risk_level": result.risk_level.value,
+            "trust_decision": result.trust_decision.model_dump(mode="json"),
+            "trace_id": result.trace_id,
+            "estimated_tokens": result.token_usage.get("final_context_pack", 0),
+        }
+
     def _handle_context(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle context building tool."""
 
         task = params.get("task", "")
+        # Route through the verified pipeline when a runtime is wired (surface parity).
+        if self.runtime is not None:
+            return self._verified_context(task)
+
         max_nodes = params.get("max_nodes", 20)
         format = params.get("format", "markdown")
 
@@ -329,12 +488,16 @@ class MCPServer:
             return {"error": f"Symbol not found: {symbol}"}
 
         impact = self.impact.analyze(node_id, depth=radius)
+        affected = len(impact.direct_callers) + len(impact.transitive_dependents)
         return {
             "symbol": symbol,
-            "affected_nodes": len(impact.direct_callers) + len(impact.transitive_dependents),
+            "affected_nodes": affected,
             "affected_files": list(impact.affected_files),
             "test_files": list(impact.affected_tests),
-            "risk_level": "unknown",
+            # Single source of truth: the analyzer derives risk from the full
+            # blast radius (callers, dependents, files, tests, centrality).
+            "risk_level": impact.risk_level,
+            "centrality": impact.centrality,
         }
 
     def _handle_node(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -351,9 +514,19 @@ class MCPServer:
         if node is None:
             return {"error": f"Node not found: {node_id}"}
 
+        from opencontext_core.indexing.scip_symbol import format_symbol
+
         return {
             "name": node.name,
             "kind": node.kind,
+            # Structured, decodable identity (language/package/file/type/role).
+            "symbol": format_symbol(
+                language=node.language,
+                file_path=node.file_path,
+                name=node.name,
+                kind=node.kind,
+                container=node.container,
+            ),
             "file": node.file_path,
             "line": node.line,
             "column": node.column,
@@ -429,6 +602,215 @@ class MCPServer:
             "depth_exceeded": result.depth_exceeded,
             "hops": result.hops,
         }
+
+    # ---- Symbol-level write tools ----
+    #
+    # These resolve a named symbol to its graph span (file + 1-based line range)
+    # and apply a precise, atomic edit to the source file. Resolution failures
+    # return a clean error dict (never an exception) and never touch the file.
+
+    def _handle_replace_symbol_body(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Replace a symbol's definition span with new source text."""
+
+        symbol = params.get("symbol", "")
+        file = params.get("file")
+        body = params.get("body")
+        if body is None:
+            return {"error": "Missing 'body'", "applied": False}
+
+        node = self._resolve_symbol(symbol, file)
+        if node is None:
+            return {"error": f"Symbol not found: {symbol}", "applied": False}
+
+        try:
+            lines, trailing = self._read_file_lines(node.file_path)
+        except OSError as exc:
+            return {"error": f"Cannot read file: {exc}", "applied": False, "symbol": symbol}
+
+        start = node.line - 1  # graph lines are 1-based
+        end = node.end_line  # exclusive slice bound (end_line is inclusive 1-based)
+        if start < 0 or end > len(lines) or start >= end:
+            return {
+                "error": f"Symbol span out of range for {symbol}",
+                "applied": False,
+                "symbol": symbol,
+            }
+
+        replacement = _split_lines(body)[0]
+        new_lines = lines[:start] + replacement + lines[end:]
+        applied = self._write_file_lines(node.file_path, new_lines, trailing)
+        return {
+            "tool": "opencontext_replace_symbol_body",
+            "file": node.file_path,
+            "symbol": symbol,
+            "applied": applied,
+            "changed_range": {"start_line": node.line, "end_line": node.end_line},
+        }
+
+    def _handle_insert_before_symbol(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Insert source text immediately before a symbol's definition."""
+
+        return self._insert_relative_to_symbol(params, after=False)
+
+    def _handle_insert_after_symbol(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Insert source text immediately after a symbol's definition."""
+
+        return self._insert_relative_to_symbol(params, after=True)
+
+    def _insert_relative_to_symbol(self, params: dict[str, Any], *, after: bool) -> dict[str, Any]:
+        """Shared insert logic for the before/after variants."""
+
+        symbol = params.get("symbol", "")
+        file = params.get("file")
+        content = params.get("content")
+        tool = "opencontext_insert_after_symbol" if after else "opencontext_insert_before_symbol"
+        if content is None:
+            return {"error": "Missing 'content'", "applied": False}
+
+        node = self._resolve_symbol(symbol, file)
+        if node is None:
+            return {"error": f"Symbol not found: {symbol}", "applied": False}
+
+        try:
+            lines, trailing = self._read_file_lines(node.file_path)
+        except OSError as exc:
+            return {"error": f"Cannot read file: {exc}", "applied": False, "symbol": symbol}
+
+        insert_at = node.end_line if after else node.line - 1
+        insert_at = max(0, min(insert_at, len(lines)))
+        block = _split_lines(content)[0]
+        new_lines = lines[:insert_at] + block + lines[insert_at:]
+        applied = self._write_file_lines(node.file_path, new_lines, trailing)
+        return {
+            "tool": tool,
+            "file": node.file_path,
+            "symbol": symbol,
+            "applied": applied,
+            "changed_range": {
+                "start_line": insert_at + 1,
+                "end_line": insert_at + len(block),
+            },
+        }
+
+    def _handle_rename_symbol(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Rename a symbol at its definition and known call-graph references.
+
+        References come from the call graph: each ``calls`` edge targeting the
+        symbol records the file + line of a call site. We rewrite the identifier
+        (whole-word) on the definition line and on every recorded call-site line.
+        The ``updated`` field lists exactly which lines changed. Edges are stored
+        one-per caller/callee pair, so a caller that references the symbol on
+        several lines records only one of them; callers should consult
+        ``updated`` and re-index if a file has repeated references.
+        """
+
+        symbol = params.get("symbol", "")
+        file = params.get("file")
+        new_name = params.get("new_name")
+        if not new_name:
+            return {"error": "Missing 'new_name'", "applied": False}
+        if not new_name.isidentifier():
+            return {"error": f"Invalid identifier: {new_name}", "applied": False}
+
+        node = self._resolve_symbol(symbol, file)
+        if node is None or node.id is None:
+            return {"error": f"Symbol not found: {symbol}", "applied": False}
+
+        # Collect edit targets as (file_path, 1-based line). Start with the
+        # definition line, then add each known call site from the graph.
+        targets: dict[str, set[int]] = {node.file_path: {node.line}}
+        for site_file, site_line in self._reference_sites(node.id):
+            targets.setdefault(site_file, set()).add(site_line)
+
+        updated: list[dict[str, Any]] = []
+        files_touched = 0
+        for rel_path, line_numbers in targets.items():
+            try:
+                lines, trailing = self._read_file_lines(rel_path)
+            except OSError:
+                continue
+            file_hits = 0
+            for line_no in line_numbers:
+                idx = line_no - 1
+                if 0 <= idx < len(lines):
+                    rewritten, hits = _replace_identifier(lines[idx], symbol, new_name)
+                    if hits:
+                        lines[idx] = rewritten
+                        file_hits += hits
+                        updated.append({"file": rel_path, "line": line_no, "occurrences": hits})
+            if file_hits and self._write_file_lines(rel_path, lines, trailing):
+                files_touched += 1
+
+        return {
+            "tool": "opencontext_rename_symbol",
+            "file": node.file_path,
+            "symbol": symbol,
+            "new_name": new_name,
+            "applied": bool(updated),
+            "updated": updated,
+            "files_changed": files_touched,
+        }
+
+    def _reference_sites(self, node_id: str) -> list[tuple[str, int]]:
+        """Return (file, line) call sites that reference ``node_id`` from the graph."""
+
+        conn = self.db._connect()
+        rows = conn.execute(
+            """
+            SELECT call_site_file, call_site_line
+            FROM edges
+            WHERE target_node_id = ? AND kind = 'calls'
+              AND call_site_file IS NOT NULL AND call_site_line IS NOT NULL
+            """,
+            (node_id,),
+        ).fetchall()
+        return [(row["call_site_file"], row["call_site_line"]) for row in rows]
+
+    def _resolve_symbol(self, symbol: str, file: str | None = None) -> Node | None:
+        """Resolve a symbol name to its full graph node (with line span)."""
+
+        node_id = self._find_node(symbol, file)
+        if node_id is None:
+            return None
+        return self.db.get_node_by_id(node_id)
+
+    def _abs_path(self, rel_path: str) -> Path:
+        """Map a graph-relative file path to an absolute path under the root.
+
+        Absolute paths stored in the graph are returned unchanged.
+        """
+
+        candidate = Path(rel_path)
+        if candidate.is_absolute():
+            return candidate
+        return (self.project_root / candidate).resolve()
+
+    def _read_file_lines(self, rel_path: str) -> tuple[list[str], bool]:
+        """Read a source file as lines plus a trailing-newline flag."""
+
+        text = self._abs_path(rel_path).read_text(encoding="utf-8")
+        return _split_lines(text)
+
+    def _write_file_lines(self, rel_path: str, lines: list[str], trailing: bool) -> bool:
+        """Atomically write lines back to a source file (temp + replace)."""
+
+        return write_text_atomic(self._abs_path(rel_path), _join_lines(lines, trailing))
+
+    @staticmethod
+    def _resolve_project_root(
+        project_root: str | Path | None,
+        runtime: OpenContextRuntime | None,
+    ) -> Path:
+        """Pick the root for resolving relative graph paths in write tools."""
+
+        if project_root is not None:
+            return Path(project_root).resolve()
+        if runtime is not None:
+            try:
+                return Path(runtime.config.project_index.root).resolve()
+            except Exception:
+                pass
+        return Path.cwd()
 
     def _find_node(self, symbol: str, file: str | None = None) -> int | None:
         """Find node ID by symbol name and optional file."""

@@ -22,8 +22,8 @@ This reference documents the top-level OpenContext configuration fields. The run
 | `server` | API server defaults | disabled, 127.0.0.1:8000 | local bind | public bind without auth | Thin adapter | `uvicorn opencontext_api.main:app` |
 | `egress` | Output/network/export policy | network deny | redacted clipboard/file export | webhook/network allow | Scaffolded | `opencontext prompt export` |
 | `provider_cache` | Provider cache planning | explicit disabled | local planning only | provider cache without policy | Scaffolded | `opencontext cache plan` |
-| `token_budgets` | Workflow input/output budgets | ask/plan/review/audit defaults | workflow-specific caps | no output cap | Scaffolded policy | `opencontext cost report` |
-| `latency` | Workflow latency caps | ask 20s, plan 60s, audit 120s | local/cache-first | expensive model first | Scaffolded policy | `opencontext workflow dry-run` |
+| `token_budgets` | Workflow input/output budgets | ask/plan/review/audit defaults | workflow-specific caps | no output cap | Scaffolded policy | `opencontext report cost` |
+| `latency` | Workflow latency caps | ask 20s, plan 60s, audit 120s | local/cache-first | expensive model first | Scaffolded policy | `opencontext harness run` |
 
 Example safe output policy:
 

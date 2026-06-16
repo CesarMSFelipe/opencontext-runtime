@@ -119,45 +119,6 @@ class RetrievalScorer:
         return score, {"name_hits": name_hits, "kind_hits": kind_hits, "path_hits": path_hits}
 
 
-class SemanticReranker:
-    """State-of-the-art semantic reranker for high-signal context selection.
-
-    Refines hybrid scores using semantic similarity or cross-encoder signals.
-    """
-
-    def rerank(
-        self,
-        query: str,
-        candidates: list[tuple[float, ProjectFile]],
-        top_k: int = 50,
-    ) -> list[tuple[float, ProjectFile]]:
-        """Rerank candidates using semantic relevance signals."""
-        if not candidates:
-            return []
-
-        # In core, we use a metadata-aware semantic heuristic.
-        # Specialized providers can override this with Cross-Encoders.
-        query_terms = set(query.lower().split())
-        results = []
-
-        for score, file in candidates[:top_k]:
-            semantic_boost = 0.0
-            content_hint = (file.summary + " " + file.path).lower()
-
-            # Boost based on exact semantic intersection and hierarchy
-            matches = sum(1 for term in query_terms if term in content_hint)
-            if matches:
-                semantic_boost = (matches / len(query_terms)) * 0.5
-
-            # Recency and depth bonus
-            depth_penalty = min(0.1, file.path.count("/") * 0.02)
-
-            new_score = min(1.0, score + semantic_boost - depth_penalty)
-            results.append((new_score, file))
-
-        return sorted(results, key=lambda x: x[0], reverse=True)
-
-
 def _hit_count(terms: list[str], haystack: str) -> int:
     return sum(1 for term in terms if term in haystack)
 

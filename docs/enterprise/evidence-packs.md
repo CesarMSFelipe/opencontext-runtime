@@ -8,12 +8,10 @@ Local release evidence is implemented with file hashes and leak-audit findings t
 
 ## Related Commands
 ```bash
-opencontext governance report
-opencontext evidence pack
+opencontext report
 opencontext release evidence --dist dist/
 opencontext prompt sbom --trace last
 opencontext org baseline check
-opencontext run receipt last
 opencontext release gate
 ```
 

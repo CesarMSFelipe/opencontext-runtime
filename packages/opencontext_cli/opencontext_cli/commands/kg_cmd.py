@@ -99,6 +99,17 @@ def handle_kg(args: Any) -> None:
 
     kg = KnowledgeGraph()
 
+    # Graph-reading commands need an index; if it's empty, say so rather than
+    # returning a bare "No results" (indistinguishable from "indexed, no match").
+    if command in {"search", "query", "callers", "callees", "impact", "node"}:
+        try:
+            if kg.get_stats().get("nodes", 0) == 0 and not json_output:
+                console.print("[yellow]No knowledge graph found for this project.[/]")
+                console.print("  Run [cyan]opencontext index .[/] first to build it.")
+                return
+        except Exception:
+            pass
+
     if command == "search":
         results = kg.search(query, limit=limit)
         if json_output:

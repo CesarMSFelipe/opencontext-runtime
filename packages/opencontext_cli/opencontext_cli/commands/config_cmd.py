@@ -122,7 +122,7 @@ def handle_config(args: Any) -> None:
 # Schema of configurable paths: "path" -> (type, description)
 CONFIG_PATHS: dict[str, tuple[type, str]] = {
     # Flat keys
-    "security_mode": (str, "Security mode: private_project, enterprise, or air-gapped"),
+    "security_mode": (str, "Security mode: developer, private_project, enterprise, or air_gapped"),
     "default_token_budget": (int, "Default token budget per operation"),
     "max_input_tokens": (int, "Maximum input tokens"),
     "reserve_output_tokens": (int, "Reserved output tokens"),
@@ -168,11 +168,6 @@ def _resolve_config_path(prefs: Any, dotted: str) -> tuple[Any, str] | None:
     return (obj, parts[-1])
 
 
-def _get_all_config_paths() -> list[str]:
-    """Return all available config paths sorted."""
-    return sorted(CONFIG_PATHS.keys())
-
-
 def _coerce_value(value: str, target_type: type) -> object:
     """Coerce a string value to the target type."""
     if target_type is bool:
@@ -194,6 +189,21 @@ def _coerce_value(value: str, target_type: type) -> object:
         return value
 
 
+def _bridge_to_project_yaml(key: str, value: object) -> None:
+    """Mirror a runtime-affecting pref into the project's opencontext.yaml.
+
+    The runtime reads opencontext.yaml, not user-prefs, so without this a
+    `config set` of e.g. embeddings would never take effect. Validated +
+    revert-on-failure logic lives in core ``config_sync``.
+    """
+    from opencontext_core.config_sync import RUNTIME_PREF_TO_YAML, sync_pref_to_yaml
+
+    if key not in RUNTIME_PREF_TO_YAML:
+        return
+    if sync_pref_to_yaml(key, value):
+        print(f"  → applied to opencontext.yaml ({RUNTIME_PREF_TO_YAML[key]})")
+
+
 def _config_set(key: str, value: str) -> None:
     """Set a config value using dot notation."""
 
@@ -212,6 +222,7 @@ def _config_set(key: str, value: str) -> None:
             setattr(parent, attr, parsed)
             store.save(prefs)
             print(f"Set {key} = {parsed}")
+            _bridge_to_project_yaml(key, parsed)
         except (ValueError, TypeError) as exc:
             print(f"Error: Cannot set '{key}' to '{value}': {exc}")
             print(f"Expected type: {_target_type.__name__}")

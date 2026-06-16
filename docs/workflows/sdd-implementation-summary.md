@@ -248,10 +248,10 @@ workflows:
 
 ## Documentation
 
-- [SDD Workflow](./docs/workflows/sdd-workflow.md)
-- [Workflow Engine](./docs/architecture/workflow-engine.md)
-- [Custom Workflows](./docs/workflows/custom-workflows.md)
-- [API Reference](./docs/configuration/reference.md)
+- [SDD Workflow](./sdd-workflow.md)
+- [Workflow Engine](../architecture/workflow-engine.md)
+- [Custom Workflows](./custom-workflows.md)
+- [API Reference](../configuration/reference.md)
 
 ## Comparison: Before vs After
 

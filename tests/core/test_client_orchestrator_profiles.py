@@ -40,12 +40,12 @@ class TestClientOrchestratorProfile:
 
     def test_opencode_is_multi_phase(self) -> None:
         profile = get_client_orchestrator_profile("opencode")
-        assert profile.orchestrator_type == "multi-phase"
+        assert profile.orchestrator_type == "opencontext"
         assert profile.kg_lookup_first is True
 
     def test_kilo_code_is_multi_phase(self) -> None:
         profile = get_client_orchestrator_profile("kilo-code")
-        assert profile.orchestrator_type == "multi-phase"
+        assert profile.orchestrator_type == "opencontext"
 
     def test_cursor_is_subagent_native(self) -> None:
         profile = get_client_orchestrator_profile("cursor")
@@ -59,7 +59,7 @@ class TestClientOrchestratorProfile:
 
     def test_codex_is_solo_compact(self) -> None:
         profile = get_client_orchestrator_profile("codex")
-        assert profile.orchestrator_type == "solo-compact"
+        assert profile.orchestrator_type == "opencontext"
 
     def test_windsurf_is_solo_compact(self) -> None:
         profile = get_client_orchestrator_profile("windsurf")
@@ -94,7 +94,7 @@ class TestClientOrchestratorProfile:
 
     def test_multi_phase_explore_mentions_kg(self) -> None:
         profile = get_client_orchestrator_profile("opencode")
-        assert "knowledge graph" in profile.phase_instruction("explore").lower()
+        assert "opencontext pack" in profile.phase_instruction("explore").lower()
 
     def test_subagent_native_explore_mentions_spawn(self) -> None:
         profile = get_client_orchestrator_profile("cursor")
@@ -102,7 +102,7 @@ class TestClientOrchestratorProfile:
 
     def test_solo_compact_explore_mentions_pack_once(self) -> None:
         profile = get_client_orchestrator_profile("codex")
-        assert "once" in profile.phase_instruction("explore").lower()
+        assert "smallest useful evidence" in profile.phase_instruction("explore").lower()
 
     def test_all_profiles_have_tdd_integration(self) -> None:
         for client, profile in CLIENT_ORCHESTRATOR_PROFILES.items():
@@ -113,8 +113,8 @@ class TestOrchestratorSectionInGeneratedFiles:
     def test_opencode_agents_md_contains_orchestrator_section(self, tmp_path: Path) -> None:
         AgentIntegrationGenerator().generate(tmp_path, target=AgentTarget.OPENCODE)
         content = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
-        assert "Orchestrator profile: multi-phase" in content
-        assert "knowledge graph" in content.lower()
+        assert "Orchestrator profile: opencontext" in content
+        assert "OpenContext" in content
         assert "Per-phase instructions" in content
 
     def test_cursor_rule_contains_subagent_native_section(self, tmp_path: Path) -> None:
@@ -126,7 +126,7 @@ class TestOrchestratorSectionInGeneratedFiles:
     def test_codex_agents_md_contains_solo_compact_section(self, tmp_path: Path) -> None:
         AgentIntegrationGenerator().generate(tmp_path, target=AgentTarget.CODEX)
         content = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
-        assert "Orchestrator profile: solo-compact" in content
+        assert "Orchestrator profile: opencontext" in content
 
     def test_windsurf_rule_contains_solo_compact_section(self, tmp_path: Path) -> None:
         AgentIntegrationGenerator().generate(tmp_path, target=AgentTarget.WINDSURF)
@@ -163,13 +163,23 @@ class TestSDDContextOrchestrationFields:
             tmp_path,
             active_clients=["opencode", "cursor", "codex"],
         )
-        assert context.orchestrator_profiles["opencode"] == "multi-phase"
+        assert context.orchestrator_profiles["opencode"] == "opencontext"
         assert context.orchestrator_profiles["cursor"] == "subagent-native"
-        assert context.orchestrator_profiles["codex"] == "solo-compact"
+        assert context.orchestrator_profiles["codex"] == "opencontext"
 
     def test_build_sdd_context_stores_sdd_model_profile(self, tmp_path: Path) -> None:
         context = build_sdd_context(tmp_path, sdd_model_profile="cheap")
         assert context.sdd_model_profile == "cheap"
+
+    def test_build_sdd_context_stores_execution_and_artifact_modes(self, tmp_path: Path) -> None:
+        context = build_sdd_context(
+            tmp_path,
+            execution_mode="manual",
+            artifact_mode="engram",
+        )
+
+        assert context.execution_mode == "manual"
+        assert context.artifact_mode == "engram"
 
     def test_build_sdd_context_defaults_to_default_profile(self, tmp_path: Path) -> None:
         context = build_sdd_context(tmp_path)
@@ -185,7 +195,7 @@ class TestSDDContextOrchestrationFields:
             sdd_model_profile="hybrid",
         )
         data = json.loads((tmp_path / ".opencontext" / "sdd" / "context.json").read_text())
-        assert data["orchestrator_profiles"]["opencode"] == "multi-phase"
+        assert data["orchestrator_profiles"]["opencode"] == "opencontext"
         assert data["orchestrator_profiles"]["cursor"] == "subagent-native"
         assert data["sdd_model_profile"] == "hybrid"
         assert data["active_clients"] == ["opencode", "cursor"]
@@ -198,9 +208,10 @@ class TestSDDContextOrchestrationFields:
         )
         md = (tmp_path / ".opencontext" / "sdd" / "testing.md").read_text(encoding="utf-8")
         assert "Client orchestrator profiles" in md
-        assert "multi-phase" in md
+        assert "opencontext" in md
         assert "subagent-native" in md
         assert "SDD model profile: `cheap`" in md
+        assert "Artifact mode: `hybrid`" in md
 
     def test_instructions_include_kg_first_rule(self, tmp_path: Path) -> None:
         context = build_sdd_context(tmp_path)
@@ -241,7 +252,7 @@ class TestSetupExperienceWithSddProfile:
             (project / ".opencontext" / "sdd" / "context.json").read_text(encoding="utf-8")
         )
         assert ctx["sdd_model_profile"] == "cheap"
-        assert ctx["orchestrator_profiles"]["opencode"] == "multi-phase"
+        assert ctx["orchestrator_profiles"]["opencode"] == "opencontext"
         assert ctx["orchestrator_profiles"]["cursor"] == "subagent-native"
         assert ctx["active_clients"] == ["opencode", "cursor"]
 

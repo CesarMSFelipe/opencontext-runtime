@@ -12,8 +12,6 @@ opencontext approvals list
 opencontext approvals request --kind provider_use --reason "Use approved private endpoint"
 opencontext approvals approve <approval_id>
 opencontext approvals deny <approval_id>
-opencontext run receipt last
-opencontext policy diff main..HEAD
 ```
 
 ## Implemented Code

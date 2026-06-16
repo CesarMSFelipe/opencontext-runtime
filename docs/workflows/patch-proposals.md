@@ -9,9 +9,9 @@ Core `code_assistant` execution is implemented. Many team workflow commands are 
 ## Related Commands
 ```bash
 opencontext workflows list
-opencontext workflow dry-run security-audit
-opencontext run architect --task "review architecture"
-opencontext propose patch --task "fix tests"
+opencontext harness run --workflow explore-only --task "security audit"
+opencontext harness run --workflow sdd --task "review architecture"
+opencontext harness run --workflow sdd --task "fix tests"
 ```
 
 ## Implemented Code

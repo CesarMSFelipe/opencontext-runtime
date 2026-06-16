@@ -1,8 +1,9 @@
 """Agent orchestrator for coordinating analysis across multiple agents."""
 
+import asyncio
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, Field
 
@@ -152,21 +153,34 @@ class AgentOrchestrator:
             context_ratio=token_cfg.get("context_ratio", 0.7),
         )
 
-        # Create appropriate agent instance based on type
+        # Create appropriate agent instance based on type. The mock execution
+        # path is test-only and MUST NOT be reachable here: when no real
+        # executor exists for the type we report executor-absent rather than
+        # fabricating a successful mock result.
         agent = self._create_agent(config, memory, token_budget)
         if agent is None:
             return AgentResult(
                 agent_name=config.name,
                 agent_type=config.type,
                 status="error",
-                error=f"Unable to create agent instance: {config.type}",
+                error=(
+                    f"No executor available for agent type '{config.type}': "
+                    "not registered in AGENT_REGISTRY"
+                ),
             )
 
-        # Execute agent (simplified - normally would be async)
+        # Execute the real agent via its async executor (BaseAgent.run).
         try:
-            # For now, create a mock result
-            # In production, this would call agent.run()
-            result_data = self._mock_agent_execution(config, agent)
+            result_data = self._run_executor(agent)
+
+            if result_data.get("status") == "error":
+                return AgentResult(
+                    agent_name=config.name,
+                    agent_type=config.type,
+                    status="error",
+                    error=result_data.get("error", "executor failed"),
+                    metadata={"executor": "real"},
+                )
 
             result = AgentResult(
                 agent_name=config.name,
@@ -180,6 +194,7 @@ class AgentOrchestrator:
                     "memory_usage": memory.to_dict(),
                 },
                 metadata={
+                    "executor": "real",
                     "objectives": config.objectives,
                     "scope": config.scope or {},
                     "provider": config.provider or {},
@@ -238,13 +253,31 @@ class AgentOrchestrator:
         Returns:
             BaseAgent instance or None if type unknown
         """
-        # For now, return None and use mock execution
-        # In production, would instantiate specific agent classes
-        # (CodeReviewAgent, SecurityAuditAgent, etc.)
+        from opencontext_core.agents import AGENT_REGISTRY
+
+        AgentClass = AGENT_REGISTRY.get(config.type)
+        if AgentClass is not None:
+            return cast(BaseAgent, AgentClass(config, self.project_root))
         return None
 
+    @staticmethod
+    def _run_executor(agent: BaseAgent) -> dict[str, Any]:
+        """Run a real agent's async executor synchronously.
+
+        Drives ``BaseAgent.run`` (which wraps ``execute``) to completion using a
+        fresh event loop. This is the live execution path — it never touches the
+        mock helper. Returns the executor's result dict (``status`` is
+        ``"success"`` or ``"error"``).
+        """
+        return asyncio.run(agent.run())
+
     def _mock_agent_execution(self, config: AgentConfig, agent: BaseAgent | None) -> dict[str, Any]:
-        """Generate mock execution result for demonstration.
+        """Generate mock execution result. TEST-ONLY — never used by the live path.
+
+        Kept callable so tests can exercise the historical template shape, but
+        ``run_agent`` drives :meth:`_run_executor` (the real executor) instead
+        and reports executor-absent when no real executor exists. A live run
+        therefore never derives success from this method.
 
         Args:
             config: Agent configuration

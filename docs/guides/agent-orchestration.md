@@ -58,9 +58,8 @@ gateway concern.
 opencontext init
 opencontext index .
 opencontext ask "Where is access control implemented?"
-opencontext orchestrate --requirements requirements.md
-opencontext validate --profile drupal
-opencontext propose patch --task "Fix access resolver tests"
+opencontext harness run --workflow sdd --task "Fix access resolver tests"
+opencontext verify
 opencontext trace last
 ```
 

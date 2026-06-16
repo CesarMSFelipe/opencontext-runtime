@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from opencontext_core.compression.caveman import CavemanCompressor
+from opencontext_core.compression.terse import TerseCompressor
 from opencontext_core.config import CompressionConfig
 from opencontext_core.context.budgeting import estimate_tokens
 from opencontext_core.context.protection import ProtectedSpanManager
@@ -41,8 +41,8 @@ class CompressionEngine:
         strategy_value = strategy.value
         if strategy_value == CompressionStrategy.NONE.value:
             return self._result(item, item, CompressionStrategy.NONE, "none")
-        elif strategy_value == CompressionStrategy.CAVEMAN.value:
-            return self._compress_caveman(item)
+        elif strategy_value == CompressionStrategy.TERSE.value:
+            return self._compress_terse(item)
         elif strategy_value == CompressionStrategy.TRUNCATE.value:
             compressed_content = _truncate_to_tokens(item.content, target_tokens)
             lossiness = "lossy_truncation"
@@ -52,6 +52,14 @@ class CompressionEngine:
         elif strategy_value == CompressionStrategy.BULLET_FACTS_PLACEHOLDER.value:
             compressed_content = _bullet_facts_placeholder(item.content, target_tokens)
             lossiness = "lossy_placeholder"
+        elif strategy_value == CompressionStrategy.COMPACT.value:
+            return self._compress_compact(item)
+        elif strategy_value == CompressionStrategy.DEEP.value:
+            return self._compress_deep_with_fallback(item)
+        elif strategy_value == CompressionStrategy.EFFICIENT.value:
+            return self._compress_efficient(item)
+        elif strategy_value == CompressionStrategy.SIGNATURE.value:
+            return self._compress_signature(item)
         else:
             raise ValueError(f"Unsupported compression strategy: {strategy_value}")
 
@@ -123,10 +131,10 @@ class CompressionEngine:
             lossiness=lossiness,
         )
 
-    def _compress_caveman(self, item: ContextItem) -> CompressionResult:
-        """Apply caveman compression to preserve technical content."""
+    def _compress_terse(self, item: ContextItem) -> CompressionResult:
+        """Apply terse compression to preserve technical content."""
 
-        compressor = CavemanCompressor(intensity=self.config.caveman_intensity)
+        compressor = TerseCompressor(intensity=self.config.terse_intensity)
         compressed_content = compressor.compress(item.content)
         compressed_tokens = estimate_tokens(compressed_content)
 
@@ -135,8 +143,8 @@ class CompressionEngine:
         metadata["compression"] = {
             "original_token_estimate": item.tokens,
             "compressed_token_estimate": compressed_tokens,
-            "strategy": CompressionStrategy.CAVEMAN.value,
-            "lossiness": "lossy_caveman",
+            "strategy": CompressionStrategy.TERSE.value,
+            "lossiness": "lossy_terse",
             "savings": savings,
         }
         compressed_item = item.model_copy(
@@ -146,7 +154,124 @@ class CompressionEngine:
                 "metadata": metadata,
             }
         )
-        return self._result(item, compressed_item, CompressionStrategy.CAVEMAN, "lossy_caveman")
+        return self._result(item, compressed_item, CompressionStrategy.TERSE, "lossy_terse")
+
+    def _compress_compact(self, item: ContextItem) -> CompressionResult:
+        """Apply structural compact compression."""
+        from opencontext_core.backends.compression.compact import CompactCompressionBackend
+
+        backend = CompactCompressionBackend()
+        spans = self.protected_spans.detect(item.content) if self.config.protected_spans else []
+        compressed_content = backend.compress(item.content, spans)
+        compressed_tokens = estimate_tokens(compressed_content)
+        metadata = dict(item.metadata)
+        metadata["compression"] = {
+            "original_token_estimate": item.tokens,
+            "compressed_token_estimate": compressed_tokens,
+            "strategy": CompressionStrategy.COMPACT.value,
+            "lossiness": "lossy_structural",
+        }
+        compressed_item = item.model_copy(
+            update={
+                "content": compressed_content,
+                "tokens": compressed_tokens,
+                "metadata": metadata,
+            }
+        )
+        return self._result(item, compressed_item, CompressionStrategy.COMPACT, "lossy_structural")
+
+    def _compress_efficient(self, item: ContextItem) -> CompressionResult:
+        """Apply maximum efficient compression (compact + terse + extended dict)."""
+        from opencontext_core.backends.compression.efficient import EfficientCompressionBackend
+
+        backend = EfficientCompressionBackend()
+        spans = self.protected_spans.detect(item.content) if self.config.protected_spans else []
+        compressed_content = backend.compress(item.content, spans)
+        compressed_tokens = estimate_tokens(compressed_content)
+        metadata = dict(item.metadata)
+        metadata["compression"] = {
+            "original_token_estimate": item.tokens,
+            "compressed_token_estimate": compressed_tokens,
+            "strategy": CompressionStrategy.EFFICIENT.value,
+            "lossiness": "lossy_maximum",
+        }
+        compressed_item = item.model_copy(
+            update={
+                "content": compressed_content,
+                "tokens": compressed_tokens,
+                "metadata": metadata,
+            }
+        )
+        return self._result(item, compressed_item, CompressionStrategy.EFFICIENT, "lossy_maximum")
+
+    def _compress_signature(self, item: ContextItem) -> CompressionResult:
+        """Reduce source code to signatures and docstring summaries."""
+        from opencontext_core.context.signature_compression import SignatureCompressor
+
+        language = _language_for_item(item)
+        compressor = SignatureCompressor()
+        compressed_content = compressor.compress(item.content, language=language)
+        compressed_tokens = estimate_tokens(compressed_content)
+        metadata = dict(item.metadata)
+        metadata["compression"] = {
+            "original_token_estimate": item.tokens,
+            "compressed_token_estimate": compressed_tokens,
+            "strategy": CompressionStrategy.SIGNATURE.value,
+            "lossiness": "lossy_signature",
+        }
+        compressed_item = item.model_copy(
+            update={
+                "content": compressed_content,
+                "tokens": compressed_tokens,
+                "metadata": metadata,
+            }
+        )
+        return self._result(item, compressed_item, CompressionStrategy.SIGNATURE, "lossy_signature")
+
+    def _compress_deep_with_fallback(self, item: ContextItem) -> CompressionResult:
+        """Attempt deep compression; degrade to compact if unavailable."""
+        from opencontext_core.exceptions import BackendUnavailableError
+
+        try:
+            from opencontext_core.backends.compression.deep import DeepCompressionBackend
+
+            spans = self.protected_spans.detect(item.content) if self.config.protected_spans else []
+            backend = DeepCompressionBackend()
+            compressed_content = backend.compress(item.content, spans)
+            compressed_tokens = estimate_tokens(compressed_content)
+            metadata = dict(item.metadata)
+            metadata["compression"] = {
+                "original_token_estimate": item.tokens,
+                "compressed_token_estimate": compressed_tokens,
+                "strategy": CompressionStrategy.DEEP.value,
+                "lossiness": "lossy_deep",
+            }
+            compressed_item = item.model_copy(
+                update={
+                    "content": compressed_content,
+                    "tokens": compressed_tokens,
+                    "metadata": metadata,
+                }
+            )
+            return self._result(item, compressed_item, CompressionStrategy.DEEP, "lossy_deep")
+        except BackendUnavailableError:
+            # Degrade to compact
+            return self._compress_compact(item)
+
+
+def _language_for_item(item: ContextItem) -> str | None:
+    """Infer a source language for an item from metadata or its source path."""
+
+    language = item.metadata.get("language")
+    if isinstance(language, str) and language:
+        return language
+
+    from pathlib import Path
+
+    from opencontext_core.indexing.tree_sitter_parser import LANGUAGE_EXTENSIONS
+
+    suffix = Path(item.source).suffix.lower()
+    return LANGUAGE_EXTENSIONS.get(suffix)
 
 
 def _truncate_to_tokens(content: str, target_tokens: int) -> str:

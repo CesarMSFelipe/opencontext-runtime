@@ -23,13 +23,32 @@ Example usage (no CLI required):
 """
 
 from .base import BaseAgent
+from .code_review_agent import CodeReviewAgent
+from .context_planner_agent import ContextPlannerAgent
 from .loader import list_available_agents, load_agent_config
+from .mutation_analyst_agent import MutationAnalystAgent
 from .orchestrator import AgentOrchestrator, AgentResult
+from .security_audit_agent import SecurityAuditAgent
+from .tdd_enforcer_agent import TDDEnforcerAgent
+
+AGENT_REGISTRY: dict[str, type] = {
+    "context-planner": ContextPlannerAgent,
+    "tdd-enforcer": TDDEnforcerAgent,
+    "mutation-analyst": MutationAnalystAgent,
+    "security-audit": SecurityAuditAgent,
+    "code-review": CodeReviewAgent,
+}
 
 __all__ = [
+    "AGENT_REGISTRY",
     "AgentOrchestrator",
     "AgentResult",
     "BaseAgent",
+    "CodeReviewAgent",
+    "ContextPlannerAgent",
+    "MutationAnalystAgent",
+    "SecurityAuditAgent",
+    "TDDEnforcerAgent",
     "list_available_agents",
     "load_agent_config",
 ]

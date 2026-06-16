@@ -214,7 +214,7 @@ opencontext harness list
 ### Graph Visualization
 
 ```bash
-opencontext visualize --output codegraph.svg --format svg
+opencontext visualize --output repo-graph.svg --format svg
 ```
 
 ### Performance Metrics

@@ -46,6 +46,22 @@ class OnboardingResult:
     warnings: list[str] = field(default_factory=list)
 
 
+def _normalize_security_mode(mode: str) -> str:
+    """Coerce a security-mode string to an exact ``SecurityMode`` enum value.
+
+    Accepts hyphenated legacy aliases (e.g. ``air-gapped``) and falls back to
+    ``private_project`` for anything unrecognised, so the written config always
+    loads. Invalid values are never passed through verbatim.
+    """
+    from opencontext_core.config import SecurityMode
+
+    candidate = (mode or "").strip().replace("-", "_").lower()
+    try:
+        return SecurityMode(candidate).value
+    except ValueError:
+        return SecurityMode.PRIVATE_PROJECT.value
+
+
 class OnboardingService:
     """Orchestrates project onboarding: workspace, config, prefs, index, SDD, agents, harness."""
 
@@ -55,9 +71,9 @@ class OnboardingService:
             AgentIntegrationGenerator,
             AgentTarget,
         )
-        from opencontext_core.config import default_config_data
+        from opencontext_core.config import SecurityMode, default_config_data
         from opencontext_core.sdd_runtime import write_sdd_context
-        from opencontext_core.user_prefs import UserConfigStore
+        from opencontext_core.user_prefs import UserConfigStore, mark_setup_complete
         from opencontext_core.workspace.layout import ensure_workspace
 
         root = options.root.resolve()
@@ -73,20 +89,25 @@ class OnboardingService:
             import yaml
 
             config_data = default_config_data()
+            project = config_data.get("project")
+            if isinstance(project, dict):
+                project["name"] = root.name or project.get("name", "my-project")
             security = config_data.get("security")
             if isinstance(security, dict):
-                security["mode"] = options.security_mode
+                security["mode"] = _normalize_security_mode(options.security_mode)
             if options.template == "enterprise":
                 security = config_data.get("security")
                 if isinstance(security, dict):
-                    security["mode"] = "enterprise"
+                    security["mode"] = SecurityMode.ENTERPRISE.value
                 for policy in config_data.get("provider_policies", []):
                     if isinstance(policy, dict) and policy.get("provider") != "mock":
                         policy["allowed"] = False
-            if options.template == "air-gapped":
+            # Accept both the enum-aligned 'air_gapped' and the legacy
+            # hyphenated 'air-gapped' template name.
+            if options.template in ("air-gapped", "air_gapped"):
                 security = config_data.get("security")
                 if isinstance(security, dict):
-                    security["mode"] = "air_gapped"
+                    security["mode"] = SecurityMode.AIR_GAPPED.value
                     security["external_providers_enabled"] = False
                 cache = config_data.get("cache")
                 if isinstance(cache, dict):
@@ -99,7 +120,9 @@ class OnboardingService:
         # 3. Save user preferences
         store = UserConfigStore()
         prefs = store.load()
-        prefs.security_mode = options.security_mode
+        # Normalize here too: prefs must never hold a value the config rejected,
+        # otherwise prefs and the written config disagree on the security mode.
+        prefs.security_mode = _normalize_security_mode(options.security_mode)
         prefs.sdd.tdd_mode = options.tdd_mode
         prefs.sdd.sdd_model_profile = options.sdd_model_profile
         prefs.sdd.orchestrator_profile = options.orchestrator_profile
@@ -108,7 +131,7 @@ class OnboardingService:
             options.active_clients[0] if options.active_clients else "opencode"
         )
         prefs.sdd_token_budget = sdd_token_budget
-        prefs.setup_completed = True
+        mark_setup_complete(prefs)
         for known_agent in list(prefs.agent_integrations):
             prefs.agent_integrations[known_agent] = known_agent in options.active_clients
         store.save(prefs)
@@ -175,13 +198,7 @@ class OnboardingService:
 
         # 9. Setup MCP if requested
         if options.setup_mcp:
-            try:
-                from opencontext_core.mcp_stdio import setup_mcp_for_opencode  # type: ignore[attr-defined]  # noqa: I001
-
-                setup_mcp_for_opencode()
-                result.mcp_configured = True
-            except Exception as exc:
-                result.warnings.append(f"MCP setup failed: {exc}")
+            result.mcp_configured = self._setup_mcp(options, result)
 
         result.active_clients = list(options.active_clients)
         return result
@@ -189,6 +206,30 @@ class OnboardingService:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _setup_mcp(self, options: OnboardingOptions, result: OnboardingResult) -> bool:
+        """Wire MCP for the active agent clients using the live installer path.
+
+        Reuses :class:`AgentInstaller` — the same path the CLI ``setup`` command
+        drives — to write a real ``mcp.json`` entry per agent. This replaces the
+        old import of the non-existent ``setup_mcp_for_opencode`` symbol, which
+        always raised ``ImportError`` and was swallowed as a warning.
+        """
+        from opencontext_core.agent_installer import AgentInstaller, AgentTarget
+
+        targets: list[AgentTarget] = []
+        for client in options.active_clients:
+            try:
+                targets.append(AgentTarget(client))
+            except ValueError:
+                result.warnings.append(f"MCP setup skipped unknown agent target: {client}")
+        if not targets:
+            return False
+
+        installer = AgentInstaller(project_root=options.root.resolve())
+        report = installer.install(targets=targets, location="global", yes=True)
+        configured = [r for r in report.get("results", []) if r.get("status") == "configured"]
+        return bool(configured)
 
     def _agent_contract_md(self, client: str, options: OnboardingOptions) -> str:
         """Generate .opencontext/agents/<client>.md contract file."""

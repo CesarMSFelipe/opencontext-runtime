@@ -4,7 +4,7 @@
 A team-grade AI operating layer compiles context, policy, tools, memory, approvals, cache, and evaluation into repeatable workflows.
 
 ## Current Status
-Local scaffolds are implemented for command registry, hook registry, approvals, playbooks, baselines, policy diff, run receipts, and reports. They do not execute external actions by default.
+Local scaffolds are implemented for command registry, hook registry, approvals, playbooks, baselines, run receipts, and reports. They do not execute external actions by default.
 
 ## Call Budget Management
 The system tracks and limits API calls to prevent quota exhaustion:
@@ -38,8 +38,6 @@ result = router.route_with_budget("generate", task_complexity="summarize")
 opencontext playbooks list
 opencontext command run review-pr
 opencontext approvals list
-opencontext run receipt last
-opencontext policy diff main..HEAD
 ```
 
 ## Implemented Code

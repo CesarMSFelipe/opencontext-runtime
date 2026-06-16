@@ -1,16 +1,14 @@
-# Ddev
+# DDEV
 
-## Purpose
-`opencontext ddev init` creates a DDEV command wrapper and Drupal workflow/rule scaffolds.
+## Status
 
-## Current Status
-CLI/API/local SDK paths are implemented. Agent-specific integrations are documented patterns unless a command explicitly exists.
+The dedicated DDEV integration command has been removed. Use OpenContext's
+standard CLI inside a DDEV web container the same way you would in any shell.
 
 ## Related Commands
 ```bash
 opencontext agent-context "Review access control" --target codex --copy
 opencontext pack . --query "review auth" --copy
-opencontext ddev init
 ```
 
 ## Implemented Code
