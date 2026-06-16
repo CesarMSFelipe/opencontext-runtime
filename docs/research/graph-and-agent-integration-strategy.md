@@ -7,7 +7,7 @@ Reviewed: June 12, 2026
 
 Make OpenContext the provider-neutral context layer that selects the smallest
 useful evidence set for a coding task, while keeping the agent workflow at least
-as capable as agentic workflow tool.
+as capable as mature agentic workflow tools.
 
 The target is not to install every graph product. The target is to combine the
 best proven capabilities behind stable OpenContext interfaces, then prove that
@@ -132,9 +132,9 @@ short retrieval handles so an agent can request exact evidence when needed.
 Protected spans, secrets, policy boundaries, and high-risk evidence must remain
 uncompressed or use lossless compaction.
 
-### 5. Agentic harness equal to or better than agentic workflow tool
+### 5. Agentic harness equal to or better than mature workflow tools
 
-agentic workflow tool is currently stronger at projecting a coherent workflow into many
+Mature agentic workflow tools are currently stronger at projecting a coherent workflow into many
 native agent platforms. It provides automatic skill discovery, isolated
 phase-specific sub-agents where supported, persistent artifacts, per-phase model
 routing, and a low-friction setup experience.
@@ -218,7 +218,7 @@ must not be copied into the MIT-licensed core.
 2. Unify SDD runtime, harness gates, skills, memory, and model routing.
 3. Add host-native delegation adapters and inline fallback.
 4. Add resumable bounded self-fix loops.
-5. Benchmark against the agentic workflow tool workflow on identical tasks.
+5. Benchmark against a mature agentic workflow on identical tasks.
 
 ### Release E — Self-hosted evaluation lab
 
