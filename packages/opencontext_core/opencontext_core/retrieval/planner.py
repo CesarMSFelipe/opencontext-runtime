@@ -33,6 +33,7 @@ from opencontext_core.retrieval.scoring import (
     identifier_quality_score,
     personalized_pagerank,
 )
+from opencontext_core.safety.redaction import SinkGuard
 
 
 class RetrievalSource(Protocol):
@@ -220,7 +221,7 @@ class RetrievalPlanner:
                 continue
 
         deduped = _deduplicate(candidates)
-        return select_diverse(self.rank(deduped, query=query), top_k)
+        return _redact_selected(select_diverse(self.rank(deduped, query=query), top_k))
 
     def rank(
         self,
@@ -312,7 +313,7 @@ class RetrievalPlanner:
         )
         # Diversity-aware selection: maximize information per token by demoting
         # near-duplicates of already-chosen evidence before truncating to top_k.
-        context_items = select_diverse(ranked, top_k)
+        context_items = _redact_selected(select_diverse(ranked, top_k))
 
         evidence = [_context_item_to_evidence(item, request.surface) for item in context_items]
         fallback_actions = _fallback_actions_for(request, evidence)
@@ -675,6 +676,28 @@ def _token_jaccard(a: frozenset[str], b: frozenset[str]) -> float:
     if not a or not b:
         return 0.0
     return len(a & b) / len(a | b)
+
+
+def _redact_selected(items: list[ContextItem]) -> list[ContextItem]:
+    """Redact secrets/PII in the SELECTED items just before they become evidence.
+
+    Candidates are read raw for speed; redaction is applied here, over the small
+    delivered set, so every item that reaches the agent is clean while the
+    expensive secret/PII scan never runs over the whole candidate corpus.
+    """
+    guard = SinkGuard()
+    out: list[ContextItem] = []
+    for item in items:
+        redacted, changed = guard.redact(item.content)
+        if changed or redacted != item.content:
+            out.append(
+                item.model_copy(
+                    update={"content": redacted, "metadata": {**item.metadata, "redacted": True}}
+                )
+            )
+        else:
+            out.append(item)
+    return out
 
 
 def select_diverse(

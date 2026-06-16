@@ -8,7 +8,6 @@ from opencontext_core.context.budgeting import estimate_tokens
 from opencontext_core.models.context import ContextItem, ContextPriority
 from opencontext_core.models.project import FileKind, ProjectFile, ProjectManifest, Symbol
 from opencontext_core.retrieval.ranking import RetrievalScorer
-from opencontext_core.safety.redaction import SinkGuard
 
 
 class ProjectRetriever:
@@ -17,7 +16,6 @@ class ProjectRetriever:
     def __init__(self, manifest: ProjectManifest) -> None:
         self.manifest = manifest
         self.scorer = RetrievalScorer()
-        self.sink_guard = SinkGuard()
 
     def retrieve(self, query: str, top_k: int) -> list[ContextItem]:
         """Retrieve file and symbol context candidates."""
@@ -46,6 +44,11 @@ class ProjectRetriever:
                 file,
                 symbols_by_path.get(file.path, []),
             )
+            # Only read+redact files that actually matched the query. Reading and
+            # secret/PII-scanning every file in the repo (most scoring 0) was the
+            # dominant cost; non-matching files never reach the pack anyway.
+            if score <= 0:
+                continue
             content, redacted = self._read_file_content(file)
             if not content:
                 content = file.summary
@@ -134,14 +137,17 @@ class ProjectRetriever:
         return items
 
     def _read_file_content(self, file: ProjectFile) -> tuple[str, bool]:
+        # Read RAW for candidate ranking. Redaction is deferred to the selected
+        # pack items (see RetrievalPlanner), so secret/PII scanning runs over the
+        # ~top-k delivered files, not every candidate in the repo. Dropped
+        # candidates are never delivered, so reading them raw is safe.
         path = Path(self.manifest.root) / file.path
         if not path.exists() or not path.is_file():
-            return self.sink_guard.redact(file.summary)
+            return file.summary, False
         raw = path.read_bytes()
         if b"\x00" in raw[:2048]:
-            return self.sink_guard.redact(file.summary)
-        content = raw[:120_000].decode("utf-8", errors="ignore")
-        return self.sink_guard.redact(content)
+            return file.summary, False
+        return raw[:120_000].decode("utf-8", errors="ignore"), False
 
     def _read_symbol_snippet(self, symbol: Symbol) -> tuple[str, bool]:
         path = Path(self.manifest.root) / symbol.path
@@ -150,7 +156,7 @@ class ProjectRetriever:
         lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
         start = max(0, symbol.line - 3)
         end = min(len(lines), symbol.line + 4)
-        return self.sink_guard.redact("\n".join(lines[start:end]))
+        return "\n".join(lines[start:end]), False
 
 
 def _symbols_by_path(symbols: list[Symbol]) -> dict[str, list[Symbol]]:
