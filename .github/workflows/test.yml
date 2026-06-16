@@ -20,6 +20,11 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python-version: ["3.12"]
     continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    env:
+      # Run Python in UTF-8 mode so the CLI's glyphs (↓ · — ✓) and the tests'
+      # subprocess capture work on Windows, whose default code page (cp1252) can't
+      # encode them. No-op on Linux (already UTF-8).
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

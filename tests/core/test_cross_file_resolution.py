@@ -87,7 +87,8 @@ def test_import_disambiguation_is_deterministic(kg: KnowledgeGraph, tmp_path: Pa
             # Return the file_path of each resolved 'save' callee target.
             return {c["file_path"] for c in callees if c["name"] == "save"}
         finally:
-            graph.db._conn = None  # fresh connection next run
+            # close() before unlink: nulling _conn first would make close() a
+            # no-op, orphaning the open connection and locking the file on Windows.
             graph.close()
             (tmp_path / "kg_run.db").unlink(missing_ok=True)
 
