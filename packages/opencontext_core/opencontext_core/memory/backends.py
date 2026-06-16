@@ -226,17 +226,14 @@ class SQLiteMemoryBackend:
         """
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT DISTINCT key FROM memory_records "
-                "WHERE invalid_at IS NULL ORDER BY key"
+                "SELECT DISTINCT key FROM memory_records WHERE invalid_at IS NULL ORDER BY key"
             ).fetchall()
         return [row["key"] for row in rows]
 
     def get(self, record_id: str) -> MemoryRecord | None:
         """Fetch a single record by id, or None."""
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM memory_records WHERE id = ?", (record_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM memory_records WHERE id = ?", (record_id,)).fetchone()
         return _row_to_record(row) if row is not None else None
 
     def mark_reviewed(self, record_id: str) -> bool:

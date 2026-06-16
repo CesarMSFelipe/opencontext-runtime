@@ -58,12 +58,8 @@ def test_resolve_symbol_path_through_real_indexed_graph(tmp_path: Path):
     config = KnowledgeGraphConfig(enabled=True, languages=["python"])
     kg = KnowledgeGraph(config=config, db_path=tmp_path / "kg.db")
     try:
-        kg.index_file(
-            "auth.py", "class AuthService:\n    def login(self):\n        return 1\n"
-        )
-        kg.index_file(
-            "admin.py", "class AdminService:\n    def login(self):\n        return 2\n"
-        )
+        kg.index_file("auth.py", "class AuthService:\n    def login(self):\n        return 1\n")
+        kg.index_file("admin.py", "class AdminService:\n    def login(self):\n        return 2\n")
 
         # Bare "login" is ambiguous across the two classes.
         assert kg.resolve_symbol_path("login") is None
@@ -74,9 +70,9 @@ def test_resolve_symbol_path_through_real_indexed_graph(tmp_path: Path):
         assert auth_id != admin_id
 
         conn = kg.db._connect()
-        auth_file = conn.execute(
-            "SELECT file_path FROM nodes WHERE id = ?", (auth_id,)
-        ).fetchone()["file_path"]
+        auth_file = conn.execute("SELECT file_path FROM nodes WHERE id = ?", (auth_id,)).fetchone()[
+            "file_path"
+        ]
         assert auth_file == "auth.py"
     finally:
         kg.close()

@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 from conftest import create_sample_project, write_config
-
 from opencontext_cli.main import _inspect, _provider_simulate, _security, _tokens, _trace
 from opencontext_core.config import OpenContextConfig, default_config_data
 from opencontext_core.context.packing import sanitize_context_pack

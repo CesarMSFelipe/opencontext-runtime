@@ -73,9 +73,7 @@ class ComponentDoctor:
                 if found
                 else "opencontext is not on PATH (running as a module)"
             )
-            return [
-                ComponentCheck(name="binary_path", ok=True, status="healthy", details=details)
-            ]
+            return [ComponentCheck(name="binary_path", ok=True, status="healthy", details=details)]
         return [
             ComponentCheck(
                 name="binary_path",
@@ -221,12 +219,16 @@ class ComponentDoctor:
             kg.close()
         except Exception as exc:
             return ComponentCheck(
-                name="kg_freshness", ok=True, status="unknown",
+                name="kg_freshness",
+                ok=True,
+                status="unknown",
                 details=f"Could not check freshness: {exc}",
             )
         if report.total == 0:
             return ComponentCheck(
-                name="kg_freshness", ok=True, status="fresh",
+                name="kg_freshness",
+                ok=True,
+                status="fresh",
                 details="Index is up to date with the working tree.",
             )
         bits = []
@@ -235,7 +237,9 @@ class ComponentDoctor:
         if report.deleted:
             bits.append(f"{len(report.deleted)} deleted")
         return ComponentCheck(
-            name="kg_freshness", ok=False, status="stale",
+            name="kg_freshness",
+            ok=False,
+            status="stale",
             details=f"Index is behind the working tree ({', '.join(bits)} files).",
             recommendation="Re-run `opencontext index .` to refresh the graph.",
         )

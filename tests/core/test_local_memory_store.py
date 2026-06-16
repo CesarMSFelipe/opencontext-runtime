@@ -104,11 +104,7 @@ def test_decay_prunes_only_old_and_low_confidence(store: LocalMemoryStore) -> No
     pruned = store.decay()
 
     assert pruned == 1
-    survivors = {
-        r.id
-        for key in ("k:a", "k:b", "k:c")
-        for r in store._backend.get_by_key(key)
-    }
+    survivors = {r.id for key in ("k:a", "k:b", "k:c") for r in store._backend.get_by_key(key)}
     assert survivors == {"stale-strong", "fresh-weak"}  # only stale+weak removed
 
 
@@ -120,12 +116,18 @@ def test_decay_spares_recently_used_record(store: LocalMemoryStore) -> None:
     """
     old = datetime.now(tz=UTC) - timedelta(days=120)
     store.write(
-        make_record("used", key="k:u", content="frequently recalled auth pattern",
-                    confidence=0.2, created_at=old)
+        make_record(
+            "used",
+            key="k:u",
+            content="frequently recalled auth pattern",
+            confidence=0.2,
+            created_at=old,
+        )
     )
     store.write(
-        make_record("unused", key="k:n", content="forgotten billing note",
-                    confidence=0.2, created_at=old)
+        make_record(
+            "unused", key="k:n", content="forgotten billing note", confidence=0.2, created_at=old
+        )
     )
     # Recall the 'used' record — this bumps its last-accessed timestamp.
     assert any(r.id == "used" for r in store.search("frequently recalled auth pattern"))

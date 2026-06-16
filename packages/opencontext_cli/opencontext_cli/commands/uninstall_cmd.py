@@ -50,6 +50,7 @@ def _strip_project_managed_blocks(root: object, scope: str) -> None:
         except Exception:
             pass
 
+
 console = Console()
 
 

@@ -23,8 +23,25 @@ from statistics import median
 from typing import Any
 
 _SOURCE_EXTS = {
-    ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".rb", ".java", ".kt",
-    ".c", ".cc", ".cpp", ".h", ".hpp", ".cs", ".php", ".swift", ".scala",
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".go",
+    ".rs",
+    ".rb",
+    ".java",
+    ".kt",
+    ".c",
+    ".cc",
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".cs",
+    ".php",
+    ".swift",
+    ".scala",
 }
 
 

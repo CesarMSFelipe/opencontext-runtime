@@ -54,9 +54,7 @@ def test_phase_model_map_reads_active_profile(
 
     sdd = tmp_path / ".opencontext" / "sdd"
     sdd.mkdir(parents=True)
-    (sdd / "context.json").write_text(
-        json.dumps({"sdd_model_profile": "cheap"}), encoding="utf-8"
-    )
+    (sdd / "context.json").write_text(json.dumps({"sdd_model_profile": "cheap"}), encoding="utf-8")
 
     mapping = HarnessRunner(root=tmp_path)._phase_model_map()
     assert mapping  # cheap assigns real models per phase

@@ -85,8 +85,7 @@ def test_compact_non_code_text_shorter():
     # Repeated prose to ensure terse compression reduces length
     text = (
         "In order to do this, and due to the fact that there are many items, "
-        "we should in order to proceed handle it. "
-        * 5
+        "we should in order to proceed handle it. " * 5
     )
     result = backend.compress(text, [])
     assert len(result) < len(text)

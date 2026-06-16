@@ -33,6 +33,7 @@ from opencontext_core.models.evidence import EvidenceRef
 if TYPE_CHECKING:
     from opencontext_core.embeddings.protocols import EmbeddingGenerator, VectorStore
 
+
 @dataclass(frozen=True)
 class MemoryMaintenanceReport:
     """Outcome of a maintenance sweep (consolidate every key, then decay)."""

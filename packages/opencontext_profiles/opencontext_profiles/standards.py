@@ -57,9 +57,7 @@ _CATALOG: dict[str, StackStandards] = {
         formatter=("ruff format .",),
         static_reviewers=("ruff check .", "mypy .", "bandit -r ."),
         dynamic_reviewers=("pytest --cov", "pip-audit"),
-        testing=(
-            "pytest — prefer fixtures over setup/teardown; one behavior per test.",
-        ),
+        testing=("pytest — prefer fixtures over setup/teardown; one behavior per test.",),
         standards=(
             "Target the `requires-python` in pyproject.toml; type-annotate public APIs.",
             "Prefer pathlib, dataclasses, and the stdlib before adding a dependency.",

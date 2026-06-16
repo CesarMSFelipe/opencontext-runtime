@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from conftest import create_sample_project, write_config
 
+from conftest import create_sample_project, write_config
 from opencontext_core.config import default_config_data
 from opencontext_core.errors import ConfigurationError
 from opencontext_core.runtime import OpenContextRuntime

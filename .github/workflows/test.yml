@@ -25,7 +25,10 @@ jobs:
       - name: Install packages and validation tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ruff mypy pytest build types-PyYAML types-requests
+          # Pin the lint/type tools so a new ruff/mypy release can't spuriously
+          # break CI with changed format rules or new checks (the repo is
+          # formatted for this ruff). Bump deliberately.
+          python -m pip install ruff==0.15.17 mypy==1.20.2 pytest build types-PyYAML types-requests
           python -m pip install -e packages/opencontext_core
           python -m pip install -e packages/opencontext_profiles
           python -m pip install -e packages/opencontext_providers

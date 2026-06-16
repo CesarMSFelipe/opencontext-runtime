@@ -98,9 +98,7 @@ def test_configure_then_uninstall_preserves_user_content(
     assert "opencontext" not in after_mcp.get("mcpServers", {})  # ours removed
 
 
-def test_uninstall_dry_run_changes_nothing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_uninstall_dry_run_changes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     (tmp_path / ".claude").mkdir(parents=True)
     cfg = Configurator(project_root=tmp_path / "proj")

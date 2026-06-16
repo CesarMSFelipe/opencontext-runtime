@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 from conftest import write_config
-
 from opencontext_cli.main import (
     _agent_context,
     _checkpoint,

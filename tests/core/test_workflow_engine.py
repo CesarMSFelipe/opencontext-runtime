@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from conftest import create_sample_project, write_config
 
+from conftest import create_sample_project, write_config
 from opencontext_core.config import load_config
 from opencontext_core.errors import ConfigurationError
 from opencontext_core.indexing.project_indexer import ProjectIndexer

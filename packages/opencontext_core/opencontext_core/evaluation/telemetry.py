@@ -10,12 +10,36 @@ from pathlib import Path
 TELEMETRY_FILE = ".opencontext/telemetry.json"
 
 _NAIVE_TEXT_EXTS = {
-    ".py", ".ts", ".tsx", ".js", ".jsx", ".md", ".yaml", ".yml",
-    ".toml", ".json", ".txt", ".go", ".rs", ".rb", ".java", ".php",
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".md",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".json",
+    ".txt",
+    ".go",
+    ".rs",
+    ".rb",
+    ".java",
+    ".php",
 }
 _NAIVE_SKIP_DIRS = {
-    ".git", "__pycache__", "build", ".storage", ".venv", "venv",
-    "node_modules", "dist", "tmp", ".opencontext", ".mypy_cache", ".ruff_cache",
+    ".git",
+    "__pycache__",
+    "build",
+    ".storage",
+    ".venv",
+    "venv",
+    "node_modules",
+    "dist",
+    "tmp",
+    ".opencontext",
+    ".mypy_cache",
+    ".ruff_cache",
 }
 
 

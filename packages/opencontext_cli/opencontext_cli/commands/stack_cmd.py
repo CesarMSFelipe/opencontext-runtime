@@ -42,9 +42,7 @@ def add_stack_parser(subparsers: Any) -> None:
             "  opencontext stack --write    Inject them into AGENTS.md (managed block)\n"
         ),
     )
-    parser.add_argument(
-        "path", nargs="?", default=".", help="Project root to detect (default: .)."
-    )
+    parser.add_argument("path", nargs="?", default=".", help="Project root to detect (default: .).")
     parser.add_argument(
         "--write",
         action="store_true",
@@ -53,9 +51,24 @@ def add_stack_parser(subparsers: Any) -> None:
 
 
 _PRUNE_DIRS = {
-    ".git", ".hg", ".svn", ".storage", ".opencontext", ".venv", "venv",
-    "node_modules", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache",
-    "dist", "build", "target", "vendor", ".next", ".tox",
+    ".git",
+    ".hg",
+    ".svn",
+    ".storage",
+    ".opencontext",
+    ".venv",
+    "venv",
+    "node_modules",
+    "__pycache__",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".pytest_cache",
+    "dist",
+    "build",
+    "target",
+    "vendor",
+    ".next",
+    ".tox",
 }
 
 

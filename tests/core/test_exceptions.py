@@ -1,6 +1,5 @@
 """Tests for opencontext_core.exceptions."""
 
-
 from opencontext_core.exceptions import BackendNotConfiguredError, BackendUnavailableError
 
 

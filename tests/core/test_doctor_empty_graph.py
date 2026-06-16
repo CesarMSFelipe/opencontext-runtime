@@ -38,9 +38,7 @@ def test_empty_graph_is_flagged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "index" in (check.recommendation or "").lower()
 
 
-def test_legacy_codegraph_name_is_resolved(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_legacy_codegraph_name_is_resolved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Only the legacy codegraph.db exists (no context_graph.db). The runtime uses
     # it via a shim; the doctor must report it healthy, not "missing".
     storage = tmp_path / ".storage" / "opencontext"

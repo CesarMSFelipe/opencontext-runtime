@@ -12,8 +12,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from conftest import create_sample_project, write_config
 
+from conftest import create_sample_project, write_config
 from opencontext_core.models.agent_memory import DecayPolicy, MemoryLayer, MemoryRecord
 from opencontext_core.retrieval.contracts import VerifiedContextRequest
 from opencontext_core.runtime import OpenContextRuntime

@@ -1,7 +1,6 @@
 """Tests for EfficientCompressionBackend."""
 
 
-
 def test_compresses_code_to_signatures():
     from opencontext_core.backends.compression.efficient import EfficientCompressionBackend
 

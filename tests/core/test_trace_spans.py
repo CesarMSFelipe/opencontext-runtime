@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from conftest import create_sample_project, write_config
-
 from opencontext_core.runtime import OpenContextRuntime
 
 

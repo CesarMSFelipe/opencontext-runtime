@@ -20,7 +20,7 @@ def _runtime_with_secret(tmp_path: Path) -> tuple[OpenContextRuntime, Path]:
     project = tmp_path / "project"
     (project / "src").mkdir(parents=True)
     (project / "src" / "auth.py").write_text(
-        "API_KEY = \"" + _SECRET + "\"\n\n"
+        'API_KEY = "' + _SECRET + '"\n\n'
         "def login(user: str) -> bool:\n"
         '    """Authenticate a user against the auth service."""\n'
         "    return bool(user)\n",

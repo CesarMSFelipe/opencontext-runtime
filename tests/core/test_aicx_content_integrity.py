@@ -12,7 +12,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from conftest import create_sample_project, write_config
-
 from opencontext_core.context.bytecode import AICXCompiler, AICXDecoder, compute_metrics
 from opencontext_core.models.context import DataClassification
 from opencontext_core.retrieval.contracts import (

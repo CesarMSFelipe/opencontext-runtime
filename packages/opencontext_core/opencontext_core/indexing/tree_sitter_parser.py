@@ -87,9 +87,7 @@ def _module_binding_names(left: Any) -> list[str]:
         return [str(left.text.decode("utf-8"))]
     if left.type in ("pattern_list", "tuple_pattern", "tuple", "expression_list", "list_pattern"):
         return [
-            str(child.text.decode("utf-8"))
-            for child in left.children
-            if child.type == "identifier"
+            str(child.text.decode("utf-8")) for child in left.children if child.type == "identifier"
         ]
     return []
 

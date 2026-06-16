@@ -6,7 +6,6 @@ from datetime import datetime
 from pathlib import Path
 
 from conftest import create_sample_project, write_config
-
 from opencontext_core.compat import UTC
 from opencontext_core.indexing.graph_db import FileRecord, GraphDatabase, Node
 from opencontext_core.models.context import ContextItem
