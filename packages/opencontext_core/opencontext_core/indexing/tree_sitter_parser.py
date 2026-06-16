@@ -75,6 +75,25 @@ class ParsedEdge:
     receiver: str | None = None
 
 
+def _module_binding_names(left: Any) -> list[str]:
+    """Identifier name(s) bound by a module-level assignment target.
+
+    Handles a single name (``X = ...``) and tuple/list unpacking
+    (``A, B = ...``). Subscript/attribute targets (``d[k] = ...``) bind no new
+    module symbol and are skipped.
+    """
+
+    if left.type == "identifier":
+        return [str(left.text.decode("utf-8"))]
+    if left.type in ("pattern_list", "tuple_pattern", "tuple", "expression_list", "list_pattern"):
+        return [
+            str(child.text.decode("utf-8"))
+            for child in left.children
+            if child.type == "identifier"
+        ]
+    return []
+
+
 @dataclass
 class ParseFileResult:
     """Outcome of parsing a single file, including parse-mode provenance."""
@@ -327,6 +346,42 @@ class TreeSitterParser:
                 current_class = None
 
         walk(root)
+
+        # Module-level bindings (PERSONAS = {...}, DEFAULT_IGNORE = [...], app = ...).
+        # These define registries/constants/config as DATA, not def/class, so a
+        # symbol search that only knows functions and classes is blind to the file
+        # that "defines" them. Index the name(s) plus a one-line RHS snippet so both
+        # the identifier and the assigned content are searchable. Module level only
+        # (direct children of the module node) — locals inside functions stay out,
+        # so the index does not explode.
+        for child in root.children:
+            if child.type != "expression_statement":
+                continue
+            for sub in child.children:
+                if sub.type != "assignment":
+                    continue
+                left = sub.child_by_field_name("left")
+                if left is None:
+                    continue
+                names = _module_binding_names(left)
+                if not names:
+                    continue
+                snippet = " ".join(str(sub.text.decode("utf-8")).split())[:200]
+                for name in names:
+                    symbols.append(
+                        ParsedSymbol(
+                            name=name,
+                            kind="constant" if name.isupper() else "variable",
+                            line=sub.start_point[0] + 1,
+                            column=sub.start_point[1],
+                            end_line=sub.end_point[0] + 1,
+                            container=None,
+                            docstring=None,
+                            signature=snippet,
+                            is_exported=not name.startswith("_"),
+                        )
+                    )
+
         return symbols, edges
 
     def _extract_js_ts(

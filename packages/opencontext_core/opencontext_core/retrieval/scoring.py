@@ -17,16 +17,16 @@ from datetime import datetime
 
 @dataclass(frozen=True)
 class RetrievalWeights:
-    semantic_relevance: float = 0.24
-    graph_centrality: float = 0.20
-    call_distance: float = 0.15
-    test_affinity: float = 0.10
-    memory_confidence: float = 0.10
-    recent_failure: float = 0.08
-    risk_requirement: float = 0.07
+    semantic_relevance: float = 0.40
+    graph_centrality: float = 0.16
+    call_distance: float = 0.10
+    test_affinity: float = 0.05
+    memory_confidence: float = 0.08
+    recent_failure: float = 0.07
+    risk_requirement: float = 0.06
     personalization: float = 0.01
-    freshness: float = 0.03
-    provenance: float = 0.02
+    freshness: float = 0.04
+    provenance: float = 0.03
     # Penalties
     stale_memory_penalty: float = 0.05
     token_cost_penalty: float = 0.03
@@ -62,7 +62,12 @@ def compute_hybrid_score(
     sem_rel = max(0.0, min(1.0, lexical_score))
     centrality = _normalize_distance(graph_distance_map.get(candidate_id, 999))
     call_dist = centrality
-    test_aff = 1.0 if is_test else 0.0
+    # Test affinity rides on the candidate's OWN lexical relevance rather than
+    # being a flat per-test bonus. A flat bonus made every test file outrank
+    # equally/more relevant non-test source (the bonus, 0.10, dwarfed the lexical
+    # contribution), so "where is X defined" returned X's tests, not X. Gating by
+    # sem_rel keeps genuinely-relevant tests as useful context without that bias.
+    test_aff = sem_rel if is_test else 0.0
     mem_conf = max(0.0, min(1.0, memory_confidence))
     fail_boost = max(0.0, min(1.0, memory_boost_map.get(candidate_id, 0.0)))
     risk_req = 1.0 if is_required else 0.0
