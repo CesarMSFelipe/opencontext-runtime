@@ -429,6 +429,8 @@ Inter-agent handoffs also compress automatically — context dictionaries are co
 
 AICX (Agent Incremental Context Exchange) is a compact, checksum-verified representation of an evidence plan — a transport/telemetry **side-channel** carried alongside the verified context. It encodes the plan as deduplicated references (with content inlined for protected evidence), giving you a tamper-evident fingerprint and a real token-reduction metric **without** stripping content from the context the agent actually receives.
 
+**Cross-turn deltas (invisible).** Within a session the evidence overlaps turn to turn, so `verify_context` also returns an `aicx_delta`: a patch against the project's previous bytecode that re-sends only the evidence that changed (the unchanged dictionary values are reused, not retransmitted). It's computed automatically per project and is safe — an exact-dictionary rebuild keeps the checksum valid, and a base mismatch falls back to the full bytecode.
+
 ```bash
 $ opencontext bytecode compile --query "fix auth bug"
 

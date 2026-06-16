@@ -91,6 +91,11 @@ class VerifiedContextResult(BaseModel):
         default=None,
         description="AICX bytecode compact dict for transport (lazy, no content inlined).",
     )
+    aicx_delta: dict[str, Any] | None = Field(
+        default=None,
+        description="Cross-turn AICX delta vs the project's previous bytecode "
+        "(omits unchanged evidence). Use instead of `aicx` when present.",
+    )
 
 
 class EvidenceRequest(BaseModel):

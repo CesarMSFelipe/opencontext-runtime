@@ -482,6 +482,40 @@ class OpenContextRuntime:
             aicx=aicx,
         )
 
+    def _compile_aicx_for_transport(
+        self, plan: EvidencePlan
+    ) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+        """Compile AICX bytecode for transport, plus a cross-turn delta.
+
+        Returns ``(compact, delta)``. The delta diffs against the project's
+        previous bytecode (cache por proyecto) so unchanged evidence is not
+        re-sent; the new bytecode is persisted as the next base. Entirely
+        best-effort: AICX is an optional side-channel, so any failure yields
+        ``(compact_or_None, None)`` and never blocks verification.
+        """
+        try:
+            from opencontext_core.context.bytecode import AICXCompiler, AICXRenderer
+
+            bc = AICXCompiler().compile(plan)
+        except Exception:
+            return None, None
+        compact = AICXRenderer().render_compact(bc)
+        delta: dict[str, object] | None = None
+        try:
+            from opencontext_core.context.bytecode.delta import diff_bytecode
+            from opencontext_core.context.bytecode.session_cache import (
+                load_last_bytecode,
+                save_last_bytecode,
+            )
+
+            prev = load_last_bytecode(self.storage_path)
+            if prev is not None:
+                delta = diff_bytecode(prev, bc).model_dump(mode="json")
+            save_last_bytecode(self.storage_path, bc)
+        except Exception:
+            delta = None
+        return compact, delta
+
     def verify_context(self, request: VerifiedContextRequest) -> VerifiedContextResult:
         """Build one-shot verified context with local evidence, gates, risk, and trace."""
 
@@ -559,13 +593,7 @@ class OpenContextRuntime:
         trust_decision = plan.trust_decision
         if any(not gate.passed for gate in gates):
             trust_decision = TrustDecision(status="insufficient", reason="verification gate failed")
-        _aicx_compact = None
-        try:
-            from opencontext_core.context.bytecode import AICXCompiler, AICXRenderer
-
-            _aicx_compact = AICXRenderer().render_compact(AICXCompiler().compile(plan))
-        except Exception:
-            pass
+        _aicx_compact, _aicx_delta = self._compile_aicx_for_transport(plan)
 
         # Auto-improvement feed (non-blocking): record this verification's outcome so
         # the learning subsystem can observe gate failures / token spend. A learning
@@ -595,6 +623,7 @@ class OpenContextRuntime:
             token_usage=trace.token_estimates,
             omitted_sources=[*omitted_sources, *plan.omissions],
             aicx=_aicx_compact,
+            aicx_delta=_aicx_delta,
         )
 
     def _load_verified_memory(self, request: VerifiedContextRequest) -> list[EvidenceItem]:
