@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencontext-profiles"
-version = "1.0.1"
+version = "1.1.0"
 description = "First-party technology profiles for OpenContext Runtime"
 readme = "README.md"
 requires-python = ">=3.12"

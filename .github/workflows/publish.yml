@@ -62,3 +62,6 @@ jobs:
         with:
           packages-dir: ${{ matrix.path }}/dist/
           print-hash: true
+          # Idempotent: if a release partially published (some packages up, some
+          # failed) and is re-run, don't fail on versions already on PyPI.
+          skip-existing: true
