@@ -143,12 +143,44 @@ class HarnessRunner:
             from opencontext_core.agents.executor import build_phase_executor
 
             gateway, provider, model = self._resolve_gateway()
-            return build_phase_executor(gateway, provider=provider, model=model)
+            return build_phase_executor(
+                gateway, provider=provider, model=model, phase_models=self._phase_model_map()
+            )
         except Exception:
             # Executor wiring is opt-in/best-effort: never break a run because a
             # gateway could not be constructed. Phases fall back to honest
             # planned/executor-absent reporting.
             return None
+
+    def _phase_model_map(self) -> dict[str, str]:
+        """Per-phase model overrides from the active SDD profile (empty if none).
+
+        Reads the profile name from this run root's SDD context, looks up the
+        profile's per-phase model assignments, and drops ``default`` sentinels so
+        only real overrides reach the executor. Best-effort: any failure yields no
+        overrides, leaving every phase on the configured default model.
+        """
+        try:
+            import json
+
+            context = self.root / ".opencontext" / "sdd" / "context.json"
+            if not context.exists():
+                return {}
+            name = json.loads(context.read_text(encoding="utf-8")).get("sdd_model_profile")
+            if not name:
+                return {}
+            from opencontext_core.sdd_profiles import SDDProfileManager
+
+            profile = SDDProfileManager().get_profile(name)
+            if profile is None:
+                return {}
+            return {
+                phase: model
+                for phase, model in profile.model_assignments.items()
+                if model and model != "default"
+            }
+        except Exception:
+            return {}
 
     def _resolve_gateway(self) -> tuple[Any, str, str]:
         """Resolve (gateway, provider, model) for the work-producing executor.

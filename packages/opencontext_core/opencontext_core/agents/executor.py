@@ -68,17 +68,26 @@ def build_phase_executor(
     *,
     provider: str,
     model: str,
+    phase_models: dict[str, str] | None = None,
 ) -> SubAgentDelegate | None:
     """Build a delegate that runs work-producing phases through ``gateway``.
 
     Returns ``None`` when no real model is available — i.e. ``gateway`` is
     ``None`` or ``provider`` is ``"mock"`` — so the harness falls back to its
     honest planned/executor-absent path rather than faking a successful artifact.
+
+    ``phase_models`` optionally overrides the model per phase (from the active SDD
+    profile), so exploration can run a cheap model and design a strong one. A
+    phase with no override — or the ``default`` sentinel — uses ``model``.
     """
     if gateway is None or provider == "mock":
         return None
 
+    overrides = phase_models or {}
     delegate = SubAgentDelegate(mode=DelegationMode.LOCAL)
     for phase in WORK_PRODUCING_PHASES:
-        delegate.register_handler(phase, _phase_handler(gateway, phase, provider, model))
+        chosen = overrides.get(phase) or model
+        if chosen == "default":
+            chosen = model
+        delegate.register_handler(phase, _phase_handler(gateway, phase, provider, chosen))
     return delegate
