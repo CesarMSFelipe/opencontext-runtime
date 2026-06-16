@@ -611,6 +611,18 @@ def _build_parser() -> argparse.ArgumentParser:
     contextbench_parser.add_argument("--root", default=".", help="Project root to benchmark.")
     contextbench_parser.add_argument("--max-tokens", type=int, default=6000)
     contextbench_parser.add_argument("--min-token-reduction", type=float, default=0.5)
+    recall_parser = eval_subparsers.add_parser(
+        "recall",
+        help="Run the real retriever on labeled tasks; measure recall/tokens/latency.",
+    )
+    recall_parser.add_argument(
+        "path",
+        nargs="?",
+        default="examples/evals/recall.yaml",
+        help="YAML of labeled tasks: id, query, relevant_files.",
+    )
+    recall_parser.add_argument("--root", default=".", help="Project root.")
+    recall_parser.add_argument("--json", action="store_true", help="Emit JSON.")
     workflows_parser = subparsers.add_parser("workflows", help=argparse.SUPPRESS)
     workflows_sub = workflows_parser.add_subparsers(dest="workflows_command", required=True)
     workflows_sub.add_parser("list", help="List local workflow packs.")
@@ -1267,14 +1279,17 @@ def _dispatch(args: argparse.Namespace) -> None:
             getattr(args, "format", "summary"),
         )
     elif command == "eval":
-        _eval(
-            runtime,
-            args.eval_command,
-            getattr(args, "path", None),
-            getattr(args, "root", "."),
-            getattr(args, "max_tokens", 6000),
-            getattr(args, "min_token_reduction", 0.5),
-        )
+        if args.eval_command == "recall":
+            _eval_recall(runtime, args.path, args.root, getattr(args, "json", False))
+        else:
+            _eval(
+                runtime,
+                args.eval_command,
+                getattr(args, "path", None),
+                getattr(args, "root", "."),
+                getattr(args, "max_tokens", 6000),
+                getattr(args, "min_token_reduction", 0.5),
+            )
     elif command == "doctor":
         _doctor(runtime, args.scope, args.suggest_ignore, getattr(args, "json", False))
     elif command == "clean":
@@ -3337,6 +3352,48 @@ def _trace(
         print(json.dumps(summary, indent=2))
     else:
         print(_render_data(summary, output_format))
+
+
+def _eval_recall(runtime: OpenContextRuntime, path: str, root: str, json_output: bool) -> None:
+    """Run the real retriever over labeled tasks and report recall/tokens/latency."""
+    import yaml
+
+    from opencontext_core.evaluation.recall_eval import (
+        RecallTask,
+        format_recall_report,
+        run_recall_eval,
+    )
+
+    tasks_file = Path(path)
+    if not tasks_file.exists():
+        raise OpenContextError(
+            f"No labeled-task file at {tasks_file}. Provide a YAML of "
+            "{id, query, relevant_files}."
+        )
+    raw = yaml.safe_load(tasks_file.read_text(encoding="utf-8")) or []
+    tasks = [
+        RecallTask(id=t["id"], query=t["query"], relevant_files=list(t.get("relevant_files", [])))
+        for t in raw
+    ]
+    root_path = Path(root)
+    runtime.index_project(root_path)
+    report = run_recall_eval(runtime, tasks, root_path)
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "median_recall": report.median_recall,
+                    "median_precision": report.median_precision,
+                    "median_token_ratio": report.median_token_ratio,
+                    "latency_p50_ms": report.latency_p(50),
+                    "latency_p95_ms": report.latency_p(95),
+                    "results": [vars(r) for r in report.results],
+                },
+                indent=2,
+            )
+        )
+    else:
+        print(format_recall_report(report))
 
 
 def _eval(

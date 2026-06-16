@@ -1,0 +1,26 @@
+# Labeled retrieval tasks for `opencontext eval recall`.
+# Each task: a real query + the files a human says are needed to do it.
+# The harness runs the REAL retriever and measures how many it actually found,
+# at what token cost (vs the directory baseline) and latency — honest numbers.
+- id: memory-fts-recall
+  query: fix memory search so non-adjacent query terms still match
+  relevant_files:
+    - packages/opencontext_core/opencontext_core/memory/backends.py
+- id: per-phase-model
+  query: route a different model per SDD phase from the active profile
+  relevant_files:
+    - packages/opencontext_core/opencontext_core/agents/executor.py
+    - packages/opencontext_core/opencontext_core/harness/runner.py
+- id: impact-risk
+  query: what risk level does changing a symbol report and how is it computed
+  relevant_files:
+    - packages/opencontext_core/opencontext_core/indexing/impact_analysis.py
+- id: agent-personas
+  query: where are the OC Orchestrator Professor and Reviewer personas defined
+  relevant_files:
+    - packages/opencontext_core/opencontext_core/personas.py
+- id: ignore-files
+  query: generate per-agent ignore files to keep secrets out of agent context
+  relevant_files:
+    - packages/opencontext_core/opencontext_core/configurator/service.py
+    - packages/opencontext_core/opencontext_core/configurator/constants.py
