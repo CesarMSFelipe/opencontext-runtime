@@ -69,19 +69,21 @@ def handle_loop(args: argparse.Namespace, config=None) -> int:
 
     phases = FLOWS.get(flow) or FLOWS["full"]
 
-    # hardcoded default storage path — matches runtime default
-    manifest_path = root / ".storage" / "opencontext" / "project_manifest.json"
-    if not manifest_path.exists():
-        print("No index found. Run 'opencontext index .' first, then retry.")
-        return 1
-
     _print_header(task, flow, compress_mode)
 
+    # A dry run only previews the static phase list, so it must work WITHOUT an
+    # index — it's the first thing a new user runs to see what the loop does.
     if dry_run:
         print("\nDry run — phases that would execute:")
         for p in phases:
             print(f"  - {p.upper()}")
         return 0
+
+    # Real runs need the index. Hardcoded default storage path matches the runtime.
+    manifest_path = root / ".storage" / "opencontext" / "project_manifest.json"
+    if not manifest_path.exists():
+        print("No index found. Run 'opencontext index .' first, then retry.")
+        return 1
 
     # Build compressor for output
     try:
