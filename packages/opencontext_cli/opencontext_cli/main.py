@@ -193,6 +193,18 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nOperation cancelled.")
         raise SystemExit(130) from None
+    except Exception as exc:
+        # A raw traceback is a terrible first impression. Show a friendly,
+        # actionable message; OPENCONTEXT_DEBUG=1 restores the full traceback.
+        if os.environ.get("OPENCONTEXT_DEBUG"):
+            raise
+        print(f"Unexpected error: {exc}", file=sys.stderr)
+        print(
+            "  Run 'opencontext doctor' to check your setup, or re-run with "
+            "OPENCONTEXT_DEBUG=1 for the full traceback.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from exc
 
 
 def _print_suggestion(command: str) -> None:
@@ -207,6 +219,8 @@ def _print_suggestion(command: str) -> None:
         print("Try: opencontext install")
     elif command == "doctor":
         print("Try: opencontext install")
+    elif command in ("explain", "demo", "verified-context"):
+        print("Try: opencontext index . first, then re-run.")
     else:
         print("Run 'opencontext --help' for usage information.")
 
