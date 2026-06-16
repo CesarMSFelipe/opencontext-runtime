@@ -61,13 +61,15 @@ binary:
 
 CI_VENV ?= .ci-venv
 
-# Reproduce the GitHub `test` job byte-for-byte: a fresh venv with the pinned
-# toolchain (requirements-ci.txt — the same file CI installs) and the same steps,
-# in the same order. If `make ci` is green, the pipeline is green. Requires `uv`.
+# Reproduce the GitHub `test` job byte-for-byte: a fresh venv built with the same
+# tools CI uses (python -m venv + pip), the pinned toolchain (requirements-ci.txt
+# — the same file CI installs), and the same steps in the same order. If `make ci`
+# is green, the pipeline is green.
 ci:
-	uv venv $(CI_VENV)
-	uv pip install --python $(CI_VENV)/bin/python -q -r requirements-ci.txt
-	uv pip install --python $(CI_VENV)/bin/python -q \
+	$(PYTHON) -m venv $(CI_VENV)
+	$(CI_VENV)/bin/python -m pip install -q --upgrade pip
+	$(CI_VENV)/bin/python -m pip install -q -r requirements-ci.txt
+	$(CI_VENV)/bin/python -m pip install -q \
 		-e packages/opencontext_core \
 		-e packages/opencontext_profiles \
 		-e packages/opencontext_providers \
