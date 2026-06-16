@@ -24,9 +24,9 @@ from opencontext_cli.commands.hints_cmd import add_hints_parser, handle_hints
 from opencontext_cli.commands.kg_cmd import add_kg_parser, handle_kg
 from opencontext_cli.commands.loop_cmd import add_loop_commands, handle_loop
 from opencontext_cli.commands.mutation_cmd import add_mutation_commands, handle_mutation
+from opencontext_cli.commands.persona_cmd import add_persona_parser, handle_persona
 from opencontext_cli.commands.plugin_cmd import add_plugin_parser, handle_plugin
 from opencontext_cli.commands.privacy_cmd import add_privacy_parser, handle_privacy
-from opencontext_cli.commands.persona_cmd import add_persona_parser, handle_persona
 from opencontext_cli.commands.profile_cmd import add_profile_parser, handle_profile
 from opencontext_cli.commands.review_cmd import add_review_parser, handle_review
 from opencontext_cli.commands.routes_cmd import add_routes_parser, handle_routes
