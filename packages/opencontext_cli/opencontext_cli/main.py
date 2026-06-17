@@ -477,7 +477,10 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Overwrite existing agent instruction files.",
     )
-    doctor_parser = subparsers.add_parser("doctor", help="Run deep runtime diagnostics.")
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Deep runtime diagnostics — dependencies, config, providers, token usage.",
+    )
     doctor_parser.add_argument(
         "scope",
         nargs="?",
@@ -672,23 +675,28 @@ def _build_parser() -> argparse.ArgumentParser:
         token_parser.add_argument("--limit", type=int, default=10)
         token_parser.add_argument("--output", default=None)
 
+    # ── Context & Analysis ────────────────────────────────────────────
+    add_demo_parser(subparsers)
+    add_loop_commands(subparsers)
+    add_explain_parser(subparsers)
     add_kg_parser(subparsers)
-    add_benchmark_parser(subparsers)
-    add_skill_parser(subparsers)
+    # ── Config, Plugins & Stack ───────────────────────────────────────
     add_config_parser(subparsers)
     add_plugin_parser(subparsers)
     add_setup_parser(subparsers)
     add_uninstall_parser(subparsers)
+    add_stack_parser(subparsers)
     add_profile_parser(subparsers)
     add_persona_parser(subparsers)
-    add_stack_parser(subparsers)
-    add_explain_parser(subparsers)
-    add_demo_parser(subparsers)
-    add_privacy_parser(subparsers)
     add_sync_parser(subparsers)
+    # ── Health & Updates ──────────────────────────────────────────────
     add_verify_parser(subparsers)
     add_update_parser(subparsers)
     add_upgrade_parser(subparsers)
+    # ── Advanced ──────────────────────────────────────────────────────
+    add_benchmark_parser(subparsers)
+    add_skill_parser(subparsers)
+    add_privacy_parser(subparsers)
 
     agent_context = subparsers.add_parser(
         "agent-context", help="Emit safe reusable agent context block."
@@ -935,13 +943,19 @@ def _build_parser() -> argparse.ArgumentParser:
     for pin_command in ("pin", "unpin"):
         pin_parser = memory_sub.add_parser(pin_command)
         pin_parser.add_argument("memory_id")
-    memory_harvest = memory_sub.add_parser("harvest", help="Harvest memory candidates from traces.")
+    memory_harvest = memory_sub.add_parser(
+        "collect", help="Collect memory candidates from traces."
+    )
     memory_harvest.add_argument("--from-trace", default="last")
     memory_harvest.add_argument(
         "--yes",
         action="store_true",
         help="Skip approval prompt and store all candidates directly.",
     )
+    # keep harvest as alias so existing scripts don't break
+    memory_harvest_alias = memory_sub.add_parser("harvest", help=argparse.SUPPRESS)
+    memory_harvest_alias.add_argument("--from-trace", default="last")
+    memory_harvest_alias.add_argument("--yes", action="store_true")
     memory_promote = memory_sub.add_parser("promote")
     memory_promote.add_argument("memory_id")
     memory_promote.add_argument("--to", default="system")
@@ -998,7 +1012,6 @@ def _build_parser() -> argparse.ArgumentParser:
     add_telemetry_parser(subparsers)
     add_contract_commands(subparsers)
     add_mutation_commands(subparsers)
-    add_loop_commands(subparsers)
     add_bytecode_commands(subparsers)
 
     # Additive shorthand namespaces. The flat commands keep working; these are
@@ -1747,6 +1760,19 @@ def _index(runtime: OpenContextRuntime, root: str, incremental: bool = False) ->
     print("Manifest: .storage/opencontext/project_manifest.json")
     if incremental:
         print("Incremental mode scaffold active in v0.1.")
+
+    # Auto-verify after index to catch index rot early
+    try:
+        from opencontext_core.doctor.checks import run_doctor
+
+        checks = run_doctor(runtime.config)
+        failed = [c for c in checks if not c.ok]
+        if failed:
+            print(f"\nVerify: {len(failed)} issue(s) detected — run 'opencontext doctor' for details.")
+        else:
+            print(f"Verify: {len(checks)} checks passed.")
+    except Exception:
+        pass
 
 
 def _watch(
@@ -3505,7 +3531,7 @@ def _memory(args: argparse.Namespace) -> None:
         print(f"Unpinned: {item.id}")
         return
     recorder = SessionMemoryRecorder(repo, require_approval=not getattr(args, "yes", False))
-    if command == "harvest":
+    if command in ("collect", "harvest"):
         trace_id = args.from_trace
         if trace_id == "last":
             runtime = _runtime(args.config)

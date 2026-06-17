@@ -62,6 +62,75 @@ class ManifestRetrievalSource:
         ]
 
 
+def _rrf_fuse(
+    ranked_lists: list[list[ContextItem]],
+    *,
+    k: int = 60,
+) -> list[ContextItem]:
+    """Reciprocal Rank Fusion across N ranked lists.
+
+    RRF(d) = sum_r( 1 / (k + rank_r(d)) ) — higher is better.
+    Items not present in a list get no contribution from that list.
+    Preserves the highest score seen across sources on the merged item.
+    """
+    scores: dict[str, float] = {}
+    best_items: dict[str, ContextItem] = {}
+    for ranked in ranked_lists:
+        for rank, item in enumerate(ranked, start=1):
+            scores[item.id] = scores.get(item.id, 0.0) + 1.0 / (k + rank)
+            if item.id not in best_items or item.score > best_items[item.id].score:
+                best_items[item.id] = item
+    return sorted(best_items.values(), key=lambda i: -scores[i.id])
+
+
+class FTSRetrievalSource:
+    """BM25 retrieval backed by SQLite FTS5 nodes_fts index."""
+
+    name = "fts"
+
+    def __init__(self, db_path: str | Path, root: str | Path) -> None:
+        self.db_path = Path(db_path)
+        self.root = Path(root)
+
+    def retrieve(self, query: str, limit: int) -> list[ContextItem]:
+        if not self.db_path.exists():
+            return []
+        from opencontext_core.indexing.graph_db import GraphDatabase
+
+        db = GraphDatabase(self.db_path)
+        rows = db.search_fts(query, limit=limit)
+        db.close()
+        items: list[ContextItem] = []
+        for rank_idx, row in enumerate(rows):
+            # FTS5 rank is negative (lower = better); normalize to [0,1]
+            raw_rank = row.get("rank") or -(rank_idx + 1)
+            score = max(0.01, 1.0 / (1.0 - raw_rank))  # monotonic, bounded
+            file_path = row.get("file_path", "")
+            symbol_path = f"{file_path}:{row.get('line', 0)}"
+            snippet = f"{row.get('kind', '')} {row['name']} in {symbol_path}"
+            if row.get("docstring"):
+                snippet += f"\n{row['docstring'][:200]}"
+            items.append(
+                ContextItem(
+                    id=f"fts:{row['id']}",
+                    content=snippet,
+                    source=symbol_path,
+                    source_type="symbol",
+                    priority=ContextPriority.P1,
+                    tokens=estimate_tokens(snippet),
+                    score=score,
+                    metadata={
+                        "retrieval": {"fts_rank": raw_rank},
+                        "retrieval_rationale": [f"fts_bm25:rank_{rank_idx+1}"],
+                        "symbol_kind": row.get("kind", ""),
+                        "language": row.get("language", ""),
+                        "container": row.get("container", ""),
+                    },
+                )
+            )
+        return items
+
+
 class GraphRetrievalSource:
     """Retrieval source backed by the native SQLite knowledge graph."""
 
@@ -192,6 +261,7 @@ class RetrievalPlanner:
         sources: list[RetrievalSource] = [ManifestRetrievalSource(manifest)]
         if graph_db_path.exists():
             sources.append(GraphRetrievalSource(graph_db_path, manifest.root))
+            sources.append(FTSRetrievalSource(graph_db_path, manifest.root))
 
         embedding = getattr(config, "embedding", None)
         if embedding is not None and getattr(embedding, "enabled", False):
@@ -209,16 +279,26 @@ class RetrievalPlanner:
         if top_k <= 0:
             return []
 
-        candidates: list[ContextItem] = []
+        per_source: list[list[ContextItem]] = []
         self.omissions = []
         for source in self.sources:
             try:
-                candidates.extend(source.retrieve(query, top_k))
+                results = source.retrieve(query, top_k)
+                if results:
+                    per_source.append(results)
             except Exception:
                 if source.name == ManifestRetrievalSource.name:
                     raise
                 self.omissions.append(f"{source.name}_unavailable")
                 continue
+
+        # RRF fusion when multiple sources returned results
+        if len(per_source) > 1:
+            candidates = _rrf_fuse(per_source)
+        elif per_source:
+            candidates = per_source[0]
+        else:
+            candidates = []
 
         deduped = _deduplicate(candidates)
         return _redact_selected(select_diverse(self.rank(deduped, query=query), top_k))
