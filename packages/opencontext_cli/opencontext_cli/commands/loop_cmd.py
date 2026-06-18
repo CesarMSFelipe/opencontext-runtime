@@ -7,10 +7,10 @@ import sys
 from pathlib import Path
 
 FLOWS = {
-    "quick": ["explore", "apply", "verify"],
-    "standard": ["explore", "spec", "design", "apply", "verify"],
-    "full": ["explore", "propose", "spec", "design", "tasks", "apply", "verify", "archive"],
-    "autonomous": None,  # all phases, no user prompts
+    "quick": "quick",
+    "standard": "standard",
+    "full": "sdd",
+    "autonomous": "sdd",
 }
 
 COMPRESSION_MODES = ["terse", "compact", "efficient", "none"]
@@ -67,28 +67,29 @@ def handle_loop(args: argparse.Namespace, config=None) -> int:
     dry_run = getattr(args, "dry_run", False)
     autonomous = flow == "autonomous"
 
-    phases = FLOWS.get(flow) or FLOWS["full"]
+    workflow = FLOWS.get(flow, "sdd")
 
     _print_header(task, flow, compress_mode)
 
-    # A dry run only previews the static phase list, so it must work WITHOUT an
-    # index — it's the first thing a new user runs to see what the loop does.
     if dry_run:
+        try:
+            from opencontext_core.harness.runner import HarnessRunner
+            runner = HarnessRunner(root=root)
+            phases = runner.schedule_phases(workflow)
+        except Exception:
+            phases = []
         print("\nDry run — phases that would execute:")
         for p in phases:
             print(f"  - {p.upper()}")
         return 0
 
-    # Real runs need the index. Hardcoded default storage path matches the runtime.
     manifest_path = root / ".storage" / "opencontext" / "project_manifest.json"
     if not manifest_path.exists():
         print("No index found. Run 'opencontext index .' first, then retry.")
         return 1
 
-    # Build compressor for output
     try:
         from opencontext_core.backends.factory import BackendFactory
-
         compressor = BackendFactory.create_compression_backend(compress_mode)
     except Exception:
         compressor = None
@@ -97,7 +98,7 @@ def handle_loop(args: argparse.Namespace, config=None) -> int:
         if max_rounds > 1:
             print(f"\n-- Round {round_num}/{max_rounds} --")
 
-        success = _run_loop(task, phases, root, config, compressor, autonomous)
+        success = _run_loop(task, workflow, root, config, compressor, autonomous)
         if success:
             break
         if round_num < max_rounds:
@@ -111,7 +112,7 @@ def handle_loop(args: argparse.Namespace, config=None) -> int:
 
 def _run_loop(
     task: str,
-    phases: list[str],
+    workflow: str,
     root: Path,
     config,
     compressor,
@@ -119,35 +120,43 @@ def _run_loop(
 ) -> bool:
     """Execute one loop iteration. Returns True if all phases completed."""
     try:
-        from opencontext_core.harness.models import HarnessRunState
         from opencontext_core.harness.runner import HarnessRunner
     except ImportError as e:
         print(f"Runtime not available: {e}", file=sys.stderr)
         return False
 
-    state = HarnessRunState(task=task, root=root)
-    runner = HarnessRunner(config=config)
+    runner = HarnessRunner(root=root)
 
-    for phase in phases:
-        print(f"\n{phase.upper()}", end="  ", flush=True)
-
-        try:
-            result = runner.run_phase(phase, state)
-        except Exception as e:
-            print(f"error: {e}")
-            return False
-
-        summary = _summarize_phase(result, compressor)
-        print(summary)
-
-        # User checkpoint (not in autonomous mode)
-        if not autonomous and phase not in ("archive",):
-            if not _ask_continue(phase):
+    if not autonomous:
+        phases = runner.schedule_phases(workflow)
+        for phase in phases:
+            print(f"\n{phase.upper()}", end="  ", flush=True)
+            try:
+                result = runner.run(workflow, task, approved_phases={phase} if phase == "apply" else set())
+            except Exception as e:
+                print(f"error: {e}")
+                return False
+            summary = _summarize_result(result, compressor)
+            print(summary)
+            if phase not in ("archive",) and not _ask_continue(phase):
                 print("\nAborted by user.")
                 return False
+        print("\nLoop complete.")
+        return True
 
-    print("\nLoop complete.")
-    return True
+    try:
+        result = runner.run(workflow, task)
+    except Exception as e:
+        print(f"error: {e}", file=sys.stderr)
+        return False
+
+    summary = _summarize_result(result, compressor)
+    print(summary)
+    status = getattr(result, "status", None)
+    passed = status is not None and getattr(status, "value", str(status)) in ("passed", "warning")
+    if passed:
+        print("\nLoop complete.")
+    return passed
 
 
 def _print_header(task: str, flow: str, compress: str) -> None:
@@ -158,7 +167,7 @@ def _print_header(task: str, flow: str, compress: str) -> None:
     print("-" * width)
 
 
-def _summarize_phase(result, compressor) -> str:
+def _summarize_result(result, compressor) -> str:
     """Produce a compressed one-line summary of a phase result."""
     if result is None:
         return "skipped"
