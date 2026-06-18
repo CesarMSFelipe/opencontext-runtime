@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 200" width="720" height="200" role="img" aria-label="Local code graph: indexes files into symbols, imports, call graph, routes, and bridges — fully offline">
+
+  <rect width="720" height="200" rx="14" fill="#0B0F14"/>
+  <rect x="1" y="1" width="718" height="198" rx="13" fill="none" stroke="rgba(0,168,232,0.12)" stroke-width="1"/>
+
+  <!-- Eyebrow -->
+  <text x="360" y="26" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" font-weight="600" fill="#3D4450" letter-spacing="1.2">LOCAL CODE GRAPH  ·  SQLITE + FTS5  ·  FULLY OFFLINE</text>
+
+  <!-- NODE: Files (source) -->
+  <rect x="20" y="50" width="90" height="100" rx="8" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="65" y="80" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="22" fill="#3D4450">📁</text>
+  <text x="65" y="100" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11" font-weight="600" fill="#8B949E">Files</text>
+  <text x="65" y="114" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">py · ts · go</text>
+  <text x="65" y="126" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">rs · java · php</text>
+
+  <!-- Arrow to Symbols -->
+  <line x1="112" y1="100" x2="130" y2="100" stroke="#21262D" stroke-width="1.5"/>
+  <polygon points="130,96 130,104 138,100" fill="#21262D"/>
+
+  <!-- NODE: Symbols -->
+  <rect x="140" y="50" width="100" height="100" rx="8" fill="#111821" stroke="rgba(0,201,167,0.30)" stroke-width="1"/>
+  <text x="190" y="80" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="18" fill="#00C9A7">⬡</text>
+  <text x="190" y="100" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11" font-weight="600" fill="#00C9A7">Symbols</text>
+  <text x="190" y="114" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#8B949E">classes · methods</text>
+  <text x="190" y="126" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#8B949E">functions · types</text>
+
+  <!-- Arrow to Imports -->
+  <line x1="242" y1="84" x2="260" y2="74" stroke="#21262D" stroke-width="1.5"/>
+  <polygon points="257,68 265,72 261,80" fill="#21262D"/>
+
+  <!-- Arrow to Call Graph -->
+  <line x1="242" y1="116" x2="260" y2="126" stroke="#21262D" stroke-width="1.5"/>
+  <polygon points="257,122 265,128 261,136" fill="#21262D"/>
+
+  <!-- NODE: Imports (top branch) -->
+  <rect x="268" y="44" width="110" height="52" rx="8" fill="#111821" stroke="rgba(0,168,232,0.30)" stroke-width="1"/>
+  <text x="323" y="66" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11" font-weight="600" fill="#00A8E8">Imports</text>
+  <text x="323" y="82" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#8B949E">dependency graph</text>
+
+  <!-- NODE: Call Graph (bottom branch) -->
+  <rect x="268" y="104" width="110" height="52" rx="8" fill="#111821" stroke="rgba(132,92,194,0.30)" stroke-width="1"/>
+  <text x="323" y="126" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11" font-weight="600" fill="#845EC2">Call Graph</text>
+  <text x="323" y="142" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#8B949E">who calls what</text>
+
+  <!-- Arrows to Routes -->
+  <line x1="380" y1="70" x2="400" y2="82" stroke="#21262D" stroke-width="1.5"/>
+  <line x1="380" y1="130" x2="400" y2="118" stroke="#21262D" stroke-width="1.5"/>
+  <polygon points="397,112 405,116 401,124" fill="#21262D"/>
+
+  <!-- NODE: Routes -->
+  <rect x="408" y="60" width="110" height="80" rx="8" fill="#111821" stroke="rgba(0,201,167,0.25)" stroke-width="1"/>
+  <text x="463" y="87" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11" font-weight="600" fill="#00C9A7">Routes</text>
+  <text x="463" y="103" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#8B949E">FastAPI · Django</text>
+  <text x="463" y="116" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#8B949E">Flask · Express</text>
+  <text x="463" y="129" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#8B949E">NestJS · more</text>
+
+  <!-- Arrow to Bridges -->
+  <line x1="520" y1="100" x2="538" y2="100" stroke="#21262D" stroke-width="1.5"/>
+  <polygon points="538,96 538,104 546,100" fill="#21262D"/>
+
+  <!-- NODE: Bridges (output) -->
+  <rect x="548" y="60" width="150" height="80" rx="8" fill="#0A1F1A" stroke="rgba(0,201,167,0.40)" stroke-width="1.5"/>
+  <text x="623" y="87" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11" font-weight="600" fill="#00C9A7">Bridges</text>
+  <text x="623" y="103" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#8B949E">cross-language calls</text>
+  <text x="623" y="116" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#8B949E">.py ↔ .ts ↔ .go</text>
+  <text x="623" y="129" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#8B949E">.rs ↔ .java</text>
+
+  <!-- Footer -->
+  <text x="360" y="178" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11" fill="#3D4450">All layers queryable via MCP tools or CLI  ·  index once, query offline forever</text>
+
+</svg>

@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 160" width="720" height="160" role="img" aria-label="SDD 9-phase workflow: explore, propose, spec, design, tasks, apply, verify, review, archive. Quality track adds GGA rules and judgment phases.">
+
+  <rect width="720" height="160" rx="8" fill="#0B0F14"/>
+
+  <text x="36" y="24" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#3D4450" letter-spacing="0.5">SDD WORKFLOW</text>
+
+  <!-- Connector arrows for core flow -->
+  <g stroke="#21262D" stroke-width="1.5" fill="none">
+    <line x1="126" y1="72" x2="132" y2="72"/>
+    <line x1="192" y1="72" x2="198" y2="72"/>
+    <line x1="258" y1="72" x2="264" y2="72"/>
+    <line x1="324" y1="72" x2="330" y2="72"/>
+    <line x1="390" y1="72" x2="396" y2="72"/>
+    <line x1="456" y1="72" x2="462" y2="72"/>
+    <line x1="522" y1="72" x2="528" y2="72"/>
+    <line x1="588" y1="72" x2="594" y2="72"/>
+  </g>
+  <g fill="#21262D">
+    <polygon points="132,68 132,76 140,72"/>
+    <polygon points="198,68 198,76 206,72"/>
+    <polygon points="264,68 264,76 272,72"/>
+    <polygon points="330,68 330,76 338,72"/>
+    <polygon points="396,68 396,76 404,72"/>
+    <polygon points="462,68 462,76 470,72"/>
+    <polygon points="528,68 528,76 536,72"/>
+    <polygon points="594,68 594,76 602,72"/>
+  </g>
+
+  <!-- 1: explore (offline) -->
+  <rect x="66" y="46" width="60" height="52" rx="5" fill="#0D1117" stroke="#00A8E8" stroke-width="1"/>
+  <text x="96" y="68" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#00A8E8">explore</text>
+  <text x="96" y="83" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">offline</text>
+
+  <!-- 2: propose -->
+  <rect x="132" y="46" width="60" height="52" rx="5" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="162" y="72" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">propose</text>
+
+  <!-- 3: spec -->
+  <rect x="198" y="46" width="60" height="52" rx="5" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="228" y="72" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">spec</text>
+
+  <!-- 4: design -->
+  <rect x="264" y="46" width="60" height="52" rx="5" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="294" y="72" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">design</text>
+
+  <!-- 5: tasks -->
+  <rect x="330" y="46" width="60" height="52" rx="5" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="360" y="72" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">tasks</text>
+
+  <!-- 6: apply -->
+  <rect x="396" y="46" width="60" height="52" rx="5" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="426" y="72" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">apply</text>
+
+  <!-- 7: verify (offline) -->
+  <rect x="462" y="46" width="60" height="52" rx="5" fill="#0D1117" stroke="#00A8E8" stroke-width="1"/>
+  <text x="492" y="68" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#00A8E8">verify</text>
+  <text x="492" y="83" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">offline</text>
+
+  <!-- 8: review -->
+  <rect x="528" y="46" width="60" height="52" rx="5" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="558" y="72" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">review</text>
+
+  <!-- 9: archive -->
+  <rect x="594" y="46" width="60" height="52" rx="5" fill="#0A1F1A" stroke="#00C9A7" stroke-width="1"/>
+  <text x="624" y="72" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#00C9A7">archive</text>
+
+  <!-- Quality track branch -->
+  <line x1="492" y1="98" x2="492" y2="116" stroke="#E3B341" stroke-width="1" stroke-dasharray="3 2"/>
+  <line x1="492" y1="116" x2="558" y2="116" stroke="#E3B341" stroke-width="1" stroke-dasharray="3 2"/>
+  <line x1="558" y1="116" x2="606" y2="116" stroke="#E3B341" stroke-width="1" stroke-dasharray="3 2"/>
+
+  <!-- gga box -->
+  <rect x="492" y="108" width="56" height="24" rx="4" fill="#1A1600" stroke="#E3B341" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="520" y="123" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9.5" fill="#E3B341">gga rules</text>
+
+  <!-- judgment box -->
+  <rect x="558" y="108" width="64" height="24" rx="4" fill="#1A1600" stroke="#E3B341" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="590" y="123" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9.5" fill="#E3B341">judgment</text>
+
+  <text x="634" y="123" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">  --flow quality</text>
+
+  <!-- Legend -->
+  <rect x="66" y="140" width="8" height="8" rx="1" fill="#0D1117" stroke="#00A8E8" stroke-width="1"/>
+  <text x="78" y="149" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">works without LLM</text>
+  <rect x="190" y="140" width="8" height="8" rx="1" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="202" y="149" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">requires LLM</text>
+  <rect x="300" y="140" width="8" height="8" rx="1" fill="#1A1600" stroke="#E3B341" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="312" y="149" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">optional quality gates</text>
+
+</svg>

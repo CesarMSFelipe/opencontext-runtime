@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" width="720" height="400" role="img" aria-label="opencontext install wizard: detects stack, configures editor and LLM provider, builds knowledge graph">
+
+  <rect width="720" height="400" rx="10" fill="#0B0F14"/>
+
+  <!-- Title bar -->
+  <rect width="720" height="40" rx="10" fill="#111821"/>
+  <rect y="30" width="720" height="10" fill="#111821"/>
+  <circle cx="24" cy="20" r="6.5" fill="#FF7B72"/>
+  <circle cx="46" cy="20" r="6.5" fill="#E3B341"/>
+  <circle cx="68" cy="20" r="6.5" fill="#00C9A7"/>
+  <text x="360" y="25" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="12" fill="#3D4450">opencontext — ~/projects/my-app</text>
+
+  <g font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace"
+     font-size="13" xml:space="preserve">
+
+    <!-- Shell prompt -->
+    <text x="20" y="62">
+      <tspan fill="#00C9A7">~/projects/my-app</tspan>
+      <tspan fill="#3D4450">  on </tspan>
+      <tspan fill="#00A8E8"> main</tspan>
+      <tspan fill="#00C9A7"> ✓</tspan>
+    </text>
+    <text x="20" y="80">
+      <tspan fill="#00A8E8">❯</tspan>
+      <tspan fill="#E6EDF3"> opencontext install</tspan>
+    </text>
+
+    <!-- Detected stack -->
+    <text x="20" y="104">
+      <tspan fill="#3D4450">  Detected  </tspan>
+      <tspan fill="#00C9A7">Python 3.12</tspan>
+      <tspan fill="#3D4450">  ·  </tspan>
+      <tspan fill="#00C9A7">FastAPI</tspan>
+      <tspan fill="#3D4450">  ·  </tspan>
+      <tspan fill="#00C9A7">pytest</tspan>
+      <tspan fill="#3D4450">  ·  </tspan>
+      <tspan fill="#00C9A7">git</tspan>
+    </text>
+
+  </g>
+
+  <!-- Divider -->
+  <line x1="20" y1="116" x2="700" y2="116" stroke="#21262D" stroke-width="1"/>
+
+  <!-- Question 1: editor -->
+  <g font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="13">
+    <text x="20" y="136">
+      <tspan fill="#00A8E8">?</tspan>
+      <tspan fill="#E6EDF3"> Which editor do you use?</tspan>
+    </text>
+
+    <rect x="20" y="144" width="260" height="22" rx="3" fill="#0D1117" stroke="rgba(0,168,232,0.25)" stroke-width="1"/>
+    <text x="28" y="159">
+      <tspan fill="#00A8E8">❯ </tspan>
+      <tspan fill="#E6EDF3">Claude Code</tspan>
+    </text>
+
+    <text x="28" y="181" fill="#3D4450">  Cursor</text>
+    <text x="28" y="199" fill="#3D4450">  VS Code + Copilot</text>
+    <text x="28" y="217" fill="#3D4450">  Other</text>
+  </g>
+
+  <!-- Divider -->
+  <line x1="20" y1="228" x2="700" y2="228" stroke="#21262D" stroke-width="1"/>
+
+  <!-- Question 2: LLM provider -->
+  <g font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="13">
+    <text x="20" y="248">
+      <tspan fill="#00A8E8">?</tspan>
+      <tspan fill="#E6EDF3"> Configure an LLM provider?</tspan>
+      <tspan fill="#3D4450">  (loop and harness require one)</tspan>
+    </text>
+
+    <rect x="20" y="256" width="300" height="22" rx="3" fill="#0D1117" stroke="rgba(0,168,232,0.25)" stroke-width="1"/>
+    <text x="28" y="271">
+      <tspan fill="#00A8E8">❯ </tspan>
+      <tspan fill="#E6EDF3">Anthropic (Claude)</tspan>
+    </text>
+
+    <text x="28" y="293" fill="#3D4450">  OpenAI</text>
+    <text x="28" y="311" fill="#3D4450">  OpenRouter</text>
+    <text x="28" y="329" fill="#3D4450">  Skip for now</text>
+  </g>
+
+  <!-- Divider -->
+  <line x1="20" y1="340" x2="700" y2="340" stroke="#21262D" stroke-width="1"/>
+
+  <!-- Results -->
+  <g font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="13">
+    <text x="20" y="360" xml:space="preserve">
+      <tspan fill="#3D4450">  Building knowledge graph </tspan><tspan fill="#8B949E">... </tspan><tspan fill="#00C9A7"> done  </tspan><tspan fill="#8B949E">1,247 symbols indexed</tspan>
+    </text>
+    <text x="20" y="378" xml:space="preserve">
+      <tspan fill="#3D4450">  Wiring Claude Code MCP   </tspan><tspan fill="#8B949E">... </tspan><tspan fill="#00C9A7"> done</tspan>
+    </text>
+    <text x="20" y="396">
+      <tspan fill="#00C9A7">  Ready. </tspan>
+      <tspan fill="#E6EDF3"> Run </tspan>
+      <tspan fill="#00A8E8">opencontext demo</tspan>
+      <tspan fill="#E6EDF3"> to see it in action.</tspan>
+    </text>
+  </g>
+
+</svg>

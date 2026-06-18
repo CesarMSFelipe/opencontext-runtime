@@ -1,0 +1,187 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" width="720" height="420" role="img" aria-label="opencontext install wizard animation: stack detection, editor selection, LLM provider, knowledge graph build, ready">
+
+  <!-- Terminal shell -->
+  <rect width="720" height="420" rx="10" fill="#0B0F14"/>
+  <rect width="720" height="40" rx="10" fill="#111821"/>
+  <rect y="30" width="720" height="10" fill="#111821"/>
+  <circle cx="24" cy="20" r="6.5" fill="#FF7B72"/>
+  <circle cx="46" cy="20" r="6.5" fill="#E3B341"/>
+  <circle cx="68" cy="20" r="6.5" fill="#00C9A7"/>
+  <text x="360" y="25" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="12" fill="#3D4450">opencontext — ~/projects/my-app</text>
+
+  <!-- ── LINE 0: shell prompt (0.2s = 2%) ── -->
+  <text x="20" y="62"
+        font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace"
+        font-size="13" opacity="0">
+    <tspan fill="#00C9A7">~/projects/my-app</tspan>
+    <tspan fill="#3D4450">  on </tspan>
+    <tspan fill="#00A8E8"> main</tspan>
+    <tspan fill="#00C9A7"> ✓</tspan>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.02;0.04;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- ── LINE 1: command (0.5s = 5%) ── -->
+  <text x="20" y="80"
+        font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace"
+        font-size="13" opacity="0">
+    <tspan fill="#00A8E8">❯</tspan>
+    <tspan fill="#E6EDF3"> opencontext install</tspan>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.07;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- cursor after command -->
+  <rect x="198" y="68" width="8" height="14" rx="1" fill="#00A8E8" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;0;1;0;1;0;0" keyTimes="0;0.07;0.08;0.09;0.10;0.11;0.12;0.13;1" dur="10s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- ── LINE 2: detected stack (1.4s = 14%) ── -->
+  <text x="20" y="104"
+        font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace"
+        font-size="13" opacity="0">
+    <tspan fill="#3D4450">  Detected  </tspan>
+    <tspan fill="#00C9A7">Python 3.12</tspan>
+    <tspan fill="#3D4450">  ·  </tspan>
+    <tspan fill="#00C9A7">FastAPI</tspan>
+    <tspan fill="#3D4450">  ·  </tspan>
+    <tspan fill="#00C9A7">pytest</tspan>
+    <tspan fill="#3D4450">  ·  </tspan>
+    <tspan fill="#00C9A7">git</tspan>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.14;0.16;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- ── DIVIDER 1 (1.7s = 17%) ── -->
+  <line x1="20" y1="116" x2="700" y2="116" stroke="#21262D" stroke-width="1" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.17;0.19;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </line>
+
+  <!-- ── LINE 3: editor question (2.0s = 20%) ── -->
+  <text x="20" y="136"
+        font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace"
+        font-size="13" opacity="0">
+    <tspan fill="#00A8E8">?</tspan>
+    <tspan fill="#E6EDF3"> Which editor do you use?</tspan>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.20;0.22;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- Claude Code option highlight -->
+  <rect x="20" y="144" width="260" height="22" rx="3" fill="#0D1117" stroke="rgba(0,168,232,0.25)" stroke-width="1" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.24;0.26;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- ── LINE 4: Claude Code selected (2.4s = 24%) ── -->
+  <text x="28" y="159"
+        font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace"
+        font-size="13" opacity="0">
+    <tspan fill="#00A8E8">❯ </tspan>
+    <tspan fill="#E6EDF3">Claude Code</tspan>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.24;0.26;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- other editor options (2.7s = 27%) -->
+  <text x="28" y="181" font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="13" fill="#3D4450" opacity="0">  Cursor<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.27;0.28;0.94;1" dur="10s" repeatCount="indefinite"/></text>
+  <text x="28" y="199" font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="13" fill="#3D4450" opacity="0">  VS Code + Copilot<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.28;0.29;0.94;1" dur="10s" repeatCount="indefinite"/></text>
+  <text x="28" y="217" font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="13" fill="#3D4450" opacity="0">  Other<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.29;0.30;0.94;1" dur="10s" repeatCount="indefinite"/></text>
+
+  <!-- ── DIVIDER 2 (3.4s = 34%) ── -->
+  <line x1="20" y1="228" x2="700" y2="228" stroke="#21262D" stroke-width="1" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.34;0.36;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </line>
+
+  <!-- ── LINE 5: LLM question (3.7s = 37%) ── -->
+  <text x="20" y="248"
+        font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace"
+        font-size="13" opacity="0">
+    <tspan fill="#00A8E8">?</tspan>
+    <tspan fill="#E6EDF3"> Configure an LLM provider?</tspan>
+    <tspan fill="#3D4450">  (loop and harness require one)</tspan>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.37;0.39;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- Anthropic option highlight -->
+  <rect x="20" y="256" width="300" height="22" rx="3" fill="#0D1117" stroke="rgba(0,168,232,0.25)" stroke-width="1" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.41;0.43;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- ── LINE 6: Anthropic selected (4.1s = 41%) ── -->
+  <text x="28" y="271"
+        font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace"
+        font-size="13" opacity="0">
+    <tspan fill="#00A8E8">❯ </tspan>
+    <tspan fill="#E6EDF3">Anthropic (Claude)</tspan>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.41;0.43;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- other LLM options (4.4s = 44%) -->
+  <text x="28" y="293" font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="13" fill="#3D4450" opacity="0">  OpenAI<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.44;0.45;0.94;1" dur="10s" repeatCount="indefinite"/></text>
+  <text x="28" y="311" font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="13" fill="#3D4450" opacity="0">  OpenRouter<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.45;0.46;0.94;1" dur="10s" repeatCount="indefinite"/></text>
+  <text x="28" y="329" font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="13" fill="#3D4450" opacity="0">  Skip for now<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.46;0.47;0.94;1" dur="10s" repeatCount="indefinite"/></text>
+
+  <!-- ── DIVIDER 3 (5.0s = 50%) ── -->
+  <line x1="20" y1="340" x2="700" y2="340" stroke="#21262D" stroke-width="1" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.50;0.52;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </line>
+
+  <!-- ── LINE 7: building KG (5.3s = 53%) ── -->
+  <!-- "Building knowledge graph ..." -->
+  <text x="20" y="360"
+        font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace"
+        font-size="13" opacity="0">
+    <tspan fill="#3D4450">  Building knowledge graph  </tspan>
+    <tspan fill="#8B949E">...</tspan>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.53;0.55;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- Progress bar track (5.3s = 53%) -->
+  <rect x="276" y="350" width="200" height="8" rx="3" fill="#21262D" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.53;0.55;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- Progress bar fill (5.3s → 6.0s = 53% → 60%) -->
+  <rect x="276" y="350" width="0" height="8" rx="3" fill="#00C9A7" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.53;0.55;0.94;1" dur="10s" repeatCount="indefinite"/>
+    <animate attributeName="width" values="0;0;0;200;200;200" keyTimes="0;0.53;0.55;0.60;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- " done  1,247 symbols indexed" appears after progress (6.0s = 60%) -->
+  <text x="484" y="360"
+        font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace"
+        font-size="13" opacity="0">
+    <tspan fill="#00C9A7"> done  </tspan>
+    <tspan fill="#8B949E">1,247 symbols indexed</tspan>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.60;0.62;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- ── LINE 8: wiring MCP (6.5s = 65%) ── -->
+  <text x="20" y="378"
+        font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace"
+        font-size="13" opacity="0">
+    <tspan fill="#3D4450">  Wiring Claude Code MCP   </tspan>
+    <tspan fill="#8B949E">... </tspan>
+    <tspan fill="#00C9A7"> done</tspan>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.65;0.67;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- ── LINE 9: Ready (7.0s = 70%) ── -->
+  <text x="20" y="398"
+        font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace"
+        font-size="13" opacity="0">
+    <tspan fill="#00C9A7">  Ready. </tspan>
+    <tspan fill="#E6EDF3"> Run </tspan>
+    <tspan fill="#00A8E8">opencontext demo</tspan>
+    <tspan fill="#E6EDF3"> to see it in action.</tspan>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.70;0.72;0.94;1" dur="10s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- blinking cursor on ready state (7.5s → end) -->
+  <rect x="20" y="408" width="8" height="2" rx="1" fill="#00A8E8" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;0;1;0;1;0;1;0;1;0;0" keyTimes="0;0.75;0.77;0.79;0.81;0.83;0.85;0.87;0.89;0.91;0.93;0.95;1" dur="10s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- ── FADE OVERLAY (9.4s → 10s) — black curtain between loops ── -->
+  <rect width="720" height="420" rx="10" fill="#0B0F14" opacity="0">
+    <animate attributeName="opacity" values="0;0;0;1;0" keyTimes="0;0.93;0.95;0.98;1" dur="10s" repeatCount="indefinite"/>
+  </rect>
+
+</svg>

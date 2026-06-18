@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 48" width="720" height="48" role="img" aria-label="OpenContext Runtime: offline-first · call-graph traced · deterministic · MCP ready · 1600+ tests">
+
+  <rect width="720" height="48" rx="10" fill="#0D1117"/>
+  <rect x="1" y="1" width="718" height="46" rx="9" fill="none" stroke="rgba(0,201,167,0.18)" stroke-width="1"/>
+
+  <!-- Pill: offline-first -->
+  <rect x="14" y="10" width="112" height="28" rx="6" fill="rgba(0,201,167,0.08)" stroke="rgba(0,201,167,0.30)" stroke-width="1"/>
+  <circle cx="30" cy="24" r="4" fill="#00C9A7"/>
+  <text x="41" y="28" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11.5" font-weight="500" fill="#00C9A7">offline-first</text>
+
+  <!-- divider -->
+  <line x1="138" y1="16" x2="138" y2="32" stroke="#21262D" stroke-width="1"/>
+
+  <!-- Pill: call-graph traced -->
+  <rect x="150" y="10" width="148" height="28" rx="6" fill="rgba(0,168,232,0.08)" stroke="rgba(0,168,232,0.25)" stroke-width="1"/>
+  <circle cx="166" cy="24" r="4" fill="#00A8E8"/>
+  <text x="177" y="28" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11.5" font-weight="500" fill="#00A8E8">call-graph traced</text>
+
+  <!-- divider -->
+  <line x1="310" y1="16" x2="310" y2="32" stroke="#21262D" stroke-width="1"/>
+
+  <!-- Pill: deterministic -->
+  <rect x="322" y="10" width="122" height="28" rx="6" fill="rgba(132,92,194,0.08)" stroke="rgba(132,92,194,0.28)" stroke-width="1"/>
+  <circle cx="338" cy="24" r="4" fill="#845EC2"/>
+  <text x="349" y="28" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11.5" font-weight="500" fill="#845EC2">deterministic</text>
+
+  <!-- divider -->
+  <line x1="456" y1="16" x2="456" y2="32" stroke="#21262D" stroke-width="1"/>
+
+  <!-- Pill: MCP ready -->
+  <rect x="468" y="10" width="96" height="28" rx="6" fill="rgba(0,201,167,0.08)" stroke="rgba(0,201,167,0.22)" stroke-width="1"/>
+  <circle cx="484" cy="24" r="4" fill="#00C9A7"/>
+  <text x="495" y="28" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11.5" font-weight="500" fill="#E6EDF3">MCP ready</text>
+
+  <!-- divider -->
+  <line x1="576" y1="16" x2="576" y2="32" stroke="#21262D" stroke-width="1"/>
+
+  <!-- Pill: 1600+ tests -->
+  <rect x="588" y="10" width="118" height="28" rx="6" fill="rgba(0,201,167,0.05)" stroke="rgba(0,201,167,0.18)" stroke-width="1"/>
+  <text x="604" y="28" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11.5" font-weight="500" fill="#8B949E">1600+ tests </text>
+  <text x="672" y="28" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11.5" font-weight="600" fill="#00C9A7">✓</text>
+
+</svg>

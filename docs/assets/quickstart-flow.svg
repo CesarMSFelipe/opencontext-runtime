@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 104" width="720" height="104" role="img" aria-label="Start in 30 seconds: 01 install, 02 run demo, 03 configure editor, 04 start working">
+
+  <rect width="720" height="104" rx="14" fill="#0B0F14"/>
+  <rect x="1" y="1" width="718" height="102" rx="13" fill="none" stroke="rgba(0,201,167,0.12)" stroke-width="1"/>
+
+  <!-- Step 1 -->
+  <rect x="20" y="20" width="155" height="64" rx="8" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="36" y="46"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="22" font-weight="700" fill="rgba(0,201,167,0.25)">01</text>
+  <text x="36" y="64"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="12" font-weight="600" fill="#E6EDF3">Install</text>
+  <text x="36" y="78"
+        font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
+        font-size="10" fill="#3D4450">pip install opencontext-cli</text>
+
+  <!-- Arrow -->
+  <text x="183" y="56" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="16" fill="#21262D">›</text>
+
+  <!-- Step 2 -->
+  <rect x="196" y="20" width="155" height="64" rx="8" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="212" y="46"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="22" font-weight="700" fill="rgba(0,168,232,0.25)">02</text>
+  <text x="212" y="64"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="12" font-weight="600" fill="#E6EDF3">Run Demo</text>
+  <text x="212" y="78"
+        font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
+        font-size="10" fill="#3D4450">opencontext demo</text>
+
+  <!-- Arrow -->
+  <text x="359" y="56" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="16" fill="#21262D">›</text>
+
+  <!-- Step 3 -->
+  <rect x="372" y="20" width="155" height="64" rx="8" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="388" y="46"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="22" font-weight="700" fill="rgba(132,92,194,0.25)">03</text>
+  <text x="388" y="64"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="12" font-weight="600" fill="#E6EDF3">Configure</text>
+  <text x="388" y="78"
+        font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
+        font-size="10" fill="#3D4450">opencontext install</text>
+
+  <!-- Arrow -->
+  <text x="535" y="56" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="16" fill="#21262D">›</text>
+
+  <!-- Step 4 -->
+  <rect x="548" y="20" width="152" height="64" rx="8" fill="#0A1F1A" stroke="rgba(0,201,167,0.40)" stroke-width="1.5"/>
+  <text x="564" y="46"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="22" font-weight="700" fill="rgba(0,201,167,0.30)">04</text>
+  <text x="564" y="64"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="12" font-weight="600" fill="#00C9A7">Editor Ready  ✓</text>
+  <text x="564" y="78"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#8B949E">MCP wired · graph indexed</text>
+
+</svg>
