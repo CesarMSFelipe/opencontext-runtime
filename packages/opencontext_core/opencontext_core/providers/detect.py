@@ -8,18 +8,18 @@ from dataclasses import dataclass
 
 @dataclass
 class DetectedProvider:
-    name: str        # anthropic | openai | openrouter | ollama | mock
-    api_key: str     # empty string for local/mock
-    model: str       # sensible default for this provider
-    source: str      # env_var | ollama_local | fallback
+    name: str  # anthropic | openai | openrouter | ollama | mock
+    api_key: str  # empty string for local/mock
+    model: str  # sensible default for this provider
+    source: str  # env_var | ollama_local | fallback
 
 
 _ENV_MAP = [
-    ("ANTHROPIC_API_KEY",  "anthropic",  "claude-sonnet-4-6"),
-    ("OPENAI_API_KEY",     "openai",     "gpt-4o"),
+    ("ANTHROPIC_API_KEY", "anthropic", "claude-sonnet-4-6"),
+    ("OPENAI_API_KEY", "openai", "gpt-4o"),
     ("OPENROUTER_API_KEY", "openrouter", "anthropic/claude-sonnet-4-6"),
-    ("GEMINI_API_KEY",     "google",     "gemini-2.0-flash"),
-    ("MISTRAL_API_KEY",    "mistral",    "mistral-large-latest"),
+    ("GEMINI_API_KEY", "google", "gemini-2.0-flash"),
+    ("MISTRAL_API_KEY", "mistral", "mistral-large-latest"),
 ]
 
 
@@ -36,7 +36,8 @@ def detect_provider() -> DetectedProvider:
     # Ollama running locally
     try:
         import urllib.request
-        urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1)  # noqa: S310
+
+        urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1)
         return DetectedProvider(name="ollama", api_key="", model="llama3", source="ollama_local")
     except Exception:
         pass
@@ -44,10 +45,10 @@ def detect_provider() -> DetectedProvider:
     return DetectedProvider(name="mock", api_key="", model="mock", source="fallback")
 
 
-def detect_provider_config() -> dict:
+def detect_provider_config() -> dict[str, str]:
     """Return a minimal provider config dict suitable for patching opencontext.yaml."""
     p = detect_provider()
-    cfg: dict = {"provider": p.name, "model": p.model}
+    cfg: dict[str, str] = {"provider": p.name, "model": p.model}
     if p.api_key:
         cfg["api_key_env"] = _key_for_provider(p.name)
     return cfg

@@ -1,5 +1,8 @@
 """UI string catalog — English and Spanish."""
+
 from __future__ import annotations
+
+from pathlib import Path
 
 _MESSAGES: dict[str, dict[str, str]] = {
     "en": {
@@ -11,10 +14,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         ),
         "install.provider_detected": "Provider: {name} ({model}) — detected from {source}",
         "install.next_steps_title": "Next Steps",
-        "install.step1": "opencontext demo                              # 30-second proof on this repo",
+        "install.step1": "opencontext demo                              # 30-second proof on this repo",  # noqa: E501
         "install.step2": "opencontext pack . --query 'your task' --copy # get verified context",
         "install.step3": "opencontext loop --task 'your task' --flow quick # full agentic run",
-        "phase.no_llm": "Phase '{phase}': no LLM configured — output will be empty. Set a provider to generate real artifacts.",
+        "phase.no_llm": "Phase '{phase}': no LLM configured — output will be empty. Set a provider to generate real artifacts.",  # noqa: E501
         "loop.complete": "Loop complete.",
         "loop.aborted": "Aborted by user.",
         "loop.no_index": "No index found. Run 'opencontext index .' first, then retry.",
@@ -24,7 +27,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "onboarding.welcome": "Welcome to OpenContext. Let's get you set up.",
         "onboarding.language_prompt": "Preferred language / Idioma preferido [en/es]",
         "onboarding.agent_detected": "Detected: {agents}. Configuring...",
-        "onboarding.agent_none": "No supported AI coding tools detected. You can run 'opencontext setup <agent>' later.",
+        "onboarding.agent_none": "No supported AI coding tools detected. You can run 'opencontext setup <agent>' later.",  # noqa: E501
         "onboarding.done": "Done! OpenContext is ready.",
     },
     "es": {
@@ -36,10 +39,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         ),
         "install.provider_detected": "Proveedor: {name} ({model}) — detectado desde {source}",
         "install.next_steps_title": "Próximos pasos",
-        "install.step1": "opencontext demo                              # prueba de 30 segundos en este repo",
+        "install.step1": "opencontext demo                              # prueba de 30 segundos en este repo",  # noqa: E501
         "install.step2": "opencontext pack . --query 'tu tarea' --copy  # contexto verificado",
-        "install.step3": "opencontext loop --task 'tu tarea' --flow quick # ejecución agéntica completa",
-        "phase.no_llm": "Fase '{phase}': sin LLM configurado — el output estará vacío. Configurá un proveedor para generar artefactos reales.",
+        "install.step3": "opencontext loop --task 'tu tarea' --flow quick # ejecución agéntica completa",  # noqa: E501
+        "phase.no_llm": "Fase '{phase}': sin LLM configurado — el output estará vacío. Configurá un proveedor para generar artefactos reales.",  # noqa: E501
         "loop.complete": "Loop completo.",
         "loop.aborted": "Abortado por el usuario.",
         "loop.no_index": "No se encontró índice. Ejecutá 'opencontext index .' primero.",
@@ -49,7 +52,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "onboarding.welcome": "Bienvenido a OpenContext. Vamos a configurarlo.",
         "onboarding.language_prompt": "Preferred language / Idioma preferido [en/es]",
         "onboarding.agent_detected": "Detectado: {agents}. Configurando...",
-        "onboarding.agent_none": "No se detectaron herramientas de IA compatibles. Podés ejecutar 'opencontext setup <agente>' después.",
+        "onboarding.agent_none": "No se detectaron herramientas de IA compatibles. Podés ejecutar 'opencontext setup <agente>' después.",  # noqa: E501
         "onboarding.done": "¡Listo! OpenContext está configurado.",
     },
 }
@@ -69,11 +72,13 @@ def t(key: str, **kwargs: str) -> str:
     return msg.format(**kwargs) if kwargs else msg
 
 
-def load_language_from_config(config_path_or_root) -> None:
+def load_language_from_config(config_path_or_root: str | Path) -> None:
     """Read ui_language from opencontext.yaml and set it globally."""
     from pathlib import Path
+
     try:
         import yaml
+
         root = Path(config_path_or_root)
         yaml_path = root / "opencontext.yaml" if root.is_dir() else root
         if yaml_path.exists():

@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import contextlib
 import os
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator, Protocol
+from typing import Protocol
+
+from opencontext_core.errors import MemoryStoreError
+from opencontext_core.models.project import ProjectManifest
+from opencontext_core.safety.redaction import SinkGuard
 
 
 @contextlib.contextmanager
@@ -46,10 +51,6 @@ def _manifest_write_lock(lock_path: Path) -> Generator[None, None, None]:
         finally:
             with contextlib.suppress(OSError):
                 lock_file.unlink()
-
-from opencontext_core.errors import MemoryStoreError
-from opencontext_core.models.project import ProjectManifest
-from opencontext_core.safety.redaction import SinkGuard
 
 
 class ProjectMemoryStore(Protocol):

@@ -121,7 +121,7 @@ class FTSRetrievalSource:
                     score=score,
                     metadata={
                         "retrieval": {"fts_rank": raw_rank},
-                        "retrieval_rationale": [f"fts_bm25:rank_{rank_idx+1}"],
+                        "retrieval_rationale": [f"fts_bm25:rank_{rank_idx + 1}"],
                         "symbol_kind": row.get("kind", ""),
                         "language": row.get("language", ""),
                         "container": row.get("container", ""),

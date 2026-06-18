@@ -82,7 +82,7 @@ class ModelConfigMap(BaseModel):
     )
     phases: dict[str, ModelProviderConfig] = Field(
         default_factory=dict,
-        description="Per-phase model overrides. Keys: explore, spec, design, tasks, apply, verify, review, archive, judgment. Falls back to default.",
+        description="Per-phase model overrides. Keys: explore, spec, design, tasks, apply, verify, review, archive, judgment. Falls back to default.",  # noqa: E501
     )
 
 
@@ -501,7 +501,9 @@ class MemoryPolicyConfig(BaseModel):
         default="local",
         description="Memory backend provider: 'local' (SQLite) or 'engram'.",
     )
-    harvest_after_run: bool = Field(default=True, description="Harvest memory automatically after each run.")
+    harvest_after_run: bool = Field(
+        default=True, description="Harvest memory automatically after each run."
+    )
     require_approval: bool = Field(default=True, description="Harvested memories require approval.")
     store_raw: bool = Field(default=False, description="Raw memory storage disabled.")
     default_classification: str = Field(default="internal", description="Default memory class.")

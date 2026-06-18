@@ -178,7 +178,7 @@ class SQLiteMemoryBackend:
                             if record.id not in by:
                                 by.append(record.id)
                             conn.execute(
-                                "UPDATE memory_records SET contradicted_by = ?, updated_at = ? WHERE id = ?",
+                                "UPDATE memory_records SET contradicted_by = ?, updated_at = ? WHERE id = ?",  # noqa: E501
                                 (json.dumps(by), now, cid),
                             )
 

@@ -146,7 +146,7 @@ _BUILTIN_REGISTRY: list[dict[str, Any]] = [
     },
     {
         "name": "performance",
-        "description": "Performance profiling and bottleneck detection (planned — not yet published)",
+        "description": "Performance profiling and bottleneck detection (planned — not yet published)",  # noqa: E501
         "author": "OpenContext Team",
         "homepage": "",
         "repository": "",

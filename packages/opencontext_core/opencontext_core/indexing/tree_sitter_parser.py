@@ -673,7 +673,8 @@ class TreeSitterParser:
     def _snippet(self, node: Any, max_chars: int = 400) -> str | None:
         """Return up to max_chars of the node's raw source text for FTS indexing."""
         try:
-            return node.text.decode("utf-8", errors="replace")[:max_chars]
+            text: str = node.text.decode("utf-8", errors="replace")[:max_chars]
+            return text
         except Exception:
             return None
 

@@ -186,6 +186,7 @@ def main() -> None:
     _force_utf8_output()
     try:
         from opencontext_core.i18n import load_language_from_config
+
         load_language_from_config(Path("."))
     except Exception:
         pass
@@ -689,7 +690,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "clarify",
         help="Convert a vague idea into a structured brief before SDD starts.",
     )
-    clarify_parser.add_argument("idea", nargs="?", default="", help="The idea or feature to clarify")
+    clarify_parser.add_argument(
+        "idea", nargs="?", default="", help="The idea or feature to clarify"
+    )
     clarify_parser.add_argument("--output", "-o", default=None, help="Write brief to file")
     add_kg_parser(subparsers)
     # ── Config, Plugins & Stack ───────────────────────────────────────
@@ -712,7 +715,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     skill_reg = subparsers.add_parser("skill-registry", help="Manage the skill registry index.")
     skill_reg_sub = skill_reg.add_subparsers(dest="skill_registry_command")
-    _sr_refresh = skill_reg_sub.add_parser("refresh", help="Scan .skill.md files and rebuild .opencontext/skill-registry.md")
+    _sr_refresh = skill_reg_sub.add_parser(
+        "refresh", help="Scan .skill.md files and rebuild .opencontext/skill-registry.md"
+    )
     _sr_refresh.add_argument("--root", default=".", help="Project root (default: .)")
     _sr_list = skill_reg_sub.add_parser("list", help="List skills in the registry.")
     _sr_list.add_argument("--root", default=".", help="Project root (default: .)")
@@ -963,9 +968,7 @@ def _build_parser() -> argparse.ArgumentParser:
     for pin_command in ("pin", "unpin"):
         pin_parser = memory_sub.add_parser(pin_command)
         pin_parser.add_argument("memory_id")
-    memory_harvest = memory_sub.add_parser(
-        "collect", help="Collect memory candidates from traces."
-    )
+    memory_harvest = memory_sub.add_parser("collect", help="Collect memory candidates from traces.")
     memory_harvest.add_argument("--from-trace", default="last")
     memory_harvest.add_argument(
         "--yes",
@@ -984,7 +987,9 @@ def _build_parser() -> argparse.ArgumentParser:
     memory_demote.add_argument("--to", default="archive")
     memory_sub.add_parser("prune")
     memory_gc = memory_sub.add_parser("gc", help="Garbage-collect expired and superseded memories.")
-    memory_gc.add_argument("--dry-run", action="store_true", help="Show what would be pruned without deleting.")
+    memory_gc.add_argument(
+        "--dry-run", action="store_true", help="Show what would be pruned without deleting."
+    )
     memory_sub.add_parser(
         "maintain",
         help="Sweep all keys: consolidate noisy clusters, then decay stale records.",
@@ -1306,10 +1311,14 @@ def _dispatch(args: argparse.Namespace) -> None:
         _sr_root = Path(getattr(args, "root", "."))
         if _sr_cmd == "list":
             from opencontext_cli.commands.skill_cmd import _handle_list as _sr_list_fn
-            _handle_list_args = type("A", (), {"root": str(_sr_root), "json": getattr(args, "json", False)})()
+
+            _handle_list_args = type(
+                "A", (), {"root": str(_sr_root), "json": getattr(args, "json", False)}
+            )()
             _sr_list_fn(_handle_list_args)
         else:
             from opencontext_core.skills.registry import refresh as _skill_refresh
+
             _sr_out = _skill_refresh(_sr_root)
             print(f"Skill registry written: {_sr_out}")
         return
@@ -1502,8 +1511,8 @@ def _template_config(template: str) -> dict[str, Any]:
 
 def _install_wizard(args: Any, console: Any) -> None:
     """Interactive wizard: language → editor → API key."""
-    from rich.prompt import Prompt, Confirm
     from rich.console import Console as _Console
+    from rich.prompt import Prompt
 
     _c = _Console()
     root = Path(getattr(args, "root", "."))
@@ -1511,6 +1520,7 @@ def _install_wizard(args: Any, console: Any) -> None:
     # Step 1 — Language
     try:
         from opencontext_core.i18n import set_language, t
+
         lang = Prompt.ask(
             t("onboarding.language_prompt"),
             choices=["en", "es"],
@@ -1521,6 +1531,7 @@ def _install_wizard(args: Any, console: Any) -> None:
         cfg_path = root / "opencontext.yaml"
         if cfg_path.exists():
             import yaml as _yaml
+
             cfg = _yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
             cfg["ui_language"] = lang
             cfg_path.write_text(_yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
@@ -1531,18 +1542,20 @@ def _install_wizard(args: Any, console: Any) -> None:
     try:
         from opencontext_core.i18n import t as _t
     except Exception:
-        def _t(k, **kw): return k  # type: ignore[misc]
+
+        def _t(k, **kw):
+            return k  # type: ignore[misc]
 
     _c.print()
     _c.print("[bold]Which AI coding editor do you use?[/bold]")
     _EDITORS = [
-        ("1", "claude-code",    "Claude Code (Anthropic)"),
-        ("2", "cursor",         "Cursor"),
-        ("3", "opencode",       "OpenCode"),
-        ("4", "windsurf",       "Windsurf"),
-        ("5", "codex",          "Codex CLI (OpenAI)"),
+        ("1", "claude-code", "Claude Code (Anthropic)"),
+        ("2", "cursor", "Cursor"),
+        ("3", "opencode", "OpenCode"),
+        ("4", "windsurf", "Windsurf"),
+        ("5", "codex", "Codex CLI (OpenAI)"),
         ("6", "vscode-copilot", "VS Code + Copilot"),
-        ("7", "other",          "Other / I'll configure later"),
+        ("7", "other", "Other / I'll configure later"),
     ]
     for num, _, label in _EDITORS:
         _c.print(f"  {num}. {label}")
@@ -1551,6 +1564,7 @@ def _install_wizard(args: Any, console: Any) -> None:
     if chosen_editor and chosen_editor != "other":
         try:
             import os
+
             os.environ["_OC_WIZARD_EDITOR"] = chosen_editor
         except Exception:
             pass
@@ -1558,28 +1572,34 @@ def _install_wizard(args: Any, console: Any) -> None:
     # Step 3 — API key (only if not already set and editor needs LLM)
     try:
         from opencontext_core.providers.detect import detect_provider
+
         current = detect_provider()
         if current.source == "fallback":
             _c.print()
             _c.print("[bold]No LLM provider detected.[/bold]")
             _c.print("Agentic phases (loop, spec, design) need a real LLM provider.")
             _PROVIDERS = [
-                ("1", "ANTHROPIC_API_KEY",  "Anthropic (Claude)"),
-                ("2", "OPENAI_API_KEY",     "OpenAI (GPT-4)"),
+                ("1", "ANTHROPIC_API_KEY", "Anthropic (Claude)"),
+                ("2", "OPENAI_API_KEY", "OpenAI (GPT-4)"),
                 ("3", "OPENROUTER_API_KEY", "OpenRouter (multi-model)"),
-                ("4", "skip",               "Skip — I'll configure later"),
+                ("4", "skip", "Skip — I'll configure later"),
             ]
             for num, _, label in _PROVIDERS:
                 _c.print(f"  {num}. {label}")
-            pchoice = Prompt.ask("Provider", choices=[n for n, _, _ in _PROVIDERS], default="4", console=_c)
+            pchoice = Prompt.ask(
+                "Provider", choices=[n for n, _, _ in _PROVIDERS], default="4", console=_c
+            )
             pkey = next((env for n, env, _ in _PROVIDERS if n == pchoice), "skip")
             if pkey != "skip":
                 api_key = Prompt.ask(f"Paste your {pkey}", password=True, console=_c)
                 if api_key.strip():
                     import os
+
                     os.environ[pkey] = api_key.strip()
                     _c.print(f"[green]✓[/] {pkey} set for this session.")
-                    _c.print("[dim]To persist it, add it to your shell profile (e.g. ~/.zshrc).[/dim]")
+                    _c.print(
+                        "[dim]To persist it, add it to your shell profile (e.g. ~/.zshrc).[/dim]"
+                    )
     except Exception:
         pass
 
@@ -1587,6 +1607,7 @@ def _install_wizard(args: Any, console: Any) -> None:
 def _print_agent_instructions(agents: list, console: Any) -> None:
     """Print client-specific usage instructions after install."""
     from rich.panel import Panel
+
     _INSTRUCTIONS = {
         "claude-code": (
             "Claude Code ready.\n"
@@ -1610,15 +1631,16 @@ def _print_agent_instructions(agents: list, console: Any) -> None:
             "Run: opencontext pack . --query 'your task' --copy, then paste into Codex."
         ),
         "windsurf": (
-            "Windsurf ready.\n"
-            "OpenContext MCP tools available in Windsurf's Cascade panel."
+            "Windsurf ready.\nOpenContext MCP tools available in Windsurf's Cascade panel."
         ),
     }
     for agent in agents:
         agent_id = agent.value if hasattr(agent, "value") else str(agent)
         msg = _INSTRUCTIONS.get(agent_id)
         if msg:
-            console.print(Panel.fit(msg, title=f"[bold cyan]{agent_id}[/bold cyan]", border_style="cyan"))
+            console.print(
+                Panel.fit(msg, title=f"[bold cyan]{agent_id}[/bold cyan]", border_style="cyan")
+            )
 
 
 def _install(args: argparse.Namespace) -> None:
@@ -1929,7 +1951,9 @@ def _index(runtime: OpenContextRuntime, root: str, incremental: bool = False) ->
         checks = run_doctor(runtime.config)
         failed = [c for c in checks if not c.ok]
         if failed:
-            print(f"\nVerify: {len(failed)} issue(s) detected — run 'opencontext doctor' for details.")
+            print(
+                f"\nVerify: {len(failed)} issue(s) detected — run 'opencontext doctor' for details."
+            )
         else:
             print(f"Verify: {len(checks)} checks passed.")
     except Exception:
@@ -1988,10 +2012,15 @@ def _watch(
         try:
             if changed:
                 stats = rt.reindex_files(changed, project_root)
-                print(f"  Re-indexed {stats.get('files', 0)} file(s) — {stats.get('nodes', 0)} nodes, {stats.get('edges', 0)} edges")
+                print(
+                    f"  Re-indexed {stats.get('files', 0)} file(s)"
+                    f" — {stats.get('nodes', 0)} nodes, {stats.get('edges', 0)} edges"
+                )
             else:
                 manifest = rt.index_project(project_root)
-                print(f"  Full re-index: {len(manifest.files)} files, {len(manifest.symbols)} symbols")
+                print(
+                    f"  Full re-index: {len(manifest.files)} files, {len(manifest.symbols)} symbols"
+                )
         except Exception as exc:
             print(f"  Re-index failed: {exc}", file=sys.stderr)
 
@@ -2082,28 +2111,33 @@ def _onboard(
 
     # i18n — load language from written config
     try:
-        from opencontext_core.i18n import load_language_from_config, t, set_language
-        load_language_from_config(Path(getattr(args, "root", ".")))
+        from opencontext_core.i18n import load_language_from_config, t
+
+        load_language_from_config(Path(root))
     except Exception:
         pass
 
     # Provider detection message
     try:
-        from opencontext_core.providers.detect import detect_provider
         from opencontext_core.i18n import t
+        from opencontext_core.providers.detect import detect_provider
+
         p = detect_provider()
         if p.source == "fallback":
             console.warning(t("install.no_provider"))
         else:
-            console.success(t("install.provider_detected", name=p.name, model=p.model, source=p.source))
+            console.success(
+                t("install.provider_detected", name=p.name, model=p.model, source=p.source)
+            )
     except Exception:
         pass
 
     # Detected agents — show client-specific instructions
     try:
-        from opencontext_core.agent_installer import AgentInstaller, AgentTarget
+        from opencontext_core.agent_installer import AgentInstaller
         from opencontext_core.i18n import t
-        installer = AgentInstaller(project_root=Path(getattr(args, "root", ".")))
+
+        installer = AgentInstaller(project_root=Path(root))
         detected = installer.detect_installed_agents()
         if detected:
             agent_names = ", ".join(a.value for a in detected)
@@ -2117,6 +2151,7 @@ def _onboard(
     console.print("")
     try:
         from opencontext_core.i18n import t
+
         console.section(t("install.next_steps_title"))
         console.print(f"  1. [bold]{t('install.step1')}[/]")
         console.print(f"  2. [bold]{t('install.step2')}[/]")
@@ -2595,7 +2630,7 @@ def _security(
             for f in findings:
                 print(f"  ⚠  {f}")
         for w in warnings:
-            print(f"\n  ℹ  {w}")
+            print(f"\n  i  {w}")
         return
     _unreachable(action)
 
@@ -2979,24 +3014,49 @@ def _harness(
             },
             "full+judgment": {
                 "phases": [
-                    "explore", "propose", "spec", "design", "tasks",
-                    "apply", "verify", "review", "archive", "judgment",
+                    "explore",
+                    "propose",
+                    "spec",
+                    "design",
+                    "tasks",
+                    "apply",
+                    "verify",
+                    "review",
+                    "archive",
+                    "judgment",
                 ],
-                "description": "Full SDD + adversarial judgment review (BLOCKER/SHOULD_FIX/APPROVED)",
+                "description": "Full SDD + adversarial judgment review (BLOCKER/SHOULD_FIX/APPROVED)",  # noqa: E501
             },
             "full+gga": {
                 "phases": [
-                    "explore", "propose", "spec", "design", "tasks",
-                    "apply", "verify", "review", "archive", "gga",
+                    "explore",
+                    "propose",
+                    "spec",
+                    "design",
+                    "tasks",
+                    "apply",
+                    "verify",
+                    "review",
+                    "archive",
+                    "gga",
                 ],
                 "description": "Full SDD + Guardian Angel coding standards enforcement",
             },
             "full+quality": {
                 "phases": [
-                    "explore", "propose", "spec", "design", "tasks",
-                    "apply", "verify", "review", "archive", "gga", "judgment",
+                    "explore",
+                    "propose",
+                    "spec",
+                    "design",
+                    "tasks",
+                    "apply",
+                    "verify",
+                    "review",
+                    "archive",
+                    "gga",
+                    "judgment",
                 ],
-                "description": "Full SDD + GGA rules + adversarial judgment (maximum quality gates)",
+                "description": "Full SDD + GGA rules + adversarial judgment (maximum quality gates)",  # noqa: E501
             },
         }
         if json_output:

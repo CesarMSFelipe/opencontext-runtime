@@ -293,7 +293,9 @@ class OpenContextRuntime:
         except Exception:
             return None
 
-    def reindex_files(self, changed_paths: set[str], root: str | Path | None = None) -> dict[str, int]:
+    def reindex_files(
+        self, changed_paths: set[str], root: str | Path | None = None
+    ) -> dict[str, int]:
         """Incrementally re-index only the changed files.
 
         Called by the watch service after a debounce window. Falls back to a
@@ -302,9 +304,6 @@ class OpenContextRuntime:
         if not self.config.project_index.enabled:
             raise ConfigurationError("Project indexing is disabled by configuration.")
         project_root = Path(root) if root is not None else Path(self.config.project_index.root)
-        if self.knowledge_graph is None:
-            self.index_project(project_root)
-            return {"files": 0, "nodes": 0, "edges": 0, "fallback": 1}
         return self.knowledge_graph.reindex_files(changed_paths, project_root)
 
     def index_project(self, root: str | Path | None = None) -> ProjectManifest:
@@ -329,7 +328,9 @@ class OpenContextRuntime:
             from opencontext_core.indexing.artifact_indexer import index_artifacts
 
             project_root = Path(root).resolve() if root else Path.cwd()
-            index_artifacts(artifacts, project_root, self.knowledge_graph.db, self.config.project.name)
+            index_artifacts(
+                artifacts, project_root, self.knowledge_graph.db, self.config.project.name
+            )
 
         # Async enqueue embeddings if worker enabled
         if self.config.embedding.enabled and self.embedding_worker:

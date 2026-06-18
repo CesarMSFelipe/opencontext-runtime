@@ -1618,54 +1618,66 @@ class JudgmentDayPhase(HarnessPhase):
         for a in apply_artifacts:
             p = Path(a.path)
             if not p.exists():
-                findings.append({
-                    "severity": "BLOCKER",
-                    "artifact": a.id,
-                    "finding": f"Apply artifact missing on disk: {a.path}",
-                })
+                findings.append(
+                    {
+                        "severity": "BLOCKER",
+                        "artifact": a.id,
+                        "finding": f"Apply artifact missing on disk: {a.path}",
+                    }
+                )
                 blocker_count += 1
 
         # Check verify was present
         if not verify_artifacts:
-            findings.append({
-                "severity": "SHOULD_FIX",
-                "artifact": "verify",
-                "finding": "No verify artifacts found — apply was not independently verified.",
-            })
+            findings.append(
+                {
+                    "severity": "SHOULD_FIX",
+                    "artifact": "verify",
+                    "finding": "No verify artifacts found — apply was not independently verified.",
+                }
+            )
             should_fix_count += 1
 
         # Check gate failures from apply + verify
         apply_failed_gates = [
-            g for g in state.gates
+            g
+            for g in state.gates
             if g.phase in ("apply", "verify") and g.status == GateStatus.FAILED
         ]
         for g in apply_failed_gates:
-            findings.append({
-                "severity": "BLOCKER",
-                "artifact": g.id,
-                "finding": f"Gate failed in {g.phase}: {g.message}",
-            })
+            findings.append(
+                {
+                    "severity": "BLOCKER",
+                    "artifact": g.id,
+                    "finding": f"Gate failed in {g.phase}: {g.message}",
+                }
+            )
             blocker_count += 1
 
         # Warnings from state
         for w in state.warnings:
             if any(kw in w.lower() for kw in ("llm", "provider", "delegate", "executor")):
-                findings.append({
-                    "severity": "SHOULD_FIX",
-                    "artifact": "warnings",
-                    "finding": f"LLM/provider warning: {w}",
-                })
+                findings.append(
+                    {
+                        "severity": "SHOULD_FIX",
+                        "artifact": "warnings",
+                        "finding": f"LLM/provider warning: {w}",
+                    }
+                )
                 should_fix_count += 1
 
         if not findings:
-            findings.append({
-                "severity": "APPROVED",
-                "artifact": "all",
-                "finding": "No structural issues found. Human review recommended before merge.",
-            })
+            findings.append(
+                {
+                    "severity": "APPROVED",
+                    "artifact": "all",
+                    "finding": "No structural issues found. Human review recommended before merge.",
+                }
+            )
 
         overall = (
-            "BLOCKER" if blocker_count > 0
+            "BLOCKER"
+            if blocker_count > 0
             else ("SHOULD_FIX" if should_fix_count > 0 else "APPROVED")
         )
 
@@ -1683,7 +1695,8 @@ class JudgmentDayPhase(HarnessPhase):
         report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
         gate_status = (
-            GateStatus.FAILED if overall == "BLOCKER"
+            GateStatus.FAILED
+            if overall == "BLOCKER"
             else (GateStatus.WARNING if overall == "SHOULD_FIX" else GateStatus.PASSED)
         )
         gates: list[PhaseGate] = [
@@ -1691,7 +1704,7 @@ class JudgmentDayPhase(HarnessPhase):
                 id="judgment_overall",
                 phase="judgment",
                 status=gate_status,
-                message=f"Judgment: {overall} ({blocker_count} blockers, {should_fix_count} should-fix)",
+                message=f"Judgment: {overall} ({blocker_count} blockers, {should_fix_count} should-fix)",  # noqa: E501
             ),
             ArtifactPersistedGate().evaluate(report_path),
         ]
@@ -1751,21 +1764,25 @@ class GGARulesPhase(HarnessPhase):
             lines = text.splitlines()
             max_lines = rules.get("max_lines_per_file", 0)
             if max_lines and len(lines) > max_lines:
-                violations.append({
-                    "severity": "SHOULD_FIX",
-                    "file": str(p),
-                    "rule": "max_lines_per_file",
-                    "detail": f"{len(lines)} lines (limit {max_lines})",
-                })
+                violations.append(
+                    {
+                        "severity": "SHOULD_FIX",
+                        "file": str(p),
+                        "rule": "max_lines_per_file",
+                        "detail": f"{len(lines)} lines (limit {max_lines})",
+                    }
+                )
 
             for pattern in rules.get("forbidden_patterns", []):
                 if pattern in text:
-                    violations.append({
-                        "severity": "BLOCKER",
-                        "file": str(p),
-                        "rule": "forbidden_pattern",
-                        "detail": f"Forbidden pattern found: {pattern!r}",
-                    })
+                    violations.append(
+                        {
+                            "severity": "BLOCKER",
+                            "file": str(p),
+                            "rule": "forbidden_pattern",
+                            "detail": f"Forbidden pattern found: {pattern!r}",
+                        }
+                    )
 
         blocker_count = sum(1 for v in violations if v["severity"] == "BLOCKER")
 
@@ -1780,8 +1797,10 @@ class GGARulesPhase(HarnessPhase):
         report_path = run_dir / "gga.json"
         report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
-        gate_status = GateStatus.FAILED if blocker_count > 0 else (
-            GateStatus.WARNING if violations else GateStatus.PASSED
+        gate_status = (
+            GateStatus.FAILED
+            if blocker_count > 0
+            else (GateStatus.WARNING if violations else GateStatus.PASSED)
         )
         gates: list[PhaseGate] = [
             PhaseGate(
@@ -1825,8 +1844,10 @@ class GGARulesPhase(HarnessPhase):
             return {}
         try:
             import importlib.util
+
             if importlib.util.find_spec("yaml") is not None:
-                import yaml  # type: ignore[import-untyped]
+                import yaml  # type: ignore[import-untyped,unused-ignore]
+
                 data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
                 return data if isinstance(data, dict) else {}
         except Exception:

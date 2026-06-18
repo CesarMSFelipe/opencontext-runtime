@@ -477,6 +477,7 @@ class InstallationManager:
             # Auto-detect ambient provider from environment
             try:
                 from opencontext_core.providers.detect import detect_provider
+
                 detected = detect_provider()
                 if detected.source != "fallback":
                     models = config_data.setdefault("models", {})

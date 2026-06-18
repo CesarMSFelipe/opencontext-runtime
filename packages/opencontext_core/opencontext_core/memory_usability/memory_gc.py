@@ -26,8 +26,10 @@ class MemoryGarbageCollector:
         """Run safe local garbage collection."""
 
         if dry_run:
-            from opencontext_core.compat import UTC
             from datetime import datetime
+
+            from opencontext_core.compat import UTC
+
             now = datetime.now(tz=UTC)
             candidates = [
                 item.id

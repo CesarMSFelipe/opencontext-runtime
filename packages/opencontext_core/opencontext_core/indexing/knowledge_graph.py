@@ -265,6 +265,8 @@ class KnowledgeGraph:
             total_nodes += stats["nodes"]
             total_edges += stats["edges"]
 
+        self.db.rebuild_fts()
+
         # Pass 2: resolve cross-file edges using the complete global node map
         cross_edges = self._resolve_cross_file_edges(file_contents)
         if cross_edges:

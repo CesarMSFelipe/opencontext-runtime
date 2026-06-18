@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from dataclasses import dataclass as _dc
+from dataclasses import field as _field
 from pathlib import Path
 from typing import Any
 
@@ -241,7 +243,8 @@ def render_registry_markdown(registry: list[SkillEntry]) -> str:
 # These coexist with the old SKILL.md/frontmatter API above.
 # ---------------------------------------------------------------------------
 
-def _parse_dotskill_file(path: Path) -> "SkillEntryV2 | None":
+
+def _parse_dotskill_file(path: Path) -> SkillEntryV2 | None:
     """Parse a .skill.md file (new format, no YAML frontmatter)."""
     try:
         text = path.read_text(encoding="utf-8")
@@ -266,10 +269,27 @@ def _parse_dotskill_file(path: Path) -> "SkillEntryV2 | None":
     trigger_text = trigger_section.group(1) if trigger_section else text
 
     exts = re.findall(r"`(\.\w+)`", trigger_text)
-    stop = {"when", "file", "test", "code", "task", "this", "that", "with", "from",
-            "skill", "trigger", "workflow", "step", "rule"}
-    kws = [w.lower() for w in re.findall(r"\b([A-Za-z][a-z]{3,}(?:JS|js|Py|py)?)\b", trigger_text)
-           if w.lower() not in stop]
+    stop = {
+        "when",
+        "file",
+        "test",
+        "code",
+        "task",
+        "this",
+        "that",
+        "with",
+        "from",
+        "skill",
+        "trigger",
+        "workflow",
+        "step",
+        "rule",
+    }
+    kws = [
+        w.lower()
+        for w in re.findall(r"\b([A-Za-z][a-z]{3,}(?:JS|js|Py|py)?)\b", trigger_text)
+        if w.lower() not in stop
+    ]
 
     return SkillEntryV2(
         name=name,
@@ -278,9 +298,6 @@ def _parse_dotskill_file(path: Path) -> "SkillEntryV2 | None":
         triggers_ext=list(dict.fromkeys(exts)),
         triggers_kw=list(dict.fromkeys(kws[:10])),
     )
-
-
-from dataclasses import dataclass as _dc, field as _field
 
 
 @_dc
@@ -346,10 +363,10 @@ def refresh(project_root: Path, force: bool = False) -> Path:
 
 
 def match_skills(
-    entries: "list[SkillEntryV2]",
+    entries: list[SkillEntryV2],
     file_paths: list[str],
     keywords: list[str],
-) -> "list[SkillEntryV2]":
+) -> list[SkillEntryV2]:
     """Return v2 skill entries relevant to the given files/keywords."""
     matched: list[SkillEntryV2] = []
     exts = {Path(f).suffix.lower() for f in file_paths}

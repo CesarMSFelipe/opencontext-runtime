@@ -500,34 +500,38 @@ class HarnessRunner:
         ]
         # Memory harvest — auto-approve low-stakes candidates
         try:
+            from opencontext_core.memory.collector import MemoryCandidateExtractor  # type: ignore[import-not-found]
             from opencontext_core.memory_usability.context_repository import ContextRepository
-            from opencontext_core.memory_usability.memory_gc import MemoryGarbageCollector  # noqa: F401
-            from opencontext_core.memory.collector import MemoryCandidateExtractor
+            from opencontext_core.memory_usability.memory_gc import (
+                MemoryGarbageCollector,  # noqa: F401
+            )
 
             repo = ContextRepository(state.root / ".storage" / "opencontext" / "memory")
             extractor = MemoryCandidateExtractor()
             candidates = extractor.extract_from_run(state.run_id, state.root)
             for candidate in candidates:
                 if getattr(candidate, "auto_approve", False):
-                    repo.save(candidate)
+                    repo.save(candidate)  # type: ignore[attr-defined]
         except Exception:
             pass
 
         # Graph re-index of changed files only
         if changed:
             try:
-                from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
                 from opencontext_core.indexing.graph_db import GraphDatabase
+                from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 
                 db_path = state.root / ".storage" / "opencontext" / "knowledge_graph.db"
                 if db_path.exists():
                     db = GraphDatabase(db_path)
-                    kg = KnowledgeGraph(db)
+                    kg = KnowledgeGraph(db)  # type: ignore[arg-type]
                     for path in changed:
                         full = state.root / path
                         if full.exists() and full.suffix == ".py":
                             try:
-                                kg.index_file(path, full.read_text(encoding="utf-8", errors="ignore"))
+                                kg.index_file(
+                                    path, full.read_text(encoding="utf-8", errors="ignore")
+                                )
                             except Exception:
                                 pass
                     db.close()

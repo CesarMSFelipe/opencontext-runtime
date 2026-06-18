@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from opencontext_core.config import ContextArtifact
-    from opencontext_core.indexing.graph_db import GraphDatabase, Node
+    from opencontext_core.indexing.graph_db import GraphDatabase
 
 _SNIPPET_CHARS = 800
 

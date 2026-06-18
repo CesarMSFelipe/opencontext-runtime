@@ -77,6 +77,7 @@ def handle_loop(args: argparse.Namespace, config=None) -> int:
     if dry_run:
         try:
             from opencontext_core.harness.runner import HarnessRunner
+
             runner = HarnessRunner(root=root)
             phases = runner.schedule_phases(workflow)
         except Exception:
@@ -93,6 +94,7 @@ def handle_loop(args: argparse.Namespace, config=None) -> int:
 
     try:
         from opencontext_core.backends.factory import BackendFactory
+
         compressor = BackendFactory.create_compression_backend(compress_mode)
     except Exception:
         compressor = None
@@ -185,10 +187,16 @@ def _print_run_summary(result) -> None:
         budget = getattr(ledger, "budget_tokens", 0)
         phase_artifacts = artifacts_by_phase.get(phase, [])
         phase_gates = gates_by_phase.get(phase, [])
-        failed_gates = [g for g in phase_gates if getattr(g, "status", None) and g.status.value == "failed"]
-        warn_gates = [g for g in phase_gates if getattr(g, "status", None) and g.status.value == "warning"]
+        failed_gates = [
+            g for g in phase_gates if getattr(g, "status", None) and g.status.value == "failed"
+        ]
+        warn_gates = [
+            g for g in phase_gates if getattr(g, "status", None) and g.status.value == "warning"
+        ]
 
-        phase_status = "✓" if not failed_gates and not warn_gates else ("⚠" if not failed_gates else "✗")
+        phase_status = (
+            "✓" if not failed_gates and not warn_gates else ("⚠" if not failed_gates else "✗")
+        )
         parts = [f"  {phase_status} {phase.upper():<12}  {used}/{budget} tokens"]
         if phase_artifacts:
             kinds = ", ".join(getattr(a, "kind", "artifact") for a in phase_artifacts[:3])
@@ -201,7 +209,13 @@ def _print_run_summary(result) -> None:
 
     # LLM-absent warnings surfaced directly to user
     for w in warnings:
-        if "LLM" in w or "provider" in w or "delegate" in w or "executor" in w or "planned" in w.lower():
+        if (
+            "LLM" in w
+            or "provider" in w
+            or "delegate" in w
+            or "executor" in w
+            or "planned" in w.lower()
+        ):
             print(f"\n  ⚠  {w}")
 
     print(f"\n  Status: {status_str}  |  {len(artifacts)} artifact(s)  |  {len(gates)} gate(s)")

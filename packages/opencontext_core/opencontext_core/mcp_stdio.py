@@ -174,7 +174,7 @@ class MCPServer:
                     "summarize": {
                         "type": "boolean",
                         "default": False,
-                        "description": "Return directory-level summaries (file count, symbol count) instead of individual files. Reduces token usage on large repos.",
+                        "description": "Return directory-level summaries (file count, symbol count) instead of individual files. Reduces token usage on large repos.",  # noqa: E501
                     },
                 },
             },
@@ -581,7 +581,10 @@ class MCPServer:
                 if dir_key in dirs:
                     dirs[dir_key]["symbols"] += sym_row[1]
             result = [
-                {**{k: v for k, v in d.items() if k != "languages"}, "languages": sorted(d["languages"])}
+                {
+                    **{k: v for k, v in d.items() if k != "languages"},
+                    "languages": sorted(d["languages"]),
+                }
                 for d in dirs.values()
             ]
             return {"directories": sorted(result, key=lambda x: x["dir"])}

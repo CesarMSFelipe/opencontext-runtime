@@ -30,7 +30,8 @@ def scan_project(root: str | Path = ".") -> SecurityScanResult:
     config_path = project_root / "opencontext.yaml"
     if config_path.exists():
         try:
-            import yaml  # type: ignore[import-untyped]
+            import yaml  # type: ignore[import-untyped,unused-ignore]
+
             data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
             extra = (data.get("project_index") or {}).get("ignore") or []
             ignore = list(dict.fromkeys([*ignore, *extra]))

@@ -21,7 +21,9 @@ def add_skill_parser(subparsers: Any) -> None:
     skill_parser = subparsers.add_parser("skill", help="Manage AI skills.")
     skill_sub = skill_parser.add_subparsers(dest="skill_command", required=True)
 
-    list_parser = skill_sub.add_parser("list", help="List available skills from registry and agent skill dirs.")
+    list_parser = skill_sub.add_parser(
+        "list", help="List available skills from registry and agent skill dirs."
+    )
     list_parser.add_argument("--root", default=".", help="Project root.")
     list_parser.add_argument("--json", action="store_true", help="JSON output.")
 
@@ -82,7 +84,14 @@ def _handle_list(args: Any) -> None:
         for skill_file in sorted(agent_skills_dir.glob("*.md")):
             name = skill_file.stem
             if not any(s["name"] == name for s in skills):
-                skills.append({"name": name, "source": "agent-local", "path": str(skill_file), "description": ""})
+                skills.append(
+                    {
+                        "name": name,
+                        "source": "agent-local",
+                        "path": str(skill_file),
+                        "description": "",
+                    }
+                )
 
     if json_out:
         print(_json.dumps(skills, indent=2))
@@ -93,7 +102,9 @@ def _handle_list(args: Any) -> None:
         return
 
     console.header(f"Skills ({len(skills)})")
-    rows = [[s.get("name", "?"), s.get("source", "?"), s.get("description", "")[:60]] for s in skills]
+    rows = [
+        [s.get("name", "?"), s.get("source", "?"), s.get("description", "")[:60]] for s in skills
+    ]
     console.table("", ["Name", "Source", "Description"], rows)
 
 

@@ -58,6 +58,7 @@ def _check_provider(config: OpenContextConfig) -> DoctorCheck:
     """Check whether a real LLM provider is available."""
     try:
         from opencontext_core.providers.detect import detect_provider
+
         p = detect_provider()
         if p.source == "fallback":
             return DoctorCheck(
