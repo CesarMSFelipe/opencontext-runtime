@@ -202,8 +202,15 @@ class Configurator:
         if adapter.agent_id == "opencode":
             path = adapter.config_dir / "agents" / "sdd-orchestrator.json"
             if path.exists():
-                path.unlink()  # we created this file
+                path.unlink()
                 changed.append(str(path))
+            # Remove OC persona files written by _plan_opencode_personas
+            from opencontext_core.personas import PERSONAS
+            for persona in PERSONAS:
+                path = adapter.config_dir / "agents" / f"{persona.id}.md"
+                if path.exists():
+                    path.unlink()
+                    changed.append(str(path))
         ignore_name = constants.ignore_filename(adapter.agent_id)
         if ignore_name:
             path = self.project_root / ignore_name
@@ -289,6 +296,7 @@ class Configurator:
             entries.append(self._plan_claude_permissions(adapter))
         if adapter.agent_id == "opencode":
             entries.append(self._plan_opencode_profile(adapter))
+            entries.extend(self._plan_opencode_personas(adapter))
         if constants.ignore_filename(adapter.agent_id):
             entries.append(self._plan_ignore(adapter))
         if constants.command_dir(adapter.agent_id):
@@ -344,6 +352,21 @@ class Configurator:
         existing.setdefault("permissions", {})["allow"] = allow
         content = json.dumps(existing, indent=2) + "\n"
         return path, _content_if_changed(path, content)
+
+    def _plan_opencode_personas(self, adapter: Adapter) -> list[PlanEntry]:
+        """Write OC Orchestrator/Professor/Reviewer personas to ~/.config/opencode/agents/."""
+        from opencontext_core.personas import PERSONAS
+
+        agents_dir = adapter.config_dir / "agents"
+        entries: list[PlanEntry] = []
+        for persona in PERSONAS:
+            path = agents_dir / f"{persona.id}.md"
+            content = (
+                f"---\nname: {persona.name}\ndescription: {persona.description}\n---\n\n"
+                f"{persona.system_prompt}\n"
+            )
+            entries.append((path, _content_if_changed(path, content)))
+        return entries
 
     def _plan_opencode_profile(self, adapter: Adapter) -> PlanEntry:
         profile = {
