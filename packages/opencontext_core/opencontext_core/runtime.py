@@ -323,6 +323,14 @@ class OpenContextRuntime:
         manifest = indexer.build_manifest(Path(root) if root is not None else None)
         self.memory_store.save_manifest(manifest)
 
+        # Index non-code context artifacts (schemas, specs, ADRs) defined in config
+        artifacts = self.config.project_index.context_artifacts
+        if artifacts and self.knowledge_graph:
+            from opencontext_core.indexing.artifact_indexer import index_artifacts
+
+            project_root = Path(root).resolve() if root else Path.cwd()
+            index_artifacts(artifacts, project_root, self.knowledge_graph.db, self.config.project.name)
+
         # Async enqueue embeddings if worker enabled
         if self.config.embedding.enabled and self.embedding_worker:
             items = items_from_manifest(manifest)

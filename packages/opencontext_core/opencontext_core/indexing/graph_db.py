@@ -393,6 +393,8 @@ class GraphDatabase:
 
         # Prune nodes of this file that are no longer present (symbol removed/renamed).
         # Only their OWN edges go with them; inbound edges to surviving ids stay intact.
+        # Write-guard: skip deletion for nodes still referenced by other files — a
+        # full re-index or the referencing file's next re-index will clean up orphans.
         keep = set(ids)
         stale = [
             row["id"]
@@ -402,6 +404,12 @@ class GraphDatabase:
             if row["id"] not in keep
         ]
         for stale_id in stale:
+            inbound = conn.execute(
+                "SELECT COUNT(*) FROM edges WHERE target_node_id = ? AND call_site_file != ?",
+                (stale_id, file_path),
+            ).fetchone()[0]
+            if inbound > 0:
+                continue
             conn.execute(
                 "DELETE FROM edges WHERE source_node_id = ? OR target_node_id = ?",
                 (stale_id, stale_id),

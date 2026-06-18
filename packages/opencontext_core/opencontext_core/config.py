@@ -86,6 +86,19 @@ class ModelConfigMap(BaseModel):
     )
 
 
+class ContextArtifact(BaseModel):
+    """A non-code file (schema, spec, config) to index alongside the codebase."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(description="Path relative to project root.")
+    name: str = Field(description="Human-readable label, e.g. 'DB Schema'.")
+    type: str = Field(
+        default="artifact",
+        description="Artifact type hint: 'schema', 'openapi', 'config', 'docs', or 'artifact'.",
+    )
+
+
 class ProjectIndexConfig(BaseModel):
     """Project indexer configuration."""
 
@@ -100,6 +113,10 @@ class ProjectIndexConfig(BaseModel):
     ignore: list[str] = Field(
         default_factory=lambda: list(DEFAULT_IGNORE_PATTERNS),
         description="Project-relative ignore patterns.",
+    )
+    context_artifacts: list[ContextArtifact] = Field(
+        default_factory=list,
+        description="Non-code files (SQL schemas, OpenAPI specs, ADRs) indexed alongside code.",
     )
 
     @field_validator("ignore", mode="after")

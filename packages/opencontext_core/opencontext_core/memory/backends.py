@@ -143,18 +143,52 @@ class SQLiteMemoryBackend:
             conn.execute(
                 "ALTER TABLE memory_records ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0"
             )
+        if "topic_key" not in existing:
+            conn.execute("ALTER TABLE memory_records ADD COLUMN topic_key TEXT")
+        if "revision_count" not in existing:
+            conn.execute(
+                "ALTER TABLE memory_records ADD COLUMN revision_count INTEGER NOT NULL DEFAULT 0"
+            )
 
-    def store(self, record: MemoryRecord) -> None:
-        """Upsert a MemoryRecord."""
+    def store(self, record: MemoryRecord) -> list[str]:
+        """Upsert a MemoryRecord. Returns IDs of any records flagged as contradicted."""
+        from opencontext_core.memory.contradictions import ContradictionDetector
+
         source_refs_json = json.dumps([ref.model_dump() for ref in record.source_refs])
+        contradicted_ids: list[str] = []
+
         with self._connect() as conn:
+            # Detect conflicts before writing: same key, active records, different content
+            existing_rows = conn.execute(
+                "SELECT * FROM memory_records WHERE key = ? AND invalid_at IS NULL AND id != ?",
+                (record.key, record.id),
+            ).fetchall()
+            if existing_rows:
+                existing = [_row_to_record(r) for r in existing_rows]
+                contradicted_ids = ContradictionDetector().detect(record, existing)
+                if contradicted_ids:
+                    now = datetime.now(tz=UTC).isoformat()
+                    for cid in contradicted_ids:
+                        # Append new record id to contradicted_by of conflicting record
+                        row = conn.execute(
+                            "SELECT contradicted_by FROM memory_records WHERE id = ?", (cid,)
+                        ).fetchone()
+                        if row:
+                            by = json.loads(row["contradicted_by"] or "[]")
+                            if record.id not in by:
+                                by.append(record.id)
+                            conn.execute(
+                                "UPDATE memory_records SET contradicted_by = ?, updated_at = ? WHERE id = ?",
+                                (json.dumps(by), now, cid),
+                            )
+
             conn.execute(
                 """
                 INSERT OR REPLACE INTO memory_records
                 (id, layer, key, content, confidence, source_refs, tags,
                  linked_nodes, supersedes, contradicted_by, created_at, updated_at,
-                 valid_from, invalid_at, superseded_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 valid_from, invalid_at, superseded_by, topic_key, revision_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record.id,
@@ -172,8 +206,55 @@ class SQLiteMemoryBackend:
                     record.valid_from.isoformat() if record.valid_from else None,
                     record.invalid_at.isoformat() if record.invalid_at else None,
                     record.superseded_by,
+                    record.topic_key,
+                    record.revision_count,
                 ),
             )
+        return contradicted_ids
+
+    def store_by_topic_key(self, record: MemoryRecord) -> MemoryRecord:
+        """Upsert using topic_key as dedup handle.
+
+        If a record with the same topic_key already exists: update content,
+        confidence, and tags in-place, increment revision_count. Returns the
+        stored record (same id if existing, record.id if new).
+        """
+        if not record.topic_key:
+            self.store(record)
+            return record
+
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM memory_records WHERE topic_key = ? AND invalid_at IS NULL LIMIT 1",
+                (record.topic_key,),
+            ).fetchone()
+
+        if row is not None:
+            existing = _row_to_record(row)
+            now = datetime.now(tz=UTC)
+            with self._connect() as conn:
+                conn.execute(
+                    """UPDATE memory_records
+                       SET content = ?, confidence = ?, tags = ?, updated_at = ?,
+                           revision_count = revision_count + 1
+                       WHERE id = ?""",
+                    (
+                        record.content,
+                        record.confidence,
+                        json.dumps(record.tags),
+                        now.isoformat(),
+                        existing.id,
+                    ),
+                )
+            existing.content = record.content
+            existing.confidence = record.confidence
+            existing.tags = record.tags
+            existing.updated_at = now
+            existing.revision_count += 1
+            return existing
+
+        self.store(record)
+        return record
 
     def mark_superseded(self, record_id: str, *, superseded_by: str, invalid_at: datetime) -> None:
         """Mark a record invalid as of a timestamp without deleting it."""

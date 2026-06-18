@@ -171,6 +171,11 @@ class MCPServer:
                 "parameters": {
                     "filter": {"type": "string", "description": "Path filter (optional)"},
                     "max_depth": {"type": "integer", "default": 10},
+                    "summarize": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Return directory-level summaries (file count, symbol count) instead of individual files. Reduces token usage on large repos.",
+                    },
                 },
             },
             "opencontext_status": {
@@ -541,21 +546,48 @@ class MCPServer:
 
         filter_pattern = params.get("filter")
         max_depth = params.get("max_depth", 10)
+        summarize = params.get("summarize", False)
 
         conn = self.db._connect()
         if filter_pattern:
-            cursor = conn.execute(
+            rows = conn.execute(
                 "SELECT path, language FROM files WHERE path LIKE ? ORDER BY path LIMIT ?",
                 (f"%{filter_pattern}%", 1000),
-            )
+            ).fetchall()
         else:
-            cursor = conn.execute(
+            rows = conn.execute(
                 "SELECT path, language FROM files ORDER BY path LIMIT ?",
                 (1000,),
-            )
+            ).fetchall()
+
+        if summarize:
+            dirs: dict[str, dict[str, Any]] = {}
+            for row in rows:
+                path = row[0]
+                parts = Path(path).parts
+                if len(parts) > max_depth:
+                    continue
+                dir_key = str(Path(path).parent) if len(parts) > 1 else "."
+                if dir_key not in dirs:
+                    dirs[dir_key] = {"dir": dir_key, "files": 0, "symbols": 0, "languages": set()}
+                dirs[dir_key]["files"] += 1
+                dirs[dir_key]["languages"].add(row[1] or "unknown")
+            # Enrich with symbol counts
+            sym_rows = conn.execute(
+                "SELECT file_path, COUNT(*) as cnt FROM nodes GROUP BY file_path"
+            ).fetchall()
+            for sym_row in sym_rows:
+                dir_key = str(Path(sym_row[0]).parent) if len(Path(sym_row[0]).parts) > 1 else "."
+                if dir_key in dirs:
+                    dirs[dir_key]["symbols"] += sym_row[1]
+            result = [
+                {**{k: v for k, v in d.items() if k != "languages"}, "languages": sorted(d["languages"])}
+                for d in dirs.values()
+            ]
+            return {"directories": sorted(result, key=lambda x: x["dir"])}
 
         files = []
-        for row in cursor.fetchall():
+        for row in rows:
             path = row[0]
             depth = len(Path(path).parts)
             if depth <= max_depth:
