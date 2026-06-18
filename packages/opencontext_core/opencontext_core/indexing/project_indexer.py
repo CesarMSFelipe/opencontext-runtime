@@ -82,6 +82,11 @@ class ProjectIndexer:
                 except Exception:
                     pass
             _save_checkpoint(checkpoint_path, done_paths)
+            # Single FTS5 rebuild after all files are indexed (was per-file — huge speedup)
+            try:
+                self.knowledge_graph.db.rebuild_fts()
+            except Exception:
+                pass
             if indexed_files:
                 try:
                     cross = self.knowledge_graph.finalize_cross_file_edges(indexed_files)

@@ -498,6 +498,7 @@ class KnowledgeGraph:
                 stats["nodes"] += result.get("nodes", 0)
                 file_contents.append((rel_path, content))
         if file_contents:
+            self.db.rebuild_fts()
             stats["edges"] += self.finalize_cross_file_edges(file_contents)
         return stats
 

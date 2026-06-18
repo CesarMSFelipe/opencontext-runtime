@@ -417,15 +417,16 @@ class GraphDatabase:
             conn.execute("DELETE FROM nodes WHERE id = ?", (stale_id,))
 
         conn.commit()
+        return ids
 
-        # Rebuild FTS5 index to ensure new nodes are searchable
+    def rebuild_fts(self) -> None:
+        """Rebuild the FTS5 index. Call once after bulk upserts, not per-file."""
+        conn = self._connect()
         try:
             conn.execute('INSERT INTO nodes_fts(nodes_fts) VALUES("rebuild")')
             conn.commit()
         except Exception:
             pass
-
-        return ids
 
     def get_node_by_id(self, node_id: int | str) -> Node | None:
         """Get a node by ID (stable text id; ints are accepted and coerced by SQLite)."""
