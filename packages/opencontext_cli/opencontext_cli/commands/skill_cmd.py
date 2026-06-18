@@ -21,6 +21,10 @@ def add_skill_parser(subparsers: Any) -> None:
     skill_parser = subparsers.add_parser("skill", help="Manage AI skills.")
     skill_sub = skill_parser.add_subparsers(dest="skill_command", required=True)
 
+    list_parser = skill_sub.add_parser("list", help="List available skills from registry and agent skill dirs.")
+    list_parser.add_argument("--root", default=".", help="Project root.")
+    list_parser.add_argument("--json", action="store_true", help="JSON output.")
+
     create_parser = skill_sub.add_parser("create", help="Create a new skill.")
     create_parser.add_argument("name", help="Skill name.")
     create_parser.add_argument("--output-dir", default=".", help="Output directory.")
@@ -38,10 +42,59 @@ def handle_skill(args: Any) -> None:
 
     command = args.skill_command
 
-    if command == "create":
+    if command == "list":
+        _handle_list(args)
+    elif command == "create":
         _handle_create(args)
     elif command == "validate":
         _handle_validate(args)
+
+
+def _handle_list(args: Any) -> None:
+    import json as _json
+    from pathlib import Path as _Path
+
+    root = _Path(getattr(args, "root", ".")).resolve()
+    json_out = getattr(args, "json", False)
+
+    skills: list[dict[str, str]] = []
+
+    # Parse project skill registry (.opencontext/skill-registry.md)
+    registry_path = root / ".opencontext" / "skill-registry.md"
+    if registry_path.exists():
+        content = registry_path.read_text(encoding="utf-8")
+        current: dict[str, str] = {}
+        for line in content.splitlines():
+            if line.startswith("## "):
+                if current:
+                    skills.append(current)
+                current = {"name": line[3:].strip(), "source": "registry"}
+            elif line.startswith("**Description:**") and current:
+                current["description"] = line.split("**Description:**", 1)[1].strip()
+            elif line.startswith("**Path:**") and current:
+                current["path"] = line.split("**Path:**", 1)[1].strip().strip("`")
+        if current:
+            skills.append(current)
+
+    # Also scan .claude/skills/ for agent-local skills
+    agent_skills_dir = _Path.home() / ".claude" / "skills"
+    if agent_skills_dir.exists():
+        for skill_file in sorted(agent_skills_dir.glob("*.md")):
+            name = skill_file.stem
+            if not any(s["name"] == name for s in skills):
+                skills.append({"name": name, "source": "agent-local", "path": str(skill_file), "description": ""})
+
+    if json_out:
+        print(_json.dumps(skills, indent=2))
+        return
+
+    if not skills:
+        console.print("[dim]No skills found. Run 'opencontext skill-registry refresh' to scan.[/]")
+        return
+
+    console.header(f"Skills ({len(skills)})")
+    rows = [[s.get("name", "?"), s.get("source", "?"), s.get("description", "")[:60]] for s in skills]
+    console.table("", ["Name", "Source", "Description"], rows)
 
 
 def _handle_create(args: Any) -> None:

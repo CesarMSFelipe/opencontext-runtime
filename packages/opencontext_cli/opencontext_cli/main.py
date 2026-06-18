@@ -714,6 +714,9 @@ def _build_parser() -> argparse.ArgumentParser:
     skill_reg_sub = skill_reg.add_subparsers(dest="skill_registry_command")
     _sr_refresh = skill_reg_sub.add_parser("refresh", help="Scan .skill.md files and rebuild .opencontext/skill-registry.md")
     _sr_refresh.add_argument("--root", default=".", help="Project root (default: .)")
+    _sr_list = skill_reg_sub.add_parser("list", help="List skills in the registry.")
+    _sr_list.add_argument("--root", default=".", help="Project root (default: .)")
+    _sr_list.add_argument("--json", action="store_true", help="JSON output.")
 
     agent_context = subparsers.add_parser(
         "agent-context", help="Emit safe reusable agent context block."
@@ -1299,10 +1302,16 @@ def _dispatch(args: argparse.Namespace) -> None:
         handle_privacy(args)
         return
     if command == "skill-registry":
-        from opencontext_core.skills.registry import refresh as _skill_refresh
+        _sr_cmd = getattr(args, "skill_registry_command", "refresh")
         _sr_root = Path(getattr(args, "root", "."))
-        _sr_out = _skill_refresh(_sr_root)
-        print(f"Skill registry written: {_sr_out}")
+        if _sr_cmd == "list":
+            from opencontext_cli.commands.skill_cmd import _handle_list as _sr_list_fn
+            _handle_list_args = type("A", (), {"root": str(_sr_root), "json": getattr(args, "json", False)})()
+            _sr_list_fn(_handle_list_args)
+        else:
+            from opencontext_core.skills.registry import refresh as _skill_refresh
+            _sr_out = _skill_refresh(_sr_root)
+            print(f"Skill registry written: {_sr_out}")
         return
     if command == "sync":
         handle_sync(args)

@@ -17,6 +17,7 @@ class SecurityScanResult(BaseModel):
 
     findings: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    files_scanned: int = Field(default=0)
 
 
 def scan_project(root: str | Path = ".") -> SecurityScanResult:
@@ -51,4 +52,5 @@ def scan_project(root: str | Path = ".") -> SecurityScanResult:
     return SecurityScanResult(
         findings=findings,
         warnings=warnings,
+        files_scanned=len(scanned),
     )
