@@ -11,6 +11,9 @@ FLOWS = {
     "standard": "standard",
     "full": "sdd",
     "autonomous": "sdd",
+    "quality": "full+quality",
+    "judgment": "full+judgment",
+    "gga": "full+gga",
 }
 
 COMPRESSION_MODES = ["terse", "compact", "efficient", "none"]
@@ -26,7 +29,7 @@ def add_loop_commands(subparsers: argparse._SubParsersAction) -> None:
         "--flow",
         choices=list(FLOWS.keys()),
         default="full",
-        help="Workflow track: quick/standard/full/autonomous",
+        help="Workflow track: quick/standard/full/autonomous/quality/judgment/gga",
     )
     loop.add_argument(
         "--compress",
