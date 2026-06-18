@@ -44,8 +44,14 @@ def handle_demo(runtime: Any, args: Any) -> int:
         return 1
 
     console.print("\n[bold]OpenContext demo[/]")
-    console.print("[dim]Indexing the project…[/]")
-    runtime.index_project(root)
+    try:
+        manifest = runtime.load_manifest()
+        if not manifest or not manifest.files:
+            raise ValueError("empty")
+        console.print(f"[dim]Using existing index ({len(manifest.files)} files)…[/]")
+    except Exception:
+        console.print("[dim]Indexing the project… (run once, faster next time)[/]")
+        runtime.index_project(root)
 
     naive = estimate_naive_tokens(root)
     pack = runtime.build_context_pack(args.query)
