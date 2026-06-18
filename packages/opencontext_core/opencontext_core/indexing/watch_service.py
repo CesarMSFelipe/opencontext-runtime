@@ -20,16 +20,19 @@ logger = logging.getLogger(__name__)
 class WatchService:
     """High-level daemon that watches a project directory and re-indexes on change.
 
-    Manages FileWatcher lifecycle, debounces bursts of file events, and
-    triggers an index callback (typically ``OpenContextRuntime.index_project``)
-    for changed files.
+    Accumulates changed file paths between debounce windows and passes them to
+    the index callback so callers can do incremental re-indexing instead of a
+    full rebuild.
 
     Usage::
 
-        service = WatchService(
-            root="/path/to/project",
-            index_callback=lambda: runtime.index_project(),
-        )
+        def reindex(changed: set[str] | None):
+            if changed:
+                runtime.reindex_files(changed)
+            else:
+                runtime.index_project()
+
+        service = WatchService(root=".", index_callback=reindex)
         service.start()
         ...
         service.stop()
@@ -38,7 +41,7 @@ class WatchService:
     def __init__(
         self,
         root: str | Path,
-        index_callback: Callable[[], Any],
+        index_callback: Callable[[set[str] | None], Any],
         *,
         debounce_seconds: float = 2.0,
         poll_interval: float = 1.0,
@@ -49,10 +52,9 @@ class WatchService:
         """
         Args:
             root: Project root directory to watch.
-            index_callback: Zero-argument callable invoked when files change.
-                Typically ``OpenContextRuntime.index_project`` bound to a root.
-            debounce_seconds: Seconds to wait after the *last* file event
-                before triggering a re-index.
+            index_callback: Called with a set of changed relative paths, or
+                None when the set is unavailable (force full re-index).
+            debounce_seconds: Seconds to wait after the last event.
             poll_interval: Polling interval in seconds (polling mode only).
             exclude_patterns: Glob patterns for files to ignore.
             use_watchdog: Prefer OS-native file events when available.
@@ -68,6 +70,7 @@ class WatchService:
         self._running = False
         self._poll_thread_active = False
         self._last_event_time: float = 0.0
+        self._changed_paths: set[str] = set()
 
         if auto_start:
             self.start()
@@ -121,21 +124,14 @@ class WatchService:
     # ------------------------------------------------------------------
 
     def _on_file_event(self, rel_path: str, event_type: str) -> None:
-        """Handle a single file event from the FileWatcher.
-
-        Records the event timestamp and logs. The actual re-index is
-        triggered by ``_debounce_check()`` after ``debounce_seconds``
-        of inactivity.
-        """
+        """Accumulate changed path and record event timestamp."""
         self._last_event_time = time.time()
+        if rel_path:
+            self._changed_paths.add(rel_path)
         logger.debug("File %s: %s", event_type, rel_path)
 
     def _debounce_and_reindex(self) -> bool:
-        """Check if enough time has passed since the last event and re-index.
-
-        Returns:
-            True if a re-index was triggered, False otherwise.
-        """
+        """Trigger incremental re-index after debounce window expires."""
         if not self._running:
             return False
         if self._last_event_time == 0:
@@ -143,26 +139,30 @@ class WatchService:
 
         elapsed = time.time() - self._last_event_time
         if elapsed >= self.debounce_seconds:
+            changed = self._changed_paths.copy() or None
+            self._changed_paths.clear()
+            self._last_event_time = 0.0
             logger.info(
-                "Change detected — re-indexing %s (%.1fs since last event)",
+                "Change detected — re-indexing %s (%s files, %.1fs since last event)",
                 self.root,
+                len(changed) if changed else "all",
                 elapsed,
             )
             try:
-                self.index_callback()
+                self.index_callback(changed)
             except Exception:
                 logger.exception("Re-index failed for %s", self.root)
-            self._last_event_time = 0.0
             return True
         return False
 
     def force_reindex(self) -> None:
-        """Immediately trigger a re-index regardless of debounce timer."""
+        """Immediately trigger a full re-index regardless of debounce timer."""
         if not self._running:
             return
         logger.info("Forced re-index for %s", self.root)
+        self._changed_paths.clear()
+        self._last_event_time = 0.0
         try:
-            self.index_callback()
+            self.index_callback(None)
         except Exception:
             logger.exception("Forced re-index failed for %s", self.root)
-        self._last_event_time = 0.0

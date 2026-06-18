@@ -484,7 +484,7 @@ class MemoryPolicyConfig(BaseModel):
         default="local",
         description="Memory backend provider: 'local' (SQLite) or 'engram'.",
     )
-    harvest_after_run: bool = Field(default=False, description="Automatic harvest disabled.")
+    harvest_after_run: bool = Field(default=True, description="Harvest memory automatically after each run.")
     require_approval: bool = Field(default=True, description="Harvested memories require approval.")
     store_raw: bool = Field(default=False, description="Raw memory storage disabled.")
     default_classification: str = Field(default="internal", description="Default memory class.")
@@ -1289,7 +1289,7 @@ def default_config_data() -> dict[str, Any]:
         },
         "memory": {
             "enabled": True,
-            "harvest_after_run": False,
+            "harvest_after_run": True,
             "require_approval": True,
             "store_raw": False,
             "default_classification": "internal",
