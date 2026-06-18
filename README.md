@@ -218,7 +218,7 @@ Produces a template with objective, non-goals, constraints, acceptance criteria,
 
 ### Harness — low-level engine
 
-The harness is what the loop runs under the hood. Each phase has an explicit token budget and gates that must pass before the next phase starts.
+The harness is what the loop runs under the hood. Each phase has an explicit token budget and gates that must pass before the next phase starts. Requires an LLM provider for spec/design/tasks/apply phases; explore and verify run without one.
 
 ```bash
 $ opencontext harness run --workflow sdd --task "add rate limiting to API"
@@ -241,6 +241,8 @@ Harness Run: sdd-c9135ab0112f
     archive : ─────────────────  passed
   Gates: 22
 ```
+
+Without an LLM provider, spec/design/tasks phases pass but produce no artifacts — the harness warns you and runs `explore` + `verify` with real output.
 
 Each run persists its full artifact trail to `.opencontext/runs/<run_id>/` — proposal, decisions, ledger, gates, verify report.
 
@@ -570,8 +572,9 @@ opencontext benchmark run
 # Config & plugins
 opencontext config wizard
 opencontext preset apply <name>
-opencontext plugin search
-opencontext plugin install <name>
+opencontext plugin search                              # lists planned plugins
+opencontext plugin install <name> --github owner/repo  # install from GitHub
+opencontext plugin install <name>                      # create local scaffold
 opencontext update && opencontext upgrade
 ```
 

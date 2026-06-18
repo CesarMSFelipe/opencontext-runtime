@@ -172,20 +172,20 @@ def _plugin_search(args: Any) -> None:
     if args.query:
         print(f"  Search results for '{args.query}':")
     else:
-        print("  Available plugins:")
+        print("  Plugin registry  (planned plugins — not yet published)")
+        print("  Install your own: opencontext plugin install <name> --github owner/repo")
     print()
 
     for p in results:
         latest = p.versions[0].version if p.versions else "—"
         print(f"  {p.name:<22} v{latest:<12} {p.description}")
-        if p.homepage:
-            print(f"  {'':22}   {p.homepage}")
         print()
 
-    print(f"  {len(results)} plugin(s) available")
+    print(f"  {len(results)} plugin(s) listed")
     print()
-    print("  Install:  opencontext plugin install <name>")
-    print("  Details:  opencontext plugin info <name>")
+    print("  Custom install:  opencontext plugin install <name> --github owner/repo")
+    print("  Custom install:  opencontext plugin install <name> --url <url>")
+    print("  New scaffold:    opencontext plugin install <name>")
 
 
 def _plugin_init(args: Any) -> None:

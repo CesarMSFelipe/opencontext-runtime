@@ -2560,14 +2560,24 @@ def _security(
     output_path: str | None = None,
 ) -> None:
     if action == "scan":
-        rendered = scan_project(root).model_dump_json(indent=2)
+        result = scan_project(root)
         if output_path is not None:
             path = Path(output_path)
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(rendered, encoding="utf-8")
+            path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
             print(f"Wrote security scan: {path}")
             return
-        print(rendered)
+        # Human-readable output
+        findings = result.findings
+        warnings = getattr(result, "warnings", [])
+        if not findings:
+            print("✓ No secret leakage patterns found.")
+        else:
+            print(f"Security Scan — {len(findings)} finding(s)\n")
+            for f in findings:
+                print(f"  ⚠  {f}")
+        for w in warnings:
+            print(f"\n  ℹ  {w}")
         return
     _unreachable(action)
 
