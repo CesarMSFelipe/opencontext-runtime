@@ -184,6 +184,11 @@ def _force_utf8_output() -> None:
 def main() -> None:
     """CLI entry point."""
     _force_utf8_output()
+    try:
+        from opencontext_core.i18n import load_language_from_config
+        load_language_from_config(Path("."))
+    except Exception:
+        pass
     parser = _build_parser()
     _enable_shell_completion(parser)
     args = parser.parse_args()
@@ -1464,6 +1469,43 @@ def _template_config(template: str) -> dict[str, Any]:
     return config_data
 
 
+def _print_agent_instructions(agents: list, console: Any) -> None:
+    """Print client-specific usage instructions after install."""
+    from rich.panel import Panel
+    _INSTRUCTIONS = {
+        "claude-code": (
+            "Claude Code ready.\n"
+            "In any project: the 13 OpenContext MCP tools are pre-approved.\n"
+            "Try: opencontext_context with query 'explain the auth flow'\n"
+            "Or:  opencontext_impact with symbol 'UserModel'"
+        ),
+        "cursor": (
+            "Cursor ready.\n"
+            "OpenContext MCP tools available in Cursor's agent panel.\n"
+            "Try: @opencontext_context 'explain the auth flow'"
+        ),
+        "opencode": (
+            "OpenCode ready.\n"
+            "OpenContext MCP configured at ~/.config/opencode/mcp.json\n"
+            "Use /context, /impact, /search commands in OpenCode."
+        ),
+        "codex": (
+            "Codex ready.\n"
+            "OpenContext context is passed automatically via the instructions file.\n"
+            "Run: opencontext pack . --query 'your task' --copy, then paste into Codex."
+        ),
+        "windsurf": (
+            "Windsurf ready.\n"
+            "OpenContext MCP tools available in Windsurf's Cascade panel."
+        ),
+    }
+    for agent in agents:
+        agent_id = agent.value if hasattr(agent, "value") else str(agent)
+        msg = _INSTRUCTIONS.get(agent_id)
+        if msg:
+            console.print(Panel.fit(msg, title=f"[bold cyan]{agent_id}[/bold cyan]", border_style="cyan"))
+
+
 def _install(args: argparse.Namespace) -> None:
     """Quick project setup wizard with auto-detection and step-by-step progress."""
     from rich.prompt import Confirm
@@ -1524,6 +1566,30 @@ def _install(args: argparse.Namespace) -> None:
     console.print("    • Agent integration (opencode)")
     console.print("    • Harness workflow")
     console.print()
+
+    # Language selection on first install (interactive only)
+    if not args.yes and sys.stdout.isatty():
+        try:
+            from opencontext_core.i18n import set_language, t
+            from rich.prompt import Prompt
+            from rich.console import Console as _Console
+            lang = Prompt.ask(
+                t("onboarding.language_prompt"),
+                choices=["en", "es"],
+                default="en",
+                console=_Console(),
+            )
+            set_language(lang)
+            # Persist to config if it exists
+            _root = Path(getattr(args, "root", "."))
+            _cfg_path = _root / "opencontext.yaml"
+            if _cfg_path.exists():
+                import yaml
+                _cfg_data = yaml.safe_load(_cfg_path.read_text(encoding="utf-8")) or {}
+                _cfg_data["ui_language"] = lang
+                _cfg_path.write_text(yaml.safe_dump(_cfg_data, sort_keys=False), encoding="utf-8")
+        except Exception:
+            pass
 
     if not args.yes:
         proceed = Confirm.ask("Proceed with setup?", default=not already_setup)
@@ -1915,25 +1981,52 @@ def _onboard(
     for warning in result.warnings:
         console.warning(warning)
 
-    # Show detected provider so the user knows what's wired
+    # i18n — load language from written config
+    try:
+        from opencontext_core.i18n import load_language_from_config, t, set_language
+        load_language_from_config(Path(getattr(args, "root", ".")))
+    except Exception:
+        pass
+
+    # Provider detection message
     try:
         from opencontext_core.providers.detect import detect_provider
+        from opencontext_core.i18n import t
         p = detect_provider()
         if p.source == "fallback":
-            console.warning(
-                "No LLM provider detected. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or "
-                "OPENROUTER_API_KEY to enable agentic phases (loop, harness)."
-            )
+            console.warning(t("install.no_provider"))
         else:
-            console.success(f"Provider: {p.name} ({p.model}) — detected from {p.source}")
+            console.success(t("install.provider_detected", name=p.name, model=p.model, source=p.source))
+    except Exception:
+        pass
+
+    # Detected agents — show client-specific instructions
+    try:
+        from opencontext_core.agent_installer import AgentInstaller, AgentTarget
+        from opencontext_core.i18n import t
+        installer = AgentInstaller(project_root=Path(getattr(args, "root", ".")))
+        detected = installer.detect_installed_agents()
+        if detected:
+            agent_names = ", ".join(a.value for a in detected)
+            console.success(t("onboarding.agent_detected", agents=agent_names))
+            _print_agent_instructions(detected, console)
+        else:
+            console.warning(t("onboarding.agent_none"))
     except Exception:
         pass
 
     console.print("")
-    console.section("Next Steps")
-    console.print("  1. [bold]opencontext demo[/]                              # 30-second proof on this repo")
-    console.print("  2. [bold]opencontext pack . --query 'your task' --copy[/] # get verified context")
-    console.print("  3. [bold]opencontext loop --task 'your task' --flow quick[/] # full agentic run")
+    try:
+        from opencontext_core.i18n import t
+        console.section(t("install.next_steps_title"))
+        console.print(f"  1. [bold]{t('install.step1')}[/]")
+        console.print(f"  2. [bold]{t('install.step2')}[/]")
+        console.print(f"  3. [bold]{t('install.step3')}[/]")
+    except Exception:
+        console.section("Next Steps")
+        console.print("  1. [bold]opencontext demo[/]")
+        console.print("  2. [bold]opencontext pack . --query 'your task' --copy[/]")
+        console.print("  3. [bold]opencontext loop --task 'your task' --flow quick[/]")
     console.print("")
     console.info("Docs: https://github.com/CesarMSFelipe/OpenContext-Runtime")
 

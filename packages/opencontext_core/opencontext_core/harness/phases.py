@@ -910,6 +910,11 @@ class SpecPhase(HarnessPhase):
         if outcome.is_real:
             spec_content = outcome.output or ""
         else:
+            if getattr(state, "delegate", None) is None:
+                state.warnings.append(
+                    "Phase 'SpecPhase' ran without LLM — "
+                    "configure a provider (ANTHROPIC_API_KEY etc.) to generate real artifacts."
+                )
             # Static template SCAFFOLD — explicitly NOT a real AI-produced spec.
             spec_content = f"""# Delta Spec: {task}
 
@@ -1017,6 +1022,11 @@ class DesignPhase(HarnessPhase):
         if outcome.is_real:
             design_content = outcome.output or ""
         else:
+            if getattr(state, "delegate", None) is None:
+                state.warnings.append(
+                    "Phase 'DesignPhase' ran without LLM — "
+                    "configure a provider (ANTHROPIC_API_KEY etc.) to generate real artifacts."
+                )
             # Extract requirements from spec content for the scaffold body.
             requirements = []
             for line in spec_content.split("\n"):
@@ -1132,6 +1142,11 @@ class TasksPhase(HarnessPhase):
         # Honest executor contract: run the real executor when wired, otherwise
         # emit a clearly-marked scaffold reported as "planned" (NOT a success).
         outcome = run_phase_executor(state, "tasks")
+        if not outcome.is_real and getattr(state, "delegate", None) is None:
+            state.warnings.append(
+                "Phase 'TasksPhase' ran without LLM — "
+                "configure a provider (ANTHROPIC_API_KEY etc.) to generate real artifacts."
+            )
         task_count = 0
         if outcome.is_real:
             # The executor owns the breakdown format. Persist its output as-is,

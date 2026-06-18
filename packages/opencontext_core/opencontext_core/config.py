@@ -968,6 +968,7 @@ class OpenContextConfig(BaseModel):
     token_budgets: dict[str, WorkflowTokenBudgetConfig] = Field(default_factory=dict)
     latency: LatencyConfig = Field(default_factory=LatencyConfig)
     commands: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    ui_language: str = Field(default="en", description="UI language: en or es.")
     hooks: dict[str, list[str]] = Field(default_factory=dict)
     profiles: dict[str, Any] = Field(default_factory=dict)
     server: ServerConfig = Field(default_factory=ServerConfig)
@@ -1475,4 +1476,5 @@ def default_config_data() -> dict[str, Any]:
                 "skills/",
             ],
         },
+        "ui_language": "en",
     }
