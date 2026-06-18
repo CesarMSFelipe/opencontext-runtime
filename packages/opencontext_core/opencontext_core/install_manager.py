@@ -468,6 +468,17 @@ class InstallationManager:
             project = config_data.get("project")
             if isinstance(project, dict):
                 project["name"] = project_root.name or project.get("name", "my-project")
+            # Auto-detect ambient provider from environment
+            try:
+                from opencontext_core.providers.detect import detect_provider
+                detected = detect_provider()
+                if detected.source != "fallback":
+                    models = config_data.setdefault("models", {})
+                    default_model = models.setdefault("default", {})
+                    default_model["provider"] = detected.name
+                    default_model["model"] = detected.model
+            except Exception:
+                pass
             config_path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
 
         # Fail loudly rather than report success over an unloadable config.

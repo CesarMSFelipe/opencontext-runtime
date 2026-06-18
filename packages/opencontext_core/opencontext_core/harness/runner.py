@@ -477,7 +477,50 @@ class HarnessRunner:
         )
 
         self.persist_run(state, run_result)
+        self._post_run_update(state)
         return run_result
+
+    def _post_run_update(self, state: HarnessState) -> None:
+        """Auto-collect memory candidates and re-index changed files after every run."""
+        changed = [
+            e["path"] if isinstance(e, dict) else getattr(e, "path", str(e))
+            for e in (state.apply_edits or [])
+        ]
+        # Memory harvest — auto-approve low-stakes candidates
+        try:
+            from opencontext_core.memory_usability.context_repository import ContextRepository
+            from opencontext_core.memory_usability.memory_gc import MemoryGarbageCollector  # noqa: F401
+            from opencontext_core.memory.collector import MemoryCandidateExtractor
+
+            repo = ContextRepository(state.root / ".storage" / "opencontext" / "memory")
+            extractor = MemoryCandidateExtractor()
+            candidates = extractor.extract_from_run(state.run_id, state.root)
+            for candidate in candidates:
+                if getattr(candidate, "auto_approve", False):
+                    repo.save(candidate)
+        except Exception:
+            pass
+
+        # Graph re-index of changed files only
+        if changed:
+            try:
+                from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+                from opencontext_core.indexing.graph_db import GraphDatabase
+
+                db_path = state.root / ".storage" / "opencontext" / "knowledge_graph.db"
+                if db_path.exists():
+                    db = GraphDatabase(db_path)
+                    kg = KnowledgeGraph(db)
+                    for path in changed:
+                        full = state.root / path
+                        if full.exists() and full.suffix == ".py":
+                            try:
+                                kg.index_file(path, full.read_text(encoding="utf-8", errors="ignore"))
+                            except Exception:
+                                pass
+                    db.close()
+            except Exception:
+                pass
 
     @staticmethod
     def _inputs_summary(state: HarnessState) -> str:
