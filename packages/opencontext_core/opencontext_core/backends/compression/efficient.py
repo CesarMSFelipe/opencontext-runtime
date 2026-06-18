@@ -63,11 +63,8 @@ class EfficientCompressionBackend:
     def compress(self, text: str, protected_spans: list[ProtectedSpan]) -> str:
         if not text:
             return text
-        # Step 1: compact (handles code blocks + prose)
         result = self._compact.compress(text, protected_spans)
-        # Step 2: terse over the entire result
         result = self._terse.compress(result, protected_spans)
-        # Step 3: extended dict substitution (word-boundary safe)
         import re
 
         for verbose, concise in EXTENDED_DICT.items():

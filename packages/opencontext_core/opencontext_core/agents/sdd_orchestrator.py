@@ -207,7 +207,6 @@ class SDDOrchestrator:
         # Save artifact
         artifact_ref = self.store.save(self.state.change, phase, content)
 
-        # Update state
         self.state.mark_completed(phase)
         self.state.mark_artifact_saved(phase)
 

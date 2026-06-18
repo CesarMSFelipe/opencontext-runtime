@@ -1516,7 +1516,6 @@ def _install(args: argparse.Namespace) -> None:
         console.print(f"  [bold]Stack:[/]   {', '.join(detected)}")
     console.print()
 
-    # Suggest defaults
     tdd = "strict" if has_pytest else "ask"
     console.print("  Will configure:")
     console.print("    • Project index + knowledge graph")
@@ -2246,7 +2245,6 @@ def _clean(root: str, dry_run: bool, force: bool) -> None:
             print("Aborted.")
             return
 
-    # remove
     for c in candidates:
         if c.is_dir():
             shutil.rmtree(c, ignore_errors=True)

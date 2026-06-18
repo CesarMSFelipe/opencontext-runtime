@@ -72,7 +72,6 @@ def handle_verify(args: Any) -> None:
         console.print(table)
         console.print()
 
-        # Summary line
         parts = []
         if report.passed:
             parts.append(f"[green]{report.passed} passed[/green]")
@@ -91,7 +90,6 @@ def handle_verify(args: Any) -> None:
             )
 
     except ImportError:
-        # Fallback: plain text
         print(f"\nOpenContext Health Check ({report.timestamp})")
         print("=" * 50)
         for r in report.results:

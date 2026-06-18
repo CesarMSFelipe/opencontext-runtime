@@ -26,19 +26,15 @@ def add_config_parser(subparsers: Any) -> None:
     config_parser = subparsers.add_parser("config", help="Manage OpenContext configuration.")
     config_sub = config_parser.add_subparsers(dest="config_command")
 
-    # Wizard
     wizard_parser = config_sub.add_parser("wizard", help="Run configuration wizard.")
     wizard_parser.add_argument(
         "--non-interactive", action="store_true", help="Use defaults without prompts."
     )
 
-    # Show
     config_sub.add_parser("show", help="Display current configuration.")
 
-    # Reset
     config_sub.add_parser("reset", help="Reset to factory defaults.")
 
-    # Reconfigure section
     reconf_parser = config_sub.add_parser("reconfigure", help="Reconfigure a specific section.")
     reconf_parser.add_argument(
         "section",
@@ -46,7 +42,6 @@ def add_config_parser(subparsers: Any) -> None:
         help="Section to reconfigure.",
     )
 
-    # Set individual values
     set_parser = config_sub.add_parser("set", help="Set a configuration value.")
     set_parser.add_argument("key", help="Configuration key (dot notation).")
     set_parser.add_argument("value", help="Value to set.")
@@ -55,7 +50,6 @@ def add_config_parser(subparsers: Any) -> None:
     get_parser = config_sub.add_parser("get", help="Get a configuration value.")
     get_parser.add_argument("key", help="Configuration key (dot notation).")
 
-    # Backup
     config_sub.add_parser("backup", help="Create a manual backup of configuration.")
 
     # List backups

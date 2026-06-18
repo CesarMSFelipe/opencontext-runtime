@@ -22,7 +22,6 @@ def add_bytecode_commands(subparsers: argparse._SubParsersAction) -> None:
     )
     sub = p.add_subparsers(dest="bytecode_command", required=True)
 
-    # compile
     cp = sub.add_parser("compile", help="Compile a query into AICX bytecode")
     cp.add_argument("--query", "-q", required=True, help="Context query")
     cp.add_argument("--root", default=".", help="Project root (default: .)")
@@ -31,11 +30,9 @@ def add_bytecode_commands(subparsers: argparse._SubParsersAction) -> None:
     cp.add_argument("--json", dest="as_json", action="store_true", help="Output JSON")
     cp.add_argument("--save", metavar="PATH", help="Save bytecode JSON to file")
 
-    # inspect
     ip = sub.add_parser("inspect", help="Inspect an AICX bytecode file or latest trace")
     ip.add_argument("path", nargs="?", help="Path to .aicx JSON file (omit for latest)")
 
-    # decode
     dp = sub.add_parser("decode", help="Decode AICX bytecode back to evidence plan")
     dp.add_argument("path", nargs="?", help="Path to .aicx JSON file (omit for latest)")
     dp.add_argument("--json", dest="as_json", action="store_true")

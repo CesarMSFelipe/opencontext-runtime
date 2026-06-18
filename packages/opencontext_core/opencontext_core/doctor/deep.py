@@ -240,7 +240,6 @@ def _collect_config_info(config: OpenContextConfig) -> list[DeepDiagnostic]:
         )
     )
 
-    # Features
     prefs = UserConfigStore().load()
     features_on = sum(
         1
@@ -359,7 +358,6 @@ def _from_plugins() -> list[DeepDiagnostic]:
             )
         )
 
-    # Check for updates
     try:
         from opencontext_core.plugin_system import PluginUpdater
 
@@ -476,7 +474,6 @@ def run_deep_diagnostics(config: OpenContextConfig) -> DeepReport:
     report.plugins = _from_plugins()
     report.update = _from_updates()
 
-    # Save to state
     try:
         state = StateStore.load()
         state.last_verified = report.timestamp

@@ -240,7 +240,6 @@ class KnowledgeGraph:
         total_nodes = 0
         total_edges = 0
 
-        # Collect files to index
         file_contents: list[tuple[str, str]] = []
         for ext in LANGUAGE_EXTENSIONS:
             for file_path in root_path.rglob(f"*{ext}"):

@@ -397,7 +397,6 @@ class ContextFirewall:
 
     def _redact_text(self, text: str, findings: list[dict[str, Any]]) -> str:
         """Replace sensitive ranges with placeholder."""
-        # Sort by start position descending to avoid offset invalidation
         sorted_findings = sorted(
             [f for f in findings if f["severity"] in ("critical", "high", "medium")],
             key=lambda f: f["start"],

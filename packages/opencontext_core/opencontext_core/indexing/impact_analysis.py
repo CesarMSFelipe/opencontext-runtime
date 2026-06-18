@@ -79,7 +79,6 @@ class ImpactAnalyzer:
         # Remove direct callers from transitive list
         transitive = [d for d in all_dependents if d["depth"] > 1]
 
-        # Collect affected files
         affected_files = set()
         for caller in all_dependents:
             affected_files.add(caller["file_path"])

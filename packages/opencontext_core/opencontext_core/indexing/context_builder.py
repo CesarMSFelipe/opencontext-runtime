@@ -79,7 +79,6 @@ class ContextBuilder:
         nodes: list[ContextNode] = []
         seen_ids: set[int] = set()
 
-        # Step 1: Search for symbols matching the task
         search_results = self.db.search_fts(task, limit=max_nodes // 2)
 
         for result in search_results:
@@ -109,13 +108,11 @@ class ContextBuilder:
             )
             nodes.append(context_node)
 
-        # Step 2: Find related symbols (callers, callees, same file)
         if len(nodes) < max_nodes:
             for ctx_node in list(nodes):
                 if len(nodes) >= max_nodes:
                     break
 
-                # Find node ID
                 node_id = self._find_node_id(ctx_node.name, ctx_node.file_path)
                 if node_id is None:
                     continue
@@ -150,7 +147,6 @@ class ContextBuilder:
                         )
                     )
 
-        # Step 3: Sort by relevance and trim
         nodes.sort(key=lambda n: n.relevance_score, reverse=True)
         nodes = nodes[:max_nodes]
 

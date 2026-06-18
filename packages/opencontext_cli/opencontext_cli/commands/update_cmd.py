@@ -96,7 +96,6 @@ def handle_upgrade(args: Any) -> None:
     if not upgraded and not failed:
         print("  ✓ All packages are up to date.")
 
-    # Refresh ecosystem update cache (engram, etc.)
     try:
         eco = EcosystemUpdateChecker.refresh()
         outdated_eco = [e for e in eco if e.is_outdated]

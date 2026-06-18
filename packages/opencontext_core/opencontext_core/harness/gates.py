@@ -612,7 +612,6 @@ class FailingTestExistsGate:
         if not tests_dir.exists():
             return None
 
-        # Get all test files
         all_tests = [str(p) for p in tests_dir.rglob("test_*.py")]
         if not all_tests:
             return None

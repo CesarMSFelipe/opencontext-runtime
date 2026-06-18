@@ -21,7 +21,6 @@ def add_skill_parser(subparsers: Any) -> None:
     skill_parser = subparsers.add_parser("skill", help="Manage AI skills.")
     skill_sub = skill_parser.add_subparsers(dest="skill_command", required=True)
 
-    # skill create
     create_parser = skill_sub.add_parser("create", help="Create a new skill.")
     create_parser.add_argument("name", help="Skill name.")
     create_parser.add_argument("--output-dir", default=".", help="Output directory.")
@@ -30,7 +29,6 @@ def add_skill_parser(subparsers: Any) -> None:
     create_parser.add_argument("--author", default=None, help="Skill author.")
     create_parser.add_argument("--force", action="store_true", help="Overwrite existing.")
 
-    # skill validate
     validate_parser = skill_sub.add_parser("validate", help="Validate a SKILL.md file.")
     validate_parser.add_argument("path", help="Path to SKILL.md or skill directory.")
 
@@ -50,7 +48,6 @@ def _handle_create(args: Any) -> None:
     name = args.name
     output_dir = args.output_dir
 
-    # Interactive prompts for missing flags
     description = args.description
     if description is None:
         description = console.ask("Skill description")
@@ -101,7 +98,6 @@ def _handle_validate(args: Any) -> None:
         ("version", "version" in frontmatter and bool(frontmatter["version"])),
     ]
 
-    # Body section checks
     _body = frontmatter.get("_body", content)
     has_overview = "## Overview" in content
     has_implementation = "## Implementation" in content

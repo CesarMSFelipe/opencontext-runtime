@@ -165,7 +165,6 @@ def _display_check_report(report: dict[str, Any]) -> None:
         ],
     )
 
-    # Show failed results
     failed_results = [r for r in report.get("results", []) if r["status"] != "passed"]
     if failed_results:
         console.section("Failed Checks")

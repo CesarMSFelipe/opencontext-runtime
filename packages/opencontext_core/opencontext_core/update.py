@@ -84,7 +84,6 @@ class UpdateChecker:
 
         current = cls.get_current_version()
 
-        # Check cache first
         if not force:
             cached = cls._load_cache()
             if cached and cached.last_check:
@@ -129,7 +128,6 @@ class UpdateChecker:
         state = UpdateState(check=result, last_check=result.checked_at)
         cls._save_cache(state)
 
-        # Update StateStore
         try:
             store_state = StateStore.load()
             store_state.last_update_check = result.checked_at

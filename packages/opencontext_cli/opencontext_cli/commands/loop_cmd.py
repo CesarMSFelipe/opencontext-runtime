@@ -137,7 +137,6 @@ def _run_loop(
             print(f"error: {e}")
             return False
 
-        # Compress and display summary
         summary = _summarize_phase(result, compressor)
         print(summary)
 

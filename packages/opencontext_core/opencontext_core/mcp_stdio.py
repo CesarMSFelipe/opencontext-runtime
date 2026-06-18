@@ -222,7 +222,6 @@ class MCPServer:
     def run(self) -> None:
         """Run the MCP server, reading from stdin and writing to stdout."""
 
-        # Send initialization notification
         self._send_notification("server/initialized", {"tools": list(self.tools.keys())})
 
         for line in sys.stdin:
@@ -432,7 +431,6 @@ class MCPServer:
         file = params.get("file")
         depth = params.get("depth", 2)
 
-        # Find node
         node_id = self._find_node(symbol, file)
         if node_id is None:
             return {"error": f"Symbol not found: {symbol}"}
@@ -716,7 +714,6 @@ class MCPServer:
         if node is None or node.id is None:
             return {"error": f"Symbol not found: {symbol}", "applied": False}
 
-        # Collect edit targets as (file_path, 1-based line). Start with the
         # definition line, then add each known call site from the graph.
         targets: dict[str, set[int]] = {node.file_path: {node.line}}
         for site_file, site_line in self._reference_sites(node.id):
