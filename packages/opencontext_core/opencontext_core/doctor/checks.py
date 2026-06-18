@@ -62,10 +62,11 @@ def _check_provider(config: OpenContextConfig) -> DoctorCheck:
         if p.source == "fallback":
             return DoctorCheck(
                 name="llm.provider",
-                ok=False,
+                ok=True,
                 details=(
-                    "No LLM provider detected. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, "
-                    "or OPENROUTER_API_KEY to enable agentic phases."
+                    "No LLM provider detected — core features (context packing, knowledge graph, "
+                    "MCP tools) work without one. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, "
+                    "or OPENROUTER_API_KEY to enable the autonomous loop."
                 ),
             )
         return DoctorCheck(

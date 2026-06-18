@@ -5,8 +5,9 @@ _MESSAGES: dict[str, dict[str, str]] = {
     "en": {
         "install.complete": "Setup complete.",
         "install.no_provider": (
-            "No LLM provider detected. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or "
-            "OPENROUTER_API_KEY to enable agentic phases."
+            "No LLM provider detected — context packing, knowledge graph, and MCP tools "
+            "work without one. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY "
+            "to enable the autonomous loop."
         ),
         "install.provider_detected": "Provider: {name} ({model}) — detected from {source}",
         "install.next_steps_title": "Next Steps",
@@ -29,8 +30,9 @@ _MESSAGES: dict[str, dict[str, str]] = {
     "es": {
         "install.complete": "Configuración completa.",
         "install.no_provider": (
-            "No se detectó proveedor LLM. Configurá ANTHROPIC_API_KEY, OPENAI_API_KEY o "
-            "OPENROUTER_API_KEY para habilitar las fases agénticas."
+            "Sin proveedor LLM — el packing de contexto, knowledge graph y MCP tools "
+            "funcionan sin uno. Configurá ANTHROPIC_API_KEY, OPENAI_API_KEY o "
+            "OPENROUTER_API_KEY para habilitar el loop autónomo."
         ),
         "install.provider_detected": "Proveedor: {name} ({model}) — detectado desde {source}",
         "install.next_steps_title": "Próximos pasos",
