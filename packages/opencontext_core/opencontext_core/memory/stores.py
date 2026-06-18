@@ -24,14 +24,14 @@ def _manifest_write_lock(lock_path: Path) -> Generator[None, None, None]:
     lock_file = lock_path.with_suffix(".lock")
     lock_file.parent.mkdir(parents=True, exist_ok=True)
     try:
-        import fcntl
+        import fcntl  # type: ignore[import-not-found,unused-ignore]
 
         with open(lock_file, "w") as fh:
-            fcntl.flock(fh, fcntl.LOCK_EX)
+            fcntl.flock(fh, fcntl.LOCK_EX)  # type: ignore[attr-defined,unused-ignore]
             try:
                 yield
             finally:
-                fcntl.flock(fh, fcntl.LOCK_UN)
+                fcntl.flock(fh, fcntl.LOCK_UN)  # type: ignore[attr-defined,unused-ignore]
     except ImportError:
         # Windows fallback: busy-wait on a lockfile (good enough for CLI use)
         import time
