@@ -78,6 +78,10 @@ class ModelConfigMap(BaseModel):
         default_factory=dict,
         description="Optional role-specific model routing.",
     )
+    phases: dict[str, ModelProviderConfig] = Field(
+        default_factory=dict,
+        description="Per-phase model overrides. Keys: explore, spec, design, tasks, apply, verify, review, archive, judgment. Falls back to default.",
+    )
 
 
 class ProjectIndexConfig(BaseModel):
@@ -1134,6 +1138,7 @@ def default_config_data() -> dict[str, Any]:
                 "summarize": {"provider": "mock", "model": "mock-llm"},
                 "orchestrate": {"provider": "mock", "model": "mock-llm"},
             },
+            "phases": {},
         },
         "project_index": {
             "enabled": True,
