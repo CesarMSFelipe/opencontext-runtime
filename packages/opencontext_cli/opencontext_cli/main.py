@@ -1469,6 +1469,90 @@ def _template_config(template: str) -> dict[str, Any]:
     return config_data
 
 
+def _install_wizard(args: Any, console: Any) -> None:
+    """Interactive wizard: language → editor → API key."""
+    from rich.prompt import Prompt, Confirm
+    from rich.console import Console as _Console
+
+    _c = _Console()
+    root = Path(getattr(args, "root", "."))
+
+    # Step 1 — Language
+    try:
+        from opencontext_core.i18n import set_language, t
+        lang = Prompt.ask(
+            t("onboarding.language_prompt"),
+            choices=["en", "es"],
+            default="en",
+            console=_c,
+        )
+        set_language(lang)
+        cfg_path = root / "opencontext.yaml"
+        if cfg_path.exists():
+            import yaml as _yaml
+            cfg = _yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+            cfg["ui_language"] = lang
+            cfg_path.write_text(_yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
+    except Exception:
+        pass
+
+    # Step 2 — Editor
+    try:
+        from opencontext_core.i18n import t as _t
+    except Exception:
+        def _t(k, **kw): return k  # type: ignore[misc]
+
+    _c.print()
+    _c.print("[bold]Which AI coding editor do you use?[/bold]")
+    _EDITORS = [
+        ("1", "claude-code",    "Claude Code (Anthropic)"),
+        ("2", "cursor",         "Cursor"),
+        ("3", "opencode",       "OpenCode"),
+        ("4", "windsurf",       "Windsurf"),
+        ("5", "codex",          "Codex CLI (OpenAI)"),
+        ("6", "vscode-copilot", "VS Code + Copilot"),
+        ("7", "other",          "Other / I'll configure later"),
+    ]
+    for num, _, label in _EDITORS:
+        _c.print(f"  {num}. {label}")
+    choice = Prompt.ask("Choice", choices=[n for n, _, _ in _EDITORS], default="1", console=_c)
+    chosen_editor = next((eid for n, eid, _ in _EDITORS if n == choice), None)
+    if chosen_editor and chosen_editor != "other":
+        try:
+            import os
+            os.environ["_OC_WIZARD_EDITOR"] = chosen_editor
+        except Exception:
+            pass
+
+    # Step 3 — API key (only if not already set and editor needs LLM)
+    try:
+        from opencontext_core.providers.detect import detect_provider
+        current = detect_provider()
+        if current.source == "fallback":
+            _c.print()
+            _c.print("[bold]No LLM provider detected.[/bold]")
+            _c.print("Agentic phases (loop, spec, design) need a real LLM provider.")
+            _PROVIDERS = [
+                ("1", "ANTHROPIC_API_KEY",  "Anthropic (Claude)"),
+                ("2", "OPENAI_API_KEY",     "OpenAI (GPT-4)"),
+                ("3", "OPENROUTER_API_KEY", "OpenRouter (multi-model)"),
+                ("4", "skip",               "Skip — I'll configure later"),
+            ]
+            for num, _, label in _PROVIDERS:
+                _c.print(f"  {num}. {label}")
+            pchoice = Prompt.ask("Provider", choices=[n for n, _, _ in _PROVIDERS], default="4", console=_c)
+            pkey = next((env for n, env, _ in _PROVIDERS if n == pchoice), "skip")
+            if pkey != "skip":
+                api_key = Prompt.ask(f"Paste your {pkey}", password=True, console=_c)
+                if api_key.strip():
+                    import os
+                    os.environ[pkey] = api_key.strip()
+                    _c.print(f"[green]✓[/] {pkey} set for this session.")
+                    _c.print("[dim]To persist it, add it to your shell profile (e.g. ~/.zshrc).[/dim]")
+    except Exception:
+        pass
+
+
 def _print_agent_instructions(agents: list, console: Any) -> None:
     """Print client-specific usage instructions after install."""
     from rich.panel import Panel
@@ -1567,29 +1651,9 @@ def _install(args: argparse.Namespace) -> None:
     console.print("    • Harness workflow")
     console.print()
 
-    # Language selection on first install (interactive only)
+    # Interactive wizard (language + editor + API key)
     if not args.yes and sys.stdout.isatty():
-        try:
-            from opencontext_core.i18n import set_language, t
-            from rich.prompt import Prompt
-            from rich.console import Console as _Console
-            lang = Prompt.ask(
-                t("onboarding.language_prompt"),
-                choices=["en", "es"],
-                default="en",
-                console=_Console(),
-            )
-            set_language(lang)
-            # Persist to config if it exists
-            _root = Path(getattr(args, "root", "."))
-            _cfg_path = _root / "opencontext.yaml"
-            if _cfg_path.exists():
-                import yaml
-                _cfg_data = yaml.safe_load(_cfg_path.read_text(encoding="utf-8")) or {}
-                _cfg_data["ui_language"] = lang
-                _cfg_path.write_text(yaml.safe_dump(_cfg_data, sort_keys=False), encoding="utf-8")
-        except Exception:
-            pass
+        _install_wizard(args, console)
 
     if not args.yes:
         proceed = Confirm.ask("Proceed with setup?", default=not already_setup)
@@ -3368,9 +3432,21 @@ def _pack(
             import sys as _sys
 
             shown_pct = min(reduction_pct, 99.9)
+            mem_indicator = ""
+            try:
+                import sqlite3 as _sqlite3
+
+                mem_db = naive_root / ".storage" / "opencontext" / "memory.db"
+                if mem_db.exists():
+                    with _sqlite3.connect(str(mem_db)) as _mc:
+                        row = _mc.execute("SELECT COUNT(*) FROM memories").fetchone()
+                        if row and row[0] > 0:
+                            mem_indicator = f"  memory: {row[0]} items active"
+            except Exception:
+                pass
             print(
                 f"  ↓ {shown_pct}% fewer tokens than reading the whole project "
-                f"({naive_tokens:,} → {optimized_tokens:,})",
+                f"({naive_tokens:,} → {optimized_tokens:,}){mem_indicator}",
                 file=_sys.stderr,
             )
         record_event(

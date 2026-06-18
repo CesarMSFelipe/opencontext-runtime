@@ -159,6 +159,12 @@ class InstallationManager:
             hooks_result = self._run_hooks("post-install")
             results.append(hooks_result)
 
+        # Install git post-commit hook for automatic harvesting
+        try:
+            self._install_git_hook(project_root)
+        except Exception:
+            pass
+
         self._save_state(
             InstallState(
                 version=self.VERSION,
@@ -548,6 +554,26 @@ class InstallationManager:
             "status": "completed",
             "hook": hook_name,
         }
+
+    def _install_git_hook(self, project_root: Path) -> None:
+        """Install a post-commit git hook that harvests memory and re-indexes changed files."""
+        git_dir = project_root / ".git"
+        if not git_dir.is_dir():
+            return
+        hook_path = git_dir / "hooks" / "post-commit"
+        hook_content = (
+            "#!/bin/sh\n"
+            "# OpenContext: harvest memory candidates and re-index changed files\n"
+            "opencontext memory collect --yes >/dev/null 2>&1 &\n"
+            "opencontext index . >/dev/null 2>&1 &\n"
+        )
+        if hook_path.exists():
+            existing = hook_path.read_text(encoding="utf-8")
+            if "opencontext" in existing:
+                return
+            hook_content = existing.rstrip("\n") + "\n\n" + hook_content
+        hook_path.write_text(hook_content, encoding="utf-8")
+        hook_path.chmod(0o755)
 
     def _check_updates(self, state: InstallState) -> list[dict[str, Any]]:
         """Check for available updates."""

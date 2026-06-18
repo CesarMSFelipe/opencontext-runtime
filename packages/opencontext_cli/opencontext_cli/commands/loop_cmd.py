@@ -127,35 +127,19 @@ def _run_loop(
 
     runner = HarnessRunner(root=root)
 
-    if not autonomous:
-        phases = runner.schedule_phases(workflow)
-        for phase in phases:
-            print(f"\n{phase.upper()}", end="  ", flush=True)
-            try:
-                result = runner.run(workflow, task, approved_phases={phase} if phase == "apply" else set())
-            except Exception as e:
-                print(f"error: {e}")
-                return False
-            summary = _summarize_result(result, compressor)
-            print(summary)
-            if phase not in ("archive",) and not _ask_continue(phase):
-                print("\nAborted by user.")
-                return False
-        print("\nLoop complete.")
-        return True
-
     try:
         result = runner.run(workflow, task)
     except Exception as e:
         print(f"error: {e}", file=sys.stderr)
         return False
 
-    summary = _summarize_result(result, compressor)
-    print(summary)
+    _print_run_summary(result)
     status = getattr(result, "status", None)
     passed = status is not None and getattr(status, "value", str(status)) in ("passed", "warning")
     if passed:
         print("\nLoop complete.")
+    elif not passed:
+        print("\nLoop did not complete — check warnings above.")
     return passed
 
 
@@ -167,26 +151,57 @@ def _print_header(task: str, flow: str, compress: str) -> None:
     print("-" * width)
 
 
-def _summarize_result(result, compressor) -> str:
-    """Produce a compressed one-line summary of a phase result."""
+def _print_run_summary(result) -> None:
+    """Print a human-readable run summary with per-phase breakdown."""
     if result is None:
-        return "skipped"
-    status = getattr(result, "status", "?")
-    gates = getattr(result, "gates", [])
-    passed = sum(1 for g in gates if getattr(g, "status", None) and g.status.value == "passed")
-    total = len(gates)
-    summary = f"status:{status.value if hasattr(status, 'value') else status}"
-    if total:
-        summary += f"  gates:{passed}/{total}"
+        print("  no result")
+        return
+
+    ledgers = getattr(result, "ledgers", [])
     artifacts = getattr(result, "artifacts", [])
-    if artifacts:
-        summary += f"  artifacts:{len(artifacts)}"
-    if compressor:
-        try:
-            summary = compressor.compress(summary, [])
-        except Exception:
-            pass
-    return summary
+    warnings = getattr(result, "warnings", [])
+    gates = getattr(result, "gates", [])
+    status = getattr(result, "status", None)
+    status_str = status.value if hasattr(status, "value") else str(status)
+
+    # Per-phase summary
+    artifacts_by_phase: dict[str, list] = {}
+    for a in artifacts:
+        phase = getattr(a, "phase", "?")
+        artifacts_by_phase.setdefault(phase, []).append(a)
+
+    gates_by_phase: dict[str, list] = {}
+    for g in gates:
+        phase = getattr(g, "phase", "?")
+        gates_by_phase.setdefault(phase, []).append(g)
+
+    print()
+    for ledger in ledgers:
+        phase = getattr(ledger, "phase", "?")
+        used = getattr(ledger, "used_tokens", 0)
+        budget = getattr(ledger, "budget_tokens", 0)
+        phase_artifacts = artifacts_by_phase.get(phase, [])
+        phase_gates = gates_by_phase.get(phase, [])
+        failed_gates = [g for g in phase_gates if getattr(g, "status", None) and g.status.value == "failed"]
+        warn_gates = [g for g in phase_gates if getattr(g, "status", None) and g.status.value == "warning"]
+
+        phase_status = "✓" if not failed_gates and not warn_gates else ("⚠" if not failed_gates else "✗")
+        parts = [f"  {phase_status} {phase.upper():<12}  {used}/{budget} tokens"]
+        if phase_artifacts:
+            kinds = ", ".join(getattr(a, "kind", "artifact") for a in phase_artifacts[:3])
+            parts.append(f"  [{kinds}]")
+        if failed_gates:
+            parts.append(f"  FAILED: {', '.join(g.id for g in failed_gates)}")
+        elif warn_gates:
+            parts.append(f"  warn: {', '.join(g.id for g in warn_gates[:2])}")
+        print("".join(parts))
+
+    # LLM-absent warnings surfaced directly to user
+    for w in warnings:
+        if "LLM" in w or "provider" in w or "delegate" in w or "executor" in w or "planned" in w.lower():
+            print(f"\n  ⚠  {w}")
+
+    print(f"\n  Status: {status_str}  |  {len(artifacts)} artifact(s)  |  {len(gates)} gate(s)")
 
 
 def _ask_continue(phase: str) -> bool:

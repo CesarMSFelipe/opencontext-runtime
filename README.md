@@ -33,22 +33,23 @@
 
 ## ⚡ Quick Start
 
+**Start here — no setup, no API key needed:**
+
 ```bash
 pip install opencontext-cli
-
 cd your-project
-
-# See the difference in 30 seconds — no setup, no API key
 opencontext demo
-
-# Set up your project (auto-detects stack, builds graph, wires your agent)
-opencontext install
-
-# Get a verified, minimal context pack
-opencontext pack . --query "How does authentication work?" --copy
 ```
 
-`opencontext demo` runs on your actual repo and shows you exactly what it filters out and why. Run it before anything else.
+`demo` runs on your actual repo and shows you the token reduction in real numbers. See the value before you commit to anything.
+
+**Then set up:**
+
+```bash
+opencontext install   # detects your stack, builds the graph, wires your editor
+```
+
+The install wizard asks which editor you use and guides you to the first real result — a verified context query in your editor.
 
 ---
 
