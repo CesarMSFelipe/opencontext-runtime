@@ -125,13 +125,16 @@ class Plugin(ABC):
 
 # ── Built-in Registry Data ─────────────────────────────────────────────────
 
+# No public plugins are published yet. The list below are planned plugins.
+# Install via --github owner/repo or --url <url> when available.
+# To build your own: opencontext plugin install <name> creates a scaffold.
 _BUILTIN_REGISTRY: list[dict[str, Any]] = [
     {
         "name": "security-audit",
-        "description": "Security audit and vulnerability scanning for OpenContext projects",
+        "description": "Security audit and vulnerability scanning (planned — not yet published)",
         "author": "OpenContext Team",
-        "homepage": "https://github.com/opencontext/plugin-security-audit",
-        "repository": "https://github.com/opencontext/plugin-security-audit",
+        "homepage": "",
+        "repository": "",
         "versions": [
             {
                 "version": "0.1.0",
@@ -143,10 +146,10 @@ _BUILTIN_REGISTRY: list[dict[str, Any]] = [
     },
     {
         "name": "performance",
-        "description": "Performance profiling, bottleneck detection, and optimization suggestions",
+        "description": "Performance profiling and bottleneck detection (planned — not yet published)",
         "author": "OpenContext Team",
-        "homepage": "https://github.com/opencontext/plugin-performance",
-        "repository": "https://github.com/opencontext/plugin-performance",
+        "homepage": "",
+        "repository": "",
         "versions": [
             {
                 "version": "0.1.0",
@@ -158,10 +161,10 @@ _BUILTIN_REGISTRY: list[dict[str, Any]] = [
     },
     {
         "name": "team",
-        "description": "Team collaboration tools, shared conventions, and peer review workflows",
+        "description": "Team collaboration and shared conventions (planned — not yet published)",
         "author": "OpenContext Team",
-        "homepage": "https://github.com/opencontext/plugin-team",
-        "repository": "https://github.com/opencontext/plugin-team",
+        "homepage": "",
+        "repository": "",
         "versions": [
             {
                 "version": "0.1.0",

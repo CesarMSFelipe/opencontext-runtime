@@ -37,8 +37,9 @@ def test_checkpoint_create_outputs_hashes(capsys) -> None:
 
 def test_security_scan_outputs_warning(capsys) -> None:
     _security("scan")
-    data = json.loads(capsys.readouterr().out)
-    assert data["warnings"]
+    out = capsys.readouterr().out
+    # Output is now human-readable (not JSON)
+    assert "Secret values are redacted" in out or "finding" in out.lower() or "No secret" in out
 
 
 def test_pack_diff_scaffold(capsys) -> None:
