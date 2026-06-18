@@ -458,6 +458,22 @@ The `judgment` phase runs adversarial structural review of apply artifacts — m
 </div>
 
 <p align="center">
+  <img src="docs/assets/sdd-phases.svg" alt="SDD 9-phase workflow: explore, propose, spec, design, tasks, apply, verify, review, archive. Quality track adds GGA rules and judgment phases." width="720">
+</p>
+
+<p align="center">
+  <sub>SDD Workflow · 9 phases · blue = works without LLM · amber dashes = optional quality gates</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/tdd-phases.svg" alt="TDD workflow: explore (offline), write test (red — failing), implement, verify (green — passing), refactor, verify (offline). Repeat write test → verify until green." width="720">
+</p>
+
+<p align="center">
+  <sub>TDD Workflow · test first · implement minimum · verify green · refactor · verify again</sub>
+</p>
+
+<p align="center">
   <img src="docs/assets/divider.svg" alt="" width="720">
 </p>
 
