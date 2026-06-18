@@ -500,8 +500,8 @@ class HarnessRunner:
         ]
         # Memory harvest — auto-approve low-stakes candidates
         try:
-            from opencontext_core.memory.collector import (
-                MemoryCandidateExtractor,  # type: ignore[import-not-found]
+            from opencontext_core.memory.collector import (  # type: ignore[import-not-found]
+                MemoryCandidateExtractor,
             )
             from opencontext_core.memory_usability.context_repository import ContextRepository
             from opencontext_core.memory_usability.memory_gc import (
