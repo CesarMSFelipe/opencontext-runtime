@@ -383,6 +383,14 @@ opencontext bridges scan . --type HTTP --json
 
 13 MCP tools, pre-approved after `opencontext install`. Compatible with Claude Code, Cursor, Copilot, Windsurf, OpenCode, and any MCP-compatible editor.
 
+`opencontext install` also writes three agent personas to your editor's agents directory — available in OpenCode via Tab, and as subagents in Claude Code:
+
+| Persona | Role |
+|---------|------|
+| **OC Orchestrator** | Plans, delegates, and verifies through the gates |
+| **OC Professor** | Explains the why and the concept before the code |
+| **OC Reviewer** | One finding per line, severity-tagged, no praise |
+
 </td>
 </tr>
 </table>
@@ -477,19 +485,28 @@ opencontext preset apply privacy    # air-gapped · fail-closed · no egress
 
 <h3>Installation</h3>
 
+**Requirements:** Python 3.12+
+
 | Method | Command |
 |--------|---------|
 | pip | `pip install opencontext-cli` |
 | pipx | `pipx install opencontext-cli` |
 | uv | `uv tool install opencontext-cli` |
-| Linux / macOS | `curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh \| bash` |
-| Windows | `irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 \| iex` |
+| Ubuntu / Debian | `curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh \| bash` |
+| macOS | `curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh \| bash` |
+| Windows (PowerShell) | `irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 \| iex` |
 | Portable binary | `make binary` → `dist/opencontext.pyz` (Python 3.12+) |
 
+After installing, run the setup wizard in your project:
+
 ```bash
-opencontext verify
-opencontext doctor
+cd your-project
+opencontext install     # detects editor, writes MCP config, indexes repo
+opencontext verify      # confirm all checks pass
+opencontext doctor      # deep diagnostics if something looks wrong
 ```
+
+The installer auto-detects Claude Code, OpenCode, Cursor, Copilot, Windsurf, and more. For OpenCode users, pressing **Tab** after install shows three built-in personas: **OC Orchestrator**, **OC Professor**, and **OC Reviewer** — each with different working styles on top of the knowledge graph.
 
 </td>
 </tr>
