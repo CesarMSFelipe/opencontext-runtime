@@ -1966,8 +1966,8 @@ def _watch(
     except Exception as exc:
         print(f"  Warning: initial index failed: {exc}", file=sys.stderr)
 
-    def _reindex() -> None:
-        """Re-index project, lazy-init runtime if needed."""
+    def _reindex(changed: set[str] | None) -> None:
+        """Incrementally re-index changed files, or full rebuild when changed is None."""
         rt = runtime_holder[0]
         if rt is None:
             try:
@@ -1977,8 +1977,12 @@ def _watch(
                 print(f"  Re-index failed (runtime init error): {exc}", file=sys.stderr)
                 return
         try:
-            manifest = rt.index_project(project_root)
-            print(f"  Re-indexed: {len(manifest.files)} files, {len(manifest.symbols)} symbols")
+            if changed:
+                stats = rt.reindex_files(changed, project_root)
+                print(f"  Re-indexed {stats.get('files', 0)} file(s) — {stats.get('nodes', 0)} nodes, {stats.get('edges', 0)} edges")
+            else:
+                manifest = rt.index_project(project_root)
+                print(f"  Full re-index: {len(manifest.files)} files, {len(manifest.symbols)} symbols")
         except Exception as exc:
             print(f"  Re-index failed: {exc}", file=sys.stderr)
 
