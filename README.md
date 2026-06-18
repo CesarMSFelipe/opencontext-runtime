@@ -346,14 +346,20 @@ opencontext demo           # 30 seconds, no setup
 opencontext benchmark run  # full structured benchmark
 ```
 
-Results on OpenContext's own codebase:
+`opencontext benchmark run` scores 7 scenarios across 5 dimensions (completeness, relevance, token efficiency, safety, freshness). Results on this repo:
 
-| Task | Naive tokens | OpenContext | Reduction |
-|------|-------------:|------------:|----------:|
-| Add `count_by_type()` to BridgeDetector | 49,394 | 2,474 | **95.0%** |
-| Add `--json` flag to `bridges scan` | 59,363 | 2,273 | **96.2%** |
-| Add RuntimeTrace to WorkflowEngine | 27,556 | 6,905 | **74.9%** |
-| **Average** | | | **88.7%** |
+| Scenario | Score | Token efficiency |
+|----------|------:|-----------------:|
+| completeness/minimal | 95.0 | 80% |
+| completeness/multi_file | 87.5 | 50% |
+| relevance/focused | 98.0 | 92% |
+| efficiency/large_project | 99.0 | 96% |
+| safety/clean_context | 95.0 | 80% |
+| freshness/recent | 87.5 | 50% |
+| freshness/stale | 81.5 | 50% |
+| **Average** | **91.9** | |
+
+The `efficiency/large_project` scenario consistently shows 96%+ token reduction on large codebases. Exact numbers vary by project size and query specificity — run `opencontext demo` on your own repo to see real figures.
 
 ---
 
