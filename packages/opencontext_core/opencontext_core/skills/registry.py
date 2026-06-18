@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from dataclasses import dataclass as _dc
+from dataclasses import field as _field
 from pathlib import Path
 from typing import Any
 
@@ -234,3 +236,144 @@ def render_registry_markdown(registry: list[SkillEntry]) -> str:
         lines.append("")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# New-style .skill.md scanner (no frontmatter, trigger-section based)
+# These coexist with the old SKILL.md/frontmatter API above.
+# ---------------------------------------------------------------------------
+
+
+def _parse_dotskill_file(path: Path) -> SkillEntryV2 | None:
+    """Parse a .skill.md file (new format, no YAML frontmatter)."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+    name_match = re.search(r"^#\s+Skill:\s*(.+)$", text, re.MULTILINE)
+    name = name_match.group(1).strip() if name_match else path.stem.replace(".skill", "")
+
+    lines = text.splitlines()
+    description = ""
+    found_h1 = False
+    for line in lines:
+        if line.startswith("# "):
+            found_h1 = True
+            continue
+        if found_h1 and line.strip():
+            description = line.strip()
+            break
+
+    trigger_section = re.search(r"##\s+Trigger\s*\n(.*?)(?=\n##|\Z)", text, re.DOTALL)
+    trigger_text = trigger_section.group(1) if trigger_section else text
+
+    exts = re.findall(r"`(\.\w+)`", trigger_text)
+    stop = {
+        "when",
+        "file",
+        "test",
+        "code",
+        "task",
+        "this",
+        "that",
+        "with",
+        "from",
+        "skill",
+        "trigger",
+        "workflow",
+        "step",
+        "rule",
+    }
+    kws = [
+        w.lower()
+        for w in re.findall(r"\b([A-Za-z][a-z]{3,}(?:JS|js|Py|py)?)\b", trigger_text)
+        if w.lower() not in stop
+    ]
+
+    return SkillEntryV2(
+        name=name,
+        path=path,
+        description=description,
+        triggers_ext=list(dict.fromkeys(exts)),
+        triggers_kw=list(dict.fromkeys(kws[:10])),
+    )
+
+
+@_dc
+class SkillEntryV2:
+    """New-style skill entry parsed from .skill.md files (no frontmatter)."""
+
+    name: str
+    path: Path
+    description: str
+    triggers_ext: list[str] = _field(default_factory=list)
+    triggers_kw: list[str] = _field(default_factory=list)
+
+
+def scan_skills(project_root: Path) -> list[SkillEntryV2]:
+    """Scan project and built-in dirs for *.skill.md files (new format)."""
+    entries: list[SkillEntryV2] = []
+    seen: set[str] = set()
+
+    for search_dir in [
+        project_root / "skills",
+        project_root / ".opencontext" / "skills",
+    ]:
+        if search_dir.is_dir():
+            for p in sorted(search_dir.rglob("*.skill.md")):
+                e = _parse_dotskill_file(p)
+                if e and e.name not in seen:
+                    entries.append(e)
+                    seen.add(e.name)
+
+    builtin_dir = Path(__file__).parent / "builtin"
+    if builtin_dir.is_dir():
+        for p in sorted(builtin_dir.glob("*.skill.md")):
+            e = _parse_dotskill_file(p)
+            if e and e.name not in seen:
+                entries.append(e)
+                seen.add(e.name)
+
+    return entries
+
+
+def refresh(project_root: Path, force: bool = False) -> Path:
+    """Write .opencontext/skill-registry.md and return the path."""
+    entries = scan_skills(project_root)
+    out_dir = project_root / ".opencontext"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "skill-registry.md"
+    lines = ["# Skill Registry", "", f"_Generated from {len(entries)} skill files._", ""]
+    for e in entries:
+        try:
+            rel = e.path.relative_to(project_root)
+        except ValueError:
+            rel = e.path
+        exts = ", ".join(e.triggers_ext) if e.triggers_ext else "—"
+        lines += [
+            f"## {e.name}",
+            f"**Path:** `{rel}`  ",
+            f"**Description:** {e.description}  ",
+            f"**Extensions:** {exts}  ",
+            "",
+        ]
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+    return out_path
+
+
+def match_skills(
+    entries: list[SkillEntryV2],
+    file_paths: list[str],
+    keywords: list[str],
+) -> list[SkillEntryV2]:
+    """Return v2 skill entries relevant to the given files/keywords."""
+    matched: list[SkillEntryV2] = []
+    exts = {Path(f).suffix.lower() for f in file_paths}
+    kw_set = {k.lower() for k in keywords}
+    for e in entries:
+        if any(ext in exts for ext in e.triggers_ext):
+            matched.append(e)
+        elif any(kw in kw_set for kw in e.triggers_kw):
+            matched.append(e)
+    return matched

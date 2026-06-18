@@ -49,11 +49,9 @@ def list_available_agents(agents_dir: Path) -> list[tuple[str, Path, AgentConfig
     for config_file in sorted(profiles_dir.glob("*.yaml")):
         try:
             config = load_agent_config(config_file)
-            # Use config type as agent identifier if name not suitable
             agent_name = config.type or config_file.stem
             agents.append((agent_name, config_file, config))
         except (ValueError, yaml.YAMLError) as e:
-            # Skip invalid configurations but log
             print(f"Warning: Skipping invalid agent config {config_file}: {e}")
 
     return agents

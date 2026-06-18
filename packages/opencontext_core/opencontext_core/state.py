@@ -187,13 +187,11 @@ class ConfigBackupManager:
 
         files_backed_up: list[str] = []
 
-        # Backup user config
         config_file = UserConfigStore.CONFIG_FILE
         if config_file.exists():
             shutil.copy2(str(config_file), str(backup_dir / "user-config.json"))
             files_backed_up.append("user-config.json")
 
-        # Backup state
         state_file = StateStore.STATE_FILE
         if state_file.exists():
             shutil.copy2(str(state_file), str(backup_dir / "state.json"))

@@ -62,3 +62,12 @@ class MemoryRecord(BaseModel):
     superseded_by: str | None = Field(
         default=None, description="ID of the record that replaced this one, if any."
     )
+    topic_key: str | None = Field(
+        default=None,
+        description="Hierarchical dedup handle like 'architecture/auth-model'. "
+        "When set, store_by_topic_key() upserts in-place instead of creating duplicates.",
+    )
+    revision_count: int = Field(
+        default=0,
+        description="How many times this topic has been updated. Incremented on each upsert.",
+    )

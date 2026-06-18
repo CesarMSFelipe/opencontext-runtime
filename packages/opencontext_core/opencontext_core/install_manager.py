@@ -66,7 +66,6 @@ class InstallationManager:
     STATE_DIR = ".config/opencontext"
     STATE_FILE = "install-state.json"
 
-    # Platform-specific config paths
     PLATFORM_PATHS: ClassVar[dict[str, dict[str, str]]] = {
         "Darwin": {  # macOS
             "config_dir": "~/.config",
@@ -82,7 +81,6 @@ class InstallationManager:
         },
     }
 
-    # Components available for installation
     AVAILABLE_COMPONENTS: ClassVar[list[InstallComponent]] = [
         InstallComponent("mcp", "MCP server configuration", required=True),
         InstallComponent("agents", "AI agent configurations"),
@@ -124,27 +122,22 @@ class InstallationManager:
 
         project_root = Path(root).resolve() if root is not None else Path.cwd()
 
-        # Backup existing config
         if backup and self._is_installed():
             self.backup_manager.create_backup(name="pre-install")
 
         # Write a loadable opencontext.yaml so the project is runnable.
         config_path = self._write_project_config(project_root)
 
-        # Determine components
         to_install = self._resolve_components(profile, components)
 
-        # Determine agents
         agents = self._resolve_agents(profile, targets)
 
         results = []
 
-        # Install MCP config
         if "mcp" in to_install:
             mcp_result = self._install_mcp()
             results.append(mcp_result)
 
-        # Install agent configs
         if "agents" in to_install and agents:
             agent_targets = [AgentTarget(a) for a in agents]
             agent_result = self.installer.install(
@@ -154,22 +147,24 @@ class InstallationManager:
             )
             results.append(agent_result)
 
-        # Install skills
         if "skills" in to_install:
             skills_result = self._install_skills(project_root)
             results.append(skills_result)
 
-        # Install profiles
         if "profiles" in to_install:
             profiles_result = self._install_profiles()
             results.append(profiles_result)
 
-        # Run hooks
         if "hooks" in to_install:
             hooks_result = self._run_hooks("post-install")
             results.append(hooks_result)
 
-        # Save state
+        # Install git post-commit hook for automatic harvesting
+        try:
+            self._install_git_hook(project_root)
+        except Exception:
+            pass
+
         self._save_state(
             InstallState(
                 version=self.VERSION,
@@ -209,7 +204,6 @@ class InstallationManager:
                 "message": "OpenContext is not installed. Run 'opencontext install' first.",
             }
 
-        # Check for updates
         updates_available = self._check_updates(state)
 
         if check_only:
@@ -227,17 +221,14 @@ class InstallationManager:
                 "version": state.version,
             }
 
-        # Backup
         if backup:
             self.backup_manager.create_backup(name="pre-update")
 
-        # Apply updates
         results = []
         for update in updates_available:
             result = self._apply_update(update)
             results.append(result)
 
-        # Update state
         state.version = self.VERSION
         self._save_state(state)
 
@@ -273,21 +264,17 @@ class InstallationManager:
 
         removed = []
 
-        # Remove agent configs
         for agent in state.agents:
             if self._remove_agent_config(agent):
                 removed.append(f"agent:{agent}")
 
-        # Remove MCP configs
         if self._remove_mcp_config():
             removed.append("mcp")
 
-        # Remove state
         if self.state_path.exists():
             self.state_path.unlink()
             removed.append("state")
 
-        # Remove install directory (keep backups if requested)
         install_dir = Path.home() / ".config" / "opencontext"
         if install_dir.exists():
             if keep_backups:
@@ -326,14 +313,12 @@ class InstallationManager:
         issues = []
         checks = []
 
-        # Check state version
         if state.version != self.VERSION:
             issues.append(f"Version mismatch: installed={state.version}, expected={self.VERSION}")
             checks.append({"check": "version", "ok": False, "version": state.version})
         else:
             checks.append({"check": "version", "ok": True, "version": state.version})
 
-        # Check agent configs
         for agent in state.agents:
             agent_dir = self._get_agent_dir(agent)
             if agent_dir and not agent_dir.exists():
@@ -342,14 +327,12 @@ class InstallationManager:
             else:
                 checks.append({"check": f"agent:{agent}", "ok": True})
 
-        # Check MCP config
         mcp_path = Path.home() / ".claude" / "mcp.json"
         if mcp_path.exists():
             checks.append({"check": "mcp:claude", "ok": True})
         else:
             checks.append({"check": "mcp:claude", "ok": False, "note": "Optional"})
 
-        # Check components
         for component in state.components:
             component_ok = self._verify_component(component)
             checks.append({"check": f"component:{component}", "ok": component_ok})
@@ -491,6 +474,18 @@ class InstallationManager:
             project = config_data.get("project")
             if isinstance(project, dict):
                 project["name"] = project_root.name or project.get("name", "my-project")
+            # Auto-detect ambient provider from environment
+            try:
+                from opencontext_core.providers.detect import detect_provider
+
+                detected = detect_provider()
+                if detected.source != "fallback":
+                    models = config_data.setdefault("models", {})
+                    default_model = models.setdefault("default", {})
+                    default_model["provider"] = detected.name
+                    default_model["model"] = detected.model
+            except Exception:
+                pass
             config_path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
 
         # Fail loudly rather than report success over an unloadable config.
@@ -561,6 +556,26 @@ class InstallationManager:
             "hook": hook_name,
         }
 
+    def _install_git_hook(self, project_root: Path) -> None:
+        """Install a post-commit git hook that harvests memory and re-indexes changed files."""
+        git_dir = project_root / ".git"
+        if not git_dir.is_dir():
+            return
+        hook_path = git_dir / "hooks" / "post-commit"
+        hook_content = (
+            "#!/bin/sh\n"
+            "# OpenContext: harvest memory candidates and re-index changed files\n"
+            "opencontext memory collect --yes >/dev/null 2>&1 &\n"
+            "opencontext index . >/dev/null 2>&1 &\n"
+        )
+        if hook_path.exists():
+            existing = hook_path.read_text(encoding="utf-8")
+            if "opencontext" in existing:
+                return
+            hook_content = existing.rstrip("\n") + "\n\n" + hook_content
+        hook_path.write_text(hook_content, encoding="utf-8")
+        hook_path.chmod(0o755)
+
     def _check_updates(self, state: InstallState) -> list[dict[str, Any]]:
         """Check for available updates."""
         updates = []
@@ -587,7 +602,6 @@ class InstallationManager:
         """Remove configuration for an agent."""
         agent_dir = self._get_agent_dir(agent)
         if agent_dir and agent_dir.exists():
-            # Remove OpenContext-specific files
             for file in ["mcp.json", "opencontext.json", "CLAUDE.md"]:
                 path = agent_dir / file
                 if path.exists():
@@ -607,7 +621,6 @@ class InstallationManager:
 
     def _verify_component(self, component: str) -> bool:
         """Verify a component is healthy."""
-        # Basic checks
         if component == "mcp":
             return True
         if component == "skills":

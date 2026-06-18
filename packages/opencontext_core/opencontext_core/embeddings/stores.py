@@ -128,7 +128,6 @@ class LocalVectorStore(VectorStore):
             dot = sum(q * v for q, v in zip(query_norm, vector_norm, strict=False))
             scores.append((item_id, dot, metadata))
 
-        # Sort by descending score
         scores.sort(key=lambda x: x[1], reverse=True)
 
         results = []

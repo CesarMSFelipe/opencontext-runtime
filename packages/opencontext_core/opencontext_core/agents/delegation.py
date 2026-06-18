@@ -179,7 +179,6 @@ class SubAgentDelegate:
     ) -> SubAgentResult:
         """Delegate to a subprocess script."""
 
-        # Write context to temp file
         import tempfile
 
         context = self._compress_context(context)
@@ -188,7 +187,6 @@ class SubAgentDelegate:
             context_path = f.name
 
         try:
-            # Look for phase script
             script_dir = Path.home() / ".config" / "opencontext" / "agents"
             script = script_dir / f"{phase}.py"
 

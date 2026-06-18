@@ -60,6 +60,8 @@ def agent_home(agent_id: str) -> Path:
         "openhands": home / ".openhands",
         "aider": home / ".aider",
         "zed": home / ".config" / "zed",
+        "trae": home / ".trae",
+        "hermes": home / ".hermes",
     }
     return dirs.get(agent_id, home / f".{agent_id}")
 
@@ -126,6 +128,7 @@ _IGNORE_FILENAME: dict[str, str] = {
     "cline": ".clineignore",
     "roo": ".rooignore",
     "windsurf": ".codeiumignore",
+    "trae": ".traeignore",
 }
 
 

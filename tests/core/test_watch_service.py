@@ -63,7 +63,7 @@ class TestWatchService:
         """Simulate file event -> debounce -> re-index."""
         calls: list[int] = []
 
-        def callback() -> None:
+        def callback(changed: set | None = None) -> None:
             calls.append(1)
 
         watcher = WatchService(
@@ -94,7 +94,7 @@ class TestWatchService:
         """Multiple rapid events should trigger only one re-index."""
         calls: list[int] = []
 
-        def callback() -> None:
+        def callback(changed: set | None = None) -> None:
             calls.append(1)
 
         watcher = WatchService(
@@ -126,7 +126,7 @@ class TestWatchService:
         """force_reindex() triggers callback immediately."""
         calls: list[int] = []
 
-        def callback() -> None:
+        def callback(changed: set | None = None) -> None:
             calls.append(1)
 
         watcher = WatchService(
@@ -145,7 +145,7 @@ class TestWatchService:
         """force_reindex() should be a no-op when not running."""
         calls: list[int] = []
 
-        def callback() -> None:
+        def callback(changed: set | None = None) -> None:
             calls.append(1)
 
         watcher = WatchService(

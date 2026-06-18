@@ -503,13 +503,10 @@ class TerseCompressor:
         if not text.strip():
             return text
 
-        # Step 1: Protect code blocks, URLs, paths, etc.
         protected_text, placeholder_map = self._protect_technical_content(text)
 
-        # Step 2: Compress prose
         compressed = self._compress_prose(protected_text)
 
-        # Step 3: Restore protected technical content
         result = self._restore_technical_content(compressed, placeholder_map)
 
         # Step 4: Clean up spacing

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencontext-cli"
-version = "1.1.0"
+version = "1.2.0"
 description = "CLI adapter for OpenContext Runtime"
 readme = "README.md"
 requires-python = ">=3.12"

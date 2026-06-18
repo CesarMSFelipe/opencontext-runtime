@@ -22,11 +22,9 @@ def add_benchmark_parser(subparsers: Any) -> None:
     bm_parser = subparsers.add_parser("benchmark", help="Run and manage benchmarks.")
     bm_sub = bm_parser.add_subparsers(dest="benchmark_command", required=True)
 
-    # benchmark list
     list_parser = bm_sub.add_parser("list", help="List available benchmark cases.")
     list_parser.add_argument("--category", default=None, help="Filter by category.")
 
-    # benchmark run
     run_parser = bm_sub.add_parser("run", help="Run benchmark cases.")
     run_parser.add_argument("--case", default=None, help="Specific case ID to run.")
     run_parser.add_argument("--category", default=None, help="Filter by category.")
@@ -39,7 +37,6 @@ def add_benchmark_parser(subparsers: Any) -> None:
     run_parser.add_argument("--output", default=None, help="Output file (for markdown).")
     run_parser.add_argument("--save", action="store_true", help="Save results.")
 
-    # benchmark compare
     compare_parser = bm_sub.add_parser("compare", help="Compare against last baseline.")
     compare_parser.add_argument(
         "--output", default=None, help="Output file for markdown comparison."
@@ -90,7 +87,6 @@ def _handle_run(args: Any) -> None:
 
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-    # Determine which cases to run
     if args.case:
         case_ids = [args.case]
     elif args.category:
@@ -102,7 +98,6 @@ def _handle_run(args: Any) -> None:
     with console.status("[bold green]Running benchmarks..."):
         result = suite.run(case_ids=case_ids)
 
-    # Format output
     if args.format == "json":
         # Plain print to avoid Rich line wrapping breaking JSON
         print(format_benchmark_result_json(result))

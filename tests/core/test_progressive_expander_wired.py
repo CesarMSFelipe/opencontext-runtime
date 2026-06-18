@@ -100,6 +100,7 @@ def _seeded_graph_db(db_path: Path) -> dict[str, str]:
             call_site_line=1,
         )
     )
+    db.rebuild_fts()
     db.close()
     return name_to_id
 

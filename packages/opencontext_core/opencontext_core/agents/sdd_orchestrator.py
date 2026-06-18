@@ -73,6 +73,22 @@ WORKFLOW_TRACKS: dict[str, dict[str, object]] = {
         "phases": PHASE_ORDER,
         "deps": PHASE_DEPENDENCIES,
     },
+    "sdd": {
+        "phases": PHASE_ORDER,
+        "deps": PHASE_DEPENDENCIES,
+    },
+    "full+judgment": {
+        "phases": [*PHASE_ORDER, "judgment"],
+        "deps": {**PHASE_DEPENDENCIES, "judgment": ["verify"]},
+    },
+    "full+gga": {
+        "phases": [*PHASE_ORDER, "gga"],
+        "deps": {**PHASE_DEPENDENCIES, "gga": ["verify"]},
+    },
+    "full+quality": {
+        "phases": [*PHASE_ORDER, "gga", "judgment"],
+        "deps": {**PHASE_DEPENDENCIES, "gga": ["verify"], "judgment": ["gga"]},
+    },
 }
 
 
@@ -207,7 +223,6 @@ class SDDOrchestrator:
         # Save artifact
         artifact_ref = self.store.save(self.state.change, phase, content)
 
-        # Update state
         self.state.mark_completed(phase)
         self.state.mark_artifact_saved(phase)
 

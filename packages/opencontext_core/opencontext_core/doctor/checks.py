@@ -50,7 +50,33 @@ def run_doctor(config: OpenContextConfig) -> list[DoctorCheck]:
             ok=not config.cache.semantic.enabled,
             details="Semantic cache disabled by default.",
         ),
+        _check_provider(config),
     ]
+
+
+def _check_provider(config: OpenContextConfig) -> DoctorCheck:
+    """Check whether a real LLM provider is available."""
+    try:
+        from opencontext_core.providers.detect import detect_provider
+
+        p = detect_provider()
+        if p.source == "fallback":
+            return DoctorCheck(
+                name="llm.provider",
+                ok=True,
+                details=(
+                    "No LLM provider detected — core features (context packing, knowledge graph, "
+                    "MCP tools) work without one. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, "
+                    "or OPENROUTER_API_KEY to enable the autonomous loop."
+                ),
+            )
+        return DoctorCheck(
+            name="llm.provider",
+            ok=True,
+            details=f"Provider: {p.name} ({p.model}) via {p.source}.",
+        )
+    except Exception as exc:
+        return DoctorCheck(name="llm.provider", ok=False, details=f"Provider check failed: {exc}")
 
 
 def run_security_doctor(config: OpenContextConfig) -> list[DoctorCheck]:

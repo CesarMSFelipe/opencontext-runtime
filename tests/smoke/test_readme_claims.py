@@ -390,8 +390,8 @@ class TestMCPTools:
 
         n = len(MCPServer(db_path=tmp_path / "context_graph.db")._default_tool_names())
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        assert f"{n} tools" in readme, (
-            f"README must state '{n} tools' to match the live MCP server; "
+        assert f"{n} tools" in readme or f"{n} MCP tools" in readme, (
+            f"README must state '{n} tools' or '{n} MCP tools' to match the live MCP server; "
             "update the README when the tool set changes."
         )
 

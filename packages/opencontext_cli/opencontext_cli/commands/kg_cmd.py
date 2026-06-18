@@ -239,7 +239,6 @@ def handle_kg(args: Any) -> None:
         use_tree = getattr(args, "tree", False)
         fmt = getattr(args, "format", None)
 
-        # Resolve format: --tree is a shorthand for --format tree
         if fmt is None:
             fmt = "tree" if use_tree else "mermaid"
 
@@ -255,7 +254,6 @@ def handle_kg(args: Any) -> None:
                     f.write(output)
                 console.print(f"  ✓ {label} saved to [cyan]{output_path}[/]")
             elif fmt == "ascii":
-                # Plain ASCII, no rich formatting
                 print(output)
             else:
                 _display_rich_tree(kg)
@@ -1017,7 +1015,6 @@ def _display_rich_tree(kg: KnowledgeGraph) -> None:
     lang_rows = []
     for lang, cnt in sorted(languages.items(), key=lambda x: -x[1]):
         lang_loc = sum(s["loc"] for s in stats.values() if s.get("language") == lang)
-        # Unicode bar
         pct = lang_loc / total_loc * 100 if total_loc else 0
         bar_len = max(1, int(pct / 5))
         bar = "█" * bar_len + "░" * (20 - bar_len)

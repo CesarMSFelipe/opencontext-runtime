@@ -55,6 +55,7 @@ class Node:
     docstring: str | None
     signature: str | None
     is_exported: bool
+    content_snippet: str | None = None
 
 
 @dataclass
@@ -102,7 +103,8 @@ class GraphDatabase:
         container TEXT,
         docstring TEXT,
         signature TEXT,
-        is_exported INTEGER DEFAULT 0
+        is_exported INTEGER DEFAULT 0,
+        content_snippet TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_nodes_name ON nodes(name);
@@ -135,7 +137,7 @@ class GraphDatabase:
     CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
-        name, kind, docstring, signature,
+        name, kind, docstring, signature, file_path, content_snippet,
         content='nodes', content_rowid='fts_rowid'
     );
 
@@ -222,12 +224,35 @@ class GraphDatabase:
         return self._conn
 
     def init_schema(self) -> None:
-        """Create tables and indexes, migrating a legacy AUTOINCREMENT schema first."""
+        """Create tables and indexes, migrating legacy schemas first."""
 
         conn = self._connect()
         self._migrate_legacy_schema(conn)
+        self._migrate_fts_schema(conn)
         conn.executescript(self.SCHEMA)
         conn.commit()
+
+    def _migrate_fts_schema(self, conn: sqlite3.Connection) -> None:
+        """Upgrade the FTS5 index if it is missing file_path / content_snippet columns.
+
+        SQLite FTS5 virtual tables cannot be altered in place — we drop and let
+        init_schema recreate it, then rebuild from the nodes content table.
+        The nodes table also gets content_snippet added via ALTER TABLE if absent;
+        ALTER TABLE ADD COLUMN is safe here because the column is nullable TEXT.
+        """
+        # Add content_snippet column to nodes if missing (safe ALTER TABLE ADD COLUMN).
+        existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(nodes)")}
+        if "content_snippet" not in existing_cols and existing_cols:
+            conn.execute("ALTER TABLE nodes ADD COLUMN content_snippet TEXT")
+            conn.commit()
+
+        # Check FTS5 schema via sqlite_master; drop if file_path not indexed.
+        fts_row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='nodes_fts'"
+        ).fetchone()
+        if fts_row and "file_path" not in (fts_row[0] or ""):
+            conn.execute("DROP TABLE IF EXISTS nodes_fts")
+            conn.commit()
 
     def _migrate_legacy_schema(self, conn: sqlite3.Connection) -> None:
         """Drop the legacy AUTOINCREMENT graph tables so the new stable-id schema applies.
@@ -293,8 +318,9 @@ class GraphDatabase:
         conn.execute(
             """
             INSERT OR REPLACE INTO nodes (id, fts_rowid, name, kind, file_path, line, column,
-                               end_line, language, container, docstring, signature, is_exported)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               end_line, language, container, docstring, signature, is_exported,
+                               content_snippet)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 node_id,
@@ -310,6 +336,7 @@ class GraphDatabase:
                 node.docstring,
                 node.signature,
                 int(node.is_exported),
+                node.content_snippet,
             ),
         )
         conn.commit()
@@ -342,8 +369,9 @@ class GraphDatabase:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO nodes (id, fts_rowid, name, kind, file_path, line, column,
-                                   end_line, language, container, docstring, signature, is_exported)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   end_line, language, container, docstring, signature, is_exported,
+                                   content_snippet)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     node_id,
@@ -359,11 +387,14 @@ class GraphDatabase:
                     node.docstring,
                     node.signature,
                     int(node.is_exported),
+                    node.content_snippet,
                 ),
             )
 
         # Prune nodes of this file that are no longer present (symbol removed/renamed).
-        # Only their OWN edges go with them; inbound edges to surviving ids stay intact.
+        # Prune stale nodes (present in DB for this file but absent from new parse).
+        # Their edges go with them; inbound edges from other files become dangling
+        # until those callers are re-indexed.
         keep = set(ids)
         stale = [
             row["id"]
@@ -380,15 +411,16 @@ class GraphDatabase:
             conn.execute("DELETE FROM nodes WHERE id = ?", (stale_id,))
 
         conn.commit()
+        return ids
 
-        # Rebuild FTS5 index to ensure new nodes are searchable
+    def rebuild_fts(self) -> None:
+        """Rebuild the FTS5 index. Call once after bulk upserts, not per-file."""
+        conn = self._connect()
         try:
             conn.execute('INSERT INTO nodes_fts(nodes_fts) VALUES("rebuild")')
             conn.commit()
         except Exception:
             pass
-
-        return ids
 
     def get_node_by_id(self, node_id: int | str) -> Node | None:
         """Get a node by ID (stable text id; ints are accepted and coerced by SQLite)."""

@@ -112,7 +112,6 @@ class AffectedTestFinder:
                         }
                     )
 
-        # Sort by file path
         affected_tests.sort(key=lambda x: x["file"])
         return affected_tests
 

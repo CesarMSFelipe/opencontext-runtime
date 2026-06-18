@@ -1,0 +1,18 @@
+# opencontext:ignore:start
+.env
+.env.*
+*.pem
+*.key
+secrets/
+*.secret
+node_modules/
+dist/
+build/
+.venv/
+venv/
+__pycache__/
+.git/
+.storage/
+*.sqlite
+*.db
+# opencontext:ignore:end

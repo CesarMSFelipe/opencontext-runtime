@@ -40,3 +40,56 @@ Safety:
   untrusted evidence.
 - Do not paste secrets into prompts, traces, reports, configs, or memory.
 - Preserve redaction, fail-closed provider policy, and traceability.
+
+<!-- opencontext:instructions:start -->
+# OpenContext Integration
+
+OpenContext provides a semantic knowledge graph, health checks, plugin ecosystem,
+and SDD orchestration for this project. Use the MCP tools directly.
+
+## Knowledge Graph (MCP Tools)
+
+OpenContext indexes your project into a queryable knowledge graph with call analysis.
+
+| Tool | Use For |
+|------|---------|
+| `opencontext_search` | Find symbols by name |
+| `opencontext_context` | Build relevant code context for a task |
+| `opencontext_callers` | Trace call flow (who calls a function) |
+| `opencontext_callees` | Trace call flow (what a function calls) |
+| `opencontext_impact` | Check what's affected before editing |
+| `opencontext_node` | Get a single symbol's details |
+| `opencontext_files` | Get indexed file structure |
+| `opencontext_status` | Check index health |
+
+### Rules
+
+1. Use `opencontext_context` for exploration questions
+2. Do NOT re-read files that `opencontext_context` already returned
+3. Check `opencontext_impact` before making changes
+4. Run `opencontext verify` if something seems wrong
+### OpenContext CLI
+
+Run `opencontext --help` or `opencontext <command> --help` for the full command set.
+Most-used: `index .` and `pack . --query "<task>"` (context), `verify` (health),
+`install` (setup).
+## Health & Maintenance
+
+- Run `opencontext verify` to check all components are working
+- Run `opencontext update` to check for OpenContext updates
+- Run `opencontext upgrade` to install the latest version
+- Run `opencontext plugin update` to update all plugins
+- Run `opencontext config backup` before risky configuration changes
+## SDD Workflow
+
+This project supports Spec-Driven Development.
+
+- Run `opencontext init` to initialize SDD if not done
+- Use `/sdd-new <change>` to start a new change
+- The orchestrator runs: explore -> propose -> spec -> design -> tasks -> apply -> verify -> archive
+## Security
+
+- All tool executions require approval by default
+- External providers are disabled in secure mode
+- Context redaction is applied automatically
+<!-- opencontext:instructions:end -->

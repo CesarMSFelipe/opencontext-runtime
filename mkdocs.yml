@@ -74,10 +74,6 @@ nav:
     - getting-started/cli-installation.md
     - getting-started/troubleshooting.md
     - getting-started/getting-started-guide.md
-  - Product:
-    - product/index.md
-    - product/installation-experience.md
-    - product/community-sdd-tdd-gap-analysis.md
   - Concepts:
     - concepts/index.md
     - concepts/what-is-context-engineering.md
@@ -104,7 +100,6 @@ nav:
     - workflows/orchestrate-mode.md
     - workflows/validation-mode.md
     - workflows/patch-proposals.md
-    - workflows/workflow-packs.md
     - workflows/sdd-implementation-summary.md
   - Integrations:
     - integrations/index.md
@@ -185,9 +180,6 @@ nav:
   - Guides:
     - guides/index.md
     - guides/pypi-publishing.md
-  - Research:
-    - research/index.md
-    - Graph and Agent Integration Strategy: research/graph-and-agent-integration-strategy.md
   - Token Efficiency:
     - token-efficiency/index.md
     - token-efficiency/repo-map-first.md

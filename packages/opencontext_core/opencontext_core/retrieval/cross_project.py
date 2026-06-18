@@ -47,11 +47,9 @@ class CrossProjectRetriever:
         """Retrieve context from local project and linked cross-project tunnels."""
         items: list[ContextItem] = []
 
-        # Step 1: Retrieve local context
         local_items = self._local_retriever.retrieve(query, top_k=top_k)
         items.extend(local_items)
 
-        # Step 2: Retrieve from linked projects
         cross_items = self._retrieve_cross_project(query, top_k=top_k)
         items.extend(cross_items)
 
@@ -191,7 +189,6 @@ class CrossProjectRetriever:
                 )
                 scored_items.append((score, items_p))
 
-        # Sort by score, take top-k within token budget
         scored_items.sort(key=lambda x: x[0], reverse=True)
 
         selected: list[ContextItem] = []
