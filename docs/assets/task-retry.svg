@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 310" width="720" height="310" role="img" aria-label="Task: fix retry bug — grep+read vs opencontext explain on psf/requests">
+
+  <rect width="720" height="310" rx="10" fill="#1e1e2e"/>
+
+  <!-- Title bar -->
+  <rect width="720" height="36" rx="10" fill="#181825"/>
+  <rect y="26" width="720" height="10" fill="#181825"/>
+  <circle cx="22" cy="18" r="6" fill="#ff5f57"/>
+  <circle cx="42" cy="18" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="18" r="6" fill="#28c840"/>
+  <text x="360" y="22" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11.5" fill="#6c7086">task: fix bug in retry logic when connection drops — psf/requests (37 py files)</text>
+
+  <!-- Panel divider -->
+  <line x1="360" y1="36" x2="360" y2="310" stroke="#313244" stroke-width="1"/>
+
+  <!-- LEFT PANEL — without OC -->
+  <text x="180" y="56" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10.5" font-weight="600" fill="#f38ba8" letter-spacing="0.6">WITHOUT OPENCONTEXT</text>
+
+  <g font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="11">
+    <text x="16" y="74" fill="#89b4fa">❯</text>
+    <text x="28" y="74" fill="#6c7086">grep "retry" src/requests/</text>
+
+    <text x="16" y="92" fill="#45475a">adapters.py:201:  max_retries=DEFAULT_RETRIES</text>
+    <text x="16" y="107" fill="#45475a">adapters.py:512:  conn = self.get_connection(...)</text>
+    <text x="16" y="122" fill="#45475a">exceptions.py:142: class RetryError(...</text>
+    <text x="16" y="137" fill="#45475a">… 31 more matches</text>
+
+    <text x="16" y="158" fill="#89b4fa">❯</text>
+    <text x="28" y="158" fill="#6c7086">read src/requests/adapters.py</text>
+    <text x="16" y="173" fill="#f38ba8">   6,998 tokens  (whole file)</text>
+
+    <text x="16" y="193" fill="#89b4fa">❯</text>
+    <text x="28" y="193" fill="#6c7086">read src/requests/exceptions.py</text>
+    <text x="16" y="208" fill="#f38ba8">   1,141 tokens  (whole file)</text>
+
+    <text x="16" y="228" fill="#89b4fa">❯</text>
+    <text x="28" y="228" fill="#6c7086">read src/requests/sessions.py</text>
+    <text x="16" y="243" fill="#f38ba8">   8,518 tokens  (whole file)</text>
+  </g>
+
+  <line x1="16" y1="256" x2="344" y2="256" stroke="#2d1f1f" stroke-width="1"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="10.5">
+    <text x="16" y="271" fill="#f38ba8">~16,657 tok  ·  4+ rounds</text>
+    <text x="16" y="286" fill="#585b70">no call direction  ·  results vary by run</text>
+    <text x="16" y="301" fill="#585b70">agent doesn't know which method handles retry</text>
+  </g>
+
+  <!-- RIGHT PANEL — with OC -->
+  <text x="540" y="56" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10.5" font-weight="600" fill="#a6e3a1" letter-spacing="0.6">WITH OPENCONTEXT</text>
+
+  <g font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="11">
+    <text x="368" y="74" fill="#89b4fa">❯</text>
+    <text x="380" y="74" fill="#6c7086">opencontext explain "fix retry bug…"</text>
+
+    <text x="368" y="92" fill="#45475a">19 files · 6,301 tokens · 1 call</text>
+
+    <text x="368" y="113" fill="#a6e3a1">exceptions.py:142</text>
+    <text x="505" y="113" fill="#585b70">class RetryError</text>
+    <text x="368" y="128" fill="#a6e3a1">exceptions.py:91 </text>
+    <text x="505" y="128" fill="#585b70">class ConnectTimeout</text>
+    <text x="368" y="143" fill="#a6e3a1">adapters.py:201  </text>
+    <text x="505" y="143" fill="#585b70">method __init__</text>
+    <text x="368" y="158" fill="#a6e3a1">adapters.py:512  </text>
+    <text x="505" y="158" fill="#585b70">method get_connection</text>
+    <text x="368" y="178" fill="#cba6f7">adapters.py:634  </text>
+    <text x="505" y="178" fill="#cba6f7">send → RetryError</text>
+    <text x="368" y="193" fill="#cba6f7">adapters.py:128  </text>
+    <text x="505" y="193" fill="#cba6f7">send → get_connection</text>
+    <text x="368" y="213" fill="#a6e3a1">test_requests:2740</text>
+    <text x="505" y="213" fill="#585b70">test_urllib3_retries</text>
+    <text x="368" y="228" fill="#a6e3a1">test_requests:2750</text>
+    <text x="505" y="228" fill="#585b70">test_urllib3_pool_conn…</text>
+  </g>
+
+  <line x1="368" y1="243" x2="704" y2="243" stroke="#1b2e22" stroke-width="1"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="10.5">
+    <text x="368" y="258" fill="#a6e3a1">6,301 tok  ·  1 call  ·  symbol-level</text>
+    <text x="368" y="273" fill="#cba6f7">call graph: send→RetryError (not in grep)</text>
+    <text x="368" y="288" fill="#585b70">exact methods, not 7,000-tok full files</text>
+    <text x="368" y="303" fill="#585b70">same result every run</text>
+  </g>
+
+</svg>

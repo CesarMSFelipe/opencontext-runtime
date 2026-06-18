@@ -24,7 +24,6 @@ def add_sync_parser(subparsers: Any) -> None:
     )
     sync_sub = sync_parser.add_subparsers(dest="sync_command")
 
-    # sync issues
     issues_parser = sync_sub.add_parser(
         "issues",
         help="Create/update GitHub Issues from a change's tasks.md file.",
@@ -50,7 +49,6 @@ def add_sync_parser(subparsers: Any) -> None:
         help="GitHub repo (owner/name). Auto-detected from git remote if omitted.",
     )
 
-    # sync config (default behavior, preserved as a subcommand)
     config_parser = sync_sub.add_parser(
         "config",
         help="Sync configuration and refresh managed assets.",

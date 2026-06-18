@@ -34,11 +34,9 @@ def add_plugin_parser(subparsers: Any) -> None:
     plugin_parser = subparsers.add_parser("plugin", help="Manage OpenContext plugins.")
     plugin_sub = plugin_parser.add_subparsers(dest="plugin_command", required=True)
 
-    # List
     list_parser = plugin_sub.add_parser("list", help="List installed plugins.")
     list_parser.add_argument("--json", action="store_true", help="Output as JSON.")
 
-    # Search
     search_parser = plugin_sub.add_parser("search", help="Search available plugins.")
     search_parser.add_argument("query", nargs="?", default="", help="Search query.")
     search_parser.add_argument("--registry", default="", help="Custom registry URL.")
@@ -46,7 +44,6 @@ def add_plugin_parser(subparsers: Any) -> None:
         "--refresh", action="store_true", help="Force refresh registry cache."
     )
 
-    # Init
     init_parser = plugin_sub.add_parser("init", help="Scaffold a new plugin.")
     init_parser.add_argument("name", help="Plugin name (alphanumeric + hyphens).")
     init_parser.add_argument("--description", default="", help="Short plugin description.")
@@ -58,7 +55,6 @@ def add_plugin_parser(subparsers: Any) -> None:
         help="Scaffold template to use (default: basic).",
     )
 
-    # Install
     install_parser = plugin_sub.add_parser("install", help="Install a plugin.")
     install_parser.add_argument("name", help="Plugin name.")
     install_parser.add_argument("--github", default="", help="Install from GitHub (owner/repo).")
@@ -68,20 +64,16 @@ def add_plugin_parser(subparsers: Any) -> None:
     )
     install_parser.add_argument("--registry", default="", help="Custom registry URL.")
 
-    # Remove
     remove_parser = plugin_sub.add_parser("remove", help="Remove a plugin.")
     remove_parser.add_argument("name", help="Plugin name.")
 
-    # Update
     update_parser = plugin_sub.add_parser("update", help="Check and apply plugin updates.")
     update_parser.add_argument("name", nargs="?", default="", help="Plugin name (all if omitted).")
 
-    # Info
     info_parser = plugin_sub.add_parser("info", help="Show plugin details.")
     info_parser.add_argument("name", help="Plugin name.")
     info_parser.add_argument("--json", action="store_true", help="Output as JSON.")
 
-    # Enable/Disable
     enable_parser = plugin_sub.add_parser("enable", help="Enable a plugin.")
     enable_parser.add_argument("name", help="Plugin name.")
 
@@ -145,7 +137,6 @@ def _plugin_list(args: Any) -> None:
         return
 
     print()
-    # Header
     print(f"  {'Name':<22} {'Version':<10} {'Source':<12} {'Status':<10} {'Description'}")
     print(f"  {'─' * 22} {'─' * 10} {'─' * 12} {'─' * 10} {'─' * 50}")
     for p in plugins:
@@ -181,20 +172,20 @@ def _plugin_search(args: Any) -> None:
     if args.query:
         print(f"  Search results for '{args.query}':")
     else:
-        print("  Available plugins:")
+        print("  Plugin registry  (planned plugins — not yet published)")
+        print("  Install your own: opencontext plugin install <name> --github owner/repo")
     print()
 
     for p in results:
         latest = p.versions[0].version if p.versions else "—"
         print(f"  {p.name:<22} v{latest:<12} {p.description}")
-        if p.homepage:
-            print(f"  {'':22}   {p.homepage}")
         print()
 
-    print(f"  {len(results)} plugin(s) available")
+    print(f"  {len(results)} plugin(s) listed")
     print()
-    print("  Install:  opencontext plugin install <name>")
-    print("  Details:  opencontext plugin info <name>")
+    print("  Custom install:  opencontext plugin install <name> --github owner/repo")
+    print("  Custom install:  opencontext plugin install <name> --url <url>")
+    print("  New scaffold:    opencontext plugin install <name>")
 
 
 def _plugin_init(args: Any) -> None:
@@ -303,15 +294,12 @@ def _plugin_install(args: Any) -> None:
 
     installer = PluginInstaller()
 
-    # GitHub install
     if args.github:
         print(f"\n  Installing from GitHub: {args.github}")
         result = installer.install_from_github(args.github, name=args.name)
-    # URL install
     elif args.url:
         print(f"\n  Installing from URL: {args.url}")
         result = installer.install_from_url(args.name, args.url)
-    # Registry install
     else:
         version = args.ver or None
         result = installer.install_from_registry(args.name, version=version)
@@ -324,7 +312,6 @@ def _plugin_remove(args: Any) -> None:
 
     registry = PluginRegistry()
 
-    # Verify it exists
     info = registry.get_info(args.name)
     if info is None:
         print(f"\n  Plugin '{args.name}' not found.")
@@ -333,7 +320,6 @@ def _plugin_remove(args: Any) -> None:
 
     print(f"\n  Removing '{args.name}'...")
 
-    # Auto-backup plugin before removal
     plugin_dir = registry.plugins_dir / args.name
     backup_dir = plugin_dir.parent / f".{args.name}.bak"
     if plugin_dir.exists():
@@ -344,14 +330,12 @@ def _plugin_remove(args: Any) -> None:
         shutil.copytree(plugin_dir, backup_dir)
 
     if registry.remove(args.name):
-        # Clean up backup
         if backup_dir.exists():
             import shutil
 
             shutil.rmtree(backup_dir)
         print(f"  ✓ '{args.name}' removed.\n")
     else:
-        # Restore from backup
         if backup_dir.exists():
             import shutil
 
@@ -373,7 +357,6 @@ def _plugin_update(args: Any) -> None:
         _print_install_result(result)
         return
 
-    # Check all
     print("\n  Checking all plugins for updates...")
     results = updater.check_updates()
 
@@ -407,7 +390,6 @@ def _plugin_info(args: Any) -> None:
     registry = PluginRegistry()
     info = registry.get_info(args.name)
 
-    # Check registry for latest version
     latest_version = "unknown"
     try:
         fetcher = RegistryFetcher()
@@ -448,7 +430,6 @@ def _plugin_info(args: Any) -> None:
         return
 
     if info is None:
-        # Check registry
         fetcher = RegistryFetcher()
         entry = fetcher.get(args.name)
         if entry:

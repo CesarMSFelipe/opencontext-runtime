@@ -36,6 +36,7 @@ def _db(tmp_path: Path) -> GraphDatabase:
             )
         ]
     )
+    db.rebuild_fts()
     return db
 
 

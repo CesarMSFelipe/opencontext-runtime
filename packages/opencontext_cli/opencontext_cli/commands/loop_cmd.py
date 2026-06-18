@@ -7,10 +7,13 @@ import sys
 from pathlib import Path
 
 FLOWS = {
-    "quick": ["explore", "apply", "verify"],
-    "standard": ["explore", "spec", "design", "apply", "verify"],
-    "full": ["explore", "propose", "spec", "design", "tasks", "apply", "verify", "archive"],
-    "autonomous": None,  # all phases, no user prompts
+    "quick": "quick",
+    "standard": "standard",
+    "full": "sdd",
+    "autonomous": "sdd",
+    "quality": "full+quality",
+    "judgment": "full+judgment",
+    "gga": "full+gga",
 }
 
 COMPRESSION_MODES = ["terse", "compact", "efficient", "none"]
@@ -26,7 +29,7 @@ def add_loop_commands(subparsers: argparse._SubParsersAction) -> None:
         "--flow",
         choices=list(FLOWS.keys()),
         default="full",
-        help="Workflow track: quick/standard/full/autonomous",
+        help="Workflow track: quick/standard/full/autonomous/quality/judgment/gga",
     )
     loop.add_argument(
         "--compress",
@@ -67,25 +70,28 @@ def handle_loop(args: argparse.Namespace, config=None) -> int:
     dry_run = getattr(args, "dry_run", False)
     autonomous = flow == "autonomous"
 
-    phases = FLOWS.get(flow) or FLOWS["full"]
+    workflow = FLOWS.get(flow, "sdd")
 
     _print_header(task, flow, compress_mode)
 
-    # A dry run only previews the static phase list, so it must work WITHOUT an
-    # index — it's the first thing a new user runs to see what the loop does.
     if dry_run:
+        try:
+            from opencontext_core.harness.runner import HarnessRunner
+
+            runner = HarnessRunner(root=root)
+            phases = runner.schedule_phases(workflow)
+        except Exception:
+            phases = []
         print("\nDry run — phases that would execute:")
         for p in phases:
             print(f"  - {p.upper()}")
         return 0
 
-    # Real runs need the index. Hardcoded default storage path matches the runtime.
     manifest_path = root / ".storage" / "opencontext" / "project_manifest.json"
     if not manifest_path.exists():
         print("No index found. Run 'opencontext index .' first, then retry.")
         return 1
 
-    # Build compressor for output
     try:
         from opencontext_core.backends.factory import BackendFactory
 
@@ -97,7 +103,7 @@ def handle_loop(args: argparse.Namespace, config=None) -> int:
         if max_rounds > 1:
             print(f"\n-- Round {round_num}/{max_rounds} --")
 
-        success = _run_loop(task, phases, root, config, compressor, autonomous)
+        success = _run_loop(task, workflow, root, config, compressor, autonomous)
         if success:
             break
         if round_num < max_rounds:
@@ -111,7 +117,7 @@ def handle_loop(args: argparse.Namespace, config=None) -> int:
 
 def _run_loop(
     task: str,
-    phases: list[str],
+    workflow: str,
     root: Path,
     config,
     compressor,
@@ -119,36 +125,27 @@ def _run_loop(
 ) -> bool:
     """Execute one loop iteration. Returns True if all phases completed."""
     try:
-        from opencontext_core.harness.models import HarnessRunState
         from opencontext_core.harness.runner import HarnessRunner
     except ImportError as e:
         print(f"Runtime not available: {e}", file=sys.stderr)
         return False
 
-    state = HarnessRunState(task=task, root=root)
-    runner = HarnessRunner(config=config)
+    runner = HarnessRunner(root=root)
 
-    for phase in phases:
-        print(f"\n{phase.upper()}", end="  ", flush=True)
+    try:
+        result = runner.run(workflow, task)
+    except Exception as e:
+        print(f"error: {e}", file=sys.stderr)
+        return False
 
-        try:
-            result = runner.run_phase(phase, state)
-        except Exception as e:
-            print(f"error: {e}")
-            return False
-
-        # Compress and display summary
-        summary = _summarize_phase(result, compressor)
-        print(summary)
-
-        # User checkpoint (not in autonomous mode)
-        if not autonomous and phase not in ("archive",):
-            if not _ask_continue(phase):
-                print("\nAborted by user.")
-                return False
-
-    print("\nLoop complete.")
-    return True
+    _print_run_summary(result)
+    status = getattr(result, "status", None)
+    passed = status is not None and getattr(status, "value", str(status)) in ("passed", "warning")
+    if passed:
+        print("\nLoop complete.")
+    elif not passed:
+        print("\nLoop did not complete — check warnings above.")
+    return passed
 
 
 def _print_header(task: str, flow: str, compress: str) -> None:
@@ -159,26 +156,69 @@ def _print_header(task: str, flow: str, compress: str) -> None:
     print("-" * width)
 
 
-def _summarize_phase(result, compressor) -> str:
-    """Produce a compressed one-line summary of a phase result."""
+def _print_run_summary(result) -> None:
+    """Print a human-readable run summary with per-phase breakdown."""
     if result is None:
-        return "skipped"
-    status = getattr(result, "status", "?")
-    gates = getattr(result, "gates", [])
-    passed = sum(1 for g in gates if getattr(g, "status", None) and g.status.value == "passed")
-    total = len(gates)
-    summary = f"status:{status.value if hasattr(status, 'value') else status}"
-    if total:
-        summary += f"  gates:{passed}/{total}"
+        print("  no result")
+        return
+
+    ledgers = getattr(result, "ledgers", [])
     artifacts = getattr(result, "artifacts", [])
-    if artifacts:
-        summary += f"  artifacts:{len(artifacts)}"
-    if compressor:
-        try:
-            summary = compressor.compress(summary, [])
-        except Exception:
-            pass
-    return summary
+    warnings = getattr(result, "warnings", [])
+    gates = getattr(result, "gates", [])
+    status = getattr(result, "status", None)
+    status_str = status.value if hasattr(status, "value") else str(status)
+
+    # Per-phase summary
+    artifacts_by_phase: dict[str, list] = {}
+    for a in artifacts:
+        phase = getattr(a, "phase", "?")
+        artifacts_by_phase.setdefault(phase, []).append(a)
+
+    gates_by_phase: dict[str, list] = {}
+    for g in gates:
+        phase = getattr(g, "phase", "?")
+        gates_by_phase.setdefault(phase, []).append(g)
+
+    print()
+    for ledger in ledgers:
+        phase = getattr(ledger, "phase", "?")
+        used = getattr(ledger, "used_tokens", 0)
+        budget = getattr(ledger, "budget_tokens", 0)
+        phase_artifacts = artifacts_by_phase.get(phase, [])
+        phase_gates = gates_by_phase.get(phase, [])
+        failed_gates = [
+            g for g in phase_gates if getattr(g, "status", None) and g.status.value == "failed"
+        ]
+        warn_gates = [
+            g for g in phase_gates if getattr(g, "status", None) and g.status.value == "warning"
+        ]
+
+        phase_status = (
+            "✓" if not failed_gates and not warn_gates else ("⚠" if not failed_gates else "✗")
+        )
+        parts = [f"  {phase_status} {phase.upper():<12}  {used}/{budget} tokens"]
+        if phase_artifacts:
+            kinds = ", ".join(getattr(a, "kind", "artifact") for a in phase_artifacts[:3])
+            parts.append(f"  [{kinds}]")
+        if failed_gates:
+            parts.append(f"  FAILED: {', '.join(g.id for g in failed_gates)}")
+        elif warn_gates:
+            parts.append(f"  warn: {', '.join(g.id for g in warn_gates[:2])}")
+        print("".join(parts))
+
+    # LLM-absent warnings surfaced directly to user
+    for w in warnings:
+        if (
+            "LLM" in w
+            or "provider" in w
+            or "delegate" in w
+            or "executor" in w
+            or "planned" in w.lower()
+        ):
+            print(f"\n  ⚠  {w}")
+
+    print(f"\n  Status: {status_str}  |  {len(artifacts)} artifact(s)  |  {len(gates)} gate(s)")
 
 
 def _ask_continue(phase: str) -> bool:

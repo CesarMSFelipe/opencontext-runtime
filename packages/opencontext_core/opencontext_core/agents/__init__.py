@@ -13,11 +13,9 @@ Example usage (no CLI required):
 
     orchestrator = AgentOrchestrator(project_root=".")
 
-    # Run code review analysis
     result = orchestrator.run_agent("code-review")
     print(result.report)
 
-    # Run security audit
     result = orchestrator.run_agent("security-audit")
     print(result.metrics)
 """

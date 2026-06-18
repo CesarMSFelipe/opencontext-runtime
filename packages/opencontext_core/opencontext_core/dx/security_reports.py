@@ -17,6 +17,7 @@ class SecurityScanResult(BaseModel):
 
     findings: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    files_scanned: int = Field(default=0)
 
 
 def scan_project(root: str | Path = ".") -> SecurityScanResult:
@@ -25,7 +26,18 @@ def scan_project(root: str | Path = ".") -> SecurityScanResult:
     project_root = Path(root)
     if not project_root.exists():
         return SecurityScanResult(warnings=[f"Project root not found: {project_root}"])
-    scanned = ProjectScanner(list(DEFAULT_IGNORE_PATTERNS)).scan(project_root)
+    ignore = list(DEFAULT_IGNORE_PATTERNS)
+    config_path = project_root / "opencontext.yaml"
+    if config_path.exists():
+        try:
+            import yaml  # type: ignore[import-untyped,unused-ignore]
+
+            data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+            extra = (data.get("project_index") or {}).get("ignore") or []
+            ignore = list(dict.fromkeys([*ignore, *extra]))
+        except Exception:
+            pass
+    scanned = ProjectScanner(ignore).scan(project_root)
     findings = []
     for item in scanned:
         if not item.metadata.get("contains_potential_secrets"):
@@ -41,4 +53,5 @@ def scan_project(root: str | Path = ".") -> SecurityScanResult:
     return SecurityScanResult(
         findings=findings,
         warnings=warnings,
+        files_scanned=len(scanned),
     )

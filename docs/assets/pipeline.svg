@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 140" width="720" height="140" role="img" aria-label="OpenContext pipeline: query → classify risk → ContextContract → retrieve from graph → score and rank → pack minimum → validate gates → deliver verified context">
+
+  <rect width="720" height="140" rx="8" fill="#0B0F14"/>
+
+  <!-- Connector lines -->
+  <g stroke="#21262D" stroke-width="1.5" fill="none">
+    <line x1="109" y1="70" x2="119" y2="70"/>
+    <line x1="201" y1="70" x2="211" y2="70"/>
+    <line x1="293" y1="70" x2="303" y2="70"/>
+    <line x1="385" y1="70" x2="395" y2="70"/>
+    <line x1="477" y1="70" x2="487" y2="70"/>
+    <line x1="569" y1="70" x2="579" y2="70"/>
+    <line x1="651" y1="70" x2="661" y2="70"/>
+  </g>
+
+  <!-- Arrow heads -->
+  <g fill="#21262D">
+    <polygon points="119,66 119,74 127,70"/>
+    <polygon points="211,66 211,74 219,70"/>
+    <polygon points="303,66 303,74 311,70"/>
+    <polygon points="395,66 395,74 403,70"/>
+    <polygon points="487,66 487,74 495,70"/>
+    <polygon points="579,66 579,74 587,70"/>
+    <polygon points="661,66 661,74 669,70"/>
+  </g>
+
+  <!-- Step 1: query -->
+  <rect x="37" y="44" width="72" height="52" rx="6" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="73" y="65" text-anchor="middle"
+        font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
+        font-size="19" fill="#00A8E8">?</text>
+  <text x="73" y="84" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#3D4450">query</text>
+
+  <!-- Step 2: classify risk -->
+  <rect x="129" y="44" width="72" height="52" rx="6" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="165" y="63" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">classify</text>
+  <text x="165" y="77" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">risk</text>
+  <text x="165" y="88" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">cheap·precise·critical</text>
+
+  <!-- Step 3: ContextContract -->
+  <rect x="221" y="44" width="72" height="52" rx="6" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="257" y="63" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">Context</text>
+  <text x="257" y="77" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">Contract</text>
+  <text x="257" y="88" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">budget · symbols</text>
+
+  <!-- Step 4: retrieve -->
+  <rect x="313" y="44" width="72" height="52" rx="6" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="349" y="63" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">retrieve</text>
+  <text x="349" y="77" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">from graph</text>
+  <text x="349" y="88" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">BM25 · RRF</text>
+
+  <!-- Step 5: score + rank -->
+  <rect x="405" y="44" width="72" height="52" rx="6" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="441" y="63" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">score</text>
+  <text x="441" y="77" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">+ rank</text>
+  <text x="441" y="88" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">call·git·memory</text>
+
+  <!-- Step 6: pack minimum -->
+  <rect x="497" y="44" width="72" height="52" rx="6" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="533" y="63" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">pack</text>
+  <text x="533" y="77" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E6EDF3">minimum</text>
+  <text x="533" y="88" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="9" fill="#3D4450">AICX bytecode</text>
+
+  <!-- Step 7: gates (amber warning) -->
+  <rect x="589" y="44" width="62" height="52" rx="6" fill="#1A1600" stroke="#E3B341" stroke-width="1"/>
+  <text x="620" y="67" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E3B341">validate</text>
+  <text x="620" y="81" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#E3B341">gates</text>
+
+  <!-- Step 8: deliver -->
+  <rect x="669" y="44" width="50" height="52" rx="6" fill="#0A1F1A" stroke="#00C9A7" stroke-width="1.5"/>
+  <text x="694" y="67" text-anchor="middle"
+        font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
+        font-size="18" fill="#00C9A7">✓</text>
+  <text x="694" y="84" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" fill="#00C9A7">deliver</text>
+
+  <!-- Footer label -->
+  <text x="360" y="120" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11" fill="#3D4450">deterministic · no LLM guessing what's relevant · offline</text>
+
+</svg>

@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" width="720" height="380" role="img" aria-label="Benchmark: fix retry bug on psf/requests — grep+read 16,657 tok 4 rounds vs opencontext 6,301 tok 1 call — 62% fewer tokens, call graph included">
+
+  <rect width="720" height="380" rx="14" fill="#0B0F14"/>
+  <rect x="1" y="1" width="718" height="378" rx="13" fill="none" stroke="rgba(0,201,167,0.18)" stroke-width="1"/>
+
+  <!-- Header bar -->
+  <rect width="720" height="56" rx="14" fill="#111821"/>
+  <rect y="42" width="720" height="14" fill="#111821"/>
+
+  <!-- Left accent -->
+  <rect x="0" y="0" width="5" height="56" rx="2" fill="#00C9A7"/>
+
+  <text x="24" y="24"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="14" font-weight="700" fill="#E6EDF3">psf/requests</text>
+  <text x="142" y="24"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="12" fill="#3D4450"> — 37 Python files</text>
+  <text x="24" y="44"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11.5" fill="#8B949E">Task: fix bug in retry logic when connection drops</text>
+
+  <!-- Column divider -->
+  <line x1="360" y1="56" x2="360" y2="380" stroke="#21262D" stroke-width="1"/>
+
+  <!-- ── LEFT PANEL ── -->
+  <text x="180" y="82" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" font-weight="600" fill="#FF7B72" letter-spacing="0.9">AGENT TOOL LOOP  (grep + read)</text>
+
+  <g font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="12">
+    <!-- step 1 -->
+    <text x="18" y="106" fill="#8B949E">❯ grep "retry" src/</text>
+    <text x="18" y="122" fill="#3D4450">  → adapters.py · exceptions.py · 31 more</text>
+
+    <!-- step 2 -->
+    <text x="18" y="146" fill="#8B949E">❯ read adapters.py</text>
+    <rect x="18" y="152" width="320" height="22" rx="4" fill="rgba(255,123,114,0.08)"/>
+    <text x="26" y="167" fill="#FF7B72">  6,998 tokens  (whole file)</text>
+
+    <!-- step 3 -->
+    <text x="18" y="188" fill="#8B949E">❯ read exceptions.py</text>
+    <rect x="18" y="194" width="320" height="22" rx="4" fill="rgba(255,123,114,0.08)"/>
+    <text x="26" y="209" fill="#FF7B72">  1,141 tokens  (whole file)</text>
+
+    <!-- step 4 -->
+    <text x="18" y="230" fill="#8B949E">❯ read sessions.py</text>
+    <rect x="18" y="236" width="320" height="22" rx="4" fill="rgba(255,123,114,0.08)"/>
+    <text x="26" y="251" fill="#FF7B72">  8,518 tokens  (whole file)</text>
+
+    <!-- unknown -->
+    <text x="18" y="276" fill="#3D4450">  send() → RetryError ?      unknown</text>
+    <text x="18" y="292" fill="#3D4450">  send() → get_connection ?  unknown</text>
+  </g>
+
+  <!-- Left divider -->
+  <line x1="18" y1="308" x2="344" y2="308" stroke="#21262D" stroke-width="1"/>
+
+  <!-- Left totals -->
+  <text x="18" y="336"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="30" font-weight="700" fill="#FF7B72">~16,657</text>
+  <text x="185" y="336"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="13" fill="#8B949E"> tok</text>
+  <text x="18" y="356"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11.5" fill="#8B949E">4+ rounds  ·  no call graph  ·  results vary</text>
+
+  <!-- ── RIGHT PANEL ── -->
+
+  <!-- Teal glow top edge on right panel -->
+  <rect x="361" y="56" width="358" height="3" fill="rgba(0,201,167,0.30)"/>
+
+  <text x="540" y="82" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" font-weight="600" fill="#00C9A7" letter-spacing="0.9">OPENCONTEXT EXPLAIN  (1 call)</text>
+
+  <g font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="12">
+    <text x="374" y="106" fill="#3D4450">❯ opencontext explain "fix retry bug…"</text>
+
+    <!-- results -->
+    <text x="374" y="132" fill="#00A8E8">exceptions.py:142</text>
+    <text x="506" y="132" fill="#8B949E"> class RetryError</text>
+
+    <text x="374" y="152" fill="#00A8E8">exceptions.py:91 </text>
+    <text x="506" y="152" fill="#8B949E"> class ConnectTimeout</text>
+
+    <text x="374" y="172" fill="#00A8E8">adapters.py:201  </text>
+    <text x="506" y="172" fill="#8B949E"> method __init__</text>
+
+    <text x="374" y="192" fill="#00A8E8">adapters.py:512  </text>
+    <text x="506" y="192" fill="#8B949E"> get_connection</text>
+
+    <!-- call graph hits — highlighted -->
+    <rect x="374" y="204" width="330" height="46" rx="6" fill="rgba(132,92,194,0.10)" stroke="rgba(132,92,194,0.30)" stroke-width="1"/>
+    <text x="382" y="222" fill="#845EC2">adapters.py:634  </text>
+    <text x="514" y="222" fill="#845EC2"> send → RetryError  ✓</text>
+    <text x="382" y="240" fill="#845EC2">adapters.py:128  </text>
+    <text x="514" y="240" fill="#845EC2"> send → get_conn  ✓</text>
+
+    <text x="374" y="266" fill="#3D4450">tests/test_requests.py:2740  test_urllib3_retries</text>
+    <text x="374" y="283" fill="#3D4450">… 12 more files</text>
+  </g>
+
+  <!-- Right divider -->
+  <line x1="374" y1="300" x2="704" y2="300" stroke="#21262D" stroke-width="1"/>
+
+  <!-- Right totals with improvement badge -->
+  <text x="374" y="332"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="30" font-weight="700" fill="#00C9A7">6,301</text>
+  <text x="460" y="332"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="13" fill="#8B949E"> tok</text>
+
+  <!-- Improvement pill -->
+  <rect x="496" y="314" width="90" height="28" rx="6" fill="rgba(0,201,167,0.12)" stroke="rgba(0,201,167,0.35)" stroke-width="1"/>
+  <text x="541" y="332" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="13" font-weight="700" fill="#00C9A7">62% less</text>
+
+  <!-- Rounds pill -->
+  <rect x="596" y="314" width="100" height="28" rx="6" fill="rgba(0,168,232,0.10)" stroke="rgba(0,168,232,0.28)" stroke-width="1"/>
+  <text x="646" y="332" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="12" font-weight="600" fill="#00A8E8">4x → 1 call</text>
+
+  <text x="374" y="358"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11.5" fill="#845EC2">call graph traced  ·  symbol-level  ·  deterministic</text>
+
+</svg>

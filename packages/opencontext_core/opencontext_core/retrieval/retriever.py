@@ -154,9 +154,37 @@ class ProjectRetriever:
         if not path.exists() or not path.is_file():
             return "", False
         lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-        start = max(0, symbol.line - 3)
-        end = min(len(lines), symbol.line + 4)
+        # end_line stored in metadata by extractor (AST-aware chunking)
+        end_line: int | None = symbol.metadata.get("end_line")
+        start = max(0, symbol.line - 1)  # 0-based
+        if end_line is not None:
+            end = min(len(lines), end_line)
+        else:
+            # Heuristic: scan forward from definition until indentation drops back
+            # (handles Python/PHP without requiring tree-sitter at retrieval time)
+            end = _find_block_end(lines, start, max_lines=120)
         return "\n".join(lines[start:end]), False
+
+
+def _find_block_end(lines: list[str], start: int, *, max_lines: int = 120) -> int:
+    """Return the 0-based exclusive end index of the code block starting at `start`.
+
+    Uses indentation level of the definition line to detect when the block ends.
+    Falls back to start+8 for files with no clear indentation structure.
+    """
+    if start >= len(lines):
+        return start + 1
+    def_line = lines[start]
+    base_indent = len(def_line) - len(def_line.lstrip())
+    limit = min(len(lines), start + max_lines)
+    for i in range(start + 1, limit):
+        line = lines[i]
+        if not line.strip():
+            continue  # skip blank lines
+        indent = len(line) - len(line.lstrip())
+        if indent <= base_indent and line.strip() and not line.strip().startswith("#"):
+            return i
+    return limit
 
 
 def _symbols_by_path(symbols: list[Symbol]) -> dict[str, list[Symbol]]:

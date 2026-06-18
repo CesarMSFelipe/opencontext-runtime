@@ -86,13 +86,10 @@ class OnboardingWizard:
         if force_non_interactive:
             self._interactive = False
 
-        # Step 1: Welcome
         self._show_welcome()
 
-        # Step 2: Template selection
         template = overrides.get("template") or self._choose_template()
 
-        # Step 3: Security mode
         security_mode = overrides.get("security_mode") or self._choose_security_mode()
 
         # Step 4: TDD mode

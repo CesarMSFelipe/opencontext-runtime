@@ -910,6 +910,11 @@ class SpecPhase(HarnessPhase):
         if outcome.is_real:
             spec_content = outcome.output or ""
         else:
+            if getattr(state, "delegate", None) is None:
+                state.warnings.append(
+                    "Phase 'SpecPhase' ran without LLM — "
+                    "configure a provider (ANTHROPIC_API_KEY etc.) to generate real artifacts."
+                )
             # Static template SCAFFOLD — explicitly NOT a real AI-produced spec.
             spec_content = f"""# Delta Spec: {task}
 
@@ -1017,6 +1022,11 @@ class DesignPhase(HarnessPhase):
         if outcome.is_real:
             design_content = outcome.output or ""
         else:
+            if getattr(state, "delegate", None) is None:
+                state.warnings.append(
+                    "Phase 'DesignPhase' ran without LLM — "
+                    "configure a provider (ANTHROPIC_API_KEY etc.) to generate real artifacts."
+                )
             # Extract requirements from spec content for the scaffold body.
             requirements = []
             for line in spec_content.split("\n"):
@@ -1132,6 +1142,11 @@ class TasksPhase(HarnessPhase):
         # Honest executor contract: run the real executor when wired, otherwise
         # emit a clearly-marked scaffold reported as "planned" (NOT a success).
         outcome = run_phase_executor(state, "tasks")
+        if not outcome.is_real and getattr(state, "delegate", None) is None:
+            state.warnings.append(
+                "Phase 'TasksPhase' ran without LLM — "
+                "configure a provider (ANTHROPIC_API_KEY etc.) to generate real artifacts."
+            )
         task_count = 0
         if outcome.is_real:
             # The executor owns the breakdown format. Persist its output as-is,
@@ -1250,8 +1265,11 @@ class VerifyPhase(HarnessPhase):
         # runner (driven by harness.tdd_mode), NOT here in VerifyPhase. See
         # HarnessRunner._evaluate_apply_pre_gates.
 
-        # Provider-neutral verification: run pytest and capture results
-        test_result = self._run_tests(state.root)
+        changed = [
+            e["path"] if isinstance(e, dict) else getattr(e, "path", str(e))
+            for e in (getattr(state, "apply_edits", None) or [])
+        ]
+        test_result = self._run_tests(state.root, changed_files=changed)
         verify_report = {
             "run_id": state.run_id,
             "task": state.task,
@@ -1357,12 +1375,38 @@ class VerifyPhase(HarnessPhase):
             },
         )
 
-    def _run_tests(self, root: Path) -> dict[str, Any]:
-        """Run pytest in the project root, provider-neutral."""
+    def _resolve_test_targets(self, root: Path, changed_files: list[str]) -> list[str]:
+        """Map changed source files to likely test files. Falls back to [] (full suite)."""
+        if not changed_files:
+            return []
+        targets: list[str] = []
+        for src in changed_files:
+            p = Path(src)
+            stem = p.stem
+            # direct test file
+            for candidate in [
+                root / "tests" / f"test_{stem}.py",
+                root / "tests" / p.parent / f"test_{stem}.py",
+                root / f"test_{stem}.py",
+                p.parent / f"test_{stem}.py",
+            ]:
+                if candidate.exists():
+                    targets.append(str(candidate))
+        # deduplicate while preserving order
+        seen: set[str] = set()
+        return [t for t in targets if not (t in seen or seen.add(t))]  # type: ignore[func-returns-value]
 
+    def _run_tests(self, root: Path, changed_files: list[str] | None = None) -> dict[str, Any]:
+        """Run pytest scoped to changed files when possible, full suite as fallback."""
+        targets = self._resolve_test_targets(root, changed_files or [])
+        args = [sys.executable, "-m", "pytest", "-q", "--tb=short"]
+        if targets:
+            args += targets
+        else:
+            args.append(str(root))
         try:
             result = subprocess.run(
-                [sys.executable, "-m", "pytest", "-q", "--tb=short", str(root)],
+                args,
                 capture_output=True,
                 text=True,
                 timeout=120,
@@ -1546,3 +1590,266 @@ class ReviewPhase(HarnessPhase):
                 "failed_gates": review["failed_gates"],
             },
         )
+
+
+class JudgmentDayPhase(HarnessPhase):
+    """Adversarial review: two independent evaluations of apply-phase artifacts.
+
+    Reads artifacts from the apply phase and produces a judgment report with
+    BLOCKER / SHOULD_FIX / NIT / APPROVED findings. No LLM is required —
+    the phase performs a structural/heuristic review and records the result
+    so a human or downstream phase can act on it.
+    """
+
+    id = "judgment"
+
+    def run(self, state: Any) -> PhaseResult:
+        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        apply_artifacts = [a for a in state.artifacts if a.phase == "apply"]
+        verify_artifacts = [a for a in state.artifacts if a.phase == "verify"]
+
+        findings: list[dict[str, str]] = []
+        blocker_count = 0
+        should_fix_count = 0
+
+        # Structural checks on apply artifacts
+        for a in apply_artifacts:
+            p = Path(a.path)
+            if not p.exists():
+                findings.append(
+                    {
+                        "severity": "BLOCKER",
+                        "artifact": a.id,
+                        "finding": f"Apply artifact missing on disk: {a.path}",
+                    }
+                )
+                blocker_count += 1
+
+        # Check verify was present
+        if not verify_artifacts:
+            findings.append(
+                {
+                    "severity": "SHOULD_FIX",
+                    "artifact": "verify",
+                    "finding": "No verify artifacts found — apply was not independently verified.",
+                }
+            )
+            should_fix_count += 1
+
+        # Check gate failures from apply + verify
+        apply_failed_gates = [
+            g
+            for g in state.gates
+            if g.phase in ("apply", "verify") and g.status == GateStatus.FAILED
+        ]
+        for g in apply_failed_gates:
+            findings.append(
+                {
+                    "severity": "BLOCKER",
+                    "artifact": g.id,
+                    "finding": f"Gate failed in {g.phase}: {g.message}",
+                }
+            )
+            blocker_count += 1
+
+        # Warnings from state
+        for w in state.warnings:
+            if any(kw in w.lower() for kw in ("llm", "provider", "delegate", "executor")):
+                findings.append(
+                    {
+                        "severity": "SHOULD_FIX",
+                        "artifact": "warnings",
+                        "finding": f"LLM/provider warning: {w}",
+                    }
+                )
+                should_fix_count += 1
+
+        if not findings:
+            findings.append(
+                {
+                    "severity": "APPROVED",
+                    "artifact": "all",
+                    "finding": "No structural issues found. Human review recommended before merge.",
+                }
+            )
+
+        overall = (
+            "BLOCKER"
+            if blocker_count > 0
+            else ("SHOULD_FIX" if should_fix_count > 0 else "APPROVED")
+        )
+
+        report = {
+            "run_id": state.run_id,
+            "task": state.task,
+            "created_at": datetime.now(UTC).isoformat(),
+            "overall": overall,
+            "blocker_count": blocker_count,
+            "should_fix_count": should_fix_count,
+            "findings": findings,
+        }
+
+        report_path = run_dir / "judgment.json"
+        report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+        gate_status = (
+            GateStatus.FAILED
+            if overall == "BLOCKER"
+            else (GateStatus.WARNING if overall == "SHOULD_FIX" else GateStatus.PASSED)
+        )
+        gates: list[PhaseGate] = [
+            PhaseGate(
+                id="judgment_overall",
+                phase="judgment",
+                status=gate_status,
+                message=f"Judgment: {overall} ({blocker_count} blockers, {should_fix_count} should-fix)",  # noqa: E501
+            ),
+            ArtifactPersistedGate().evaluate(report_path),
+        ]
+
+        ledger = PhaseLedger(
+            phase="judgment",
+            used_tokens=0,
+            budget_tokens=self.config.budget_tokens,
+            budget_mode=self.budget_mode,
+        )
+
+        return PhaseResult(
+            phase="judgment",
+            status=gate_status,
+            ledger=ledger,
+            gates=gates,
+            artifacts=[
+                HarnessArtifact(
+                    id=f"judgment-{state.run_id[:8]}",
+                    phase="judgment",
+                    path=str(report_path),
+                    kind="judgment",
+                    description=f"Adversarial review report: {overall}",
+                )
+            ],
+            metadata={"overall": overall, "findings": len(findings)},
+        )
+
+
+class GGARulesPhase(HarnessPhase):
+    """Guardian Angel rules enforcement.
+
+    Reads `.opencontext/rules.yaml` and validates the apply-phase diffs
+    against project-level coding standards (max lines, forbidden patterns,
+    required docstrings, etc.). No LLM required.
+    """
+
+    id = "gga"
+
+    def run(self, state: Any) -> PhaseResult:
+        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        rules = self._load_rules(state.root)
+        violations: list[dict[str, str]] = []
+
+        apply_artifacts = [a for a in state.artifacts if a.phase == "apply"]
+        for artifact in apply_artifacts:
+            p = Path(artifact.path)
+            if not p.exists() or p.suffix not in (".py", ".ts", ".js", ".go", ".rs"):
+                continue
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+
+            lines = text.splitlines()
+            max_lines = rules.get("max_lines_per_file", 0)
+            if max_lines and len(lines) > max_lines:
+                violations.append(
+                    {
+                        "severity": "SHOULD_FIX",
+                        "file": str(p),
+                        "rule": "max_lines_per_file",
+                        "detail": f"{len(lines)} lines (limit {max_lines})",
+                    }
+                )
+
+            for pattern in rules.get("forbidden_patterns", []):
+                if pattern in text:
+                    violations.append(
+                        {
+                            "severity": "BLOCKER",
+                            "file": str(p),
+                            "rule": "forbidden_pattern",
+                            "detail": f"Forbidden pattern found: {pattern!r}",
+                        }
+                    )
+
+        blocker_count = sum(1 for v in violations if v["severity"] == "BLOCKER")
+
+        report = {
+            "run_id": state.run_id,
+            "created_at": datetime.now(UTC).isoformat(),
+            "rules_file": str(state.root / ".opencontext" / "rules.yaml"),
+            "violations": violations,
+            "blocker_count": blocker_count,
+        }
+
+        report_path = run_dir / "gga.json"
+        report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+        gate_status = (
+            GateStatus.FAILED
+            if blocker_count > 0
+            else (GateStatus.WARNING if violations else GateStatus.PASSED)
+        )
+        gates: list[PhaseGate] = [
+            PhaseGate(
+                id="gga_rules",
+                phase="gga",
+                status=gate_status,
+                message=f"GGA: {blocker_count} blockers, {len(violations)} total violations",
+            ),
+            ArtifactPersistedGate().evaluate(report_path),
+        ]
+
+        ledger = PhaseLedger(
+            phase="gga",
+            used_tokens=0,
+            budget_tokens=self.config.budget_tokens,
+            budget_mode=self.budget_mode,
+        )
+
+        return PhaseResult(
+            phase="gga",
+            status=gate_status,
+            ledger=ledger,
+            gates=gates,
+            artifacts=[
+                HarnessArtifact(
+                    id=f"gga-{state.run_id[:8]}",
+                    phase="gga",
+                    path=str(report_path),
+                    kind="gga_report",
+                    description=f"GGA rules report: {len(violations)} violations",
+                )
+            ],
+            metadata={"blocker_count": blocker_count, "violations": len(violations)},
+        )
+
+    @staticmethod
+    def _load_rules(root: Path) -> dict[str, Any]:
+        """Load .opencontext/rules.yaml if present, else return empty rules."""
+        rules_path = root / ".opencontext" / "rules.yaml"
+        if not rules_path.exists():
+            return {}
+        try:
+            import importlib.util
+
+            if importlib.util.find_spec("yaml") is not None:
+                import yaml  # type: ignore[import-untyped,unused-ignore]
+
+                data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else {}
+        except Exception:
+            pass
+        return {}

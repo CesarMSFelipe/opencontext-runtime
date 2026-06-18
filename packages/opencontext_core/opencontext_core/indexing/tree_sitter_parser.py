@@ -55,6 +55,7 @@ class ParsedSymbol:
     docstring: str | None
     signature: str | None
     is_exported: bool = False
+    content_snippet: str | None = None
 
 
 @dataclass
@@ -309,6 +310,7 @@ class TreeSitterParser:
                             docstring=self._extract_docstring(node, content),
                             signature=None,
                             is_exported=True,
+                            content_snippet=self._snippet(node),
                         )
                     )
 
@@ -330,6 +332,7 @@ class TreeSitterParser:
                             docstring=self._extract_docstring(node, content),
                             signature=self._extract_signature(node, content),
                             is_exported=True,
+                            content_snippet=self._snippet(node),
                         )
                     )
 
@@ -377,6 +380,7 @@ class TreeSitterParser:
                             docstring=None,
                             signature=snippet,
                             is_exported=not name.startswith("_"),
+                            content_snippet=snippet,
                         )
                     )
 
@@ -407,6 +411,7 @@ class TreeSitterParser:
                             docstring=None,
                             signature=None,
                             is_exported=True,
+                            content_snippet=self._snippet(node),
                         )
                     )
                     edges.extend(self._extract_calls(node, func_name, file_path))
@@ -426,6 +431,7 @@ class TreeSitterParser:
                             docstring=None,
                             signature=None,
                             is_exported=True,
+                            content_snippet=self._snippet(node),
                         )
                     )
 
@@ -459,6 +465,7 @@ class TreeSitterParser:
                             docstring=self._extract_docstring(node, content),
                             signature=None,
                             is_exported=func_name[0].isupper(),
+                            content_snippet=self._snippet(node),
                         )
                     )
                     edges.extend(self._extract_calls(node, func_name, file_path))
@@ -478,6 +485,7 @@ class TreeSitterParser:
                             docstring=None,
                             signature=None,
                             is_exported=method_name[0].isupper(),
+                            content_snippet=self._snippet(node),
                         )
                     )
 
@@ -511,6 +519,7 @@ class TreeSitterParser:
                             docstring=self._extract_docstring(node, content),
                             signature=None,
                             is_exported=True,
+                            content_snippet=self._snippet(node),
                         )
                     )
                     edges.extend(self._extract_calls(node, func_name, file_path))
@@ -530,6 +539,7 @@ class TreeSitterParser:
                             docstring=None,
                             signature=None,
                             is_exported=True,
+                            content_snippet=self._snippet(node),
                         )
                     )
 
@@ -566,6 +576,7 @@ class TreeSitterParser:
                             docstring=None,
                             signature=None,
                             is_exported=True,
+                            content_snippet=self._snippet(node),
                         )
                     )
 
@@ -584,6 +595,7 @@ class TreeSitterParser:
                             docstring=self._extract_docstring(node, content),
                             signature=None,
                             is_exported=True,
+                            content_snippet=self._snippet(node),
                         )
                     )
                     edges.extend(self._extract_calls(node, method_name, file_path))
@@ -624,6 +636,7 @@ class TreeSitterParser:
                             docstring=None,
                             signature=None,
                             is_exported=True,
+                            content_snippet=self._snippet(node),
                         )
                     )
 
@@ -643,6 +656,7 @@ class TreeSitterParser:
                             docstring=None,
                             signature=None,
                             is_exported=True,
+                            content_snippet=self._snippet(node),
                         )
                     )
                     edges.extend(self._extract_calls(node, func_name, file_path))
@@ -655,6 +669,14 @@ class TreeSitterParser:
 
         walk(root)
         return symbols, edges
+
+    def _snippet(self, node: Any, max_chars: int = 400) -> str | None:
+        """Return up to max_chars of the node's raw source text for FTS indexing."""
+        try:
+            text: str = node.text.decode("utf-8", errors="replace")[:max_chars]
+            return text
+        except Exception:
+            return None
 
     def _extract_docstring(self, node: Any, content: str) -> str | None:
         """Extract docstring from a node."""

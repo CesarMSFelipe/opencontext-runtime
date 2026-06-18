@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 310" width="720" height="310" role="img" aria-label="Task: add OAuth2 auth — grep+read vs opencontext explain on tiangolo/fastapi">
+
+  <rect width="720" height="310" rx="10" fill="#1e1e2e"/>
+
+  <!-- Title bar -->
+  <rect width="720" height="36" rx="10" fill="#181825"/>
+  <rect y="26" width="720" height="10" fill="#181825"/>
+  <circle cx="22" cy="18" r="6" fill="#ff5f57"/>
+  <circle cx="42" cy="18" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="18" r="6" fill="#28c840"/>
+  <text x="360" y="22" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11.5" fill="#6c7086">task: add OAuth2 bearer token authentication — tiangolo/fastapi (1,121 py files)</text>
+
+  <!-- Panel divider -->
+  <line x1="360" y1="36" x2="360" y2="310" stroke="#313244" stroke-width="1"/>
+
+  <!-- LEFT PANEL — without OC -->
+  <text x="180" y="56" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10.5" font-weight="600" fill="#f38ba8" letter-spacing="0.6">WITHOUT OPENCONTEXT</text>
+
+  <g font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="11">
+    <text x="16" y="74" fill="#89b4fa">❯</text>
+    <text x="28" y="74" fill="#6c7086">grep "oauth2" fastapi/ tests/</text>
+    <text x="16" y="89" fill="#45475a">47 matches across 12 files</text>
+
+    <text x="16" y="109" fill="#89b4fa">❯</text>
+    <text x="28" y="109" fill="#6c7086">read fastapi/security/oauth2.py</text>
+    <text x="16" y="124" fill="#f38ba8">   6,044 tokens  (whole file)</text>
+
+    <text x="16" y="144" fill="#89b4fa">❯</text>
+    <text x="28" y="144" fill="#6c7086">read fastapi/routing.py</text>
+    <text x="16" y="159" fill="#f38ba8">   56,550 tokens  (whole file)</text>
+    <text x="16" y="174" fill="#45475a">   ← likely next step; too large</text>
+
+    <text x="16" y="194" fill="#89b4fa">❯</text>
+    <text x="28" y="194" fill="#6c7086">read fastapi/security/http.py</text>
+    <text x="16" y="209" fill="#f38ba8">   3,352 tokens  (whole file)</text>
+
+    <text x="16" y="229" fill="#45475a">grep "HTTPBearer" → missed on first pass</text>
+    <text x="16" y="244" fill="#45475a">test examples → not found without extra round</text>
+  </g>
+
+  <line x1="16" y1="256" x2="344" y2="256" stroke="#2d1f1f" stroke-width="1"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="10.5">
+    <text x="16" y="271" fill="#f38ba8">~65,000 tok  ·  4–8 rounds</text>
+    <text x="16" y="286" fill="#585b70">no usage examples  ·  routing.py likely skipped</text>
+    <text x="16" y="301" fill="#585b70">(too large — agent may abandon or truncate)</text>
+  </g>
+
+  <!-- RIGHT PANEL — with OC -->
+  <text x="540" y="56" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10.5" font-weight="600" fill="#a6e3a1" letter-spacing="0.6">WITH OPENCONTEXT</text>
+
+  <g font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="11">
+    <text x="368" y="74" fill="#89b4fa">❯</text>
+    <text x="380" y="74" fill="#6c7086">opencontext explain "add OAuth2…"</text>
+    <text x="368" y="89" fill="#45475a">14 files · 11,740 tokens · 1 call</text>
+
+    <text x="368" y="110" fill="#a6e3a1">security/oauth2.py:433 </text>
+    <text x="510" y="110" fill="#585b70">OAuth2PasswordBearer</text>
+    <text x="368" y="125" fill="#a6e3a1">security/oauth2.py:547 </text>
+    <text x="510" y="125" fill="#585b70">OAuth2AuthzCodeBearer</text>
+    <text x="368" y="140" fill="#a6e3a1">security/oauth2.py:442 </text>
+    <text x="510" y="140" fill="#585b70">OAuth2PasswordBearer.__init__</text>
+    <text x="368" y="155" fill="#a6e3a1">security/http.py:254   </text>
+    <text x="510" y="155" fill="#585b70">HTTPBearer.__init__</text>
+
+    <text x="368" y="175" fill="#f9e2af">test_security_oauth2_auth_*</text>
+    <text x="368" y="190" fill="#585b70">  → working usage examples</text>
+    <text x="368" y="205" fill="#f9e2af">test_security_oauth2_pass_*</text>
+    <text x="368" y="220" fill="#585b70">  → password bearer examples</text>
+
+    <text x="368" y="240" fill="#45475a">… 8 more  (ranked by relevance)</text>
+  </g>
+
+  <line x1="368" y1="252" x2="704" y2="252" stroke="#1b2e22" stroke-width="1"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="10.5">
+    <text x="368" y="267" fill="#a6e3a1">11,740 tok  ·  1 call  ·  symbol-level</text>
+    <text x="368" y="282" fill="#f9e2af">test examples included automatically</text>
+    <text x="368" y="297" fill="#585b70">routing.py (56k) excluded — system says why</text>
+  </g>
+
+</svg>

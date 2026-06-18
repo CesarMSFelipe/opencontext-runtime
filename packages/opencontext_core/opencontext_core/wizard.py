@@ -226,7 +226,6 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
     console.print("\nWelcome! Let's set up OpenContext for your workflow.")
     console.print("You can re-run this anytime with: opencontext config wizard")
 
-    # Step 1: Security Mode
     _print_section("Step 1: Security & Privacy")
     console.print("\nChoose your security mode:")
     console.print("  developer        - Local dev posture, fewest restrictions")
@@ -249,7 +248,6 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
         prefs.features.semantic_search = False
         console.print("\nAir-gapped mode: disabling network features.")
 
-    # Step 2: Features
     _print_section("Step 2: Features")
     console.print("\nEnable/disable features:")
 
@@ -278,7 +276,6 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
         "Git Integration (context from git history)?", prefs.features.git_integration
     )
 
-    # Step 3: Token Budgets
     _print_section("Step 3: Token Budgets")
     console.print("\nConfigure default token limits:")
 

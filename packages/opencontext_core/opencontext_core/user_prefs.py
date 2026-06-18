@@ -87,7 +87,6 @@ class UserPreferences:
     security_mode: str = "private_project"
     data_classification: str = "internal"
 
-    # Features
     features: UserFeatures = field(default_factory=UserFeatures)
 
     # SDD/TDD workflow
@@ -216,7 +215,6 @@ class UserConfigStore:
         elif self._preferences is None:
             self._preferences = UserPreferences()
 
-        # Auto-backup before overwriting existing config
         if self.CONFIG_FILE.exists():
             try:
                 from opencontext_core.state import ConfigBackupManager

@@ -67,27 +67,23 @@ class BackupManager:
         if paths is None:
             paths = self._default_paths()
 
-        # Collect files
         files_to_backup: list[Path] = []
         for pattern in paths:
             for path in self.project_root.rglob(pattern):
                 if path.is_file():
                     files_to_backup.append(path)
 
-        # Deduplication: check if identical backup already exists
         content_hash = self._compute_hash(files_to_backup)
         existing = self._find_by_hash(content_hash)
         if existing is not None:
             return existing
 
-        # Create tar.gz
         backup_path = self.backup_dir / f"{backup_id}.tar.gz"
         with tarfile.open(backup_path, "w:gz") as tar:
             for file_path in files_to_backup:
                 arcname = file_path.relative_to(self.project_root)
                 tar.add(file_path, arcname=str(arcname))
 
-        # Build info
         info = BackupInfo(
             id=backup_id,
             timestamp=timestamp,
@@ -97,7 +93,6 @@ class BackupManager:
             files=[str(f.relative_to(self.project_root)) for f in files_to_backup],
         )
 
-        # Save to index
         self._add_to_index(info)
 
         # Auto-prune
@@ -254,10 +249,8 @@ class BackupManager:
         backups = self.list_backups()
         unpinned = [b for b in backups if not b.pinned]
 
-        # Sort by timestamp (newest first)
         unpinned.sort(key=lambda b: b.timestamp, reverse=True)
 
-        # Remove excess unpinned backups
         to_remove = unpinned[self.MAX_BACKUPS :]
         for backup in to_remove:
             self.delete_backup(backup.id)

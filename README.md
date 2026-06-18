@@ -1,756 +1,683 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="OpenContext" width="120" height="120">
+  <img src="docs/assets/logo.svg" alt="OpenContext" width="108" height="108">
 </p>
 
-<h2 align="center">OpenContext Runtime</h2>
+<h1 align="center">OpenContext Runtime</h1>
 
 <p align="center">
-  <b>Your AI agent reads the whole directory to change two files.<br>
-  OpenContext hands it the few that matter — verified, offline, in one MCP call.</b><br>
-  <sub>The token-verified context runtime for AI coding agents. Plans · Verifies · Remembers · Learns.</sub>
+  <strong>Deterministic context for AI coding agents.</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/up_to_96%25_token_reduction-benchmarked-00C9A7?style=flat-square" alt="Up to 96% token reduction">
-  <img src="https://img.shields.io/badge/offline--first-no_API_key-00A8E8?style=flat-square&logo=python&logoColor=white" alt="Works offline">
-  <img src="https://img.shields.io/badge/1500%2B_tests-passing-00C9A7?style=flat-square" alt="1500+ tests passing">
-  <img src="https://img.shields.io/badge/14%2B_agents-Claude_%7C_Cursor_%7C_Copilot-845EC2?style=flat-square" alt="14+ agents">
+  One call. Call-graph-traced symbols. Verified context packs.<br>
+  No grep loops. No full-file reads. No opaque vector guesses.
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/opencontext-cli/"><img src="https://img.shields.io/pypi/v/opencontext-cli?style=flat-square&color=00C9A7" alt="PyPI"></a>
+  <img src="https://img.shields.io/badge/python-3.12%2B-00A8E8?style=flat-square&logo=python&logoColor=white" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/license-MIT-gray?style=flat-square" alt="MIT">
 </p>
 
 <p align="center">
-  <a href="#why-opencontext"><b>Why</b></a> &nbsp;·&nbsp;
-  <a href="#-quick-start--60-seconds-to-verified-context"><b>Quick Start</b></a> &nbsp;·&nbsp;
-  <a href="#-how-it-works">How It Works</a> &nbsp;·&nbsp;
-  <a href="#-agentic-loop">Agentic Loop</a> &nbsp;·&nbsp;
-  <a href="#-sdd--tdd">SDD + TDD</a> &nbsp;·&nbsp;
-  <a href="#-knowledge-graph">Knowledge Graph</a> &nbsp;·&nbsp;
-  <a href="#-memory">Memory</a> &nbsp;·&nbsp;
-  <a href="#-compression">Compression</a> &nbsp;·&nbsp;
-  <a href="#-benchmark">Benchmark</a> &nbsp;·&nbsp;
-  <a href="#-cli-reference">CLI</a>
+  <img src="docs/assets/runtime-strip.svg" alt="offline-first · call-graph traced · deterministic · MCP ready · 1600+ tests" width="720">
 </p>
 
----
+<p align="center">
+  <a href="#the-opencontext-difference">What It Does</a> ·
+  <a href="#start-in-30-seconds">Quick Start</a> ·
+  <a href="#proof-not-promises">Benchmarks</a> ·
+  <a href="#the-context-runtime">How It Works</a> ·
+  <a href="#local-code-graph">Code Graph</a> ·
+  <a href="#agent-interface">MCP</a> ·
+  <a href="#offline-by-default">Security</a> ·
+  <a href="#installation">Install</a>
+</p>
 
-```sh
-$ opencontext loop --task "fix crash in auth middleware" --flow full --dry-run
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
 
-------------------------------------------------------------
-  OpenContext Loop  [full]  compress:efficient
-  Task: fix crash in auth middleware
-------------------------------------------------------------
+<p align="center">
+  <img src="docs/assets/demo-terminal.svg" alt="Real opencontext explain output on tiangolo/fastapi — task: add OAuth2 bearer token auth — 14 files, 11,740 tokens, 1 call" width="720">
+</p>
 
-Dry run — phases that would execute:
-  - EXPLORE
-  - PROPOSE
-  - SPEC
-  - DESIGN
-  - TASKS
-  - APPLY
-  - VERIFY
-  - ARCHIVE
-```
+<p align="center">
+  <sub>Real output · tiangolo/fastapi · 1,121 Python files · 1 call replaces 4–8 grep+read rounds</sub>
+</p>
 
----
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
 
-## Why OpenContext
+<!-- ─────────────── THE OPENCONTEXT DIFFERENCE ─────────────── -->
 
-- **Up to 96% fewer tokens.** Your agent gets the *minimum sufficient* context — the symbols and call chains the task actually needs, not the whole directory. Benchmarked on this repo, reproducible in one command.
-- **Verified, not guessed.** Every context pack passes 16 quality gates (coverage, freshness, secret-leakage, budget) and ships a trace ID you can audit. This is a runtime, not a RAG wrapper.
-- **Offline & MCP-native.** No API key, no network egress. 13 MCP tools your agent already speaks — drop-in for Claude Code, Cursor, Copilot, and 11 more editors.
-- **It gets smarter.** Past failures boost the right symbols next time; decisions and conventions persist in local memory across sessions.
-
----
-
-## ⚡ Quick Start — 60 seconds to verified context
-
-```bash
-# 1. Install (no API key, nothing leaves your machine)
-pip install opencontext-cli
-
-# 2. See the difference on YOUR repo in 30 seconds (no setup, no API key)
-cd your-project
-opencontext demo
-
-# 3. Set up your project — auto-detects stack, builds the graph, wires your agent
-opencontext install
-
-# 4. Get your first verified, minimal context pack (copied to clipboard)
-opencontext pack . --query "How does authentication work?" --copy
-
-# Or hand the whole task to the agentic loop
-opencontext loop --task "fix crash in auth middleware" --flow full
-```
-
-Every pack tells you what it saved:
-
-```text
-  ✓ Copied to clipboard.
-  ↓ 99.9% fewer tokens than reading the whole project (1,312,123 → 217)
-```
-
-`opencontext install` does five things automatically:
-
-1. **Detects your stack** — Python, Node, Go, Rust, Terraform, and more
-2. **Builds the knowledge graph** — symbols, call chains, imports, framework routes
-3. **Configures your agent** — generates the right instruction file for your editor
-4. **Sets up MCP tools** — pre-approves 13 tools (9 read + 4 symbol-level edits), all routed through the verified pipeline
-5. **Verifies the setup** — health check before finishing
-
-> **No API keys. No external services.** Everything runs offline on your machine.
-
----
-
-## 🧠 How It Works
-
-OpenContext is not a RAG wrapper. It's a runtime that **plans, verifies, remembers, and learns** what minimum sufficient context each task needs.
-
-### Before vs After
+<div id="the-opencontext-difference" align="center">
 
 <table>
 <tr>
-<th>Without OpenContext</th>
-<th>With OpenContext</th>
-</tr>
-<tr>
-<td>
+<td width="760">
 
-```
-Agent sees every file in scope:
-  src/auth.py        (maybe relevant)
-  src/models.py      (maybe relevant)
-  tests/ (50 files)  (probably not)
-  ...and more
+<h3>The OpenContext Difference</h3>
 
-Tens of thousands of tokens per query
-Secrets may be in plaintext
-No call graph — deps guessed or missed
-No memory of past failures
-No verification before shipping
-```
+AI coding agents usually discover context through repeated search and full-file reads. Each file read whole. Call direction invisible. Results vary between runs.
+
+**OpenContext builds the context before the agent starts.** Traces the call graph, ranks symbols, applies a token budget, delivers a verified pack in one deterministic call.
 
 </td>
-<td>
+</tr>
+</table>
 
-```
-Agent sees only what the task needs:
-  src/auth/middleware.py   ✓ verified required
-  src/auth/token.py        ✓ verified required
-  tests/test_auth.py       ✓ required by risk tier
-  ─────────────────────────────────────────────
-  Everything else filtered out
+</div>
 
-Up to 96% fewer tokens (benchmarked)
-Secrets auto-redacted
-Call chain traced precisely
-Past failures boost relevant symbols
-16 quality gates validated before delivery
+<p align="center">
+  <img src="docs/assets/difference-card.svg" alt="OpenContext flow: 01 Trace Graph → 02 Rank Symbols → 03 Apply Budget → 04 Verified Pack. Built before the agent starts. Same result every run." width="720">
+</p>
+
+<p align="center">
+  <sub>Runtime · deterministic pipeline · no LLM in the retrieval path · same result every run</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/before-after.svg" alt="Without OpenContext: agent grep+read loop — ~65,000 tokens, 4-8 rounds, no call graph. With OpenContext: 11,740 tokens, 82% less, 1 call, call graph traced." width="720">
+</p>
+
+<p align="center">
+  <sub>Benchmark · tiangolo/fastapi · add OAuth2 auth · 82% fewer tokens, 1 call</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/workflow-audience.svg" alt="Built for: agent users, large repositories, structured SDD workflows, security-first teams" width="720">
+</p>
+
+<p align="center">
+  <sub>Not a good fit: repos under ~50 files, or workflows that specifically require semantic embedding search.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
+
+<!-- ─────────────── START IN 30 SECONDS ─────────────── -->
+
+<div id="start-in-30-seconds" align="center">
+
+<table>
+<tr>
+<td width="760">
+
+<h3>Start in 30 Seconds</h3>
+
+Run the demo on your actual repository, then wire OpenContext into your editor.
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/quickstart-flow.svg" alt="01 install → 02 run demo → 03 configure editor → 04 editor ready" width="720">
+</p>
+
+<p align="center">
+  <sub>Setup · pip install → demo on your repo → editor wizard → MCP wired</sub>
+</p>
+
+<div align="center">
+
+<table>
+<tr>
+<td width="760">
+
+```bash
+pip install opencontext-cli
+cd your-project
+opencontext demo        # real token reduction on your actual repo
+opencontext install     # stack detection · editor setup · optional LLM provider
 ```
 
 </td>
 </tr>
 </table>
 
-### The Pipeline
+</div>
 
-Every task runs through a verified pipeline:
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
+
+<!-- ─────────────── PROOF, NOT PROMISES ─────────────── -->
+
+<div id="proof-not-promises" align="center">
+
+<table>
+<tr>
+<td width="760">
+
+<h3>Proof, Not Promises</h3>
+
+Every benchmark runs on a public repository. No hidden dataset. No hosted service. No benchmark-only path. Fully reproducible with `opencontext explain`.
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/stats-bar.svg" alt="62-82% fewer tokens · 4-8 rounds to 1 call · call graph included · deterministic" width="720">
+</p>
+
+<p align="center">
+  <img src="docs/assets/benchmark-card-requests.svg" alt="psf/requests — fix retry bug: grep+read ~16,657 tok 4 rounds vs opencontext 6,301 tok 1 call — 62% fewer tokens" width="720">
+</p>
+
+<p align="center">
+  <sub>Benchmark · psf/requests · retry bug · <code>send → RetryError</code> surfaced by call graph, not query text</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/benchmark-card-fastapi.svg" alt="tiangolo/fastapi — add OAuth2 auth: grep+read ~65,000 tok 4-8 rounds vs opencontext 11,740 tok 1 call — 82% fewer tokens" width="720">
+</p>
+
+<p align="center">
+  <sub>Benchmark · tiangolo/fastapi · OAuth2 auth · <code>routing.py</code> is 56,550 tokens — OpenContext returns only the symbols that matter</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/benchmark-numbers.svg" alt="4 benchmarks: requests retry 62%, requests SSL 37%, fastapi OAuth2 82%, django overview impractical to 1560 tokens" width="720">
+</p>
+
+<p align="center">
+  <sub>Numbers · 4 public repos · agent loop = full files via grep, no call graph · all reproducible</sub>
+</p>
+
+<div align="center">
+
+<table>
+<tr>
+<td width="760">
+
+<details>
+<summary><strong>Benchmark Methodology</strong></summary>
+
+"Agent loop" means reading full files discovered via grep-style search, without call-graph tracing. OpenContext numbers come from `opencontext explain` on the same public repositories. Real agent behavior varies by model, editor, and tool strategy.
+
+</details>
+
+When a file exceeds the per-item budget, OpenContext is explicit — it never silently drops content:
 
 ```
-receive task
-  → classify task type + risk (deterministic, no LLM)
-  → build ContextContract (known / unknown / must verify)
-  → plan context (budget: 8k / 16k / 28k tokens by risk tier)
-  → retrieve from knowledge graph
-  → score with multiple signals (graph centrality, call distance, git working set, risk...)
-  → pack minimum sufficient context (diversity-aware: distinct facets, not duplicates)
-  → compress (terse / compact / efficient / none by risk tier)
-  → validate 16 quality gates
-  → deliver verified context to agent
-  → harvest learnings into memory
+Kept out (and why):
+  ✗ django/db/models/query.py   29,532 tok — item_exceeds_available_budget
 ```
 
-The agent receives a **ContextContract** — not "these files might be relevant":
+Pass `--max-tokens 32000` or set `token_budget` in `opencontext.yaml` to include it.
 
+</td>
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
+
+<!-- ─────────────── THE CONTEXT RUNTIME ─────────────── -->
+
+<div id="the-context-runtime" align="center">
+
+<table>
+<tr>
+<td width="760">
+
+<h3>The Context Runtime</h3>
+
+Every query runs through a deterministic pipeline. A **ContextContract** locks in the token budget, required symbols, and verification gates _before_ retrieval starts.
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/pipeline.svg" alt="OpenContext pipeline: query → classify → ContextContract → retrieve → score → pack → gates → deliver" width="720">
+</p>
+
+<p align="center">
+  <sub>Runtime · deterministic · no LLM in retrieval · offline</sub>
+</p>
+
+<div align="center">
+
+<table>
+<tr>
+<td width="760">
+
+**Command**
 ```bash
-$ opencontext contract build --query "fix crash in auth middleware"
+opencontext contract build --query "fix crash in auth middleware"
 ```
 
+**Output**
 ```yaml
 task: fix crash in auth middleware
 task_type: bugfix
 risk_tier: precise
 token_budget: 16000
-
-required_symbols:
-  - '*crash*'
-  - '*auth*'
-  - '*middleware*'
-
-must_verify:
-  - id: run-tests
-  - id: lint
-  - id: type-check
+required_symbols: ['*crash*', '*auth*', '*middleware*']
+must_verify: [run-tests, lint, type-check]
 ```
 
-Risk tiers and budgets:
+<details>
+<summary><strong>Risk Tiers</strong></summary>
 
-| Risk tier | Token budget | Used when |
-|-----------|-------------|-----------|
-| `cheap` | 8,000 | Renames, docs, config, trivial fixes |
+| Risk Tier | Token Budget | When |
+|-----------|-------------|------|
+| `cheap` | 8,000 | Renames, docs, trivial fixes |
 | `precise` | 16,000 | Bugfixes, features, refactors |
 | `critical` | 28,000 | Security, migrations, architecture |
 
----
+</details>
 
-## 🤖 Agentic Loop
+<details>
+<summary><strong>AICX Bytecode</strong></summary>
 
-The loop is the primary way to use OpenContext for real tasks. Interactive checkpoints, multi-agent execution, compressed output.
-
-```bash
-# Full 8-phase SDD workflow with user checkpoints
-opencontext loop --task "add OAuth2 login" --flow full
-
-# Faster: skip spec/design, straight to apply
-opencontext loop --task "rename variable in utils" --flow quick
-
-# No checkpoints — gates decide whether to continue
-opencontext loop --task "fix payment bug" --flow autonomous
-
-# Retry up to 3 times if verification fails
-opencontext loop --task "..." --flow full --max-rounds 3
-
-# Preview without executing
-opencontext loop --task "..." --flow full --dry-run
-
-# Control compression of agent output
-opencontext loop --task "..." --compress efficient   # maximum reduction
-opencontext loop --task "..." --compress terse       # prose only
-opencontext loop --task "..." --compress none        # raw output
-```
-
-### Flow Tracks
-
-| Track | Phases | Use for |
-|-------|--------|---------|
-| `quick` | explore → apply → verify | Simple fixes, renames |
-| `standard` | explore → spec+design → apply → verify | Features, refactors |
-| `full` | All 8 phases | Architecture, security, migrations |
-| `autonomous` | All 8 phases, no prompts | CI/CD, scripts, automation |
-
-### Built-in Agents
-
-The loop orchestrates five specialized agents, each running in the right mode:
-
-| Agent | Mode | What it does |
-|-------|------|-------------|
-| `context-planner` | Local | Builds ContextContract using the knowledge graph |
-| `tdd-enforcer` | Local | Runs test suite, reports red/green cycle status |
-| `mutation-analyst` | Local | Measures test quality via mutation analysis (requires mutation framework) |
-| `security-audit` | Local | Scans for secret leakage patterns in files |
-| `code-review` | Hybrid | Graph analysis locally + review prompt for host LLM |
-
-Local agents need no LLM. Hybrid agents generate structured prompts your current agent executes — no double billing, no API key required.
-
-### Using Agents via SDK
-
-```python
-import asyncio
-from pathlib import Path
-from opencontext_core.agents import AGENT_REGISTRY
-from opencontext_core.agents.base import AgentConfig
-
-config = AgentConfig(
-    name="security-audit",
-    type="security-audit",
-    objectives=["scan for leaked credentials"],
-    scope={"paths": ["src/"]},
-)
-agent = AGENT_REGISTRY["security-audit"](config, Path("."))
-result = asyncio.run(agent.execute())
-print(result["finding_count"], "findings,", "clean:", result["clean"])
-```
-
----
-
-## 📐 SDD + TDD
-
-OpenContext enforces **Spec-Driven Development** as the default workflow for non-trivial changes. Eight phases. Zero guesswork. Full traceability.
-
-```
-explore → propose → spec → design → tasks → apply → verify → archive
-```
-
-Each phase:
-- Runs inside the harness with a token budget
-- Produces auditable YAML/JSON artifacts
-- Passes through quality gates before proceeding
-- Records its trace in the memory graph
+Context packs are serialized as AICX bytecode — compact, verifiable, with a cryptographic checksum. Agents can validate integrity before acting.
 
 ```bash
-# Run full SDD workflow
-opencontext harness run --workflow sdd --task "Add rate limiting to API"
-
-# Same workflow, interactive
-opencontext loop --task "Add rate limiting to API" --flow full
+opencontext bytecode compile --query "fix auth bug"
+opencontext bytecode inspect
+opencontext bytecode decode <path.aicx>
 ```
 
-### TDD Integration
+</details>
 
-The `tdd-enforcer` agent validates the red→green→refactor cycle at every verify phase. With `strict-tdd` preset, the harness **blocks** apply if no failing test was written first:
+</td>
+</tr>
+</table>
 
-```bash
-opencontext preset apply strict-tdd
-opencontext loop --task "add feature X" --flow full
-# → VERIFY blocks if no failing test exists before APPLY
+</div>
+
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
+
+<!-- ─────────────── LOCAL CODE GRAPH ─────────────── -->
+
+<div id="local-code-graph" align="center">
+
+<table>
+<tr>
+<td width="760">
+
+<h3>Local Code Graph</h3>
+
+SQLite + FTS5, fully offline. Indexes symbols, call chains, imports, and framework routes across Python, TypeScript, Go, Rust, Java, and PHP.
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/local-code-graph.svg" alt="Graph layers: files → symbols → imports + call graph → routes → bridges. Index once, query offline." width="720">
+</p>
+
+<p align="center">
+  <sub>Code Graph · 6 layers · symbol-level · cross-language bridges · offline</sub>
+</p>
+
+<div align="center">
+
+<table>
+<tr>
+<td width="760">
+
+**Real output on psf/requests**
+```
+Why this context — how does authentication work
+20 files · 9,900 tokens
+
+src/requests/auth.py:116     0.86  125  graph · class HTTPProxyAuth  · matched query
+src/requests/auth.py:85      0.84  362  graph · class HTTPBasicAuth  · matched query
+src/requests/sessions.py     0.83  385  graph · method rebuild_auth  · matched query
+src/requests/models.py       0.73   81  graph · method prepare_auth  · calls:HTTPBasicAuth
+docs/user/authentication.rst 0.68 1464  manifest
 ```
 
-### Mutation Testing
-
-Measures test quality beyond line coverage — kills mutants to prove tests actually catch regressions. Requires a compatible mutation testing framework to be installed.
-
-```bash
-opencontext mutation run --scope changed --threshold 80
-```
-
-Without a mutation framework:
-```
-Warning: Mutation analysis framework not found in this environment.
-```
-
-Configure in `opencontext.yaml`:
-
-```yaml
-testing:
-  mutation:
-    enabled: true
-    threshold: 80
-    fail_on_low_score: false   # true = block archive below threshold
-```
-
-### Quality Gates
-
-Every verify phase runs 16 gates automatically:
-
-| Gate | Checks |
-|------|--------|
-| `project-index-exists` | Knowledge graph is indexed |
-| `context-pack-created` | Context was built and delivered |
-| `token-budget` | Pack within tier budget |
-| `trace-id-created` | Trace ID recorded for audit |
-| `security-scan` | No secret patterns found |
-| `artifact-persisted` | Artifacts saved to run directory |
-| `confidence` | Evidence confidence meets threshold |
-| `privacy` | Privacy policy satisfied |
-| `no-secret-leakage` | Context pack is clean |
-| `included-sources-present` | Required symbols present in pack |
-| `omissions-recorded` | Omissions documented in trace |
-| `provider-policy-passed` | Provider rules satisfied |
-| `approval-required-for-writes` | Writes confirmed by user/policy |
-| `no-high-risk-exports` | No confidential data to external providers |
-| `review-artifact-created` | Review trail persisted |
-| `failing-test-exists` | TDD: failing test before apply — advisory by default, blocks in strict-tdd |
-
----
-
-## 🕸️ Knowledge Graph
-
-Indexes your project into a queryable SQLite graph. Understands call chains, imports, framework routes, and cross-language boundaries. No external services.
+`prepare_auth → HTTPBasicAuth` surfaced from the call graph — not from the query text.
 
 ```bash
 opencontext index .
-
-opencontext knowledge-graph search "authenticate"
-opencontext knowledge-graph callers "authenticate_user"      # who calls this
-opencontext knowledge-graph impact "UserModel" --radius 2    # what breaks if changed
-opencontext knowledge-graph view --format tree
-```
-
-**Framework routes** — URL-to-handler mappings for Django, FastAPI, Flask, Express, NestJS:
-
-```bash
-opencontext routes scan . --framework fastapi
-```
-
-**Cross-language bridges** — HTTP calls, gRPC stubs, subprocesses across `.py`, `.ts`, `.go`, `.rs`:
-
-```bash
-opencontext bridges scan . --type GRPC --json
-```
-
----
-
-## 🧠 Memory
-
-Five memory layers — all local, all offline, all SQLite+FTS5:
-
-| Layer | What it stores |
-|-------|---------------|
-| `SEMANTIC` | Stable project facts: "repo separates core from CLI" |
-| `EPISODIC` | Past experiences: "task X failed because graph_db.py was missing" |
-| `PROCEDURAL` | Learned rules: "for KnowledgeGraph changes, always read graph_db.py" |
-| `WORKING` | Current task context (cleared after archive) |
-| `FAILURE` | Failure patterns: which symbols and files caused test failures |
-
-Memory enriches every context pack. Symbols linked to past failures are boosted in retrieval scoring. Procedural rules are injected into the ContextContract automatically.
-
-```bash
-opencontext memory search --query "auth middleware failures"
-opencontext memory harvest           # extract learnings from latest run
-opencontext memory gc --dry-run      # preview decay candidates
-```
-
-After each run, the harvester automatically:
-- Records the episodic trace
-- Extracts procedural rules from failures
-- Links failure patterns to symbols in the graph
-- Applies confidence decay to stale records by half-life
-
----
-
-## 🗜️ Compression
-
-Four strategies, applied automatically by risk tier — zero configuration needed:
-
-| Strategy | Tier | What it does |
-|----------|------|-------------|
-| `none` | Critical | Never compress — full fidelity for high-risk tasks |
-| `terse` | Cheap | Remove prose padding, apply substitution dictionary |
-| `compact` | Precise | AST summaries: signatures + first docstring line, no bodies |
-| `efficient` | Loop output | compact + terse + extended dict — maximum reduction |
-
-`efficient` is the default for `opencontext loop` output. It chains:
-1. **compact** — reduce code to signatures and docstrings
-2. **terse** — compress prose to minimum form
-3. **extended dictionary** — `function→fn`, `implementation→impl`, `service→svc`, `connection→conn`, `transaction→tx`, and more
-
-Protected spans (code blocks, file paths, commands, errors, diffs, stack traces) are **never** modified.
-
-Inter-agent handoffs also compress automatically — context dictionaries are compressed before passing between agents, reducing handoff token cost.
-
-### AICX — Context Bytecode
-
-AICX (Agent Incremental Context Exchange) is a compact, checksum-verified representation of an evidence plan — a transport/telemetry **side-channel** carried alongside the verified context. It encodes the plan as deduplicated references (with content inlined for protected evidence), giving you a tamper-evident fingerprint and a real token-reduction metric **without** stripping content from the context the agent actually receives.
-
-**Cross-turn deltas (invisible).** Within a session the evidence overlaps turn to turn, so `verify_context` also returns an `aicx_delta`: a patch against the project's previous bytecode that re-sends only the evidence that changed (the unchanged dictionary values are reused, not retransmitted). It's computed automatically per project and is safe — an exact-dictionary rebuild keeps the checksum valid, and a base mismatch falls back to the full bytecode.
-
-```bash
-$ opencontext bytecode compile --query "fix auth bug"
-
-AICX/1
-REQ id:2f8a2d6e surface:cli risk:normal budget:16000 q:q001
-EVID id:file:exa src:s002 type:file conf:0.51 fresh:current tok:591 mode:handle
-EVID id:symbol:e src:s004 type:symbol conf:0.33 fresh:current tok:47 mode:handle
-...
-CHK ed078856445c
-
-instructions     : 15
-evidence items   : 10
-dictionary keys  : 12
-original tokens  : 2654
-bytecode tokens  : 242
-token reduction  : 90.9%
-checksum         : ✓ valid
-```
-
-```bash
-opencontext bytecode compile --query "task"   # compile evidence plan to AICX
-opencontext bytecode inspect [path]           # show metrics, gates, checksum
-opencontext bytecode decode [path]            # reconstruct evidence plan (lazy)
-```
-
----
-
-## 🔒 Security
-
-Secure by default. Nothing leaves your machine without explicit configuration.
-
-| Surface | Default | Override |
-|---------|---------|---------|
-| External providers | ❌ Disabled | Enable per-provider in config |
-| Network egress | ❌ Denied | `providers.external_enabled: true` |
-| Secrets in prompts | ✅ Auto-redacted | Not configurable |
-| MCP tools | ❌ Disabled | Allowlist required |
-| Raw traces | ❌ Off | `traces.store_raw_context: true` |
-| Missing policy | ✅ Fail closed | `fail_closed: false` |
-| High-risk exports | ✅ Blocked by gate | `no-high-risk-exports` |
-
-```bash
-opencontext preset apply privacy     # Maximum privacy: air-gapped, fail-closed
-opencontext security scan .          # Scan for secret leakage patterns
-opencontext doctor security          # Full security audit
-```
-
----
-
-## 📊 Benchmark
-
-Fully reproducible — run it yourself:
-
-```bash
-opencontext benchmark run
-python -m pytest tests/core/test_comparative_benchmark.py -v -s
-```
-
-Results on OpenContext's own codebase:
-
-| Task | Naive tokens | OpenContext | Reduction |
-|------|------------:|------------:|----------:|
-| Add `count_by_type()` to BridgeDetector | 49,394 | 2,474 | **95.0%** |
-| Add `--json` flag to `bridges scan` | 59,363 | 2,273 | **96.2%** |
-| Add RuntimeTrace persistence to WorkflowEngine | 27,556 | 6,905 | **74.9%** |
-| **Average** | | | **88.7%** |
-
-TDD compliance ✓ · Secrets clean ✓ on all three. The naive baseline grows as the
-repo grows, so these are a snapshot — the numbers above are whatever the command
-prints today.
-
-*Naive baseline = all files in the relevant directory. Token estimate: `len(text)/4`. Run `pytest tests/core/test_comparative_benchmark.py -v -s` to reproduce.*
-
----
-
-## 🔧 Configuration
-
-```yaml
-# opencontext.yaml
-
-context_planning:
-  enabled: true
-  default_mode: progressive        # progressive | fast | minimal
-  contract_required: true
-  risk_classifier: deterministic
-  max_expansion_rounds: 3
-
-context:
-  ranking:
-    semantic_relevance: 0.25
-    graph_centrality: 0.20
-    call_distance: 0.15
-    test_affinity: 0.10
-    memory_confidence: 0.10
-    recent_failure: 0.08
-    risk_requirement: 0.07
-    freshness: 0.03
-    provenance: 0.02
-
-memory:
-  enabled: true
-  provider: local                  # local | remote
-  harvest_after_run: true
-  decay:
-    enabled: true
-    default_half_life_days: 90
-
-testing:
-  mutation:
-    enabled: false
-    threshold: 80
-    fail_on_low_score: false
-
-context_storage:
-  semantic_search: false           # enable for vector-powered retrieval
-
-security:
-  mode: private_project
-  fail_closed: true
-
-models:
-  default:
-    provider: mock                 # swap: anthropic / openai / openrouter / local
-    model: mock-llm
-```
-
-### Presets
-
-```bash
-opencontext preset apply strict-tdd   # Enforce test-first across all phases
-opencontext preset apply fast         # Cheap model, 2K budget, low latency
-opencontext preset apply deep         # Premium model, 8K budget, max quality
-opencontext preset apply privacy      # Air-gapped, fail-closed, no external calls
-opencontext preset apply air-gapped   # Fully offline
-```
-
----
-
-## 🔌 Integrations
-
-| Agent | Integration |
-|-------|------------|
-| Claude Code | MCP tools + AGENTS.md auto-generated |
-| Cursor | `.cursorrules` + MCP config |
-| GitHub Copilot | `.github/copilot-instructions.md` |
-| Windsurf | `.windsurfrules` |
-| OpenCode / Kilo Code | MCP + agent profile |
-| Any agent | `opencontext agent-context` emits reusable context block |
-
-**MCP tools** (13 tools, pre-approved after `opencontext install`) — every read routed through the verified pipeline, every edit applied at symbol granularity:
-
-```
-# read (9)
-opencontext_search    opencontext_context   opencontext_callers
-opencontext_callees   opencontext_impact    opencontext_node
-opencontext_files     opencontext_status    opencontext_trace
-
-# symbol-level edits (4)
-opencontext_replace_symbol_body   opencontext_insert_before_symbol
-opencontext_insert_after_symbol   opencontext_rename_symbol
-```
-
----
-
-## 📚 CLI Reference
-
-```bash
-# Setup
-opencontext install                              # Auto-detect, build graph, configure agent
-opencontext install --yes                        # Non-interactive (CI)
-opencontext setup claude-code cursor             # Configure specific agents (MCP + instructions)
-opencontext uninstall --all                      # Cleanly remove OpenContext from agents (backup first)
-opencontext doctor                               # Health check
-opencontext update && opencontext upgrade
-
-# Stack standards (prepare every agent for the detected stack)
-opencontext stack                                # Print formatter/linters/tests/standards for the detected stack
-opencontext stack --write                        # Inject them into AGENTS.md as a managed block (idempotent)
-
-# Agentic Loop
-opencontext loop --task "..." --flow full        # Interactive 8-phase SDD workflow
-opencontext loop --task "..." --flow quick       # explore → apply → verify
-opencontext loop --task "..." --flow autonomous  # No prompts, gates decide
-opencontext loop --task "..." --max-rounds 3     # Retry on failure
-opencontext loop --task "..." --compress efficient
-opencontext loop --task "..." --dry-run          # Preview phases, no execution
-
-# Context
-opencontext index .
-opencontext pack . --query "task" --copy
-opencontext pack . --query "task" --format json
-opencontext verified-context --query "task"
-opencontext explain "task"                       # Why each file is (or isn't) in the context — the audit trail
-opencontext contract build --query "task"        # Show ContextContract YAML
-
-# AICX Bytecode
-opencontext bytecode compile --query "task"      # Compile to AICX bytecode
-opencontext bytecode inspect [path]              # Show metrics and checksum
-opencontext bytecode decode [path]               # Reconstruct evidence plan
-
-# Knowledge Graph
-opencontext knowledge-graph search "symbol"
-opencontext knowledge-graph callers "func_name"
-opencontext knowledge-graph impact "ClassName" --radius 2
-opencontext knowledge-graph view --format tree
-
-# SDD Harness
-opencontext harness run --workflow sdd --task "description"
-opencontext harness list
-
-# Analysis
-opencontext mutation run --scope changed --threshold 80
+opencontext explain "how does authentication work"
+opencontext knowledge-graph callers "authenticate_user"
+opencontext knowledge-graph impact "UserModel" --radius 2
 opencontext routes scan . --framework fastapi
 opencontext bridges scan . --type HTTP --json
-opencontext review --party --context "$(git diff HEAD~1)"
+```
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
+
+<!-- ─────────────── AGENT INTERFACE ─────────────── -->
+
+<div id="agent-interface" align="center">
+
+<table>
+<tr>
+<td width="760">
+
+<h3>Agent Interface</h3>
+
+13 MCP tools, pre-approved after `opencontext install`. Compatible with Claude Code, Cursor, Copilot, Windsurf, OpenCode, and any MCP-compatible editor.
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/mcp-tools.svg" alt="13 MCP tools: 9 read tools (search, context, callers, callees, impact, node, files, status, trace) and 4 symbol-level edit tools" width="720">
+</p>
+
+<p align="center">
+  <sub>Agent Interface · 13 MCP tools · read + symbol-level edits · pre-approved</sub>
+</p>
+
+<div align="center">
+
+<table>
+<tr>
+<td width="760">
+
+```bash
+opencontext setup claude-code
+opencontext setup cursor
+opencontext setup --all
+```
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
+
+<!-- ─────────────── OFFLINE BY DEFAULT ─────────────── -->
+
+<div id="offline-by-default" align="center">
+
+<table>
+<tr>
+<td width="760">
+
+<h3>Offline by Default</h3>
+
+Knowledge graph, context packing, MCP tools, and benchmarks run without external services. Index your repo once; every query after that is local.
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/security-defaults.svg" alt="Security defaults: external providers disabled, secrets auto-redacted, MCP tools blocked until allow-listed, missing policy fail closed" width="720">
+</p>
+
+<p align="center">
+  <sub>Security · 4 defaults active out of the box · no configuration required</sub>
+</p>
+
+<div align="center">
+
+<table>
+<tr>
+<td width="760">
+
+```bash
 opencontext security scan .
-
-# Memory
-opencontext memory search --query "auth failures"
-opencontext memory harvest
-opencontext memory maintain                      # Consolidate noisy clusters + decay stale records (sweep all keys)
-opencontext memory review                        # List high-stakes memories (decisions/constraints) due for re-confirmation
-opencontext memory gc --dry-run
-
-# Config
-opencontext config wizard
-opencontext preset list
-opencontext preset apply <name>
-
-# Plugins
-opencontext plugin search
-opencontext plugin install <name>
-
-# Telemetry
-opencontext telemetry show
-opencontext benchmark run
+opencontext doctor security
+opencontext preset apply privacy    # air-gapped · fail-closed · no egress
 ```
 
----
+</td>
+</tr>
+</table>
 
-## 🐍 Python SDK
+</div>
 
-```python
-from opencontext_core import OpenContextRuntime
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
 
-# Build a verified context pack
-runtime = OpenContextRuntime()
-runtime.setup_project(".")
-prepared = runtime.prepare_context("Review authentication", max_tokens=6000)
-# prepared.context   → compact, redacted, task-specific markdown
-# prepared.trace_id  → auditable record of what was included and why
+<!-- ─────────────── INSTALLATION ─────────────── -->
 
-# Build a ContextContract
-contract = runtime.build_contract("fix crash in auth middleware")
-print(contract.risk_tier)        # "precise"
-print(contract.token_budget)     # 16000
-print([g.id for g in contract.must_verify])
+<div id="installation" align="center">
 
-# Run an agent programmatically
-import asyncio
-from pathlib import Path
-from opencontext_core.agents import AGENT_REGISTRY
-from opencontext_core.agents.base import AgentConfig
+<table>
+<tr>
+<td width="760">
 
-config = AgentConfig(
-    name="tdd-enforcer",
-    type="tdd-enforcer",
-    objectives=["verify test suite passes"],
-)
-agent = AGENT_REGISTRY["tdd-enforcer"](config, Path("."))
-result = asyncio.run(agent.execute())
-print(result["cycle_status"])    # "green" | "red"
-```
-
----
-
-## 📖 Documentation
-
-| Topic | Links |
-|-------|-------|
-| **Getting Started** | [Quickstart](docs/getting-started/quickstart.md) · [Installation](docs/getting-started/installation.md) · [Troubleshooting](docs/getting-started/troubleshooting.md) |
-| **Architecture** | [Overview](docs/architecture/overview.md) · [Context Pack Builder](docs/architecture/context-pack-builder.md) · [Safety Layer](docs/architecture/safety-layer.md) |
-| **Agentic Loop** | [Workflow Modes](docs/workflows/modes.md) · [Custom Workflows](docs/workflows/custom-workflows.md) |
-| **SDD Workflow** | [SDD Guide](docs/workflows/sdd-workflow.md) · [Workflow Packs](docs/workflows/workflow-packs.md) |
-| **Memory** | [Overview](docs/memory/overview.md) · [Session Harvesting](docs/memory/session-harvesting.md) · [Temporal Memory](docs/memory/temporal-memory.md) |
-| **Compression** | [Overview](docs/token-efficiency/compression.md) · [Token Efficiency](docs/token-efficiency/overview.md) |
-| **Configuration** | [Reference](docs/configuration/reference.md) · [Security Policy](docs/configuration/security-policy.md) |
-| **Security** | [Threat Model](docs/security/threat-model.md) · [Data Classification](docs/security/data-classification.md) |
-| **Integrations** | [Python SDK](docs/integrations/python-sdk.md) · [API](docs/integrations/api.md) · [GitHub Action](docs/integrations/github-action.md) |
-| **Enterprise** | [Air-Gapped](docs/enterprise/air-gapped.md) · [Governance Reports](docs/enterprise/governance-reports.md) |
-| **Development** | [Contributing](docs/development/contributing.md) · [Testing](docs/development/testing.md) · [Architecture Boundaries](docs/development/architecture-boundaries.md) |
-
----
-
-## Install
+<h3>Installation</h3>
 
 | Method | Command |
 |--------|---------|
 | pip | `pip install opencontext-cli` |
-| Isolated tool | `pipx install opencontext-cli` (or `uv tool install opencontext-cli`) |
-| Linux/macOS | `curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh \| bash` |
+| pipx | `pipx install opencontext-cli` |
+| uv | `uv tool install opencontext-cli` |
+| Linux / macOS | `curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh \| bash` |
 | Windows | `irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 \| iex` |
-| Single file | `make binary` → `dist/opencontext.pyz`, run with `python3 opencontext.pyz` |
-| Source | `git clone … && pip install -e packages/*` |
-
-Requires **Python 3.12+**. No API key required for core functionality.
-
-`make binary` produces one portable file (`dist/opencontext.pyz`, ~640 KB) that
-bundles the OpenContext source and runs anywhere a compatible Python is present —
-copy it to a server, an air-gapped box, or a CI image, no install step.
+| Portable binary | `make binary` → `dist/opencontext.pyz` (Python 3.12+) |
 
 ```bash
-pytest                          # 1500+ tests
-ruff check .                    # Lint
-mypy packages/opencontext_core  # Types
+opencontext verify
+opencontext doctor
 ```
 
----
+</td>
+</tr>
+</table>
 
-MIT · [LICENSE](LICENSE) · [SECURITY.md](SECURITY.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
+</div>
+
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
+
+<!-- ─────────────── DOCS INDEX ─────────────── -->
+
+<div align="center">
+
+<table>
+<tr>
+<td width="760">
+
+<details open>
+<summary><strong>Documentation Index</strong></summary>
+
+| Area | Links |
+|------|-------|
+| Getting Started | [Quickstart](docs/getting-started/quickstart.md) · [Installation](docs/getting-started/installation.md) · [Troubleshooting](docs/getting-started/troubleshooting.md) |
+| Architecture | [Overview](docs/architecture/overview.md) · [Context Pack Builder](docs/architecture/context-pack-builder.md) · [Safety Layer](docs/architecture/safety-layer.md) |
+| Workflows | [Flow Modes](docs/workflows/modes.md) · [SDD Guide](docs/workflows/sdd-workflow.md) · [Custom Workflows](docs/workflows/custom-workflows.md) |
+| Security | [Threat Model](docs/security/threat-model.md) · [Data Classification](docs/security/data-classification.md) |
+| Integrations | [Python SDK](docs/integrations/python-sdk.md) · [API](docs/integrations/api.md) · [GitHub Action](docs/integrations/github-action.md) · [Air-Gapped](docs/enterprise/air-gapped.md) |
+| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) · [Architecture deep-dive](docs/architecture/overview.md) |
+
+</details>
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
+
+<!-- ─────────────── SECONDARY SECTIONS (DETAILS) ─────────────── -->
+
+<div align="center">
+
+<table>
+<tr>
+<td width="760">
+
+<details>
+<summary><strong>Execution Harness</strong></summary>
+
+<sub>Requires an LLM provider — <code>ANTHROPIC_API_KEY</code> or <code>OPENAI_API_KEY</code>, or configure via <code>opencontext install</code>.</sub>
+
+```bash
+opencontext clarify "add OAuth2 login"
+opencontext loop --task "..." --flow full
+opencontext loop --task "..." --flow quality
+opencontext loop --task "..." --flow quick --dry-run
+```
+
+| Track | Phases | When |
+|-------|--------|------|
+| `quick` | explore → apply → verify | Simple fixes |
+| `standard` | explore → spec + design → apply → verify | Features, refactors |
+| `full` | All 9 phases | Architecture, security |
+| `autonomous` | All 9, no prompts | CI/CD, automation |
+| `quality` | All 9 + GGA rules + judgment | Maximum quality gates |
+
+</details>
+
+<details>
+<summary><strong>Local Agent Memory</strong></summary>
+
+Five layers, SQLite + FTS5, zero external services. Past failures automatically surface first in the next run.
+
+| Layer | Stores |
+|-------|--------|
+| `SEMANTIC` | Stable project facts |
+| `EPISODIC` | Past task outcomes |
+| `PROCEDURAL` | Learned rules |
+| `WORKING` | Current task context |
+| `FAILURE` | Symbols that caused test failures |
+
+```bash
+opencontext memory search "auth middleware"
+opencontext memory collect
+opencontext memory review
+opencontext memory gc --dry-run
+```
+
+</details>
+
+<details>
+<summary><strong>Workflow Skills</strong></summary>
+
+Drop `.skill.md` files in `skills/`. OpenContext injects the right ones based on file extensions and task keywords.
+
+| Skill | Injected When |
+|-------|--------------|
+| `fix` | Task mentions "bug", "fix", "crash", "regression" |
+| `prd` | Task is a vague idea before SDD |
+| `work-unit-commits` | Any apply phase |
+| `sdd-onboard` | First run on a new project |
+
+```bash
+opencontext skill-registry refresh
+```
+
+</details>
+
+<details>
+<summary><strong>Runtime Configuration</strong></summary>
+
+```bash
+opencontext config wizard
+opencontext config show
+opencontext config backup
+opencontext preset apply <name>
+```
+
+</details>
+
+<details>
+<summary><strong>Runtime Commands</strong></summary>
+
+```bash
+# Setup
+opencontext install
+opencontext demo
+opencontext verify  &&  opencontext doctor
+
+# Context
+opencontext explain "task"
+opencontext pack . --query "task" --copy
+opencontext verified-context "task"
+opencontext contract build --query "task"
+opencontext index .
+
+# AICX bytecode
+opencontext bytecode compile --query "task"
+opencontext bytecode inspect
+opencontext bytecode decode <path.aicx>
+
+# Agentic loop & harness
+opencontext clarify "idea"
+opencontext loop --task "..." --flow full
+opencontext loop --task "..." --flow quality --dry-run
+opencontext harness run --workflow sdd --task "..."
+opencontext harness list
+
+# Code graph
+opencontext knowledge-graph search "symbol"
+opencontext knowledge-graph callers "func"
+opencontext knowledge-graph impact "Class" --radius 2
+opencontext routes scan . --framework fastapi
+opencontext bridges scan . --type HTTP --json
+
+# Memory
+opencontext memory search "query"
+opencontext memory collect
+opencontext memory gc --dry-run
+
+# Config & plugins
+opencontext config wizard
+opencontext preset apply <name>
+opencontext plugin install <name> --github owner/repo
+opencontext update && opencontext upgrade
+opencontext security scan .
+opencontext benchmark run
+```
+
+</details>
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/assets/footer-mark.svg" alt="OpenContext Runtime — Small context. Full trace. Verified execution." width="720">
+</p>
+
+<p align="center">
+  <sub>MIT · <a href="LICENSE">LICENSE</a> · <a href="SECURITY.md">SECURITY.md</a> · <a href="CONTRIBUTING.md">CONTRIBUTING.md</a></sub>
+</p>

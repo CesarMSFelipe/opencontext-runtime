@@ -125,6 +125,7 @@ def test_graph_source_emits_provenance_and_freshness_metadata(tmp_path: Path) ->
             )
         ]
     )
+    db.rebuild_fts()
     db.close()
 
     items = GraphRetrievalSource(db_path=db_path, root=tmp_path).retrieve(

@@ -40,6 +40,8 @@ _NAIVE_SKIP_DIRS = {
     ".opencontext",
     ".mypy_cache",
     ".ruff_cache",
+    "worktrees",
+    "cache",
 }
 
 

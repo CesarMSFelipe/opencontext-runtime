@@ -96,7 +96,6 @@ class MetricsCollector:
         metrics.input_tokens = input_tokens
         metrics.output_tokens = output_tokens
 
-        # Calculate cost
         costs = self.COST_PER_1M_TOKENS.get(provider, self.COST_PER_1M_TOKENS["mock"])
         input_cost = (input_tokens / 1_000_000) * costs["input"]
         output_cost = (output_tokens / 1_000_000) * costs["output"]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -50,28 +51,53 @@ class ProjectIndexer:
         profiles = self._profiles_from_detections(detections)
         primary_profile = self._primary_profile(detections, profiles)
 
-        # Populate knowledge graph if available
+        # Populate knowledge graph with batch checkpointing
+        # Checkpoint persists which files have been indexed so interrupted runs resume.
         kg_stats = {"files_indexed": 0, "nodes": 0, "edges": 0}
         if self.knowledge_graph is not None:
+            checkpoint_path = project_root / ".storage" / "opencontext" / "index_checkpoint.json"
+            done_paths: set[str] = _load_checkpoint(checkpoint_path)
             indexed_files: list[tuple[str, str]] = []
+            batch_size = 50
+            batch_count = 0
             for scanned_file in scanned_files:
-                if scanned_file.language in ("python", "php"):
-                    try:
-                        stats = self.knowledge_graph.index_file(
-                            scanned_file.relative_path, scanned_file.content
-                        )
-                        kg_stats["files_indexed"] += 1
-                        kg_stats["nodes"] += stats.get("nodes", 0)
-                        kg_stats["edges"] += stats.get("edges", 0)
-                        indexed_files.append((scanned_file.relative_path, scanned_file.content))
-                    except Exception:
-                        pass
+                if scanned_file.language not in ("python", "php"):
+                    continue
+                if scanned_file.relative_path in done_paths:
+                    kg_stats["files_indexed"] += 1
+                    indexed_files.append((scanned_file.relative_path, scanned_file.content))
+                    continue
+                try:
+                    stats = self.knowledge_graph.index_file(
+                        scanned_file.relative_path, scanned_file.content
+                    )
+                    kg_stats["files_indexed"] += 1
+                    kg_stats["nodes"] += stats.get("nodes", 0)
+                    kg_stats["edges"] += stats.get("edges", 0)
+                    indexed_files.append((scanned_file.relative_path, scanned_file.content))
+                    done_paths.add(scanned_file.relative_path)
+                    batch_count += 1
+                    if batch_count % batch_size == 0:
+                        _save_checkpoint(checkpoint_path, done_paths)
+                except Exception:
+                    pass
+            _save_checkpoint(checkpoint_path, done_paths)
+            # Single FTS5 rebuild after all files are indexed (was per-file — huge speedup)
+            try:
+                self.knowledge_graph.db.rebuild_fts()
+            except Exception:
+                pass
             if indexed_files:
                 try:
                     cross = self.knowledge_graph.finalize_cross_file_edges(indexed_files)
                     kg_stats["edges"] += cross
                 except Exception:
                     pass
+            # Clear checkpoint after successful full index
+            try:
+                checkpoint_path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
         # Run route scanners for detected profiles
         detected_profile_names = [
@@ -178,3 +204,18 @@ class ProjectIndexer:
         if non_generic:
             return max(non_generic, key=lambda detection: detection.score).profile
         return profiles[0]
+
+
+def _load_checkpoint(path: Path) -> set[str]:
+    try:
+        return set(json.loads(path.read_text(encoding="utf-8")))
+    except Exception:
+        return set()
+
+
+def _save_checkpoint(path: Path, done: set[str]) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(sorted(done)), encoding="utf-8")
+    except Exception:
+        pass

@@ -56,7 +56,6 @@ def resolve_skills(
         else:
             combined[skill.name] = (score, skill)
 
-    # Sort by score descending
     sorted_skills = sorted(combined.values(), key=lambda x: -x[0])
 
     return [skill for _, skill in sorted_skills[:max_matches]]

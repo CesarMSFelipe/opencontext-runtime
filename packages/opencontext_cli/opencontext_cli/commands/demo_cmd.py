@@ -44,8 +44,14 @@ def handle_demo(runtime: Any, args: Any) -> int:
         return 1
 
     console.print("\n[bold]OpenContext demo[/]")
-    console.print("[dim]Indexing the project…[/]")
-    runtime.index_project(root)
+    try:
+        manifest = runtime.load_manifest()
+        if not manifest or not manifest.files:
+            raise ValueError("empty")
+        console.print(f"[dim]Using existing index ({len(manifest.files)} files)…[/]")
+    except Exception:
+        console.print("[dim]Indexing the project… (run once, faster next time)[/]")
+        runtime.index_project(root)
 
     naive = estimate_naive_tokens(root)
     pack = runtime.build_context_pack(args.query)
@@ -72,4 +78,20 @@ def handle_demo(runtime: Any, args: Any) -> int:
         "that reads exactly what matters.[/]"
     )
     console.print('[dim]Try it on your own task:[/] opencontext explain "your task here"\n')
+
+    import sys
+
+    if sys.stdout.isatty():
+        try:
+            from rich.prompt import Confirm
+
+            if Confirm.ask("Set up this project now?", default=True):
+                import argparse
+
+                from opencontext_cli.main import _install
+
+                _install(argparse.Namespace(root=str(root), yes=False))
+        except (KeyboardInterrupt, EOFError):
+            pass
+
     return 0

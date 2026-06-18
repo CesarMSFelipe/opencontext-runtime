@@ -123,6 +123,7 @@ class KnowledgeGraph:
                 docstring=sym.docstring,
                 signature=sym.signature,
                 is_exported=sym.is_exported,
+                content_snippet=sym.content_snippet,
             )
             for sym in parsed_symbols
         ]
@@ -240,7 +241,6 @@ class KnowledgeGraph:
         total_nodes = 0
         total_edges = 0
 
-        # Collect files to index
         file_contents: list[tuple[str, str]] = []
         for ext in LANGUAGE_EXTENSIONS:
             for file_path in root_path.rglob(f"*{ext}"):
@@ -264,6 +264,8 @@ class KnowledgeGraph:
             files_indexed += 1
             total_nodes += stats["nodes"]
             total_edges += stats["edges"]
+
+        self.db.rebuild_fts()
 
         # Pass 2: resolve cross-file edges using the complete global node map
         cross_edges = self._resolve_cross_file_edges(file_contents)
@@ -468,6 +470,39 @@ class KnowledgeGraph:
 
         # Multiple candidates, no disambiguator -> ambiguous (do not guess).
         return None, True
+
+    def reindex_files(self, file_paths: set[str], root: Path) -> dict[str, Any]:
+        """Incrementally re-index a specific set of files.
+
+        Reads each file from disk, re-parses it (upsert semantics — unchanged
+        symbols are preserved, removed ones pruned), then rebuilds cross-file
+        edges for the affected set only.
+
+        Returns stats dict with nodes/edges counts.
+        """
+        stats = {"files": 0, "nodes": 0, "edges": 0, "skipped": 0}
+        file_contents: list[tuple[str, str]] = []
+        for rel_path in file_paths:
+            abs_path = root / rel_path
+            try:
+                content = abs_path.read_text(encoding="utf-8", errors="replace")
+            except FileNotFoundError:
+                # File was deleted — remove its nodes from the graph
+                self.db.delete_file_and_nodes(rel_path)
+                stats["skipped"] += 1
+                continue
+            except Exception:
+                stats["skipped"] += 1
+                continue
+            result = self.index_file(rel_path, content)
+            if result.get("parse_mode") != "skipped":
+                stats["files"] += 1
+                stats["nodes"] += result.get("nodes", 0)
+                file_contents.append((rel_path, content))
+        if file_contents:
+            self.db.rebuild_fts()
+            stats["edges"] += self.finalize_cross_file_edges(file_contents)
+        return stats
 
     def finalize_cross_file_edges(self, file_contents: list[tuple[str, str]]) -> int:
         """Resolve and store cross-file edges from an externally-managed file batch.

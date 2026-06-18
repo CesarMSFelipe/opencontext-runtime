@@ -563,7 +563,6 @@ def _run_automated(
     artifact_mode: str = "hybrid",
 ) -> None:
     """Run automated setup (non-interactive)."""
-    # Check first run — suggest onboard before proceeding
     _check_first_run()
 
     if not preset and not components:
@@ -599,7 +598,6 @@ def _choose_preset() -> str:
     """Interactive preset selection."""
     presets = get_available_presets()
 
-    # Sort so context-first appears first with [default] marker
     def preset_sort_key(p):
         if p.id == "context-first":
             return (0, p.id)
@@ -626,7 +624,6 @@ def _choose_preset() -> str:
         )
     console.print(table)
 
-    # Default to context-first (option 1)
     choice = Prompt.ask(
         "\nSelect preset",
         choices=[str(i) for i in range(1, len(sorted_presets) + 1)],
@@ -639,7 +636,6 @@ def _choose_profile(preset: str | None = None) -> str:
     """Interactive profile selection."""
     profiles = get_available_profiles()
 
-    # Suggest a default based on preset
     suggestions = {
         "full": "developer",
         "context-essential": "minimal",

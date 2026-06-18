@@ -38,7 +38,9 @@ from opencontext_core.harness.phases import (
     ArchivePhase,
     DesignPhase,
     ExplorePhase,
+    GGARulesPhase,
     HarnessPhase,
+    JudgmentDayPhase,
     PhaseResult,
     ProposePhase,
     ReviewPhase,
@@ -72,6 +74,9 @@ class HarnessState:
         # run via run_phase_executor. None when no real LLM is configured, in
         # which case those phases report honest planned/executor-absent results.
         self.delegate: Any = None
+        # Per-phase model override resolved by HarnessRunner before each phase.
+        # None means "use the configured default".
+        self.current_phase_model: Any = None
 
 
 class HarnessRunner:
@@ -237,6 +242,9 @@ class HarnessRunner:
         "full": "full",
         "standard": "standard",
         "quick": "quick",
+        "full+judgment": "full+judgment",
+        "full+gga": "full+gga",
+        "full+quality": "full+quality",
     }
 
     @staticmethod
@@ -416,6 +424,10 @@ class HarnessRunner:
             if phase_obj is None:
                 continue
 
+            phase_model = self._model_for_phase(phase_id)
+            if phase_model is not None:
+                state.current_phase_model = phase_model
+
             try:
                 result = phase_obj.run(state)
             except Exception as exc:
@@ -477,7 +489,56 @@ class HarnessRunner:
         )
 
         self.persist_run(state, run_result)
+        self._post_run_update(state)
         return run_result
+
+    def _post_run_update(self, state: HarnessState) -> None:
+        """Auto-collect memory candidates and re-index changed files after every run."""
+        changed = [
+            e["path"] if isinstance(e, dict) else getattr(e, "path", str(e))
+            for e in (state.apply_edits or [])
+        ]
+        # Memory harvest — auto-approve low-stakes candidates
+        try:
+            from opencontext_core.memory.collector import (  # type: ignore[import-not-found]
+                MemoryCandidateExtractor,
+            )
+            from opencontext_core.memory_usability.context_repository import ContextRepository
+            from opencontext_core.memory_usability.memory_gc import (
+                MemoryGarbageCollector,  # noqa: F401
+            )
+
+            repo = ContextRepository(state.root / ".storage" / "opencontext" / "memory")
+            extractor = MemoryCandidateExtractor()
+            candidates = extractor.extract_from_run(state.run_id, state.root)
+            for candidate in candidates:
+                if getattr(candidate, "auto_approve", False):
+                    repo.save(candidate)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+        # Graph re-index of changed files only
+        if changed:
+            try:
+                from opencontext_core.indexing.graph_db import GraphDatabase
+                from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+
+                db_path = state.root / ".storage" / "opencontext" / "knowledge_graph.db"
+                if db_path.exists():
+                    db = GraphDatabase(db_path)
+                    kg = KnowledgeGraph(db)  # type: ignore[arg-type]
+                    for path in changed:
+                        full = state.root / path
+                        if full.exists() and full.suffix == ".py":
+                            try:
+                                kg.index_file(
+                                    path, full.read_text(encoding="utf-8", errors="ignore")
+                                )
+                            except Exception:
+                                pass
+                    db.close()
+            except Exception:
+                pass
 
     @staticmethod
     def _inputs_summary(state: HarnessState) -> str:
@@ -709,6 +770,10 @@ class HarnessRunner:
             return ReviewPhase(phase_config, budget_mode)
         if phase_id == "archive":
             return ArchivePhase(phase_config, budget_mode, memory_store=memory_store)
+        if phase_id == "judgment":
+            return JudgmentDayPhase(phase_config, budget_mode)
+        if phase_id == "gga":
+            return GGARulesPhase(phase_config, budget_mode)
 
         # Fallback: return None for unknown phases
         return None
@@ -791,6 +856,22 @@ class HarnessRunner:
             "data_classification": "internal",
         }
         return phase_ops.get(phase_id, default_op)
+
+    def _model_for_phase(self, phase_id: str) -> Any:
+        """Return the per-phase ModelProviderConfig override, or None if not set.
+
+        Looks up ``config.models.phases[phase_id]`` from the top-level
+        ``opencontext.yaml``. Returns ``None`` when no override is configured so
+        callers can fall back to the default model cleanly.
+        """
+        try:
+            from opencontext_core.config import load_config_or_defaults
+
+            cfg = load_config_or_defaults(self.root / "opencontext.yaml", auto_detect=False)
+            phases = getattr(cfg.models, "phases", {}) or {}
+            return phases.get(phase_id)
+        except Exception:
+            return None
 
     def _warn_if_kg_not_indexed(self, state: HarnessState) -> None:
         """Add a warning if the knowledge graph has no indexed content.

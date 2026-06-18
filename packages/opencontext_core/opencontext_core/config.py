@@ -36,6 +36,8 @@ DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
     "*.log",
     "*.min.js",
     "*.min.css",
+    ".claude/worktrees",
+    ".claude/plugins/cache",
 )
 
 
@@ -78,6 +80,23 @@ class ModelConfigMap(BaseModel):
         default_factory=dict,
         description="Optional role-specific model routing.",
     )
+    phases: dict[str, ModelProviderConfig] = Field(
+        default_factory=dict,
+        description="Per-phase model overrides. Keys: explore, spec, design, tasks, apply, verify, review, archive, judgment. Falls back to default.",  # noqa: E501
+    )
+
+
+class ContextArtifact(BaseModel):
+    """A non-code file (schema, spec, config) to index alongside the codebase."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(description="Path relative to project root.")
+    name: str = Field(description="Human-readable label, e.g. 'DB Schema'.")
+    type: str = Field(
+        default="artifact",
+        description="Artifact type hint: 'schema', 'openapi', 'config', 'docs', or 'artifact'.",
+    )
 
 
 class ProjectIndexConfig(BaseModel):
@@ -94,6 +113,10 @@ class ProjectIndexConfig(BaseModel):
     ignore: list[str] = Field(
         default_factory=lambda: list(DEFAULT_IGNORE_PATTERNS),
         description="Project-relative ignore patterns.",
+    )
+    context_artifacts: list[ContextArtifact] = Field(
+        default_factory=list,
+        description="Non-code files (SQL schemas, OpenAPI specs, ADRs) indexed alongside code.",
     )
 
     @field_validator("ignore", mode="after")
@@ -478,7 +501,9 @@ class MemoryPolicyConfig(BaseModel):
         default="local",
         description="Memory backend provider: 'local' (SQLite) or 'engram'.",
     )
-    harvest_after_run: bool = Field(default=False, description="Automatic harvest disabled.")
+    harvest_after_run: bool = Field(
+        default=True, description="Harvest memory automatically after each run."
+    )
     require_approval: bool = Field(default=True, description="Harvested memories require approval.")
     store_raw: bool = Field(default=False, description="Raw memory storage disabled.")
     default_classification: str = Field(default="internal", description="Default memory class.")
@@ -968,6 +993,7 @@ class OpenContextConfig(BaseModel):
     token_budgets: dict[str, WorkflowTokenBudgetConfig] = Field(default_factory=dict)
     latency: LatencyConfig = Field(default_factory=LatencyConfig)
     commands: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    ui_language: str = Field(default="en", description="UI language: en or es.")
     hooks: dict[str, list[str]] = Field(default_factory=dict)
     profiles: dict[str, Any] = Field(default_factory=dict)
     server: ServerConfig = Field(default_factory=ServerConfig)
@@ -1133,6 +1159,7 @@ def default_config_data() -> dict[str, Any]:
                 "summarize": {"provider": "mock", "model": "mock-llm"},
                 "orchestrate": {"provider": "mock", "model": "mock-llm"},
             },
+            "phases": {},
         },
         "project_index": {
             "enabled": True,
@@ -1281,7 +1308,7 @@ def default_config_data() -> dict[str, Any]:
         },
         "memory": {
             "enabled": True,
-            "harvest_after_run": False,
+            "harvest_after_run": True,
             "require_approval": True,
             "store_raw": False,
             "default_classification": "internal",
@@ -1475,4 +1502,5 @@ def default_config_data() -> dict[str, Any]:
                 "skills/",
             ],
         },
+        "ui_language": "en",
     }

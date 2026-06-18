@@ -34,14 +34,12 @@ def add_privacy_parser(subparsers: Any) -> None:
     )
     privacy_sub = privacy_parser.add_subparsers(dest="privacy_command", required=True)
 
-    # list-rules
     list_parser = privacy_sub.add_parser(
         "list",
         help="List all configured privacy rules.",
     )
     list_parser.add_argument("--json", action="store_true", help="Output as JSON.")
 
-    # add-rule
     add_parser = privacy_sub.add_parser(
         "add",
         help="Add a new privacy rule.",
@@ -86,7 +84,6 @@ def add_privacy_parser(subparsers: Any) -> None:
         help="Skip confirmation prompt and add the rule directly.",
     )
 
-    # remove-rule
     remove_parser = privacy_sub.add_parser(
         "remove",
         help="Remove a privacy rule by ID.",
@@ -172,7 +169,6 @@ def _list_rules(json_output: bool) -> None:
 
 def _add_rule(args: Any) -> None:
     """Add a new privacy rule."""
-    # Parse scopes
     scope_strs = [s.strip() for s in args.scope.split(",")]
     try:
         scopes = [PermissionScope(s) for s in scope_strs]
@@ -182,7 +178,6 @@ def _add_rule(args: Any) -> None:
         console.print(f"  Valid: {', '.join(valid)}")
         return
 
-    # Parse classification
     try:
         classification = DataClassification(args.classification)
     except ValueError:
@@ -191,7 +186,6 @@ def _add_rule(args: Any) -> None:
         console.print(f"  Valid: {', '.join(valid)}")
         return
 
-    # Parse audit level
     try:
         audit_level = AuditLevel(args.audit)
     except ValueError:
@@ -200,10 +194,8 @@ def _add_rule(args: Any) -> None:
         console.print(f"  Valid: {', '.join(valid)}")
         return
 
-    # Parse providers
     providers = [p.strip() for p in args.providers.split(",") if p.strip()]
 
-    # Build rule
     import uuid
 
     rule_id = f"rule-{uuid.uuid4().hex[:8]}"
@@ -217,7 +209,6 @@ def _add_rule(args: Any) -> None:
         audit_level=audit_level,
     )
 
-    # Load and update
     data, privacy_path = _load_privacy_yaml()
     rules = data.get("privacy_rules", [])
     rules.append(rule.model_dump(mode="json"))

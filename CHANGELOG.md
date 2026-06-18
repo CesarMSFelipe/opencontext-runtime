@@ -5,6 +5,42 @@ All notable changes to OpenContext Runtime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-06-18
+
+### Performance
+
+- **FTS5 rebuild deferred**: `upsert_nodes()` no longer calls `INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild')` per file. A single `rebuild_fts()` call runs after the full indexing loop. Benchmark: 624 Python files 96 s → 5 s (19×).
+
+### Added
+
+- **Incremental watch mode**: `WatchService` passes `set[str] | None` to the index callback — a set for incremental re-index, `None` for full rebuild. `_watch()` in the CLI uses `rt.reindex_files()` for changed paths.
+- **Context artifacts**: Non-code files (SQL schemas, OpenAPI specs, ADRs) declared under `context_artifacts` in `opencontext.yaml` are indexed as `kind='artifact'` nodes, searchable through all MCP tools.
+- **`opencontext_files` summarize mode**: `summarize=true` returns directory-level aggregates (file count, symbol count, language breakdown) instead of the full file list — reduces token usage on large repos.
+- **Memory `topic_key` + dedup**: `MemoryRecord` gains `topic_key` (hierarchical handle like `architecture/auth-model`) and `revision_count`. `store_by_topic_key()` upserts in-place instead of creating duplicates.
+- **Contradiction detection wired**: `ContradictionDetector` is now called inside `store()` — flags records with same key, different content, and confidence delta > 0.3.
+- **`skill list` and `skill-registry list` commands**: List available skills from registry and agent skill dirs.
+- **Per-phase model config**: `ModelConfigMap.phases` dict allows per-phase model overrides (explore, spec, design, tasks, apply, verify, review, archive, judgment).
+- **Judgment-day phase**: Adversarial review phase (`judgment`) with BLOCKER/SHOULD_FIX/APPROVED verdicts; GGA rules enforcement; `clarify` command.
+- **Quality workflow tracks**: `quick`, `standard`, `full`, `full+judgment`, `full+gga` harness tracks.
+- **Skill registry v2**: `.skill.md` scanner alongside legacy `SKILL.md`/frontmatter format; built-in skills (fix, prd, work-unit-commits, sdd-onboard).
+- **Trae/Hermes agent support**: Detected and configured by `AgentInstaller`.
+- **`verify --json` `ok` field**: Each check entry now includes `"ok": bool` for CI consumers.
+- **`security scan --json` `files_scanned`**: Field now populated with the actual count.
+- **Content snippet in FTS5**: Symbol body indexed for semantic search via `content_snippet`.
+- **Memory harvest enabled by default**: Auto-approves low-stakes candidates after apply.
+
+### Fixed
+
+- `skill list` / `skill-registry list` — `invalid choice` error (subcommands were missing).
+- `F821` undefined `args` in `_onboard` — replaced `getattr(args, "root", ".")` with `root`.
+- Import order `E402` in `memory/stores.py` and `skills/registry.py`.
+- Mypy: `dict[str, str]` annotation, `Path` param type, unused `type: ignore`, removed unreachable guard in `reindex_files`.
+- Watch service callback signature updated to accept `changed: set[str] | None`.
+- Tests calling `upsert_nodes()` now call `rebuild_fts()` explicitly after bulk inserts.
+- README MCP tool count assertion accepts `"13 MCP tools"` substring.
+- Worktrees excluded from KG indexing and security scans.
+- `demo` re-index skip; `security scan --json`; `bytecode inspect` fallback.
+
 ## [1.0.0] - 2026-05-28
 
 ### Fixed

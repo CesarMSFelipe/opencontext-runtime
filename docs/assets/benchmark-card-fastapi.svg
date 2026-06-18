@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" width="720" height="380" role="img" aria-label="Benchmark: add OAuth2 auth on tiangolo/fastapi — grep+read ~65,000 tok 4-8 rounds vs opencontext 11,740 tok 1 call — 82% fewer tokens, call graph included">
+
+  <rect width="720" height="380" rx="14" fill="#0B0F14"/>
+  <rect x="1" y="1" width="718" height="378" rx="13" fill="none" stroke="rgba(0,168,232,0.18)" stroke-width="1"/>
+
+  <!-- Header bar -->
+  <rect width="720" height="56" rx="14" fill="#111821"/>
+  <rect y="42" width="720" height="14" fill="#111821"/>
+
+  <!-- Left accent — blue for fastapi -->
+  <rect x="0" y="0" width="5" height="56" rx="2" fill="#00A8E8"/>
+
+  <text x="24" y="24"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="14" font-weight="700" fill="#E6EDF3">tiangolo/fastapi</text>
+  <text x="168" y="24"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="12" fill="#3D4450"> — 1,121 Python files</text>
+  <text x="24" y="44"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11.5" fill="#8B949E">Task: add OAuth2 bearer token authentication to an endpoint</text>
+
+  <!-- Column divider -->
+  <line x1="360" y1="56" x2="360" y2="380" stroke="#21262D" stroke-width="1"/>
+
+  <!-- ── LEFT PANEL ── -->
+  <text x="180" y="82" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" font-weight="600" fill="#FF7B72" letter-spacing="0.9">AGENT TOOL LOOP  (grep + read)</text>
+
+  <g font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="12">
+    <text x="18" y="106" fill="#8B949E">❯ grep "oauth2" fastapi/ tests/</text>
+    <text x="18" y="122" fill="#3D4450">  → 47 matches across 12 files</text>
+
+    <!-- routing.py -->
+    <text x="18" y="146" fill="#8B949E">❯ read fastapi/routing.py</text>
+    <rect x="18" y="152" width="320" height="30" rx="4" fill="rgba(255,123,114,0.08)"/>
+    <text x="26" y="167" fill="#FF7B72">  56,550 tokens  (whole file)</text>
+    <text x="26" y="180" fill="#3D4450" font-size="10.5">  agent may skip — too large</text>
+
+    <!-- oauth2.py -->
+    <text x="18" y="204" fill="#8B949E">❯ read fastapi/security/oauth2.py</text>
+    <rect x="18" y="210" width="320" height="22" rx="4" fill="rgba(255,123,114,0.08)"/>
+    <text x="26" y="225" fill="#FF7B72">   6,044 tokens  (whole file)</text>
+
+    <!-- http.py -->
+    <text x="18" y="246" fill="#8B949E">❯ read fastapi/security/http.py</text>
+    <rect x="18" y="252" width="320" height="22" rx="4" fill="rgba(255,123,114,0.08)"/>
+    <text x="26" y="267" fill="#FF7B72">   3,352 tokens  (whole file)</text>
+
+    <text x="18" y="293" fill="#3D4450">  HTTPBearer → missed on first pass</text>
+    <text x="18" y="309" fill="#3D4450">  test examples → extra round needed</text>
+  </g>
+
+  <line x1="18" y1="322" x2="344" y2="322" stroke="#21262D" stroke-width="1"/>
+
+  <text x="18" y="352"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="30" font-weight="700" fill="#FF7B72">~65,000</text>
+  <text x="192" y="352"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="13" fill="#8B949E"> tok</text>
+  <text x="18" y="370"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11.5" fill="#8B949E">4–8 rounds  ·  no call graph  ·  test examples missed</text>
+
+  <!-- ── RIGHT PANEL ── -->
+  <rect x="361" y="56" width="358" height="3" fill="rgba(0,168,232,0.30)"/>
+
+  <text x="540" y="82" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" font-weight="600" fill="#00C9A7" letter-spacing="0.9">OPENCONTEXT EXPLAIN  (1 call)</text>
+
+  <g font-family="'JetBrains Mono','Cascadia Code','SF Mono',Consolas,monospace" font-size="12">
+    <text x="374" y="106" fill="#3D4450">❯ opencontext explain "add OAuth2…"</text>
+
+    <text x="374" y="132" fill="#00A8E8">security/oauth2.py:433 </text>
+    <text x="527" y="132" fill="#8B949E"> OAuth2PasswordBearer</text>
+
+    <text x="374" y="152" fill="#00A8E8">security/oauth2.py:547 </text>
+    <text x="527" y="152" fill="#8B949E"> OAuth2AuthzCodeBearer</text>
+
+    <text x="374" y="172" fill="#00A8E8">security/http.py:254   </text>
+    <text x="527" y="172" fill="#8B949E"> HTTPBearer.__init__</text>
+
+    <text x="374" y="192" fill="#00A8E8">security/oauth2.py:442 </text>
+    <text x="527" y="192" fill="#8B949E"> PasswordBearer.__init__</text>
+
+    <!-- Test examples highlighted -->
+    <rect x="374" y="204" width="330" height="46" rx="6" fill="rgba(132,92,194,0.10)" stroke="rgba(132,92,194,0.30)" stroke-width="1"/>
+    <text x="382" y="222" fill="#845EC2">test_security_oauth2_auth_*   </text>
+    <text x="382" y="240" fill="#845EC2">test_security_oauth2_pass_*   </text>
+    <text x="572" y="231" fill="#845EC2"> usage examples  ✓</text>
+
+    <text x="374" y="266" fill="#3D4450">fastapi/openapi/models.py      3,652 tok</text>
+    <text x="374" y="283" fill="#3D4450">… 8 more files  (symbol-level, ranked)</text>
+  </g>
+
+  <line x1="374" y1="300" x2="704" y2="300" stroke="#21262D" stroke-width="1"/>
+
+  <text x="374" y="332"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="30" font-weight="700" fill="#00C9A7">11,740</text>
+  <text x="474" y="332"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="13" fill="#8B949E"> tok</text>
+
+  <!-- Improvement pill -->
+  <rect x="504" y="314" width="90" height="28" rx="6" fill="rgba(0,201,167,0.12)" stroke="rgba(0,201,167,0.35)" stroke-width="1"/>
+  <text x="549" y="332" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="13" font-weight="700" fill="#00C9A7">82% less</text>
+
+  <!-- Rounds pill -->
+  <rect x="604" y="314" width="100" height="28" rx="6" fill="rgba(0,168,232,0.10)" stroke="rgba(0,168,232,0.28)" stroke-width="1"/>
+  <text x="654" y="332" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="12" font-weight="600" fill="#00A8E8">8x → 1 call</text>
+
+  <text x="374" y="358"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="11.5" fill="#845EC2">test examples auto-included  ·  symbol-level  ·  deterministic</text>
+
+</svg>

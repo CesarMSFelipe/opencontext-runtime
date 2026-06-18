@@ -22,7 +22,6 @@ def add_bytecode_commands(subparsers: argparse._SubParsersAction) -> None:
     )
     sub = p.add_subparsers(dest="bytecode_command", required=True)
 
-    # compile
     cp = sub.add_parser("compile", help="Compile a query into AICX bytecode")
     cp.add_argument("--query", "-q", required=True, help="Context query")
     cp.add_argument("--root", default=".", help="Project root (default: .)")
@@ -31,11 +30,9 @@ def add_bytecode_commands(subparsers: argparse._SubParsersAction) -> None:
     cp.add_argument("--json", dest="as_json", action="store_true", help="Output JSON")
     cp.add_argument("--save", metavar="PATH", help="Save bytecode JSON to file")
 
-    # inspect
     ip = sub.add_parser("inspect", help="Inspect an AICX bytecode file or latest trace")
     ip.add_argument("path", nargs="?", help="Path to .aicx JSON file (omit for latest)")
 
-    # decode
     dp = sub.add_parser("decode", help="Decode AICX bytecode back to evidence plan")
     dp.add_argument("path", nargs="?", help="Path to .aicx JSON file (omit for latest)")
     dp.add_argument("--json", dest="as_json", action="store_true")
@@ -250,7 +247,17 @@ def _load_bc(path: str | None):
             print(f"Failed to parse bytecode: {exc}", file=sys.stderr)
             return None
 
-    # Try latest trace metadata
+    # Try last_bytecode.json (written by `bytecode compile`)
+    try:
+        from opencontext_core.context.bytecode.session_cache import load_last_bytecode
+
+        bc = load_last_bytecode(".storage/opencontext")
+        if bc is not None:
+            return bc
+    except Exception:
+        pass
+
+    # Try latest trace metadata (written by `pack` / MCP calls)
     try:
         from opencontext_core.runtime import OpenContextRuntime
 
@@ -259,11 +266,11 @@ def _load_bc(path: str | None):
         bc_data = trace.metadata.get("aicx", {}).get("bytecode")
         if bc_data:
             return ContextBytecode(**bc_data)
-        print("No AICX bytecode in latest trace. Run 'opencontext bytecode compile' first.")
-        return None
-    except Exception as exc:
-        print(f"Could not load latest trace: {exc}", file=sys.stderr)
-        return None
+    except Exception:
+        pass
+
+    print("No AICX bytecode found. Run 'opencontext bytecode compile' first.")
+    return None
 
 
 def _normalize_bc_json(data: dict) -> dict:
