@@ -703,6 +703,11 @@ def _build_parser() -> argparse.ArgumentParser:
     add_skill_parser(subparsers)
     add_privacy_parser(subparsers)
 
+    skill_reg = subparsers.add_parser("skill-registry", help="Manage the skill registry index.")
+    skill_reg_sub = skill_reg.add_subparsers(dest="skill_registry_command")
+    _sr_refresh = skill_reg_sub.add_parser("refresh", help="Scan .skill.md files and rebuild .opencontext/skill-registry.md")
+    _sr_refresh.add_argument("--root", default=".", help="Project root (default: .)")
+
     agent_context = subparsers.add_parser(
         "agent-context", help="Emit safe reusable agent context block."
     )
@@ -1284,6 +1289,12 @@ def _dispatch(args: argparse.Namespace) -> None:
         sys.exit(handle_stack(args))
     if command == "privacy":
         handle_privacy(args)
+        return
+    if command == "skill-registry":
+        from opencontext_core.skills.registry import refresh as _skill_refresh
+        _sr_root = Path(getattr(args, "root", "."))
+        _sr_out = _skill_refresh(_sr_root)
+        print(f"Skill registry written: {_sr_out}")
         return
     if command == "sync":
         handle_sync(args)
