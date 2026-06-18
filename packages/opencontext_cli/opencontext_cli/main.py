@@ -963,7 +963,8 @@ def _build_parser() -> argparse.ArgumentParser:
     memory_demote.add_argument("memory_id")
     memory_demote.add_argument("--to", default="archive")
     memory_sub.add_parser("prune")
-    memory_sub.add_parser("gc")
+    memory_gc = memory_sub.add_parser("gc", help="Garbage-collect expired and superseded memories.")
+    memory_gc.add_argument("--dry-run", action="store_true", help="Show what would be pruned without deleting.")
     memory_sub.add_parser(
         "maintain",
         help="Sweep all keys: consolidate noisy clusters, then decay stale records.",
@@ -3558,9 +3559,15 @@ def _memory(args: argparse.Namespace) -> None:
         print(f"Pruned {len(report.pruned_ids)} items: {report.reason}")
         return
     if command == "gc":
+        dry_run = getattr(args, "dry_run", False)
         gc = MemoryGarbageCollector(repo)
-        report = gc.run()
-        print(f"Garbage collected {len(report.pruned_ids)} items.")
+        report = gc.run(dry_run=dry_run)
+        if dry_run:
+            print(f"Dry run: {len(report.pruned_ids)} item(s) would be pruned.")
+            for mid in report.pruned_ids:
+                print(f"  {mid}")
+        else:
+            print(f"Garbage collected {len(report.pruned_ids)} items.")
         return
     if command == "maintain":
         from opencontext_core.memory.graph import LocalMemoryStore
