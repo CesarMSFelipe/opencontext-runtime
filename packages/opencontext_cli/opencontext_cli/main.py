@@ -1163,6 +1163,7 @@ def _dispatch(args: argparse.Namespace) -> None:
             getattr(args, "root", "."),
             getattr(args, "action", None),
             getattr(args, "output", None),
+            json_out=getattr(args, "json", False),
         )
         return
     if command == "tokens":
@@ -2558,6 +2559,7 @@ def _security(
     root: str = ".",
     policy_action: str | None = None,
     output_path: str | None = None,
+    json_out: bool = False,
 ) -> None:
     if action == "scan":
         result = scan_project(root)
@@ -2566,6 +2568,9 @@ def _security(
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
             print(f"Wrote security scan: {path}")
+            return
+        if json_out:
+            print(result.model_dump_json(indent=2))
             return
         # Human-readable output
         findings = result.findings

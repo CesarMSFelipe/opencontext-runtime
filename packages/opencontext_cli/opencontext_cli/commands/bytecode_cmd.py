@@ -247,7 +247,17 @@ def _load_bc(path: str | None):
             print(f"Failed to parse bytecode: {exc}", file=sys.stderr)
             return None
 
-    # Try latest trace metadata
+    # Try last_bytecode.json (written by `bytecode compile`)
+    try:
+        from opencontext_core.context.bytecode.session_cache import load_last_bytecode
+
+        bc = load_last_bytecode(".storage/opencontext")
+        if bc is not None:
+            return bc
+    except Exception:
+        pass
+
+    # Try latest trace metadata (written by `pack` / MCP calls)
     try:
         from opencontext_core.runtime import OpenContextRuntime
 
@@ -256,11 +266,11 @@ def _load_bc(path: str | None):
         bc_data = trace.metadata.get("aicx", {}).get("bytecode")
         if bc_data:
             return ContextBytecode(**bc_data)
-        print("No AICX bytecode in latest trace. Run 'opencontext bytecode compile' first.")
-        return None
-    except Exception as exc:
-        print(f"Could not load latest trace: {exc}", file=sys.stderr)
-        return None
+    except Exception:
+        pass
+
+    print("No AICX bytecode found. Run 'opencontext bytecode compile' first.")
+    return None
 
 
 def _normalize_bc_json(data: dict) -> dict:
