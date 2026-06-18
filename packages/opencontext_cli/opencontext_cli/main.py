@@ -684,6 +684,13 @@ def _build_parser() -> argparse.ArgumentParser:
     add_demo_parser(subparsers)
     add_loop_commands(subparsers)
     add_explain_parser(subparsers)
+
+    clarify_parser = subparsers.add_parser(
+        "clarify",
+        help="Convert a vague idea into a structured brief before SDD starts.",
+    )
+    clarify_parser.add_argument("idea", nargs="?", default="", help="The idea or feature to clarify")
+    clarify_parser.add_argument("--output", "-o", default=None, help="Write brief to file")
     add_kg_parser(subparsers)
     # ── Config, Plugins & Stack ───────────────────────────────────────
     add_config_parser(subparsers)
@@ -1360,6 +1367,9 @@ def _dispatch(args: argparse.Namespace) -> None:
         sys.exit(handle_explain(runtime, args))
     elif command == "demo":
         sys.exit(handle_demo(runtime, args))
+    elif command == "clarify":
+        _clarify(getattr(args, "idea", ""), getattr(args, "output", None))
+        return
     elif command == "workflows":
         _workflows(args.workflows_command, getattr(args, "name", None))
     elif command == "trace":
@@ -2113,6 +2123,62 @@ def _instructions(action: str) -> None:
     print(
         json.dumps([{"source": item.source, "trusted": item.trusted} for item in items], indent=2)
     )
+
+
+def _clarify(idea: str, output: str | None) -> None:
+    """Convert a vague idea into a structured SDD brief."""
+    if not idea:
+        idea = input("Describe your idea or feature: ").strip()
+    if not idea:
+        print("No idea provided.")
+        return
+
+    brief = f"""# Clarification Brief
+
+**Idea:** {idea}
+
+---
+
+## Objective
+*(What we want to achieve — one sentence.)*
+
+## Context
+*(Why this change exists now.)*
+
+## Non-goals
+*(What we will NOT do — prevents scope creep.)*
+- [ ] ...
+
+## Constraints
+*(Architecture, APIs, compatibility, performance, security, style.)*
+- [ ] ...
+
+## Acceptance criteria
+*(Numbered, verifiable — each must map to a test scenario.)*
+1. ...
+2. ...
+
+## Risks
+*(What could break or be affected.)*
+- [ ] ...
+
+## Testing strategy
+*(Unit / integration / e2e / regression / manual.)*
+- [ ] Unit: ...
+- [ ] Integration: ...
+
+---
+
+*Fill in the blanks above, then run:*
+```
+opencontext loop --task "<objective>" --flow full
+```
+"""
+    if output:
+        Path(output).write_text(brief, encoding="utf-8")
+        print(f"Brief written: {output}")
+    else:
+        print(brief)
 
 
 def _workflows(action: str, name: str | None) -> None:

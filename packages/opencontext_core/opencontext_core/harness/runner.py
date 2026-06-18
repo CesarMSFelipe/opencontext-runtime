@@ -38,7 +38,9 @@ from opencontext_core.harness.phases import (
     ArchivePhase,
     DesignPhase,
     ExplorePhase,
+    GGARulesPhase,
     HarnessPhase,
+    JudgmentDayPhase,
     PhaseResult,
     ProposePhase,
     ReviewPhase,
@@ -240,6 +242,9 @@ class HarnessRunner:
         "full": "full",
         "standard": "standard",
         "quick": "quick",
+        "full+judgment": "full+judgment",
+        "full+gga": "full+gga",
+        "full+quality": "full+quality",
     }
 
     @staticmethod
@@ -759,6 +764,10 @@ class HarnessRunner:
             return ReviewPhase(phase_config, budget_mode)
         if phase_id == "archive":
             return ArchivePhase(phase_config, budget_mode, memory_store=memory_store)
+        if phase_id == "judgment":
+            return JudgmentDayPhase(phase_config, budget_mode)
+        if phase_id == "gga":
+            return GGARulesPhase(phase_config, budget_mode)
 
         # Fallback: return None for unknown phases
         return None
