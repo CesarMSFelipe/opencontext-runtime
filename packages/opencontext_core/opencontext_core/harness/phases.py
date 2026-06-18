@@ -1250,8 +1250,11 @@ class VerifyPhase(HarnessPhase):
         # runner (driven by harness.tdd_mode), NOT here in VerifyPhase. See
         # HarnessRunner._evaluate_apply_pre_gates.
 
-        # Provider-neutral verification: run pytest and capture results
-        test_result = self._run_tests(state.root)
+        changed = [
+            e["path"] if isinstance(e, dict) else getattr(e, "path", str(e))
+            for e in (getattr(state, "apply_edits", None) or [])
+        ]
+        test_result = self._run_tests(state.root, changed_files=changed)
         verify_report = {
             "run_id": state.run_id,
             "task": state.task,
@@ -1357,12 +1360,38 @@ class VerifyPhase(HarnessPhase):
             },
         )
 
-    def _run_tests(self, root: Path) -> dict[str, Any]:
-        """Run pytest in the project root, provider-neutral."""
+    def _resolve_test_targets(self, root: Path, changed_files: list[str]) -> list[str]:
+        """Map changed source files to likely test files. Falls back to [] (full suite)."""
+        if not changed_files:
+            return []
+        targets: list[str] = []
+        for src in changed_files:
+            p = Path(src)
+            stem = p.stem
+            # direct test file
+            for candidate in [
+                root / "tests" / f"test_{stem}.py",
+                root / "tests" / p.parent / f"test_{stem}.py",
+                root / f"test_{stem}.py",
+                p.parent / f"test_{stem}.py",
+            ]:
+                if candidate.exists():
+                    targets.append(str(candidate))
+        # deduplicate while preserving order
+        seen: set[str] = set()
+        return [t for t in targets if not (t in seen or seen.add(t))]  # type: ignore[func-returns-value]
 
+    def _run_tests(self, root: Path, changed_files: list[str] | None = None) -> dict[str, Any]:
+        """Run pytest scoped to changed files when possible, full suite as fallback."""
+        targets = self._resolve_test_targets(root, changed_files or [])
+        args = [sys.executable, "-m", "pytest", "-q", "--tb=short"]
+        if targets:
+            args += targets
+        else:
+            args.append(str(root))
         try:
             result = subprocess.run(
-                [sys.executable, "-m", "pytest", "-q", "--tb=short", str(root)],
+                args,
                 capture_output=True,
                 text=True,
                 timeout=120,

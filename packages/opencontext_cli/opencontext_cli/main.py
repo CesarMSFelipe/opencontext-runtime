@@ -1915,12 +1915,27 @@ def _onboard(
     for warning in result.warnings:
         console.warning(warning)
 
+    # Show detected provider so the user knows what's wired
+    try:
+        from opencontext_core.providers.detect import detect_provider
+        p = detect_provider()
+        if p.source == "fallback":
+            console.warning(
+                "No LLM provider detected. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or "
+                "OPENROUTER_API_KEY to enable agentic phases (loop, harness)."
+            )
+        else:
+            console.success(f"Provider: {p.name} ({p.model}) — detected from {p.source}")
+    except Exception:
+        pass
+
     console.print("")
     console.section("Next Steps")
-    console.print("  [bold]opencontext harness run --workflow sdd --task 'Your task'[/]")
-    console.print("  [bold]opencontext pack . --query 'Explain this code'[/]")
+    console.print("  1. [bold]opencontext demo[/]                              # 30-second proof on this repo")
+    console.print("  2. [bold]opencontext pack . --query 'your task' --copy[/] # get verified context")
+    console.print("  3. [bold]opencontext loop --task 'your task' --flow quick[/] # full agentic run")
     console.print("")
-    console.info("For help: opencontext --help")
+    console.info("Docs: https://github.com/CesarMSFelipe/OpenContext-Runtime")
 
 
 def _instructions(action: str) -> None:
