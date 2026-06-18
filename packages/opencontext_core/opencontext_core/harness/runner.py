@@ -72,6 +72,9 @@ class HarnessState:
         # run via run_phase_executor. None when no real LLM is configured, in
         # which case those phases report honest planned/executor-absent results.
         self.delegate: Any = None
+        # Per-phase model override resolved by HarnessRunner before each phase.
+        # None means "use the configured default".
+        self.current_phase_model: Any = None
 
 
 class HarnessRunner:
@@ -415,6 +418,10 @@ class HarnessRunner:
             phase_obj = self._build_phase(phase_id, budget_mode)
             if phase_obj is None:
                 continue
+
+            phase_model = self._model_for_phase(phase_id)
+            if phase_model is not None:
+                state.current_phase_model = phase_model
 
             try:
                 result = phase_obj.run(state)
@@ -834,6 +841,22 @@ class HarnessRunner:
             "data_classification": "internal",
         }
         return phase_ops.get(phase_id, default_op)
+
+    def _model_for_phase(self, phase_id: str) -> Any:
+        """Return the per-phase ModelProviderConfig override, or None if not set.
+
+        Looks up ``config.models.phases[phase_id]`` from the top-level
+        ``opencontext.yaml``. Returns ``None`` when no override is configured so
+        callers can fall back to the default model cleanly.
+        """
+        try:
+            from opencontext_core.config import load_config_or_defaults
+
+            cfg = load_config_or_defaults(self.root / "opencontext.yaml", auto_detect=False)
+            phases = getattr(cfg.models, "phases", {}) or {}
+            return phases.get(phase_id)
+        except Exception:
+            return None
 
     def _warn_if_kg_not_indexed(self, state: HarnessState) -> None:
         """Add a warning if the knowledge graph has no indexed content.
