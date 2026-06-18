@@ -2,7 +2,7 @@
 # One-liner: irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 | iex
 
 param(
-    [string]$Version = "0.1.0",
+    [string]$Version = "1.2.0",
     [string]$RepoUrl = "https://github.com/CesarMSFelipe/OpenContext-Runtime",
     [switch]$Yes = $false
 )
@@ -61,8 +61,8 @@ function Install-OpenContext {
     $tempDir = $null
 
     try {
-        # Try pip install first
-        & $pythonCmd -m pip install opencontext-core opencontext-cli --quiet 2>$null
+        # Try pip install first (pinned to exact release version)
+        & $pythonCmd -m pip install --upgrade --upgrade-strategy eager "opencontext-cli==$Version" --quiet
         Write-Host "✓ Installed from PyPI" -ForegroundColor Green
     } catch {
         Write-Host "PyPI packages not found. Installing from source..." -ForegroundColor Yellow
