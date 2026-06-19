@@ -102,6 +102,11 @@ class SQLiteMemoryBackend:
 
     def __init__(self, db_path: Path | str) -> None:
         self._path = str(db_path)
+        # Be self-contained: sqlite won't create missing parent directories (it
+        # raises "unable to open database file"). The runtime usually pre-creates
+        # the storage path, but the public factory must not depend on that.
+        if self._path != ":memory:":
+            Path(self._path).parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
     @contextmanager
