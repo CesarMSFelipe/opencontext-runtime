@@ -237,12 +237,9 @@ def _remove_rule(args: Any) -> None:
         return
 
     if not args.force:
-        console.print(f"Remove rule [cyan]{args.rule_id}[/]? [y/N] ", end="")
-        try:
-            confirm = input().strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            confirm = "n"
-        if confirm not in ("y", "yes"):
+        from opencontext_core import prompts
+
+        if not prompts.confirm(f"Remove rule {args.rule_id}?", default=False):
             console.print("[dim]Cancelled.[/]")
             return
 

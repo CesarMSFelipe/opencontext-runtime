@@ -14,8 +14,8 @@ from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Confirm
 
+from opencontext_core import prompts
 from opencontext_core.configurator import KNOWN_AGENTS, Configurator
 
 
@@ -132,7 +132,7 @@ def handle_uninstall(args: Any) -> None:
             console.print("[yellow]Refusing non-interactive uninstall; pass --yes.[/]")
             return
         console.print(f"About to remove OpenContext from: [bold]{', '.join(valid)}[/]")
-        if not Confirm.ask("Proceed?", default=False):
+        if not prompts.confirm("Proceed?", default=False):
             console.print("[yellow]Uninstall cancelled.[/]")
             return
 

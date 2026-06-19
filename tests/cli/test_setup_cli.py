@@ -179,7 +179,7 @@ def test_setup_without_yes_respects_confirm_decline(
 ) -> None:
     """On an interactive stdin, declining the prompt writes nothing."""
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr(setup_cmd.Confirm, "ask", lambda *a, **k: False)
+    monkeypatch.setattr(setup_cmd.prompts, "confirm", lambda *a, **k: False)
 
     args = _parse(["setup", "claude-code", "--scope", "global", "--root", str(project)])
     cli_main._dispatch(args)

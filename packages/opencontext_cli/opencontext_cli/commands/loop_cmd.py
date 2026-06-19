@@ -222,9 +222,13 @@ def _print_run_summary(result) -> None:
 
 
 def _ask_continue(phase: str) -> bool:
-    """Prompt user for continuation. Returns True to continue."""
+    """Prompt user for continuation with a Yes/No selector. Returns True to continue."""
+    # Checkpoints are a safety gate: never auto-continue on a non-interactive run.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return False
     try:
-        ans = input(f"  Continue past {phase}? [Y/n] ").strip().lower()
-        return ans in ("", "y", "yes")
+        from opencontext_core import prompts
+
+        return prompts.confirm(f"Continue past {phase}?", default=True)
     except (EOFError, KeyboardInterrupt):
         return False

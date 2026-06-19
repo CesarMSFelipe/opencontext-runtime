@@ -83,9 +83,9 @@ def handle_demo(runtime: Any, args: Any) -> int:
 
     if sys.stdout.isatty():
         try:
-            from rich.prompt import Confirm
+            from opencontext_core import prompts
 
-            if Confirm.ask("Set up this project now?", default=True):
+            if prompts.confirm("Set up this project now?", default=True):
                 import argparse
 
                 from opencontext_cli.main import _install

@@ -284,11 +284,13 @@ class TestSetupExperienceWithSddProfile:
         assert ctx["tdd_mode"] == "strict"
 
     def test_choose_sdd_profile_returns_valid_option(self, monkeypatch) -> None:
-        monkeypatch.setattr("opencontext_cli.commands.setup_cmd.Prompt.ask", lambda *a, **kw: "2")
+        # The navigable selector returns the chosen value verbatim.
+        monkeypatch.setattr(setup_cmd.prompts, "select", lambda *a, **kw: "cheap")
         result = setup_cmd._choose_sdd_profile()
         assert result == "cheap"
 
     def test_choose_sdd_profile_default_is_default(self, monkeypatch) -> None:
-        monkeypatch.setattr("opencontext_cli.commands.setup_cmd.Prompt.ask", lambda *a, **kw: "1")
+        # When the user just confirms, the selector returns its wired default.
+        monkeypatch.setattr(setup_cmd.prompts, "select", lambda *a, **kw: kw["default"])
         result = setup_cmd._choose_sdd_profile()
         assert result == "default"

@@ -7,10 +7,10 @@ from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.text import Text
 
+from opencontext_core import prompts
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
 from opencontext_core.agent_installer import AgentInstaller
 from opencontext_core.agent_installer import AgentTarget as GlobalAgentTarget
@@ -369,7 +369,7 @@ def _confirm_configure(agents: list[str], scope: str, *, yes: bool, json_output:
     if yes or json_output or not sys.stdin.isatty():
         return True
     console.print(f"About to configure: [bold]{', '.join(agents)}[/] (scope: {scope})")
-    return bool(Confirm.ask("Proceed?", default=True))
+    return prompts.confirm("Proceed?", default=True)
 
 
 def _parse_setup_agents(values: list[str] | None) -> list[str]:
@@ -476,7 +476,7 @@ def _run_interactive(
         console.print(f"[bold]Components ({len(components)}):[/]")
         for c in components:
             console.print(f"  • {c}")
-        if not Confirm.ask("\nContinue with these components?", default=True):
+        if not prompts.confirm("Continue with these components?", default=True):
             custom_components = _choose_components()
             if custom_components:
                 components = custom_components
@@ -518,7 +518,7 @@ def _run_interactive(
         console.print("\n[bold yellow]── Dry run — no changes made ──[/]")
         return
 
-    if not Confirm.ask("\nApply this plan?", default=True):
+    if not prompts.confirm("Apply this plan?", default=True):
         console.print("[yellow]Setup cancelled.[/]")
         return
 
@@ -624,12 +624,11 @@ def _choose_preset() -> str:
         )
     console.print(table)
 
-    choice = Prompt.ask(
-        "\nSelect preset",
-        choices=[str(i) for i in range(1, len(sorted_presets) + 1)],
-        default="1",
+    return prompts.select(
+        "Select preset",
+        [(p.id, f"{p.name} — {p.description}") for p in sorted_presets],
+        default=sorted_presets[0].id,
     )
-    return sorted_presets[int(choice) - 1].id
 
 
 def _choose_profile(preset: str | None = None) -> str:
@@ -646,17 +645,17 @@ def _choose_profile(preset: str | None = None) -> str:
     default = suggestions.get(preset or "", "developer")
     default_idx = next((i for i, p in enumerate(profiles) if p.id == default), 0)
 
-    console.print("\n[bold]Available Profiles:[/]")
-    for i, p in enumerate(profiles, 1):
-        marker = " (recommended)" if p.id == default else ""
-        console.print(f"  {i}. {p.name} — {p.description}{marker}")
-
-    choice = Prompt.ask(
-        "\nSelect profile",
-        choices=[str(i) for i in range(1, len(profiles) + 1)],
-        default=str(default_idx + 1),
+    return prompts.select(
+        "Select profile",
+        [
+            (
+                p.id,
+                f"{p.name} — {p.description}" + (" (recommended)" if p.id == default else ""),
+            )
+            for p in profiles
+        ],
+        default=profiles[default_idx].id,
     )
-    return profiles[int(choice) - 1].id
 
 
 def _parse_agents(values: list[str] | None) -> list[str]:
@@ -674,69 +673,49 @@ def _parse_agents(values: list[str] | None) -> list[str]:
 def _choose_agents(default_agents: list[str]) -> list[str]:
     supported = [target.value for target in AgentTarget]
     selected = list(dict.fromkeys(default_agents))
-    console.print("\n[bold]Agent clients to configure:[/]")
-    for agent in supported:
-        enabled = agent in selected
-        if Confirm.ask(f"  Enable {agent}?", default=enabled):
-            if agent not in selected:
-                selected.append(agent)
-        elif agent in selected:
-            selected.remove(agent)
-    return selected or ["opencode"]
+    chosen = prompts.checkbox(
+        "Agent clients to configure",
+        list(supported),
+        defaults=selected,
+        require_one=True,
+    )
+    return chosen or ["opencode"]
 
 
 def _choose_tdd_mode(default: str) -> str:
-    modes = ["ask", "strict", "off"]
     labels = {
         "ask": "ask — agent asks per change (recommended)",
         "strict": "strict — tests first whenever a harness exists",
         "off": "off — SDD still works but TDD is optional",
     }
-    console.print("\n[bold]TDD behavior:[/]")
-    for i, mode in enumerate(modes, 1):
-        marker = " (default)" if mode == default else ""
-        console.print(f"  {i}. {labels[mode]}{marker}")
-    choice = Prompt.ask(
-        "Select TDD mode",
-        choices=[str(i) for i in range(1, len(modes) + 1)],
-        default=str(modes.index(default) + 1 if default in modes else 1),
+    return prompts.select(
+        "TDD behavior",
+        [(mode, label) for mode, label in labels.items()],
+        default=default if default in labels else "ask",
     )
-    return modes[int(choice) - 1]
 
 
 def _choose_sdd_profile() -> str:
-    profiles = ["default", "cheap", "hybrid", "premium"]
     labels = {
         "default": "default — use one model for all phases",
         "cheap": "cheap — fast/free models for exploration, premium for design/verify",
         "hybrid": "hybrid — mix of cheap and premium models per phase",
         "premium": "premium — strongest models for all phases",
     }
-    console.print("\n[bold]SDD model profile:[/]")
-    for i, p in enumerate(profiles, 1):
-        marker = " (recommended)" if p == "cheap" else ""
-        console.print(f"  {i}. {labels[p]}{marker}")
-    choice = Prompt.ask(
-        "Select SDD model profile",
-        choices=[str(i) for i in range(1, len(profiles) + 1)],
-        default="1",
+    return prompts.select(
+        "SDD model profile",
+        [(p, label) for p, label in labels.items()],
+        default="default",
     )
-    return profiles[int(choice) - 1]
 
 
 def _choose_components() -> list[str]:
-    """Interactive component selection."""
+    """Interactive component selection (space to toggle, Enter to confirm)."""
     components = get_available_components()
-    selected: list[str] = []
-
-    console.print("\n[bold]Select Components:[/]")
-    console.print("  (y = yes, n = no, press Enter to finish)")
-
-    for comp in components:
-        if Confirm.ask(f"  Install {comp.name}?", default=False):
-            selected.append(comp.id)
-
-    return selected
+    return prompts.checkbox(
+        "Select components",
+        [(comp.id, comp.name) for comp in components],
+    )
 
 
 def _show_plan(plan: Any) -> None:
