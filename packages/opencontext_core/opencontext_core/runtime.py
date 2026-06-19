@@ -213,17 +213,21 @@ class OpenContextRuntime:
         self.free_registry = FreeProviderRegistry()
         self.budget_manager = CallBudgetManager()
 
-        # Map roles from config to router format
+        # Map roles from config to router format. models.default is the source of
+        # truth for the primary 'generate' role and MUST win over the
+        # models.roles 'generate' entry — which defaults to mock, so otherwise a
+        # user who sets models.default (e.g. ollama/qwen) never generates with it
+        # and every call is forced onto mock-llm.
         router_roles = {}
-        if self.config.models.default:
-            router_roles["generate"] = {
-                "provider": self.config.models.default.provider,
-                "model": self.config.models.default.model,
-            }
         for role, pconfig in self.config.models.roles.items():
             router_roles[role] = {
                 "provider": pconfig.provider,
                 "model": pconfig.model,
+            }
+        if self.config.models.default:
+            router_roles["generate"] = {
+                "provider": self.config.models.default.provider,
+                "model": self.config.models.default.model,
             }
 
         self.router = ModelRoleRouter(

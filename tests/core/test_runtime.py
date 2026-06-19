@@ -63,6 +63,22 @@ def test_runtime_sets_up_project_without_cli(tmp_path: Path) -> None:
     assert runtime.load_manifest().root == str(project_root.resolve())
 
 
+def test_models_default_wins_over_mock_roles_for_generate(tmp_path: Path) -> None:
+    """Real-use regression: models.roles.generate defaults to mock and was
+    overwriting models.default, so a configured model never drove generation."""
+    from opencontext_core.config import OpenContextConfig
+
+    data = default_config_data()
+    data["models"]["default"] = {"provider": "ollama", "model": "qwen2.5:7b-instruct"}
+    # default_config_data ships models.roles.generate = mock/mock-llm.
+    runtime = OpenContextRuntime(
+        config=OpenContextConfig.model_validate(data),
+        storage_path=tmp_path / ".storage/opencontext",
+    )
+    route = runtime.router.route("generate")
+    assert route == {"provider": "ollama", "model": "qwen2.5:7b-instruct"}
+
+
 def test_air_gapped_mode_blocks_external_capabilities(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     project_root.mkdir()
