@@ -1,22 +1,22 @@
 ---
-name: sdd-archive
+name: oc-archive
 description: Archive a completed SDD change — syncs specs and closes the cycle.
 triggers:
-  - sdd-archive
+  - oc-archive
   - archive change
   - close the cycle
   - finish change
 version: 0.1.0
 ---
 
-# sdd-archive
+# oc-archive
 
 Archive a verified SDD change: persist memory and graph deltas, sync the specs,
 and close out the cycle.
 
 ## When to use
 
-Use after `sdd-verify` passes and the change is complete.
+Use after `oc-verify` passes and the change is complete.
 
 ## Steps
 

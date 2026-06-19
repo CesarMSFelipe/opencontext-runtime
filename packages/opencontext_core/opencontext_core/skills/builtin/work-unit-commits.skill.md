@@ -3,7 +3,7 @@
 One commit per logical work unit. No giant commits. No "WIP" commits.
 
 ## What is a work unit
-- A single task from sdd-tasks
+- A single task from oc-tasks
 - A test + its implementation
 - A refactor step
 - A documentation update

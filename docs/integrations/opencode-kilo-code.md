@@ -31,7 +31,7 @@ opencontext inspect repomap
 
 # SDD workflow
 opencontext init        # Initialize SDD context
-# Then in the agent: /sdd-new <change>
+# Then in the agent: /oc-new <change>
 
 # Health & updates
 opencontext verify

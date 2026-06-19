@@ -504,12 +504,17 @@ class InstallationManager:
         dest_root = project_root / ".opencontext" / "skills"
         dest_root.mkdir(parents=True, exist_ok=True)
 
-        # Skills the developer drives, plus the agent lifecycle skill.
+        # Skills the developer drives (one per SDD phase), plus the agent skill.
         required_skills = (
-            "sdd-new",
-            "sdd-apply",
-            "sdd-verify",
-            "sdd-archive",
+            "oc-new",
+            "oc-explore",
+            "oc-propose",
+            "oc-spec",
+            "oc-design",
+            "oc-tasks",
+            "oc-apply",
+            "oc-verify",
+            "oc-archive",
             "opencontext-agent",
         )
 

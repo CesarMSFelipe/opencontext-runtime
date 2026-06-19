@@ -37,5 +37,5 @@ Unit / integration / e2e / regression / manual.
 ## Rules
 - Ask clarifying questions BEFORE writing the brief if the intent is ambiguous.
 - Non-goals are mandatory — they prevent scope creep in later phases.
-- Acceptance criteria must map 1:1 to test scenarios in sdd-spec.
+- Acceptance criteria must map 1:1 to test scenarios in oc-spec.
 - Do NOT start implementation. This is input to SDD, not a task.

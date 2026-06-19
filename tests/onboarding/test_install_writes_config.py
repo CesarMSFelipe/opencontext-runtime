@@ -15,7 +15,7 @@ from opencontext_core.install_manager import InstallationManager, InstallProfile
 # The SDD agentic skill set the developer drives, plus the agent SKILL.md template.
 # Home isolation (so install-state never lands in the real ~/.config) is provided
 # by the autouse fixture in this package's conftest.
-REQUIRED_SDD_SKILLS = ("sdd-new", "sdd-apply", "sdd-verify", "sdd-archive")
+REQUIRED_SDD_SKILLS = ("oc-new", "oc-apply", "oc-verify", "oc-archive")
 
 
 def test_install_writes_loadable_config(tmp_path: Path) -> None:

@@ -1,15 +1,15 @@
 ---
-name: sdd-new
+name: oc-new
 description: Start a new Spec-Driven Development change — runs exploration then creates a proposal.
 triggers:
-  - sdd-new
+  - oc-new
   - new change
   - start a change
   - new feature
 version: 0.1.0
 ---
 
-# sdd-new
+# oc-new
 
 Start a new SDD change. This skill kicks off the spec-driven workflow by
 exploring the codebase with the OpenContext knowledge graph and drafting a
@@ -29,7 +29,7 @@ bug fix, or refactor and wants a structured plan rather than ad-hoc edits.
 3. Record a `trace_id` and preserve it across every later phase.
 4. Draft a proposal under `openspec/changes/<change-id>/` capturing the problem,
    the approach, and the affected areas.
-5. Hand off to `sdd-apply` once the proposal is approved.
+5. Hand off to `oc-apply` once the proposal is approved.
 
 ## Rules
 

@@ -1,4 +1,4 @@
-# Skill: sdd-onboard
+# Skill: oc-onboard
 
 Initialize a project for SDD. Run this once per project before using SDD workflows.
 

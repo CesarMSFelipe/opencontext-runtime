@@ -1,15 +1,15 @@
 ---
-name: sdd-apply
+name: oc-apply
 description: Implement SDD tasks — writes code following the approved spec and design.
 triggers:
-  - sdd-apply
+  - oc-apply
   - apply change
   - implement tasks
   - write the code
 version: 0.1.0
 ---
 
-# sdd-apply
+# oc-apply
 
 Implement the tasks for an approved SDD change. This skill writes code that
 follows the spec and design, respecting the configured TDD mode and token
@@ -30,7 +30,7 @@ Use after a proposal/spec/design exists and the tasks are ready to implement.
 4. Make surgical edits scoped to the current task; use `opencontext_impact`
    before touching shared symbols.
 5. Write artifacts to `.opencontext/runs/<run_id>/artifacts/`.
-6. Hand off to `sdd-verify` once the tasks are implemented.
+6. Hand off to `oc-verify` once the tasks are implemented.
 
 ## Rules
 
