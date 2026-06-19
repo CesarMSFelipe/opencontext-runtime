@@ -126,7 +126,7 @@ class TestAgentInstaller:
         server = mcp_config["mcpServers"]["opencontext"]
         assert server["type"] == "stdio"
         assert server["command"] == "opencontext"
-        assert server["args"] == ["serve", "--mcp"]
+        assert server["args"] == ["mcp"]
 
     def test_permissions_content(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Verify permissions config lists OpenContext tools."""
