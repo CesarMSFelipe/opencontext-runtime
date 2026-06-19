@@ -63,3 +63,16 @@ def test_phase_model_map_reads_active_profile(
 
 def test_phase_model_map_empty_without_context(tmp_path: Path) -> None:
     assert HarnessRunner(root=tmp_path)._phase_model_map() == {}
+
+
+def test_phase_model_map_honors_models_phases_override(tmp_path: Path) -> None:
+    """LOW: models.phases overrides were computed into a dead field and never
+    applied — they must now reach the per-phase model map."""
+    (tmp_path / "opencontext.yaml").write_text(
+        "project:\n  name: t\n"
+        "models:\n"
+        "  default:\n    provider: anthropic\n    model: base\n"
+        "  phases:\n    spec:\n      provider: anthropic\n      model: custom-spec\n",
+        encoding="utf-8",
+    )
+    assert HarnessRunner(root=tmp_path)._phase_model_map().get("spec") == "custom-spec"
