@@ -68,10 +68,6 @@ class OnboardingService:
 
     def run(self, options: OnboardingOptions) -> OnboardingResult:
         """Execute the full onboarding pipeline."""
-        from opencontext_core.adapters.agent_manifest import (
-            AgentIntegrationGenerator,
-            AgentTarget,
-        )
         from opencontext_core.config import SecurityMode, default_config_data
         from opencontext_core.sdd_runtime import write_sdd_context
         from opencontext_core.user_prefs import UserConfigStore, mark_setup_complete
@@ -175,17 +171,30 @@ class OnboardingService:
             if f.name == "context.json":
                 result.sdd_context_path = str(f)
 
-        # 6. Generate agent instruction files
-        generator = AgentIntegrationGenerator()
+        # 6. Configure agent files through the single Configurator engine.
+        # Unlike the old whole-file generator, this MERGES a managed block into
+        # existing AGENTS.md/CLAUDE.md (no silent skip when the file exists) and
+        # is reversed exactly by `opencontext uninstall`. The project instructions
+        # carry the per-client orchestrator profile.
+        from opencontext_core.adapters.agent_manifest import (
+            _base_rules,
+            _orchestrator_section,
+        )
+        from opencontext_core.configurator import KNOWN_AGENTS, Configurator
+
+        def _instructions(client: str) -> str:
+            return _base_rules() + _orchestrator_section(client)
+
         for client in options.active_clients:
-            try:
-                files = generator.generate(
-                    root, target=AgentTarget(client), force=options.force_agent_files
-                )
-                for gf in files:
-                    result.generated_agent_files.append(f"{gf.target.value}: {gf.path}")
-            except ValueError:
+            if client not in KNOWN_AGENTS:
                 result.warnings.append(f"Unknown agent target: {client}")
+        known_clients = [c for c in options.active_clients if c in KNOWN_AGENTS]
+        if known_clients:
+            configurator = Configurator(root, instructions_builder=_instructions)
+            report = configurator.configure(known_clients, scope="local")
+            for entry in report.get("results", []):
+                for path in entry.get("files", []):
+                    result.generated_agent_files.append(f"{entry['agent']}: {path}")
 
         # 7. Generate .opencontext/agents/<client>.md contract files
         agents_dir = root / ".opencontext" / "agents"

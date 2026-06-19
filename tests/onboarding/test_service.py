@@ -162,6 +162,27 @@ def test_onboarding_service_saves_preferences(tmp_path: Path, monkeypatch: Any) 
     assert prefs["agents"]["active_clients"] == ["opencode", "cursor"]
 
 
+def test_onboarding_merges_existing_instructions_and_uninstall_reverses(tmp_path: Path) -> None:
+    """Install MERGES a managed block into an existing AGENTS.md (no silent skip),
+    and `uninstall` removes exactly that block, leaving the user's content."""
+    from opencontext_core.configurator.service import Configurator
+
+    agents_md = tmp_path / "AGENTS.md"
+    agents_md.write_text("# My project rules\nDo the thing.\n", encoding="utf-8")
+
+    # No force_agent_files: the old generator skipped existing files; Configurator merges.
+    OnboardingService().run(OnboardingOptions(root=tmp_path, active_clients=["opencode"]))
+
+    merged = agents_md.read_text(encoding="utf-8")
+    assert "# My project rules" in merged  # user content preserved
+    assert "<!-- opencontext:instructions:start -->" in merged  # OC block added, not skipped
+
+    Configurator(tmp_path).deconfigure_one("opencode")
+    after = agents_md.read_text(encoding="utf-8")
+    assert "# My project rules" in after  # user content survives uninstall
+    assert "opencontext:instructions" not in after  # OC block fully reversed
+
+
 def test_onboarding_service_harness_yaml_enterprise(tmp_path: Path) -> None:
     service = OnboardingService()
     service.run(

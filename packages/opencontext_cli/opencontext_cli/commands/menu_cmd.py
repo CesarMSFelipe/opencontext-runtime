@@ -266,7 +266,9 @@ def _run_agent_integrations() -> None:
     """Configure agent integrations — show current state, offer regeneration."""
     _action_header("Agent integrations")
 
-    from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
+    from pathlib import Path
+
+    from opencontext_core.configurator import KNOWN_AGENTS, Configurator
     from opencontext_core.user_prefs import UserConfigStore
 
     store = UserConfigStore()
@@ -282,11 +284,9 @@ def _run_agent_integrations() -> None:
         console.print("  [dim]None configured yet[/]")
     console.print()
 
-    supported = [t.value for t in AgentTarget]
-    console.print()
-
+    supported = list(KNOWN_AGENTS)
     target = prompts.select(
-        "Regenerate integration files for which agent?",
+        "Configure which agent?",
         supported,
         default="opencode",
     )
@@ -295,19 +295,16 @@ def _run_agent_integrations() -> None:
         return
 
     try:
-        from pathlib import Path
-
-        generator = AgentIntegrationGenerator()
-        files = generator.generate(Path("."), target=AgentTarget(target), force=True)
-        console.print(f"[green]✓ Generated {len(files)} file(s) for {target}[/]")
+        # Single engine: merges a managed block into existing files and writes the
+        # MCP entry, reversible by `opencontext uninstall`.
+        report = Configurator(Path(".")).configure_one(target, "local")
+        files = report.get("files", [])
+        console.print(f"[green]✓ Configured {len(files)} file(s) for {target}[/]")
         for f in files:
             console.print(f"  [dim]{f}[/]")
 
         prefs.agent_integrations[target] = True
         store.save(prefs)
-    except ValueError:
-        console.print(f"[red]Unknown agent target: {target}[/]")
-        console.print(f"  Supported: {', '.join(supported)}")
     except Exception as exc:
         console.print(f"[red]Failed: {exc}[/]")
 
