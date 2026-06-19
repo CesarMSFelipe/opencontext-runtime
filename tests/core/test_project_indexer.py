@@ -1,10 +1,46 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+import pytest
 
 from opencontext_core.config import ProjectIndexConfig
 from opencontext_core.indexing.project_indexer import ProjectIndexer
 from opencontext_profiles import first_party_profiles
+
+
+def test_indexing_failure_is_logged_not_silently_swallowed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A file that fails to index must be surfaced, not silently dropped.
+
+    Regression: the per-file index loop swallowed every exception with
+    ``except: pass``, so a broken parser produced a quietly incomplete graph.
+    """
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "ok.py").write_text("class A: ...\n", encoding="utf-8")
+    (tmp_path / "src" / "bad.py").write_text("class B: ...\n", encoding="utf-8")
+    config = ProjectIndexConfig(root=str(tmp_path), profile="generic", ignore=[])
+
+    from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+
+    real = KnowledgeGraph.index_file
+
+    def flaky(self: KnowledgeGraph, path: str, content: str) -> dict:
+        if path.endswith("bad.py"):
+            raise RuntimeError("boom parser")
+        return real(self, path, content)
+
+    monkeypatch.setattr(KnowledgeGraph, "index_file", flaky)
+    kg = KnowledgeGraph(db_path=tmp_path / ".storage" / "opencontext" / "context_graph.db")
+
+    with caplog.at_level(logging.WARNING):
+        ProjectIndexer(config, "fail-surfacing", knowledge_graph=kg).build_manifest()
+
+    messages = " ".join(r.message for r in caplog.records)
+    assert "bad.py" in messages
+    assert "failed to index" in messages
 
 
 def test_project_indexer_ignores_common_virtualenv_directory(tmp_path: Path) -> None:
