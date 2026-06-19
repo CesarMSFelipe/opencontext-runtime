@@ -113,3 +113,20 @@ class TestHarnessRunnerPersistence:
         dir2 = runner.persist_run(state2, r2)
         assert dir1 != dir2
         assert dir1.parent == dir2.parent
+
+    def test_harvested_memory_lands_where_recall_reads(self, tmp_path: Path) -> None:
+        """C2 regression: the harness must write agent memory to the same DB the
+        runtime recall path opens (.storage/opencontext) — not an orphan
+        .opencontext DB that recall never touches (write-only memory)."""
+        from opencontext_core.memory.graph import LocalMemoryStore
+        from opencontext_core.memory.harvester import _make_record
+        from opencontext_core.models.agent_memory import MemoryLayer
+
+        runner = HarnessRunner(root=tmp_path)
+        runner._memory_store.write(
+            _make_record(MemoryLayer.FAILURE, "auth:login", "token expiry off-by-one")
+        )
+
+        recall = LocalMemoryStore(tmp_path / ".storage" / "opencontext" / "memory.db")
+        assert any("token expiry" in r.content for r in recall.list_records())
+        assert not (tmp_path / ".opencontext" / "memory.db").exists()

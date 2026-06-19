@@ -109,14 +109,20 @@ class HarnessRunner:
         # back to no executor (honest planned/executor-absent) for mock/local.
         self._llm_gateway = llm_gateway
 
-        # v2: inject memory store (additive, never breaks existing usage)
+        # Agent memory store. This MUST resolve to the same DB (path + provider)
+        # the runtime's recall path reads, or every harvested memory lands in a
+        # store recall never opens (write-only memory). The runtime recalls from
+        # .storage/opencontext honoring memory.provider; resolve the same way
+        # here from the project config instead of a hardcoded-local store under
+        # .opencontext.
         try:
             from opencontext_core.backends.factory import BackendFactory
+            from opencontext_core.config import load_config_or_defaults
 
-            storage_path = self.root / ".opencontext"
+            oc_config = load_config_or_defaults(self.root / "opencontext.yaml")
+            storage_path = self.root / ".storage" / "opencontext"
             storage_path.mkdir(parents=True, exist_ok=True)
-            _memory_config = type("MemConfig", (), {"enabled": True, "provider": "local"})()
-            self._memory_store = BackendFactory.create_memory_store(_memory_config, storage_path)
+            self._memory_store = BackendFactory.create_memory_store(oc_config, storage_path)
         except Exception:
             from opencontext_core.memory.agent import NullAgentMemoryStore
 
