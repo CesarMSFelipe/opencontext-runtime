@@ -358,7 +358,13 @@ class RetrievalPlanner:
                 personalization_map=personalization,
             )
 
-        return sorted(items, key=lambda item: (-_score(item), item.tokens, item.id))
+        # Persist the hybrid score onto each item so it survives into evidence
+        # confidence and the final pack ordering. Without this the hybrid signal
+        # (graph centrality, PPR, memory, freshness) would shape only this local
+        # sort and then be discarded downstream by a weaker lexical re-ranker.
+        scored = [(item, _score(item)) for item in items]
+        scored.sort(key=lambda pair: (-pair[1], pair[0].tokens, pair[0].id))
+        return [item.model_copy(update={"score": score}) for item, score in scored]
 
     def plan(self, request: EvidenceRequest, top_k: int) -> EvidencePlan:
         """Return a traceable evidence plan for a converged retrieval request.
