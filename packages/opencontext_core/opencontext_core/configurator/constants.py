@@ -16,7 +16,7 @@ MCP_LABEL = "opencontext"
 MCP_SERVER_ENTRY: dict[str, object] = {
     "type": "stdio",
     "command": "opencontext",
-    "args": ["serve", "--mcp"],
+    "args": ["mcp"],
 }
 
 # Tool names auto-allowed for agents that support a permissions allow-list.

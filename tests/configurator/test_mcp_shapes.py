@@ -18,9 +18,23 @@ _SERVER = {
     "opencontext": {
         "type": "stdio",
         "command": "opencontext",
-        "args": ["serve", "--mcp"],
+        "args": ["mcp"],
     }
 }
+
+
+def test_emitted_mcp_command_parses_against_the_cli() -> None:
+    """The launch command we write into every agent must be a real CLI invocation.
+
+    Regression: the entry pointed at a non-existent ``serve`` subcommand, so every
+    configured agent got an MCP launch command that exits with argparse error.
+    """
+    from opencontext_cli.main import _build_parser
+    from opencontext_core.configurator.constants import MCP_SERVER_ENTRY
+
+    parser = _build_parser()
+    args = parser.parse_args(list(MCP_SERVER_ENTRY["args"]))
+    assert args.command == "mcp"
 
 
 def test_json_mcp_servers_shape(tmp_path: Path) -> None:
@@ -45,7 +59,7 @@ def test_toml_mcp_servers_shape_for_codex(tmp_path: Path) -> None:
     parsed = tomllib.loads(path.read_text(encoding="utf-8"))
     assert "opencontext" in parsed["mcp_servers"]
     assert parsed["mcp_servers"]["opencontext"]["command"] == "opencontext"
-    assert parsed["mcp_servers"]["opencontext"]["args"] == ["serve", "--mcp"]
+    assert parsed["mcp_servers"]["opencontext"]["args"] == ["mcp"]
 
 
 def test_yaml_mcp_servers_shape_for_continue(tmp_path: Path) -> None:

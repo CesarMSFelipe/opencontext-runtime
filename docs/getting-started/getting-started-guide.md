@@ -135,7 +135,7 @@ opencontext install --target claude,cursor,opencode
 ### MCP Server (for Claude Code, Cursor, etc.)
 
 ```bash
-opencontext serve --mcp
+opencontext mcp
 ```
 
 This starts an MCP server that exposes knowledge graph tools to your agent.
