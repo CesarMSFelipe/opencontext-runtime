@@ -17,7 +17,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "install.step1": "opencontext demo                              # 30-second proof on this repo",  # noqa: E501
         "install.step2": "opencontext pack . --query 'your task' --copy # get verified context",
         "install.step3": "opencontext loop --task 'your task' --flow quick # full agentic run",
-        "phase.no_llm": "Phase '{phase}': no LLM configured — output will be empty. Set a provider to generate real artifacts.",  # noqa: E501
+        "phase.no_llm": "Phase '{phase}': no model bound — emitted a plan for your agent's model to complete. Run inside your AI agent to use its model, or set a provider for standalone runs.",  # noqa: E501
         "loop.complete": "Loop complete.",
         "loop.aborted": "Aborted by user.",
         "loop.no_index": "No index found. Run 'opencontext index .' first, then retry.",
@@ -42,7 +42,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "install.step1": "opencontext demo                              # prueba de 30 segundos en este repo",  # noqa: E501
         "install.step2": "opencontext pack . --query 'tu tarea' --copy  # contexto verificado",
         "install.step3": "opencontext loop --task 'tu tarea' --flow quick # ejecución agéntica completa",  # noqa: E501
-        "phase.no_llm": "Fase '{phase}': sin LLM configurado — el output estará vacío. Configurá un proveedor para generar artefactos reales.",  # noqa: E501
+        "phase.no_llm": "Fase '{phase}': sin modelo asignado — se emitió un plan para que lo complete el modelo de tu agente. Ejecutá OpenContext dentro de tu agente de IA para usar su modelo, o configurá un proveedor para correr en modo standalone.",  # noqa: E501
         "loop.complete": "Loop completo.",
         "loop.aborted": "Abortado por el usuario.",
         "loop.no_index": "No se encontró índice. Ejecutá 'opencontext index .' primero.",

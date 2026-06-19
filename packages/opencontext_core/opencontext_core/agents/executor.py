@@ -40,22 +40,39 @@ _PHASE_INSTRUCTIONS: dict[str, str] = {
 
 
 def _build_prompt(phase: str, context: dict[str, Any]) -> str:
-    """Compose a provider-neutral prompt for a phase from the run context."""
+    """Compose a provider-neutral prompt for a phase from the run context.
+
+    Includes the verified context pack built in the explore phase when present, so
+    the model works from OpenContext's retrieved evidence — not just the bare task.
+    """
     instruction = _PHASE_INSTRUCTIONS.get(phase, f"Execute the {phase} phase for the task below.")
     task = context.get("task", "")
-    return f"{instruction}\n\nTask: {task}\nPhase: {phase}"
+    pack = (context.get("context") or "").strip()
+    parts = [instruction, f"\nTask: {task}", f"Phase: {phase}"]
+    if pack:
+        parts.append(f"\n## Verified context\n{pack}")
+    return "\n".join(parts)
 
 
 def _phase_handler(gateway: LLMGateway, phase: str, provider: str, model: str) -> Any:
-    """Create a delegation handler that runs ``phase`` through the gateway."""
+    """Create a delegation handler that runs ``phase`` through the gateway.
+
+    The handler adopts the phase's persona (e.g. OC Tester for test phases) as the
+    system prompt, so the agent system auto-switches behavior per phase.
+    """
+    from opencontext_core.personas import persona_for_phase
+
+    persona = persona_for_phase(phase)
+    system_prompt = persona.system_prompt if persona else ""
 
     def _handler(context: dict[str, Any]) -> dict[str, Any]:
         request = LLMRequest(
             prompt=_build_prompt(phase, context),
+            system_prompt=system_prompt,
             provider=provider,
             model=model,
             max_output_tokens=4000,
-            metadata={"role": "generate", "phase": phase},
+            metadata={"role": "generate", "phase": phase, "persona": persona.id if persona else ""},
         )
         response = gateway.generate(request)
         return {"status": "success", "output": response.content}

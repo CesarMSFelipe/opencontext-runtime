@@ -90,6 +90,13 @@ class ExplorePhase(HarnessPhase):
         pack_path = run_dir / "context-pack.json"
         pack_path.write_text(pack.model_dump_json(indent=2), encoding="utf-8")
 
+        # Make the verified context available to later work phases' executor prompts
+        # (spec/design/tasks) so the model works from retrieved evidence, not the
+        # bare task. Rendered compactly as "source\ncontent" blocks.
+        state.context_pack = "\n\n".join(
+            f"### {item.source}\n{item.content}" for item in pack.included
+        )
+
         # KG wiring: run impact analysis if task is provided
         impact_affected_files: list[str] = []
         impact_affected_tests: list[str] = []
@@ -588,6 +595,8 @@ def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
         "phase": phase,
         "run_id": getattr(state, "run_id", ""),
         "root": str(getattr(state, "root", "")),
+        # Verified context pack rendered by the explore phase (empty if unavailable).
+        "context": getattr(state, "context_pack", ""),
     }
     try:
         result = delegate.delegate(phase, context)
@@ -930,8 +939,10 @@ class SpecPhase(HarnessPhase):
         else:
             if getattr(state, "delegate", None) is None:
                 state.warnings.append(
-                    "Phase 'SpecPhase' ran without LLM — "
-                    "configure a provider (ANTHROPIC_API_KEY etc.) to generate real artifacts."
+                    "Phase 'SpecPhase': no model bound — emitted a structured plan for your "
+                    "agent's model to complete. Run OpenContext inside your AI agent "
+                    "(Claude Code, Codex, OpenCode, …) to use its selected model, or set a "
+                    "provider for standalone generation."
                 )
             # Static template SCAFFOLD — explicitly NOT a real AI-produced spec.
             spec_content = f"""# Delta Spec: {task}
@@ -1042,8 +1053,10 @@ class DesignPhase(HarnessPhase):
         else:
             if getattr(state, "delegate", None) is None:
                 state.warnings.append(
-                    "Phase 'DesignPhase' ran without LLM — "
-                    "configure a provider (ANTHROPIC_API_KEY etc.) to generate real artifacts."
+                    "Phase 'DesignPhase': no model bound — emitted a structured plan for your "
+                    "agent's model to complete. Run OpenContext inside your AI agent "
+                    "(Claude Code, Codex, OpenCode, …) to use its selected model, or set a "
+                    "provider for standalone generation."
                 )
             # Extract requirements from spec content for the scaffold body.
             requirements = []
@@ -1162,8 +1175,10 @@ class TasksPhase(HarnessPhase):
         outcome = run_phase_executor(state, "tasks")
         if not outcome.is_real and getattr(state, "delegate", None) is None:
             state.warnings.append(
-                "Phase 'TasksPhase' ran without LLM — "
-                "configure a provider (ANTHROPIC_API_KEY etc.) to generate real artifacts."
+                "Phase 'TasksPhase': no model bound — emitted a structured plan for your "
+                "agent's model to complete. Run OpenContext inside your AI agent "
+                "(Claude Code, Codex, OpenCode, …) to use its selected model, or set a "
+                "provider for standalone generation."
             )
         task_count = 0
         if outcome.is_real:
