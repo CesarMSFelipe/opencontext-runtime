@@ -1728,180 +1728,77 @@ def _install(args: argparse.Namespace) -> None:
             console.print("[yellow]Setup cancelled.[/]")
             return
 
-    # ── Step-by-step phases with Rich Status ──────────────────────────
-    steps = [
-        ("Creating workspace and config...", "workspace"),
-        ("Indexing project and building knowledge graph...", "index"),
-        ("Setting up SDD/TDD context...", "sdd"),
-        ("Configuring agent integrations...", "agents"),
-        ("Setting up harness workflow...", "harness"),
-        ("Verifying setup...", "verify"),
-    ]
+    # ── Run the canonical onboarding engine ───────────────────────────
+    # config + prefs + index + SDD context + agent files + harness are all done by
+    # OnboardingService.run() — the SAME engine init/onboard use, so the install
+    # flow can no longer drift from them. Install adds the project SDD skills, the
+    # once-per-machine global integration, and a verify pass on top.
+    from opencontext_core.agent_installer import AgentInstaller as _AgentInstaller
+    from opencontext_core.install_manager import InstallationManager, InstallState
+    from opencontext_core.onboarding.service import OnboardingOptions, OnboardingService
 
-    results: dict[str, str] = {}
+    summary: list[str] = []
+    options = OnboardingOptions(
+        root=root,
+        template="generic",
+        security_mode="private_project",
+        tdd_mode=tdd,
+        active_clients=["opencode"],
+        sdd_model_profile="hybrid",
+        orchestrator_profile="opencontext",
+        token_budget_per_phase=3000,
+    )
+    _msg = "Setting up project (config, index, SDD, agents, harness)..."
+    with Status(_msg, console=console, spinner="dots"):  # type: ignore[arg-type]
+        try:
+            ob = OnboardingService().run(options)
+            summary.append(f"✓ Indexed {ob.indexed_files} files, {ob.indexed_symbols} symbols")
+            summary.append(f"✓ SDD/TDD context (TDD: {tdd})")
+            summary.append(f"✓ {len(ob.generated_agent_files)} agent file(s)")
+            summary.extend(f"⚠ {w}" for w in ob.warnings)
+        except Exception as exc:
+            console.print(f"  [red]✗ Setup failed: {exc}[/]")
+            return
 
-    for phase_label, phase_key in steps:
-        with Status(phase_label, console=console, spinner="dots") as status:  # type: ignore[arg-type]
-            try:
-                if phase_key == "workspace":
-                    from opencontext_core.user_prefs import UserConfigStore
-                    from opencontext_core.workspace.layout import ensure_workspace
+    mgr = InstallationManager()
+    try:
+        mgr._install_skills(root)
+        summary.append("✓ SDD skill commands (oc-*)")
+    except Exception as exc:
+        summary.append(f"⚠ Skill install: {exc}")
 
-                    ensure_workspace(root)
-                    # Write the project config so the runtime, `status`, and the
-                    # provider tip all see a real opencontext.yaml (init/wizard do
-                    # this too; install must converge with them).
-                    config_path = root / "opencontext.yaml"
-                    if not config_path.exists():
-                        import yaml as _yaml
+    # Global agent integration (MCP) — once per machine.
+    if mgr._is_installed():
+        summary.append("✓ Global integration (already installed)")
+    else:
+        try:
+            installer = _AgentInstaller(project_root=root)
+            detected = installer.detect_installed_agents()
+            report = installer.install(targets=detected, location="global")
+            mgr._save_state(
+                InstallState(version=mgr.VERSION, components=["agents"], agents=list(detected))
+            )
+            n = report.get("agents_configured", 0)
+            summary.append(f"✓ Global integration ({n} agent(s))" if n else "✓ Global integration")
+        except Exception as exc:
+            summary.append(f"⚠ Global integration: {exc}")
 
-                        from opencontext_core.config import default_config_data
+    try:
+        from opencontext_core.doctor.checks import run_doctor
+        from opencontext_core.runtime import OpenContextRuntime
 
-                        cfg_data = default_config_data()
-                        project = cfg_data.get("project")
-                        if isinstance(project, dict):
-                            project["name"] = root.resolve().name or project.get("name", "project")
-                        security = cfg_data.get("security")
-                        if isinstance(security, dict):
-                            security["mode"] = "private_project"
-                        config_path.write_text(
-                            _yaml.safe_dump(cfg_data, sort_keys=False), encoding="utf-8"
-                        )
-                    store = UserConfigStore()
-                    prefs = store.load()
-                    prefs.security_mode = "private_project"
-                    prefs.sdd.tdd_mode = tdd
-                    prefs.sdd.sdd_model_profile = "hybrid"
-                    prefs.sdd.orchestrator_profile = "opencontext"
-                    prefs.agents.active_clients = ["opencode"]
-                    prefs.agents.default_client = "opencode"
-                    prefs.setup_completed = True
-                    store.save(prefs)
-                    results[phase_key] = "✓"
-
-                elif phase_key == "index":
-                    from opencontext_core.runtime import OpenContextRuntime
-
-                    config_path = root / "opencontext.yaml"
-                    runtime = OpenContextRuntime(
-                        config_path=str(config_path) if config_path.exists() else None,
-                        storage_path=root / ".storage" / "opencontext",
-                    )
-                    manifest = runtime.index_project(root)
-                    results[phase_key] = (
-                        f"✓ ({len(manifest.files)} files, {len(manifest.symbols)} symbols)"
-                    )
-
-                elif phase_key == "sdd":
-                    from opencontext_core.sdd_runtime import write_sdd_context
-
-                    _context, files = write_sdd_context(
-                        root,
-                        token_budget_per_phase=3000,
-                        tdd_mode=tdd,
-                        active_clients=["opencode"],
-                        sdd_model_profile="hybrid",
-                        execution_mode="auto",
-                        artifact_mode="hybrid",
-                    )
-                    _context_path = next((str(f) for f in files if f.name == "context.json"), "")
-                    results[phase_key] = f"✓ (TDD: {tdd})"
-
-                elif phase_key == "agents":
-                    from opencontext_core.adapters.agent_manifest import (
-                        AgentIntegrationGenerator,
-                        AgentTarget,
-                    )
-                    from opencontext_core.agent_installer import AgentInstaller as _AgentInstaller
-                    from opencontext_core.install_manager import InstallationManager, InstallState
-
-                    # Project-level instruction files (AGENTS.md, opencode.json) — always.
-                    generator = AgentIntegrationGenerator()
-                    agent_files = generator.generate(
-                        root, target=AgentTarget("opencode"), force=False
-                    )
-                    agents_dir = root / ".opencontext" / "agents"
-                    agents_dir.mkdir(parents=True, exist_ok=True)
-                    for client in ["opencode"]:
-                        agent_path = agents_dir / f"{client}.md"
-                        if not agent_path.exists():
-                            agent_path.write_text(
-                                _agent_contract_md(client, tdd, "hybrid", "opencontext"),
-                                encoding="utf-8",
-                            )
-
-                    # Copy the oc-* SDD skill commands into the project so the phase
-                    # commands actually land (.opencontext/skills/). Project-scoped.
-                    mgr = InstallationManager()
-                    try:
-                        mgr._install_skills(root)
-                    except Exception:
-                        pass
-
-                    # Global agent config (MCP registration, agent profiles) is a
-                    # once-per-machine concern — skip if already installed globally.
-                    if mgr._is_installed():
-                        results[phase_key] = (
-                            f"✓ ({len(agent_files)} files, global integration already installed)"
-                        )
-                    else:
-                        agent_installer = _AgentInstaller(project_root=root)
-                        detected = agent_installer.detect_installed_agents()  # type: ignore[assignment]
-                        global_report = agent_installer.install(targets=detected, location="global")  # type: ignore[arg-type]
-                        global_count = global_report.get("agents_configured", 0)
-                        mgr._save_state(
-                            InstallState(
-                                version=mgr.VERSION,
-                                components=["agents"],
-                                agents=list(detected),
-                            )
-                        )
-                        summary = f"✓ ({len(agent_files)} files"
-                        if global_count:
-                            summary += f", {global_count} agent(s) globally configured"
-                        summary += ")"
-                        results[phase_key] = summary
-
-                elif phase_key == "harness":
-                    from opencontext_core.onboarding.service import (
-                        OnboardingOptions,
-                        OnboardingService,
-                    )
-
-                    service = OnboardingService()
-                    service._write_harness_yaml(
-                        root / ".opencontext" / "harness.yaml",
-                        OnboardingOptions(root=root),
-                        3000,
-                    )
-                    results[phase_key] = "✓"
-
-                elif phase_key == "verify":
-                    from opencontext_core.doctor.checks import run_doctor
-                    from opencontext_core.runtime import OpenContextRuntime
-
-                    rt = OpenContextRuntime(config_path=None)
-                    checks = run_doctor(rt.config)
-                    passed = sum(1 for c in checks if c.ok)
-                    total = len(checks)
-                    results[phase_key] = f"✓ ({passed}/{total} checks passed)"
-
-                status.update(phase_label)
-            except Exception as exc:
-                results[phase_key] = f"✗ ({exc})"
-                console.print(f"  [red]✗ {phase_label}: {exc}[/]")
+        rt = OpenContextRuntime(config_path=str(root / "opencontext.yaml"))
+        checks = run_doctor(rt.config)
+        passed = sum(1 for c in checks if c.ok)
+        summary.append(f"✓ Verify ({passed}/{len(checks)} checks passed)")
+    except Exception as exc:
+        summary.append(f"⚠ Verify: {exc}")
 
     # ── Summary ────────────────────────────────────────────────────────
     console.print()
     console.rule("[bold]Install Complete[/]", style="green")
-    for phase_label, phase_key in steps:
-        result = results.get(phase_key, "?")
-        if result.startswith("✓"):
-            console.print(f"  [green]{result}[/]  {phase_label}")
-        elif result.startswith("✗"):
-            console.print(f"  [red]{result}[/]  {phase_label}")
-        else:
-            console.print(f"  [yellow]?[/]  {phase_label}: {result}")
+    for line in summary:
+        console.print(f"  [{'green' if line.startswith('✓') else 'yellow'}]{line}[/]")
 
     console.print()
     console.print("[bold]Next steps:[/]")
@@ -1923,49 +1820,6 @@ def _install(args: argparse.Namespace) -> None:
     except Exception:
         pass
     console.print("[dim]For help: opencontext --help[/]")
-
-
-def _agent_contract_md(
-    client: str,
-    tdd_mode: str = "ask",
-    sdd_model_profile: str = "hybrid",
-    orchestrator_profile: str = "multi-phase",
-) -> str:
-    """Generate .opencontext/agents/<client>.md contract file."""
-    lines = [
-        f"# OpenContext Agent Contract: {client}",
-        "",
-        "## Before acting",
-        "1. Read `.opencontext/sdd/context.json`.",
-        '2. Build a context pack: `opencontext pack . --query "<task>" --max-tokens 3000'
-        " --mode plan`.",
-        "3. Preserve trace_id across all phases.",
-        "4. Do not dump the full repository.",
-        f"5. Respect TDD mode: `{tdd_mode}`.",
-        "6. Respect token budget per phase.",
-        "7. Write outputs to `.opencontext/runs/<run_id>/artifacts/`.",
-        "",
-        "## Orchestrator profile",
-        f"- Type: `{orchestrator_profile}`",
-        f"- SDD model profile: `{sdd_model_profile}`",
-        f"- Active clients: {client}",
-        "",
-        "## Allowed actions",
-        "- Read files needed for the current phase",
-        "- Use opencontext CLI for context packs, knowledge graph, and memory",
-        "- Write to `.opencontext/runs/<run_id>/` for artifacts",
-        "",
-        "## Forbidden actions",
-        "- Do not disable security redaction",
-        "- Do not enable external providers without policy approval",
-        "- Do not write to `.env`, `secrets/`, `vendor/`",
-        "",
-        "## Required output",
-        "- Every phase must produce a trace_id and artifact",
-        "- Archive phase must persist memory and graph deltas",
-        "",
-    ]
-    return "\n".join(lines)
 
 
 def _index(runtime: OpenContextRuntime, root: str, incremental: bool = False) -> None:
@@ -3932,8 +3786,7 @@ def _memory(args: argparse.Namespace) -> None:
                 shown = True
         for item in repo.list_items():
             print(
-                f"{item.id}: {item.kind} ({item.classification.value}) - "
-                f"{item.tokens} tokens [md]"
+                f"{item.id}: {item.kind} ({item.classification.value}) - {item.tokens} tokens [md]"
             )
             shown = True
         if not shown:
