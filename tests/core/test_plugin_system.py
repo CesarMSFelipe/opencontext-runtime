@@ -18,12 +18,15 @@ def _registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PluginRegistry
             or setattr(self, "_plugins", {})
             or setattr(self, "_commands", {})
             or setattr(self, "_hooks", {})
+            or setattr(self, "_permissions", {})
         ),
     )
     return PluginRegistry(tmp_path)
 
 
-def _make_plugin(tmp_path: Path, name: str, *, checksum: str | None) -> None:
+def _make_plugin(
+    tmp_path: Path, name: str, *, checksum: str | None, permissions: object = None
+) -> None:
     import hashlib
     import json
 
@@ -31,12 +34,47 @@ def _make_plugin(tmp_path: Path, name: str, *, checksum: str | None) -> None:
     pdir.mkdir()
     body = "class OpenContextPlugin:\n    name = 'p'\n"
     (pdir / "plugin.py").write_text(body, encoding="utf-8")
-    info = {"name": name, "enabled": True, "entry_point": "plugin.py"}
+    info: dict = {"name": name, "enabled": True, "entry_point": "plugin.py"}
     if checksum == "valid":
         info["entry_checksum"] = "sha256:" + hashlib.sha256(body.encode()).hexdigest()
     elif checksum == "tampered":
         info["entry_checksum"] = "sha256:" + ("0" * 64)
+    if permissions is not None:
+        info["permissions"] = permissions
     (pdir / "plugin.json").write_text(json.dumps(info), encoding="utf-8")
+
+
+def test_load_parses_and_enforces_declared_permissions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = _registry(tmp_path, monkeypatch)
+    _make_plugin(
+        tmp_path, "netty", checksum=None, permissions={"network_hosts": ["api.example.com"]}
+    )
+    assert registry.load("netty") is not None
+    # Declared allowlist is honored; anything else is deny-by-default.
+    assert registry.is_allowed("netty", "network", "api.example.com") is True
+    assert registry.is_allowed("netty", "network", "evil.example.com") is False
+    assert registry.is_allowed("netty", "write", "/etc") is False
+
+
+def test_unmanaged_plugin_denies_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = _registry(tmp_path, monkeypatch)
+    _make_plugin(tmp_path, "bare", checksum=None, permissions=None)  # no manifest
+    assert registry.load("bare") is not None
+    perms = registry.declared_permissions("bare")
+    assert perms is not None and perms.network_hosts == []  # nothing declared
+    assert registry.is_allowed("bare", "network", "api.example.com") is False
+
+
+def test_malformed_permissions_refuses_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = _registry(tmp_path, monkeypatch)
+    _make_plugin(tmp_path, "broken", checksum=None, permissions="not-a-dict")
+    assert registry.load("broken") is None
 
 
 def test_load_refuses_plugin_with_bad_checksum(
