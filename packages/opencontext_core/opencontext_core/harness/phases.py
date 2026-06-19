@@ -1822,6 +1822,26 @@ class GGARulesPhase(HarnessPhase):
 
     id = "gga"
 
+    @staticmethod
+    def _changed_source_paths(state: Any) -> list[str]:
+        """Source files the apply phase actually wrote, from its manifest."""
+        paths: list[str] = []
+        for artifact in state.artifacts:
+            if artifact.phase != "apply":
+                continue
+            manifest_path = Path(artifact.path)
+            if manifest_path.name != "apply-manifest.json" or not manifest_path.exists():
+                continue
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            for change in manifest.get("changes", []):
+                path = change.get("path")
+                if path:
+                    paths.append(str(path))
+        return paths
+
     def run(self, state: Any) -> PhaseResult:
         run_dir = state.root / ".opencontext" / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -1829,9 +1849,11 @@ class GGARulesPhase(HarnessPhase):
         rules = self._load_rules(state.root)
         violations: list[dict[str, str]] = []
 
-        apply_artifacts = [a for a in state.artifacts if a.phase == "apply"]
-        for artifact in apply_artifacts:
-            p = Path(artifact.path)
+        # Scan the source the apply phase actually wrote (manifest changes[].path),
+        # not the apply-manifest.json artifact itself — whose .json suffix was
+        # always skipped, so every quality rule passed vacuously.
+        for raw_path in self._changed_source_paths(state):
+            p = Path(raw_path)
             if not p.exists() or p.suffix not in (".py", ".ts", ".js", ".go", ".rs"):
                 continue
             try:
