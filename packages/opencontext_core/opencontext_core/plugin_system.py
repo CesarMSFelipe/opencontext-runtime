@@ -935,6 +935,8 @@ class PluginRegistry:
         self._plugins: dict[str, Plugin] = {}
         self._commands: dict[str, Callable[..., Any]] = {}
         self._hooks: dict[str, list[Callable[..., Any]]] = {}
+        # Declared, validated permissions per loaded plugin (deny-by-default).
+        self._permissions: dict[str, Any] = {}
 
     def discover(self) -> list[PluginInfo]:
         """Discover available plugins."""
@@ -976,6 +978,31 @@ class PluginRegistry:
             info = json.loads(info_path.read_text())
             if not info.get("enabled", True):
                 return None
+
+            # Deny-by-default permissions contract: the plugin declares what it may
+            # touch. An absent manifest = nothing declared (flagged as unmanaged);
+            # a malformed one refuses the load. (In-process IO sandboxing of the
+            # exec'd code itself needs a process sandbox — out of scope here.)
+            from opencontext_core.plugins.manifest import PluginPermissions
+
+            raw_perms = info.get("permissions")
+            try:
+                perms = (
+                    PluginPermissions.model_validate(raw_perms)
+                    if raw_perms is not None
+                    else PluginPermissions()
+                )
+            except Exception as exc:
+                _log.error(
+                    "Refusing to load plugin %r: invalid permissions manifest: %s", name, exc
+                )
+                return None
+            if raw_perms is None:
+                _log.warning(
+                    "Plugin %r declares no permissions manifest — unmanaged (deny-by-default).",
+                    name,
+                )
+            self._permissions[name] = perms
 
             entry_point = info.get("entry_point", "plugin.py")
             module_path = plugin_dir / entry_point
@@ -1025,6 +1052,28 @@ class PluginRegistry:
 
         except Exception:
             return None
+
+    def declared_permissions(self, name: str) -> Any:
+        """The validated PluginPermissions a loaded plugin declared, or None."""
+        return self._permissions.get(name)
+
+    def is_allowed(self, name: str, capability: str, value: str) -> bool:
+        """Deny-by-default check against a plugin's declared allowlist.
+
+        capability: one of "read"/"write"/"network"/"mcp". Returns False when the
+        plugin is unknown/unmanaged or the value is not in its declared allowlist —
+        callers that broker a capability to a plugin gate on this.
+        """
+        perms = self._permissions.get(name)
+        if perms is None:
+            return False
+        allow = {
+            "read": perms.read_paths,
+            "write": perms.write_paths,
+            "network": perms.network_hosts,
+            "mcp": perms.mcp_servers,
+        }.get(capability, [])
+        return value in allow
 
     def enable(self, name: str) -> bool:
         """Enable a plugin."""
