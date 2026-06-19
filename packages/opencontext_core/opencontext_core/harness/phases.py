@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from opencontext_core.context.budgeting import estimate_tokens
 from opencontext_core.harness.budget import TokenBudgetEnforcer
 from opencontext_core.harness.checkpoint import CheckpointStore
 from opencontext_core.harness.config import PhaseConfig
@@ -1045,7 +1046,9 @@ _None._
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(spec_path),
         ]
-        ledger = self._token_ledger("spec", 0)
+        ledger = self._token_ledger(
+            "spec", estimate_tokens(outcome.output or "") if outcome.is_real else 0
+        )
         gates.append(TokenBudgetGate().evaluate(ledger))
 
         status = (
@@ -1165,7 +1168,9 @@ This section describes the high-level architecture for implementing: {task}.
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(design_path),
         ]
-        ledger = self._token_ledger("design", 0)
+        ledger = self._token_ledger(
+            "design", estimate_tokens(outcome.output or "") if outcome.is_real else 0
+        )
         gates.append(TokenBudgetGate().evaluate(ledger))
 
         status = (
@@ -1297,7 +1302,9 @@ class TasksPhase(HarnessPhase):
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(tasks_path),
         ]
-        ledger = self._token_ledger("tasks", 0)
+        ledger = self._token_ledger(
+            "tasks", estimate_tokens(outcome.output or "") if outcome.is_real else 0
+        )
         gates.append(TokenBudgetGate().evaluate(ledger))
 
         status = (
