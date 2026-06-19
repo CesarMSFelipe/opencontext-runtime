@@ -15,8 +15,8 @@ from typing import Any
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.prompt import Prompt
 
+from opencontext_core import prompts
 from opencontext_core.config import SecurityMode
 from opencontext_core.onboarding.service import (
     OnboardingOptions,
@@ -27,71 +27,6 @@ from opencontext_core.onboarding.service import (
 console = Console()
 
 _TEMPLATE_CHOICES = ("generic", "enterprise", "air_gapped")
-
-# ---------------------------------------------------------------------------
-# InquirerPy helpers — graceful fallback to Rich Prompt when not installed
-# ---------------------------------------------------------------------------
-
-
-def _iq_select(
-    message: str,
-    choices: list[dict[str, str]],
-    default: str = "",
-    instruction: str = "Use arrow keys, Enter to confirm.",
-) -> str:
-    """Arrow-key single select. Falls back to Rich Prompt.ask if InquirerPy missing."""
-    try:
-        from InquirerPy import inquirer
-        from InquirerPy.base.control import Choice
-
-        iq_choices = [Choice(value=c["value"], name=c["name"]) for c in choices]
-        default_val = default or choices[0]["value"]
-        selected = inquirer.select(
-            message=message,
-            choices=iq_choices,
-            default=default_val,
-            long_instruction=instruction,
-            show_cursor=True,
-        ).execute()
-        return str(selected)
-    except ImportError:
-        str_choices = [c["value"] for c in choices]
-        console.print("  " + "  ".join(f"[cyan]{c['name']}[/]" for c in choices))
-        return Prompt.ask(message, choices=str_choices, default=default or str_choices[0])
-
-
-def _iq_checkbox(
-    message: str,
-    choices: list[dict[str, str]],
-    defaults: list[str] | None = None,
-    instruction: str = "Space to select, Enter to confirm.",
-) -> list[str]:
-    """Arrow-key multi-select checkbox. Falls back to comma-separated text input."""
-    try:
-        from InquirerPy import inquirer
-        from InquirerPy.base.control import Choice
-
-        iq_choices = [
-            Choice(value=c["value"], name=c["name"], enabled=(c["value"] in (defaults or [])))
-            for c in choices
-        ]
-        result: list[str] = inquirer.checkbox(
-            message=message,
-            choices=iq_choices,
-            long_instruction=instruction,
-            validate=lambda x: len(x) > 0,
-            invalid_message="Select at least one option.",
-        ).execute()
-        return result
-    except ImportError:
-        str_choices = [c["value"] for c in choices]
-        console.print("  " + ", ".join(f"[cyan]{c['value']}[/]" for c in choices))
-        raw = Prompt.ask(
-            f"{message} (comma-separated)",
-            default=",".join(defaults or [str_choices[0]]),
-        )
-        selected = [a.strip() for a in raw.split(",") if a.strip()]
-        return selected or [str_choices[0]]
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +130,7 @@ class OnboardingWizard:
         console.print(welcome)
 
         if self._interactive:
-            Prompt.ask("[dim]Press Enter to start[/]", default="")
+            prompts.pause("Press Enter to start")
 
     def _choose_template(self) -> str:
         if not self._interactive:
@@ -219,7 +154,7 @@ class OnboardingWizard:
                 "name": "Air-gapped         — No external access, no semantic cache, max isolation",
             },
         ]
-        return _iq_select("Choose a configuration template", choices, default="generic")
+        return str(prompts.select("Choose a configuration template", choices, default="generic"))
 
     def _choose_security_mode(self) -> str:
         if not self._interactive:
@@ -247,10 +182,12 @@ class OnboardingWizard:
                 "name": "air_gapped       — Completely offline, no external access",
             },
         ]
-        return _iq_select(
-            "Choose security mode",
-            choices,
-            default=SecurityMode.PRIVATE_PROJECT.value,
+        return str(
+            prompts.select(
+                "Choose security mode",
+                choices,
+                default=SecurityMode.PRIVATE_PROJECT.value,
+            )
         )
 
     def _choose_tdd_mode(self) -> str:
@@ -275,7 +212,7 @@ class OnboardingWizard:
                 "name": "Off      — No TDD enforcement, code-first workflow",
             },
         ]
-        return _iq_select("Choose TDD mode", choices, default="ask")
+        return str(prompts.select("Choose TDD mode", choices, default="ask"))
 
     def _choose_agents(self) -> list[str]:
         if not self._interactive:
@@ -300,11 +237,11 @@ class OnboardingWizard:
             {"value": "roo", "name": "Roo           — Roo-Code extension"},
             {"value": "continue", "name": "Continue      — continue.dev extension"},
         ]
-        return _iq_checkbox(
+        return prompts.checkbox(
             "Select agents to configure",
             choices,
             defaults=["opencode"],
-            instruction="Space to select/deselect, Enter to confirm.",
+            require_one=True,
         )
 
     def _run_onboarding(self, options: OnboardingOptions) -> OnboardingResult:

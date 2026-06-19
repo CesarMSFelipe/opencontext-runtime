@@ -6,11 +6,13 @@ providers, and plugins. Uses rich for a modern interactive TUI.
 
 from __future__ import annotations
 
+import sys
+
 from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Confirm, IntPrompt, Prompt
+from rich.prompt import IntPrompt
 from rich.table import Table
 
+from opencontext_core import prompts
 from opencontext_core.config import SecurityMode
 from opencontext_core.plugin_system import (
     PluginInstaller,
@@ -36,86 +38,63 @@ console = Console()
 def run_wizard_menu() -> None:
     """Show interactive menu and delegate to the selected section."""
 
+    # The menu loop terminates only on an explicit "quit" selection. Without a
+    # terminal, the navigable selector returns its default forever, so guard
+    # against a non-interactive hang and point at the non-interactive path.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        console.print(
+            "[yellow]The configuration menu needs a terminal.[/] "
+            "Run [cyan]opencontext config wizard --non-interactive[/] instead."
+        )
+        return
+
     while True:
         console.clear()
-        menu = Panel(
-            "\n".join(
-                [
-                    "[bold]OpenContext Configuration[/bold]",
-                    "",
-                    "  [cyan]1[/]  Full configuration wizard",
-                    "  [cyan]2[/]  Security & privacy",
-                    "  [cyan]3[/]  Features",
-                    "  [cyan]4[/]  Token budgets",
-                    "  [cyan]5[/]  Agent integrations",
-                    "  [cyan]6[/]  Plugins",
-                    "  [cyan]7[/]  Show current config",
-                    "  [cyan]8[/]  Reset to defaults",
-                    "  [cyan]q[/]  Quit",
-                    "",
-                    "[dim]j/k: navigate • enter: select • q: quit[/]",
-                ]
-            ),
-            title="OpenContext Config",
-            border_style="cyan",
-            padding=(1, 2),
-        )
-        console.print(menu)
+        console.rule("[bold cyan]OpenContext Configuration[/]")
         console.print()
 
-        choice = Prompt.ask(
-            "Select option",
-            choices=["1", "2", "3", "4", "5", "6", "7", "8", "q"],
-            default="1",
+        choice = prompts.select(
+            "Configuration",
+            [
+                ("wizard", "Full configuration wizard"),
+                ("security", "Security & privacy"),
+                ("features", "Features"),
+                ("tokens", "Token budgets"),
+                ("agents", "Agent integrations"),
+                ("plugins", "Plugins"),
+                ("show", "Show current config"),
+                ("reset", "Reset to defaults"),
+                ("quit", "Quit"),
+            ],
+            default="wizard",
         )
 
-        if choice == "1":
-            run_wizard()
-        elif choice == "2":
-            reconfigure("security")
-        elif choice == "3":
-            reconfigure("features")
-        elif choice == "4":
-            reconfigure("tokens")
-        elif choice == "5":
-            reconfigure("agents")
-        elif choice == "6":
-            reconfigure("plugins")
-        elif choice == "7":
-            show_config()
-            console.print("\n[dim]Press Enter to return to menu...[/]")
-            input()
-        elif choice == "8":
-            reset_config()
-        elif choice == "q":
+        if choice == "quit":
             console.print("[dim]Goodbye.[/]")
             break
+        elif choice == "wizard":
+            run_wizard()
+        elif choice == "show":
+            show_config()
+            prompts.pause("Press Enter to return to menu")
+        elif choice == "reset":
+            reset_config()
+        else:
+            # security / features / tokens / agents / plugins
+            reconfigure(choice)
 
 
 def _ask_bool(question: str, default: bool = True) -> bool:
-    """Ask a yes/no question."""
+    """Ask a yes/no question with a navigable Yes/No selector."""
 
-    result = Confirm.ask(f"\n[bold]{question}[/]", default=default)
-    return result
+    return prompts.confirm(question, default=default)
 
 
 def _ask_choice(question: str, choices: list[str], default: int = 0) -> str:
-    """Ask user to choose from a list."""
+    """Ask user to choose from a list with an arrow-key selector."""
 
-    table = Table(box=None, show_header=False)
-    for i, choice in enumerate(choices, 1):
-        marker = " (default)" if i - 1 == default else ""
-        table.add_row(f"  [cyan]{i}[/]", f"{choice}{marker}")
-
-    console.print(f"\n[bold]{question}[/]")
-    console.print(table)
-
-    choice = Prompt.ask(
-        "Enter number",
-        choices=[str(i) for i in range(1, len(choices) + 1)],
-        default=str(default + 1),
-    )
-    return choices[int(choice) - 1]
+    default_value = choices[default] if 0 <= default < len(choices) else choices[0]
+    return str(prompts.select(question, list(choices), default=default_value))
 
 
 def _ask_int(question: str, default: int, min_val: int = 1, max_val: int = 1000000) -> int:
@@ -169,7 +148,6 @@ def _plugin_wizard_step(prefs: UserPreferences) -> None:
             name = plug.name
             version = plug.versions[0].version if plug.versions else "—"
             status = "✓ installed" if name in installed else "—"
-            f"  [{len(available)}] " if False else "   "
             table.add_row("", name, f"v{version}", plug.description[:55], status)
 
         console.print(table)
@@ -249,32 +227,26 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
         console.print("\nAir-gapped mode: disabling network features.")
 
     _print_section("Step 2: Features")
-    console.print("\nEnable/disable features:")
 
-    prefs.features.knowledge_graph = _ask_bool(
-        "Knowledge Graph (code indexing & search)?", prefs.features.knowledge_graph
-    )
-    prefs.features.call_graph = _ask_bool(
-        "Call Graph (function call analysis)?", prefs.features.call_graph
-    )
-    prefs.features.learning_system = _ask_bool(
-        "Learning System (auto-optimize token usage)?", prefs.features.learning_system
-    )
-    prefs.features.governance = _ask_bool(
-        "Governance (audit trails & policies)?", prefs.features.governance
-    )
-
+    # One multi-select instead of a long yes/no chain. Network features are
+    # hidden (and stay off) in air-gapped mode.
+    feature_opts: list[tuple[str, str]] = [
+        ("knowledge_graph", "Knowledge Graph (code indexing & search)"),
+        ("call_graph", "Call Graph (function call analysis)"),
+        ("learning_system", "Learning System (auto-optimize token usage)"),
+        ("governance", "Governance (audit trails & policies)"),
+    ]
     if not air_gapped:
-        prefs.features.embeddings = _ask_bool(
-            "Embeddings (semantic search)?", prefs.features.embeddings
-        )
-        prefs.features.mcp_server = _ask_bool(
-            "MCP Server (agent integration)?", prefs.features.mcp_server
-        )
+        feature_opts += [
+            ("embeddings", "Embeddings (semantic search)"),
+            ("mcp_server", "MCP Server (agent integration)"),
+        ]
+    feature_opts.append(("git_integration", "Git Integration (context from git history)"))
 
-    prefs.features.git_integration = _ask_bool(
-        "Git Integration (context from git history)?", prefs.features.git_integration
-    )
+    enabled_defaults = [key for key, _ in feature_opts if getattr(prefs.features, key)]
+    selected = set(prompts.checkbox("Enable features", feature_opts, defaults=enabled_defaults))
+    for key, _ in feature_opts:
+        setattr(prefs.features, key, key in selected)
 
     _print_section("Step 3: Token Budgets")
     console.print("\nConfigure default token limits:")
@@ -289,9 +261,13 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
     if prefs.context_first_mode:
         console.print("[dim]Skipped (context-first mode)[/dim]")
     else:
-        console.print("\nWhich AI agents do you use?")
-        for agent, enabled in prefs.agent_integrations.items():
-            prefs.agent_integrations[agent] = _ask_bool(f"  Enable {agent}?", enabled)
+        agent_keys = list(prefs.agent_integrations.keys())
+        defaults = [a for a in agent_keys if prefs.agent_integrations[a]]
+        selected = set(
+            prompts.checkbox("Which AI agents do you use?", agent_keys, defaults=defaults)
+        )
+        for agent in agent_keys:
+            prefs.agent_integrations[agent] = agent in selected
 
     # Step 5: Plugins
     _print_section("Step 5: Plugins")
@@ -379,10 +355,11 @@ def reconfigure(section: str | None = None) -> None:
     elif section == "tokens":
         prefs.default_token_budget = _ask_int("Token budget", prefs.default_token_budget)
     elif section == "agents":
-        for agent in prefs.agent_integrations:
-            prefs.agent_integrations[agent] = _ask_bool(
-                f"{agent}?", prefs.agent_integrations[agent]
-            )
+        agent_keys = list(prefs.agent_integrations.keys())
+        defaults = [a for a in agent_keys if prefs.agent_integrations[a]]
+        selected = set(prompts.checkbox("Agent integrations", agent_keys, defaults=defaults))
+        for agent in agent_keys:
+            prefs.agent_integrations[agent] = agent in selected
     elif section == "plugins":
         _plugin_wizard_step(prefs)
     else:
