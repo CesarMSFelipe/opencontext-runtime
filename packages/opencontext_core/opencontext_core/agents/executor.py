@@ -97,15 +97,29 @@ def parse_file_edits(text: str) -> list[dict[str, str]]:
     edits (ApplyPhase then reports planned, never a bad write).
     """
     import json
+    import re
 
     start = text.find("[")
     end = text.rfind("]")
     if start == -1 or end <= start:
         return []
+    blob = text[start : end + 1]
     try:
-        data = json.loads(text[start : end + 1])
+        data = json.loads(blob)
     except json.JSONDecodeError:
-        return []
+        # Smaller models often emit "JSON" with Python triple-quoted content
+        # (`"content": """...multi-line..."""`), which is not valid JSON. Re-encode
+        # any triple-quoted body as a proper JSON string, then retry once.
+        repaired = re.sub(
+            r'"""(.*?)"""|\'\'\'(.*?)\'\'\'',
+            lambda m: json.dumps(m.group(1) if m.group(1) is not None else m.group(2)),
+            blob,
+            flags=re.DOTALL,
+        )
+        try:
+            data = json.loads(repaired)
+        except json.JSONDecodeError:
+            return []
     edits: list[dict[str, str]] = []
     for item in data if isinstance(data, list) else []:
         path = item.get("path") if isinstance(item, dict) else None
