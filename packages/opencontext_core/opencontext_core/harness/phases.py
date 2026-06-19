@@ -222,6 +222,24 @@ class ArchivePhase(HarnessPhase):
         run_dir = state.root / ".opencontext" / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
+        # run.json is finalized by the runner's persist_run() AFTER all phases,
+        # so it does not exist yet at archive time. Write a preliminary copy here
+        # so the phase is self-contained and its persistence gate is meaningful;
+        # persist_run() overwrites it with the final status afterward.
+        run_json_path = run_dir / "run.json"
+        if not run_json_path.exists():
+            run_json_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": state.run_id,
+                        "task": state.task,
+                        "status": "archiving",
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
         # Produce memory_delta.json
         memory_delta = self._build_memory_delta(state)
         memory_delta_path = run_dir / "memory_delta.json"
