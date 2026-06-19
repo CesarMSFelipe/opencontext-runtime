@@ -1813,8 +1813,9 @@ def _install(args: argparse.Namespace) -> None:
                         AgentTarget,
                     )
                     from opencontext_core.agent_installer import AgentInstaller as _AgentInstaller
+                    from opencontext_core.install_manager import InstallationManager, InstallState
 
-                    # Project-level instruction files (AGENTS.md, opencode.json)
+                    # Project-level instruction files (AGENTS.md, opencode.json) — always.
                     generator = AgentIntegrationGenerator()
                     agent_files = generator.generate(
                         root, target=AgentTarget("opencode"), force=False
@@ -1829,17 +1830,30 @@ def _install(args: argparse.Namespace) -> None:
                                 encoding="utf-8",
                             )
 
-                    # Global agent config (MCP registration, agent profiles)
-                    agent_installer = _AgentInstaller(project_root=root)
-                    detected = agent_installer.detect_installed_agents()  # type: ignore[assignment]
-                    global_report = agent_installer.install(targets=detected, location="global")  # type: ignore[arg-type]
-                    global_count = global_report.get("agents_configured", 0)
-
-                    summary = f"✓ ({len(agent_files)} files"
-                    if global_count:
-                        summary += f", {global_count} agent(s) globally configured"
-                    summary += ")"
-                    results[phase_key] = summary
+                    # Global agent config (MCP registration, agent profiles) is a
+                    # once-per-machine concern — skip if already installed globally.
+                    mgr = InstallationManager()
+                    if mgr._is_installed():
+                        results[phase_key] = (
+                            f"✓ ({len(agent_files)} files, global integration already installed)"
+                        )
+                    else:
+                        agent_installer = _AgentInstaller(project_root=root)
+                        detected = agent_installer.detect_installed_agents()  # type: ignore[assignment]
+                        global_report = agent_installer.install(targets=detected, location="global")  # type: ignore[arg-type]
+                        global_count = global_report.get("agents_configured", 0)
+                        mgr._save_state(
+                            InstallState(
+                                version=mgr.VERSION,
+                                components=["agents"],
+                                agents=list(detected),
+                            )
+                        )
+                        summary = f"✓ ({len(agent_files)} files"
+                        if global_count:
+                            summary += f", {global_count} agent(s) globally configured"
+                        summary += ")"
+                        results[phase_key] = summary
 
                 elif phase_key == "harness":
                     from opencontext_core.onboarding.service import (
