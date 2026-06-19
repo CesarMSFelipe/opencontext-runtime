@@ -763,7 +763,14 @@ class OpenContextRuntime:
         """Build and persist a context pack, returning the trace that records it."""
 
         manifest = self.load_manifest()
-        planner = RetrievalPlanner(manifest, graph_db_path=self.storage_path / "context_graph.db")
+        # from_config lights up FTS + (config-gated) vector + memory-aware ranking;
+        # with defaults it is identical to the bare manifest+graph planner.
+        planner = RetrievalPlanner.from_config(
+            manifest,
+            self.config,
+            storage_path=self.storage_path,
+            memory_store=getattr(self, "_v2_memory_store", None),
+        )
         plan = planner.plan(
             EvidenceRequest(
                 query=query,

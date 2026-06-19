@@ -153,9 +153,15 @@ def test_runtime_context_pack_uses_retrieval_planner(tmp_path: Path, monkeypatch
     class SpyPlanner:
         called = False
 
-        def __init__(self, manifest: ProjectManifest, *, graph_db_path: Path | None = None) -> None:
+        def __init__(self, manifest: ProjectManifest, **_: object) -> None:
             self.manifest = manifest
-            self.graph_db_path = graph_db_path
+
+        @classmethod
+        def from_config(
+            cls, manifest: ProjectManifest, _config: object, **_kw: object
+        ) -> SpyPlanner:
+            # Runtime builds the planner via from_config; route it to the spy.
+            return cls(manifest)
 
         def plan(self, request: EvidenceRequest, top_k: int):
             SpyPlanner.called = True
