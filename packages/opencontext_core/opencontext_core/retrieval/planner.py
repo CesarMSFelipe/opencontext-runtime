@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from collections import defaultdict
 from collections.abc import Sequence
@@ -15,6 +16,7 @@ from opencontext_core.context.planning.expansion import ContextItem as Expansion
 from opencontext_core.context.planning.expansion import ProgressiveExpander
 from opencontext_core.graph.unified import UnifiedGraph
 from opencontext_core.indexing.context_builder import ContextBuilder, ContextNode
+from opencontext_core.memory.fusion import reciprocal_rank_fusion
 from opencontext_core.models.context import ContextItem, ContextPriority
 from opencontext_core.models.project import ProjectManifest
 from opencontext_core.retrieval.contracts import (
@@ -34,6 +36,8 @@ from opencontext_core.retrieval.scoring import (
     personalized_pagerank,
 )
 from opencontext_core.safety.redaction import SinkGuard
+
+_log = logging.getLogger(__name__)
 
 
 class RetrievalSource(Protocol):
@@ -67,20 +71,18 @@ def _rrf_fuse(
     *,
     k: int = 60,
 ) -> list[ContextItem]:
-    """Reciprocal Rank Fusion across N ranked lists.
+    """Reciprocal Rank Fusion across N ranked lists using shared fusion.reciprocal_rank_fusion.
 
-    RRF(d) = sum_r( 1 / (k + rank_r(d)) ) — higher is better.
-    Items not present in a list get no contribution from that list.
-    Preserves the highest score seen across sources on the merged item.
+    Preserves the highest-scoring ContextItem copy seen across sources.
     """
-    scores: dict[str, float] = {}
     best_items: dict[str, ContextItem] = {}
     for ranked in ranked_lists:
-        for rank, item in enumerate(ranked, start=1):
-            scores[item.id] = scores.get(item.id, 0.0) + 1.0 / (k + rank)
+        for item in ranked:
             if item.id not in best_items or item.score > best_items[item.id].score:
                 best_items[item.id] = item
-    return sorted(best_items.values(), key=lambda i: -scores[i.id])
+    id_lists = [[item.id for item in ranked] for ranked in ranked_lists]
+    ranked_ids = reciprocal_rank_fusion(id_lists, k=k)
+    return [best_items[id_] for id_ in ranked_ids if id_ in best_items]
 
 
 class FTSRetrievalSource:
@@ -209,7 +211,8 @@ class VectorRetrievalSource:
             return True
         try:
             record = getter(result.item_id)
-        except Exception:
+        except Exception as exc:
+            _log.debug("project check failed for %r: %s", getattr(result, "item_id", "?"), exc)
             return True
         if record is None:
             return True
@@ -286,9 +289,10 @@ class RetrievalPlanner:
                 results = source.retrieve(query, top_k)
                 if results:
                     per_source.append(results)
-            except Exception:
+            except Exception as exc:
                 if source.name == ManifestRetrievalSource.name:
                     raise
+                _log.warning("retrieval source %r failed: %s", source.name, exc)
                 self.omissions.append(f"{source.name}_unavailable")
                 continue
 
@@ -376,9 +380,10 @@ class RetrievalPlanner:
             for source in self.sources:
                 try:
                     base_items.extend(source.retrieve(request.query, top_k))
-                except Exception:
+                except Exception as exc:
                     if source.name == ManifestRetrievalSource.name:
                         raise
+                    _log.warning("retrieval source %r failed: %s", source.name, exc)
                     self.omissions.append(f"{source.name}_unavailable")
                     continue
             base_items = _deduplicate(base_items)
@@ -470,8 +475,9 @@ class RetrievalPlanner:
                 seen_ids.add(exp_item.id)
                 new_items.append(neighbor)
             return new_items, graph_distance_map
-        except Exception:
+        except Exception as exc:
             # Expansion is best-effort; never break the base retrieval contract.
+            _log.warning("graph expansion failed: %s", exc)
             self.omissions.append("graph_expansion_unavailable")
             return [], {}
         finally:
@@ -549,7 +555,8 @@ def _git_focus_files(root: Path | None) -> frozenset[str]:
         for diff in GitContextProvider(root).get_recent_changes(days=7):
             files.update(diff.files_changed)
         return frozenset(files)
-    except Exception:
+    except Exception as exc:
+        _log.debug("git recent-changes lookup failed: %s", exc)
         return frozenset()
 
 
@@ -941,7 +948,8 @@ def _embed_query(generator: Any, query: str) -> list[float]:
             vectors = loop.run_until_complete(generator.embed([query]))
         finally:
             loop.close()
-    except Exception:
+    except Exception as exc:
+        _log.debug("query embedding failed: %s", exc)
         return []
     return list(vectors[0]) if vectors else []
 
@@ -990,6 +998,7 @@ def _build_vector_source(
 
         generator = create_generator(config)
         store = LocalVectorStore(storage_path)
-    except Exception:
+    except Exception as exc:
+        _log.debug("vector retrieval source unavailable: %s", exc)
         return None
     return VectorRetrievalSource(store, generator, project_name=project_name)

@@ -246,8 +246,8 @@ class SubAgentDelegate:
     ) -> SubAgentResult:
         """Delegate to a remote API (e.g., OpenCode sub-agent)."""
 
-        # This would call OpenCode's sub-agent API
-        # For now, return scaffold result
+        # NOTE: returns a synthetic success placeholder. Wire the real OpenCode
+        # sub-agent API here when multi-agent execution is available.
         return SubAgentResult(
             status="success",
             output=f"Remote {phase} execution scaffold",

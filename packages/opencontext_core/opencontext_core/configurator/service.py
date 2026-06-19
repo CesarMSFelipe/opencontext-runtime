@@ -207,6 +207,7 @@ class Configurator:
         subdir = constants.global_agents_subdir(adapter.agent_id)
         if subdir:
             from opencontext_core.personas import PERSONAS
+
             for persona in PERSONAS:
                 path = adapter.config_dir / subdir / f"{persona.id}.md"
                 if path.exists():

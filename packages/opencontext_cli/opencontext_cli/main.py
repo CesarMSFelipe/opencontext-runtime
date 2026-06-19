@@ -1008,6 +1008,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--content", help="The corrected memory content (required with --supersede)."
     )
     memory_sub.add_parser("facts")
+    memory_sub.add_parser(
+        "doctor",
+        help="Diagnose memory system health: backends, store size, conflict count.",
+    )
     memory_timeline = memory_sub.add_parser("timeline")
     memory_timeline.add_argument("query")
     memory_supersede = memory_sub.add_parser("supersede")
@@ -3906,7 +3910,8 @@ def _memory(args: argparse.Namespace) -> None:
             runtime = _runtime(args.config)
             trace = runtime.latest_trace()
         else:
-            # Scaffold: assume trace_id is a file path for now
+            # NOTE: single trace store — trace_id maps directly to a file path.
+            # Add source routing when traces span multiple stores.
             trace_path = Path(f".storage/opencontext/traces/{trace_id}.json")
             trace_data = json.loads(trace_path.read_text(encoding="utf-8"))
             trace = RuntimeTrace.model_validate(trace_data)
@@ -4025,6 +4030,9 @@ def _memory(args: argparse.Namespace) -> None:
     if command == "import":
         _memory_import(repo, args.path)
         return
+    if command == "doctor":
+        _memory_doctor()
+        return
     _unreachable(command)
 
 
@@ -4072,6 +4080,66 @@ def _memory_import(repo: Any, path: str) -> None:
         )
         imported += 1
     print(f"Imported {imported} item(s), skipped {skipped} (already present or invalid).")
+
+
+def _memory_doctor() -> None:
+    """Diagnose memory system health: backends, store size, conflict count."""
+    from opencontext_core.memory.graph import LocalMemoryStore
+
+    checks: list[tuple[str, bool, str]] = []
+
+    # Check 1: ContextRepository (local .md store)
+    repo = ContextRepository(Path("."))
+    try:
+        items = repo.list_items()
+        checks.append(("context_repository", True, f"{len(items)} item(s) in local memory store"))
+    except Exception as exc:
+        checks.append(("context_repository", False, f"Cannot read local memory: {exc}"))
+
+    # Check 2: LocalMemoryStore (SQLite FTS5)
+    db_path = Path(".storage/opencontext/memory.db")
+    if db_path.exists():
+        try:
+            store = LocalMemoryStore(db_path)
+            records = store.search("", limit=1000)
+            checks.append(("sqlite_store", True, f"{len(records)} record(s) in SQLite memory"))
+        except Exception as exc:
+            checks.append(("sqlite_store", False, f"SQLite memory error: {exc}"))
+    else:
+        checks.append(("sqlite_store", True, "SQLite store not yet created (run `memory init`)"))
+
+    # Check 3: Conflict detection (same key, different layers)
+    try:
+        if db_path.exists():
+            store = LocalMemoryStore(db_path)
+            all_recs = store.search("", limit=5000)
+            key_layers: dict[str, set[str]] = {}
+            for rec in all_recs:
+                key_layers.setdefault(rec.key, set()).add(rec.layer.value)
+            conflicts = {k: v for k, v in key_layers.items() if len(v) > 1}
+            if conflicts:
+                checks.append(
+                    (
+                        "conflict_check",
+                        False,
+                        f"{len(conflicts)} key(s) present in multiple layers: "
+                        f"{', '.join(list(conflicts)[:5])}",
+                    )
+                )
+            else:
+                checks.append(("conflict_check", True, "No cross-layer key conflicts detected"))
+    except Exception as exc:
+        checks.append(("conflict_check", False, f"Conflict check failed: {exc}"))
+
+    # Print results
+    all_ok = all(ok for _, ok, _ in checks)
+    for name, ok, msg in checks:
+        status = "OK  " if ok else "FAIL"
+        print(f"  [{status}] {name}: {msg}")
+    if all_ok:
+        print("\nmemory doctor: all checks passed.")
+    else:
+        print("\nmemory doctor: some checks failed. Review above.")
 
 
 def _render_data(data: Any, output_format: str = "json") -> str:

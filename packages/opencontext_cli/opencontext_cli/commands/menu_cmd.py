@@ -307,7 +307,8 @@ def _run_configure_models() -> None:
             model = inquirer.select(
                 message="Default model",
                 choices=[Choice(value=m, name=m) for m in model_choices],
-                default=prefs.default_model if prefs.default_model in model_choices
+                default=prefs.default_model
+                if prefs.default_model in model_choices
                 else model_choices[0],
             ).execute()
         else:
