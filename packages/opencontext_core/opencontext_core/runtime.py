@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
@@ -893,11 +894,16 @@ class OpenContextRuntime:
 
         gateway = build_provider_gateway(model_config.provider, model_config.model)
         if gateway is None:
-            raise ConfigurationError(
-                f"No LLM gateway available for provider {model_config.provider!r}. "
-                "Use a known provider (anthropic, openai, openrouter, ollama) or "
-                "pass an explicit gateway implementation."
+            # An unknown provider (e.g. a detected google/mistral key with no
+            # adapter yet) must not crash every runtime construction. Degrade to
+            # the mock gateway with a loud warning so indexing/context still work.
+            warnings.warn(
+                f"No LLM gateway for provider {model_config.provider!r}; falling "
+                "back to the mock gateway. Configure a supported provider "
+                "(anthropic, openai, openrouter, ollama) for real generation.",
+                stacklevel=2,
             )
+            return MockLLMGateway()
         return gateway
 
     def _load_config_or_defaults(self, config_path: Path | None) -> OpenContextConfig:
