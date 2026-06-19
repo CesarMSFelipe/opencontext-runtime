@@ -54,3 +54,6 @@ Thumbs.db
 
 # External skill registry cache (generated, not project-owned)
 .atl/
+
+# Claude Code agent worktrees (transient, not project-owned)
+.claude/worktrees/
