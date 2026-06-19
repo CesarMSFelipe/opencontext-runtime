@@ -15,6 +15,10 @@ class LLMRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     prompt: str = Field(description="Final assembled prompt.")
+    system_prompt: str = Field(
+        default="",
+        description="Optional system prompt (e.g. the active persona) sent as a system message.",
+    )
     provider: str = Field(description="Configured provider key.")
     model: str = Field(description="Configured model name.")
     max_output_tokens: int = Field(gt=0, description="Maximum output tokens requested.")

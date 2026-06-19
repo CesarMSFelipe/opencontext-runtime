@@ -65,6 +65,9 @@ class HarnessState:
         self.decisions: list[HarnessDecision] = []
         self.trace_ids: list[str] = []
         self.warnings: list[str] = []
+        # Verified context pack rendered by the explore phase, fed to later phases'
+        # executor prompts so the model works from retrieved evidence.
+        self.context_pack: str = ""
         # Concrete file edits produced by the executor for ApplyPhase to write.
         # List of {"path": ..., "content": ...} dicts (or FileEdit instances).
         self.apply_edits: list[Any] = []
@@ -210,6 +213,17 @@ class HarnessRunner:
             # An injected gateway overrides a mock config so the executor runs.
             effective_provider = provider if provider != "mock" else "injected"
             return self._llm_gateway, effective_provider, model
+
+        # Prefer the host agent's selected model (MCP sampling) when available —
+        # this is the zero-config path, so it overrides even a mock provider.
+        from opencontext_core.config import SecurityMode
+
+        if cfg.security.mode is not SecurityMode.AIR_GAPPED:
+            from opencontext_core.llm.sampling_gateway import SamplingGateway, get_host_sampler
+
+            sampler = get_host_sampler()
+            if sampler is not None:
+                return SamplingGateway(sampler, model=model), "host", model
 
         if provider == "mock":
             return None, provider, model

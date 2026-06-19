@@ -22,7 +22,7 @@ class MockLLMGateway:
             content=answer,
             provider=request.provider,
             model=request.model,
-            input_tokens=estimate_tokens(request.prompt),
+            input_tokens=estimate_tokens(request.system_prompt + request.prompt),
             output_tokens=estimate_tokens(answer),
-            metadata={"mock": True},
+            metadata={"mock": True, "system_prompt": request.system_prompt},
         )

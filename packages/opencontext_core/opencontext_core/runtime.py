@@ -843,12 +843,33 @@ class OpenContextRuntime:
 
     def _gateway_from_config(self) -> LLMGateway:
         model_config = self.config.models.default
+        air_gapped = self.config.security.mode is SecurityMode.AIR_GAPPED
+        # Prefer the host agent's selected model via MCP sampling when available —
+        # zero provider config needed. Forbidden in air-gapped mode (external).
+        if not air_gapped:
+            from opencontext_core.llm.sampling_gateway import (
+                SamplingGateway,
+                get_host_sampler,
+            )
+
+            sampler = get_host_sampler()
+            if sampler is not None:
+                return SamplingGateway(sampler, model=model_config.model)
         if model_config.provider == "mock":
             return MockLLMGateway()
-        raise ConfigurationError(
-            f"No LLM gateway configured for provider {model_config.provider!r}. "
-            "Pass an explicit gateway implementation."
-        )
+        # Air-gapped mode must never reach an external provider.
+        if air_gapped:
+            raise ConfigurationError("air_gapped mode forbids external LLM providers.")
+        from opencontext_core.llm.provider_gateway import build_provider_gateway
+
+        gateway = build_provider_gateway(model_config.provider, model_config.model)
+        if gateway is None:
+            raise ConfigurationError(
+                f"No LLM gateway available for provider {model_config.provider!r}. "
+                "Use a known provider (anthropic, openai, openrouter, ollama) or "
+                "pass an explicit gateway implementation."
+            )
+        return gateway
 
     def _load_config_or_defaults(self, config_path: Path | None) -> OpenContextConfig:
         if config_path is not None:
