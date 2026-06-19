@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from opencontext_core import prompts
 from opencontext_core.dx.console_styles import console
 from opencontext_core.skills.scaffolder import scaffold_skill
 
@@ -114,15 +115,15 @@ def _handle_create(args: Any) -> None:
 
     description = args.description
     if description is None:
-        description = console.ask("Skill description")
+        description = prompts.text("Skill description")
 
     triggers = args.triggers
     if triggers is None:
-        triggers = console.ask("Comma-separated trigger phrases")
+        triggers = prompts.text("Comma-separated trigger phrases")
 
     author = args.author
     if author is None:
-        author = console.ask("Author name")
+        author = prompts.text("Author name")
 
     try:
         result = scaffold_skill(
