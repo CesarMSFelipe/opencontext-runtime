@@ -507,29 +507,15 @@ class HarnessRunner:
         return run_result
 
     def _post_run_update(self, state: HarnessState) -> None:
-        """Auto-collect memory candidates and re-index changed files after every run."""
+        """Re-index changed files after a run.
+
+        Memory harvesting is handled by ArchivePhase (MemoryHarvester); the old
+        harvest block here referenced a non-existent module and never ran.
+        """
         changed = [
             e["path"] if isinstance(e, dict) else getattr(e, "path", str(e))
             for e in (state.apply_edits or [])
         ]
-        # Memory harvest — auto-approve low-stakes candidates
-        try:
-            from opencontext_core.memory.collector import (  # type: ignore[import-not-found]
-                MemoryCandidateExtractor,
-            )
-            from opencontext_core.memory_usability.context_repository import ContextRepository
-            from opencontext_core.memory_usability.memory_gc import (
-                MemoryGarbageCollector,  # noqa: F401
-            )
-
-            repo = ContextRepository(state.root / ".storage" / "opencontext" / "memory")
-            extractor = MemoryCandidateExtractor()
-            candidates = extractor.extract_from_run(state.run_id, state.root)
-            for candidate in candidates:
-                if getattr(candidate, "auto_approve", False):
-                    repo.save(candidate)  # type: ignore[attr-defined]
-        except Exception:
-            pass
 
         # Graph re-index of changed files only
         if changed:
@@ -537,7 +523,8 @@ class HarnessRunner:
                 from opencontext_core.indexing.graph_db import GraphDatabase
                 from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 
-                db_path = state.root / ".storage" / "opencontext" / "knowledge_graph.db"
+                # Canonical KG db name — same as runtime/explore (context_graph.db).
+                db_path = state.root / ".storage" / "opencontext" / "context_graph.db"
                 if db_path.exists():
                     db = GraphDatabase(db_path)
                     kg = KnowledgeGraph(db)  # type: ignore[arg-type]
