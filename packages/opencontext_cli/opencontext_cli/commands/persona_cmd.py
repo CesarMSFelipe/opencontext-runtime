@@ -1,14 +1,16 @@
-"""Persona CLI — inspect OpenContext's selectable agent personas.
+"""Persona CLI — inspect and configure OpenContext's selectable agent personas.
 
-Three personas ship: OC Orchestrator (coordinate + verify), OC Professor (teach
-the why), OC Reviewer (rigorous review). `setup` writes them as native agent
-files for editors that support them; this command lists and shows them.
+Personas drive the SDD phases (Explorer→explore, Architect→design, Builder→apply,
+Tester→tests, Reviewer→verify/review, Orchestrator→propose/spec/tasks) and can
+each be pinned to a provider model. `setup` writes them as native agent files.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
+import yaml
 from rich.console import Console
 from rich.table import Table
 
@@ -21,18 +23,25 @@ def add_persona_parser(subparsers: Any) -> None:
     """Add the ``persona`` command parser."""
     parser = subparsers.add_parser(
         "persona",
-        help="Inspect OpenContext agent personas (orchestrator / professor / reviewer).",
+        help="Inspect and configure OpenContext agent personas.",
         description=(
-            "OpenContext ships three agent personas.\n\n"
-            "  opencontext persona list            List the personas\n"
-            "  opencontext persona show oc-reviewer Show a persona's full prompt\n\n"
+            "OpenContext personas drive the SDD phases and can each be pinned to a model.\n\n"
+            "  opencontext persona list                       List the personas\n"
+            "  opencontext persona show oc-architect          Show a persona's full prompt\n"
+            "  opencontext persona models                     Show per-persona model assignments\n"
+            "  opencontext persona set-model oc-orchestrator opus   Pin a model to a persona\n\n"
             "Personas are written as native agent files by `opencontext setup`."
         ),
     )
     sub = parser.add_subparsers(dest="persona_command", required=True)
     sub.add_parser("list", help="List available personas.")
     show = sub.add_parser("show", help="Show a persona's description and prompt.")
-    show.add_argument("id", help="Persona id (e.g. oc-orchestrator, oc-professor, oc-reviewer).")
+    show.add_argument("id", help="Persona id (e.g. oc-orchestrator, oc-architect, oc-builder).")
+    sub.add_parser("models", help="Show per-persona model assignments.")
+    setm = sub.add_parser("set-model", help="Pin a provider model to a persona.")
+    setm.add_argument("id", help="Persona id (e.g. oc-orchestrator).")
+    setm.add_argument("model", help="Model name (e.g. opus, sonnet, haiku, claude-opus-4-8).")
+    setm.add_argument("--root", default=".", help="Project root holding opencontext.yaml.")
 
 
 def handle_persona(args: Any) -> int:
@@ -57,5 +66,36 @@ def handle_persona(args: Any) -> int:
         console.print(persona.description)
         console.print()
         console.print(persona.system_prompt)
+        return 0
+
+    if args.persona_command == "models":
+        cfg_path = Path(getattr(args, "root", ".")) / "opencontext.yaml"
+        assignments: dict[str, str] = {}
+        if cfg_path.exists():
+            data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+            assignments = (data.get("sdd") or {}).get("persona_models", {}) or {}
+        table = Table(title="Per-persona model assignments")
+        table.add_column("Persona", style="cyan")
+        table.add_column("Model")
+        for persona in PERSONAS:
+            table.add_row(persona.id, assignments.get(persona.id) or "[dim]default[/]")
+        console.print(table)
+        return 0
+
+    if args.persona_command == "set-model":
+        if get_persona(args.id) is None:
+            console.print(f"[red]Unknown persona:[/] {args.id}")
+            console.print(f"  Available: {', '.join(p.id for p in PERSONAS)}")
+            return 1
+        cfg_path = Path(getattr(args, "root", ".")) / "opencontext.yaml"
+        if not cfg_path.exists():
+            console.print(f"[red]No opencontext.yaml at {cfg_path}[/] — run `opencontext install`.")
+            return 1
+        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+        sdd = data.setdefault("sdd", {})
+        persona_models = sdd.setdefault("persona_models", {})
+        persona_models[args.id] = args.model
+        cfg_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        console.print(f"[green]✓[/] {args.id} → [cyan]{args.model}[/]")
         return 0
     return 1

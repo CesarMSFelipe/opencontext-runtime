@@ -168,27 +168,44 @@ class HarnessRunner:
         only real overrides reach the executor. Best-effort: any failure yields no
         overrides, leaving every phase on the configured default model.
         """
+        phase_map: dict[str, str] = {}
         try:
             import json
 
             context = self.root / ".opencontext" / "sdd" / "context.json"
-            if not context.exists():
-                return {}
-            name = json.loads(context.read_text(encoding="utf-8")).get("sdd_model_profile")
-            if not name:
-                return {}
-            from opencontext_core.sdd_profiles import SDDProfileManager
+            name = (
+                json.loads(context.read_text(encoding="utf-8")).get("sdd_model_profile")
+                if context.exists()
+                else None
+            )
+            if name:
+                from opencontext_core.sdd_profiles import SDDProfileManager
 
-            profile = SDDProfileManager().get_profile(name)
-            if profile is None:
-                return {}
-            return {
-                phase: model
-                for phase, model in profile.model_assignments.items()
-                if model and model != "default"
-            }
+                profile = SDDProfileManager().get_profile(name)
+                if profile is not None:
+                    phase_map = {
+                        phase: model
+                        for phase, model in profile.model_assignments.items()
+                        if model and model != "default"
+                    }
         except Exception:
-            return {}
+            phase_map = {}
+
+        # Overlay per-persona model overrides (a persona override wins over the
+        # phase's profile model) — e.g. Orchestrator=opus, Explorer=sonnet.
+        try:
+            from opencontext_core.config import load_config_or_defaults
+            from opencontext_core.personas import PHASE_PERSONAS
+
+            cfg = load_config_or_defaults(self.root / "opencontext.yaml", auto_detect=False)
+            persona_models = getattr(cfg.sdd, "persona_models", {}) or {}
+            for phase, persona_id in PHASE_PERSONAS.items():
+                model = persona_models.get(persona_id)
+                if model and model != "default":
+                    phase_map[phase] = model
+        except Exception:
+            pass
+        return phase_map
 
     def _resolve_gateway(self) -> tuple[Any, str, str]:
         """Resolve (gateway, provider, model) for the work-producing executor.

@@ -892,6 +892,14 @@ class SDDConfig(BaseModel):
         },
         description="Per-phase model assignment map.",
     )
+    persona_models: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Per-persona model overrides (persona id -> model), e.g. "
+            "{'oc-orchestrator': 'opus', 'oc-explorer': 'sonnet'}. A persona override "
+            "wins over the phase's profile model. Set via `opencontext persona set-model`."
+        ),
+    )
     interactive: bool = Field(default=False, description="Pause after each phase for review.")
 
 

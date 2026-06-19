@@ -11,7 +11,15 @@ from opencontext_cli.commands import persona_cmd
 from opencontext_core.configurator.service import Configurator
 from opencontext_core.personas import PERSONAS, get_persona
 
-_EXPECTED = {"oc-orchestrator", "oc-professor", "oc-reviewer", "oc-tester"}
+_EXPECTED = {
+    "oc-orchestrator",
+    "oc-explorer",
+    "oc-architect",
+    "oc-builder",
+    "oc-professor",
+    "oc-reviewer",
+    "oc-tester",
+}
 
 
 def test_distinct_personas() -> None:
