@@ -1,14 +1,5 @@
 """Memory and token usability primitives for OpenContext Runtime."""
 
-from opencontext_core.memory_usability.code_compression import (
-    CodeCompressionDecision,
-    CodeCompressionMode,
-    CodeCompressionPolicy,
-)
-from opencontext_core.memory_usability.compression_quality import (
-    CompressionQualityGate,
-    CompressionQualityReport,
-)
 from opencontext_core.memory_usability.content_router import (
     ContentRoute,
     ContentRouter,
@@ -27,7 +18,6 @@ from opencontext_core.memory_usability.context_repository import (
     MemorySearchResult,
 )
 from opencontext_core.memory_usability.memory_candidates import MemoryCandidate, MemoryKind
-from opencontext_core.memory_usability.memory_compressor import MemoryCompressor
 from opencontext_core.memory_usability.memory_expansion import MemoryExpansionTool
 from opencontext_core.memory_usability.memory_gc import MemoryGarbageCollector
 from opencontext_core.memory_usability.novelty_gate import NoveltyDecision, NoveltyGate
@@ -50,11 +40,6 @@ from opencontext_core.memory_usability.session_recorder import (
 from opencontext_core.memory_usability.temporal_memory import TemporalFact, TemporalMemoryGraph
 
 __all__ = [
-    "CodeCompressionDecision",
-    "CodeCompressionMode",
-    "CodeCompressionPolicy",
-    "CompressionQualityGate",
-    "CompressionQualityReport",
     "ContentRoute",
     "ContentRouter",
     "ContentType",
@@ -68,7 +53,6 @@ __all__ = [
     "HarvestResult",
     "MemoryCandidate",
     "MemoryCandidateExtractor",
-    "MemoryCompressor",
     "MemoryExpansionTool",
     "MemoryGarbageCollector",
     "MemoryInjectionPlan",
