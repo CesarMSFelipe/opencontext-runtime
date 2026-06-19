@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sqlite3
 import uuid
 from collections.abc import Iterator
@@ -34,6 +35,8 @@ from opencontext_core.models.evidence import EvidenceRef
 
 if TYPE_CHECKING:
     from opencontext_core.embeddings.protocols import EmbeddingGenerator, VectorStore
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -161,7 +164,8 @@ class LocalMemoryStore:
                 vectors = loop.run_until_complete(self._embedder.embed([query]))
             finally:
                 loop.close()
-        except Exception:
+        except Exception as exc:
+            _log.debug("query embedding failed: %s", exc)
             return []
         return list(vectors[0]) if vectors else []
 
@@ -187,8 +191,8 @@ class LocalMemoryStore:
         )
         try:
             self._vector_store.store([item])
-        except Exception:
-            return
+        except Exception as exc:
+            _log.debug("vector index write failed for memory %s: %s", record.id, exc)
 
     def _get_record(self, record_id: str) -> MemoryRecord | None:
         with self._connect() as conn:
@@ -365,8 +369,8 @@ class LocalMemoryStore:
                         continue  # recently used — keep it
                     conn.execute("DELETE FROM memory_records WHERE id = ?", (row["id"],))
                     pruned += 1
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _log.warning("decay row error (id=%s): %s", row.get("id"), exc)
         return pruned
 
     def consolidate(

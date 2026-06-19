@@ -16,6 +16,7 @@ from typing import Any
 from opencontext_core.backends.factory import BackendFactory
 from opencontext_core.config import SecurityMode
 from opencontext_core.memory.agent import AgentMemoryStore, NullAgentMemoryStore
+from opencontext_core.memory.composite import CompositeMemoryStore
 from opencontext_core.memory.engram_mcp_store import EngramMemoryStore
 from opencontext_core.memory.graph import LocalMemoryStore
 
@@ -52,9 +53,11 @@ def test_provider_engram_returns_engram_store() -> None:
         store = BackendFactory.create_memory_store(
             _cfg("engram"), Path(tmpdir), engram_client=client
         )
-    assert isinstance(store, EngramMemoryStore)
+    # engram provider now returns CompositeMemoryStore (local + engram routing)
+    assert isinstance(store, CompositeMemoryStore)
     assert isinstance(store, AgentMemoryStore)
     assert not isinstance(store, (LocalMemoryStore, NullAgentMemoryStore))
+    assert isinstance(store._engram, EngramMemoryStore)
 
 
 def test_provider_local_returns_local_store() -> None:

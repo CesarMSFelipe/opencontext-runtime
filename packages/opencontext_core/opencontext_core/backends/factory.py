@@ -62,14 +62,19 @@ class BackendFactory:
     ) -> Any:
         """Resolve exactly one AgentMemoryStore from ``memory.provider``.
 
-        ``engram`` -> ``EngramMemoryStore`` over the injected ``engram_client``;
-        any other provider -> ``LocalMemoryStore``; disabled -> ``Null``.
+        ``auto``   -> couple to a co-resident Engram if one is detected, else
+        local; ``engram`` -> couple to Engram (injected client or a detected
+        co-resident install); any other provider -> ``LocalMemoryStore``;
+        disabled -> ``Null``.
 
-        Degrades gracefully (never raises): if the engram client is missing or
-        constructing it fails, falls back to ``LocalMemoryStore``. In
-        ``AIR_GAPPED`` security mode no engram/MCP call may be issued, so the
-        engram provider is force-degraded to the local store (whose methods
-        never touch the injected client).
+        Coupling means ``CompositeMemoryStore``: Engram owns EPISODIC/SEMANTIC,
+        the local store owns PROCEDURAL/FAILURE/WORKING.
+
+        Degrades gracefully (never raises): if no Engram client can be resolved
+        or constructing it fails, falls back to ``LocalMemoryStore``. In
+        ``AIR_GAPPED`` security mode no engram/MCP call may be issued, so Engram
+        coupling is force-degraded to the local store (whose methods never touch
+        an external client).
         """
         from opencontext_core.memory.agent import NullAgentMemoryStore
         from opencontext_core.memory.graph import LocalMemoryStore
@@ -81,18 +86,34 @@ class BackendFactory:
         def _local() -> Any:
             return LocalMemoryStore(storage_path / "memory.db")
 
-        provider = getattr(memory_cfg, "provider", "local")
-        if provider == "engram":
+        provider = getattr(memory_cfg, "provider", "auto")
+        if provider in ("engram", "auto"):
             if cls._is_air_gapped(config):
                 # Air-gapped: never issue an engram/MCP call — use local only.
                 return _local()
             client = cls._resolve_engram_client(engram_client)
+            project = "default"
             if client is None:
+                # No injected client — couple to a detected co-resident Engram.
+                from opencontext_core.memory.engram_bridge import (
+                    default_engram_client,
+                    engram_project,
+                )
+
+                client = default_engram_client()
+                if client is not None:
+                    project = engram_project()
+            if client is None:
+                # Engram absent -> our full multi-level local memory.
                 return _local()
             try:
+                from opencontext_core.memory.composite import CompositeMemoryStore
                 from opencontext_core.memory.engram_mcp_store import EngramMemoryStore
 
-                return EngramMemoryStore(client)
+                return CompositeMemoryStore(
+                    local=_local(),
+                    engram=EngramMemoryStore(client, project=project),
+                )
             except Exception:
                 return _local()
 
