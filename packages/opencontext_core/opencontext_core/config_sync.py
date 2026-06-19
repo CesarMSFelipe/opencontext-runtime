@@ -17,6 +17,10 @@ from typing import Any
 RUNTIME_PREF_TO_YAML: dict[str, str] = {
     "security_mode": "security.mode",
     "features.embeddings": "embedding.enabled",
+    "features.mcp_server": "tools.mcp.enabled",
+    "features.semantic_search": "cache.semantic.enabled",
+    "features.knowledge_graph": "knowledge_graph.enabled",
+    "features.call_graph": "knowledge_graph.track_call_sites",
     "default_provider": "models.default.provider",
     "default_model": "models.default.model",
 }

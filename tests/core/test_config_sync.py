@@ -33,6 +33,18 @@ def test_sync_pref_unmapped_key_is_noop(tmp_path: Path) -> None:
     assert sync_pref_to_yaml("check_updates", False, root=tmp_path) is False
 
 
+def test_runtime_feature_keys_reach_the_yaml(tmp_path: Path) -> None:
+    """Expanded bridge: runtime-affecting feature toggles now reach opencontext.yaml."""
+    _project(tmp_path)
+    assert sync_pref_to_yaml("features.mcp_server", False, root=tmp_path) is True
+    assert sync_pref_to_yaml("features.knowledge_graph", False, root=tmp_path) is True
+    assert sync_pref_to_yaml("features.semantic_search", False, root=tmp_path) is True
+    data = _loaded(tmp_path)
+    assert data["tools"]["mcp"]["enabled"] is False
+    assert data["knowledge_graph"]["enabled"] is False
+    assert data["cache"]["semantic"]["enabled"] is False
+
+
 def test_sync_pref_invalid_value_reverts(tmp_path: Path) -> None:
     _project(tmp_path)
     before = (tmp_path / "opencontext.yaml").read_text(encoding="utf-8")

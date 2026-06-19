@@ -193,6 +193,9 @@ def _bridge_to_project_yaml(key: str, value: object) -> None:
     from opencontext_core.config_sync import RUNTIME_PREF_TO_YAML, sync_pref_to_yaml
 
     if key not in RUNTIME_PREF_TO_YAML:
+        # Be honest: this key lives in user preferences and is not mirrored to the
+        # opencontext.yaml the runtime reads, so it does not change runtime behavior.
+        print("  → saved to user preferences only (does not change runtime behavior)")
         return
     if sync_pref_to_yaml(key, value):
         print(f"  → applied to opencontext.yaml ({RUNTIME_PREF_TO_YAML[key]})")
