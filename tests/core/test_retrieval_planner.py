@@ -181,3 +181,49 @@ def test_runtime_context_pack_uses_retrieval_planner(tmp_path: Path, monkeypatch
 
     assert SpyPlanner.called is True
     assert pack.included
+
+
+def test_recent_failure_memory_boosts_matching_candidate(tmp_path: Path) -> None:
+    """H2: a candidate that recent FAILURE memory flagged outranks an otherwise
+    identical candidate — the recent_failure weight is fed in prod, not always 0."""
+    from types import SimpleNamespace
+
+    from opencontext_core.models.context import ContextItem, ContextPriority, DataClassification
+    from opencontext_core.retrieval.contracts import EvidenceRequest, RetrievalSurface
+    from opencontext_core.retrieval.planner import RetrievalPlanner
+
+    def _item(item_id: str, source: str) -> ContextItem:
+        return ContextItem(
+            id=item_id,
+            content="login token check",
+            source=source,
+            source_type="file",
+            priority=ContextPriority.P2,
+            tokens=5,
+            score=0.7,
+            metadata={"freshness": "current"},
+            classification=DataClassification.INTERNAL,
+            source_trust=0.8,
+        )
+
+    class _Source:
+        name = "fixture"
+
+        def retrieve(self, query: str, limit: int) -> list[ContextItem]:
+            return [_item("a", "src/a.py"), _item("b", "src/b.py")]
+
+    class _Memory:
+        def search(self, query: str, *, scope: object = None, limit: int = 10) -> list[object]:
+            return [SimpleNamespace(linked_nodes=["src/b.py"], confidence=0.9)]
+
+    request = EvidenceRequest(
+        query="login", root=tmp_path, surface=RetrievalSurface.RUNTIME,
+        max_tokens=1000, risk_level="normal",
+    )
+
+    boosted = RetrievalPlanner([_Source()], memory_store=_Memory())
+    plain = RetrievalPlanner([_Source()])
+
+    assert [e.id for e in boosted.plan(request, top_k=2).evidence][0] == "b"
+    # Without the failure memory the tie breaks the other way (token, id order).
+    assert [e.id for e in plain.plan(request, top_k=2).evidence][0] == "a"
