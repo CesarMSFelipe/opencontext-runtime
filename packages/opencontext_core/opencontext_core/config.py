@@ -599,10 +599,14 @@ class MemoryPolicyConfig(BaseModel):
 
     enabled: bool = Field(default=True, description="Local memory layer enabled.")
     provider: str = Field(
-        default="auto",
+        default="local",
         description=(
-            "Memory backend provider: 'auto' (couple to a co-resident engram if "
-            "present, else local), 'local' (SQLite), or 'engram' (force coupling)."
+            "Memory backend provider. 'local' (default): OpenContext's own SQLite "
+            "memory — its full capability (cognitive layers, decay, reinforce, "
+            "supersede, hybrid recall). 'engram': couple to a co-resident Engram "
+            "(EPISODIC/SEMANTIC -> Engram, the rest local). 'auto': couple to Engram "
+            "if present, else local. Engram coupling is an explicit opt-in (offered "
+            "by the setup wizard when an install is detected), not a silent default."
         ),
     )
     harvest_after_run: bool = Field(
@@ -1412,7 +1416,7 @@ def default_config_data() -> dict[str, Any]:
         },
         "memory": {
             "enabled": True,
-            "provider": "auto",
+            "provider": "local",
             "harvest_after_run": True,
             "require_approval": True,
             "store_raw": False,

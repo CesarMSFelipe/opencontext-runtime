@@ -82,6 +82,7 @@ class OnboardingWizard:
         security_mode = overrides.get("security_mode") or self._choose_security_mode()
         tdd = overrides.get("tdd") or self._choose_tdd_mode()
         agents = overrides.get("agents") or self._choose_agents()
+        memory_provider = overrides.get("memory_provider") or self._choose_memory_provider()
 
         options = OnboardingOptions(
             root=self.root,
@@ -89,6 +90,7 @@ class OnboardingWizard:
             security_mode=security_mode,
             tdd_mode=tdd,
             active_clients=agents,
+            memory_provider=memory_provider,
             setup_mcp=False,
             force_agent_files=True,
         )
@@ -243,6 +245,41 @@ class OnboardingWizard:
             defaults=["opencode"],
             require_one=True,
         )
+
+    def _choose_memory_provider(self) -> str:
+        """Offer Engram coexistence only when an install is detected.
+
+        Default is OpenContext's own memory (``local``). If a co-resident Engram is
+        present, ask whether to couple with it (episodic/semantic -> Engram, the
+        rest -> OpenContext) — an explicit opt-in, never a silent default.
+        """
+        if not self._interactive:
+            return "local"
+
+        from opencontext_core.memory.engram_bridge import detect_engram
+
+        if not detect_engram():
+            return "local"  # nothing to offer — use OpenContext's own memory
+
+        console.print()
+        console.rule("[bold cyan]Memory — Engram detected[/]")
+        console.print(
+            "[dim]You already have Engram. OpenContext can keep using it for episodic "
+            "& semantic memory and layer its own engine on top, or use only its own.[/]\n"
+        )
+        choices = [
+            {
+                "value": "engram",
+                "name": "Couple with Engram  — episodic & semantic → Engram, the rest → "
+                "OpenContext (augments capabilities)",
+            },
+            {
+                "value": "local",
+                "name": "OpenContext only    — full local engine (layers, decay, "
+                "reinforce, supersede, hybrid recall)",
+            },
+        ]
+        return str(prompts.select("Memory backend", choices, default="engram"))
 
     def _run_onboarding(self, options: OnboardingOptions) -> OnboardingResult:
         service = OnboardingService()
