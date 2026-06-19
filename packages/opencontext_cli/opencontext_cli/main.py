@@ -282,9 +282,9 @@ def _check_first_run(command: str) -> None:
     fr_console.print(banner)
 
     try:
-        from rich.prompt import Confirm as RichConfirm
+        from opencontext_core import prompts
 
-        run_wizard = RichConfirm.ask("\nRun the setup wizard?", default=True)
+        run_wizard = prompts.confirm("Run the setup wizard?", default=True)
     except Exception:
         run_wizard = False
 
@@ -498,6 +498,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Output results as JSON (CI-friendly).",
+    )
+    doctor_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit non-zero if any check fails (CI gate).",
     )
     clean_parser = subparsers.add_parser("clean", help="Remove OpenContext data from project.")
     clean_parser.add_argument("root", nargs="?", default=".", help="Project root.")
@@ -1415,7 +1420,13 @@ def _dispatch(args: argparse.Namespace) -> None:
                 getattr(args, "min_token_reduction", 0.5),
             )
     elif command == "doctor":
-        _doctor(runtime, args.scope, args.suggest_ignore, getattr(args, "json", False))
+        _doctor(
+            runtime,
+            args.scope,
+            args.suggest_ignore,
+            getattr(args, "json", False),
+            strict=getattr(args, "strict", False),
+        )
     elif command == "clean":
         _clean(args.root, args.dry_run, args.force)
     elif command == "provider":
@@ -1516,7 +1527,8 @@ def _template_config(template: str) -> dict[str, Any]:
 def _install_wizard(args: Any, console: Any) -> None:
     """Interactive wizard: language → editor → API key."""
     from rich.console import Console as _Console
-    from rich.prompt import Prompt
+
+    from opencontext_core import prompts
 
     _c = _Console()
     root = Path(getattr(args, "root", "."))
@@ -1525,11 +1537,10 @@ def _install_wizard(args: Any, console: Any) -> None:
     try:
         from opencontext_core.i18n import set_language, t
 
-        lang = Prompt.ask(
+        lang = prompts.select(
             t("onboarding.language_prompt"),
-            choices=["en", "es"],
+            [("en", "English (en)"), ("es", "Español (es)")],
             default="en",
-            console=_c,
         )
         set_language(lang)
         cfg_path = root / "opencontext.yaml"
@@ -1551,20 +1562,20 @@ def _install_wizard(args: Any, console: Any) -> None:
             return k  # type: ignore[misc]
 
     _c.print()
-    _c.print("[bold]Which AI coding editor do you use?[/bold]")
     _EDITORS = [
-        ("1", "claude-code", "Claude Code (Anthropic)"),
-        ("2", "cursor", "Cursor"),
-        ("3", "opencode", "OpenCode"),
-        ("4", "windsurf", "Windsurf"),
-        ("5", "codex", "Codex CLI (OpenAI)"),
-        ("6", "vscode-copilot", "VS Code + Copilot"),
-        ("7", "other", "Other / I'll configure later"),
+        ("claude-code", "Claude Code (Anthropic)"),
+        ("cursor", "Cursor"),
+        ("opencode", "OpenCode"),
+        ("windsurf", "Windsurf"),
+        ("codex", "Codex CLI (OpenAI)"),
+        ("vscode-copilot", "VS Code + Copilot"),
+        ("other", "Other / I'll configure later"),
     ]
-    for num, _, label in _EDITORS:
-        _c.print(f"  {num}. {label}")
-    choice = Prompt.ask("Choice", choices=[n for n, _, _ in _EDITORS], default="1", console=_c)
-    chosen_editor = next((eid for n, eid, _ in _EDITORS if n == choice), None)
+    chosen_editor = prompts.select(
+        "Which AI coding editor do you use?",
+        _EDITORS,
+        default="claude-code",
+    )
     if chosen_editor and chosen_editor != "other":
         try:
             import os
@@ -1583,19 +1594,18 @@ def _install_wizard(args: Any, console: Any) -> None:
             _c.print("[bold]No LLM provider detected.[/bold]")
             _c.print("Agentic phases (loop, spec, design) need a real LLM provider.")
             _PROVIDERS = [
-                ("1", "ANTHROPIC_API_KEY", "Anthropic (Claude)"),
-                ("2", "OPENAI_API_KEY", "OpenAI (GPT-4)"),
-                ("3", "OPENROUTER_API_KEY", "OpenRouter (multi-model)"),
-                ("4", "skip", "Skip — I'll configure later"),
+                ("ANTHROPIC_API_KEY", "Anthropic (Claude)"),
+                ("OPENAI_API_KEY", "OpenAI (GPT-4)"),
+                ("OPENROUTER_API_KEY", "OpenRouter (multi-model)"),
+                ("skip", "Skip — I'll configure later"),
             ]
-            for num, _, label in _PROVIDERS:
-                _c.print(f"  {num}. {label}")
-            pchoice = Prompt.ask(
-                "Provider", choices=[n for n, _, _ in _PROVIDERS], default="4", console=_c
+            pkey = prompts.select(
+                "Provider",
+                _PROVIDERS,
+                default="skip",
             )
-            pkey = next((env for n, env, _ in _PROVIDERS if n == pchoice), "skip")
             if pkey != "skip":
-                api_key = Prompt.ask(f"Paste your {pkey}", password=True, console=_c)
+                api_key = prompts.secret(f"Paste your {pkey}")
                 if api_key.strip():
                     import os
 
@@ -1649,9 +1659,9 @@ def _print_agent_instructions(agents: list, console: Any) -> None:
 
 def _install(args: argparse.Namespace) -> None:
     """Quick project setup wizard with auto-detection and step-by-step progress."""
-    from rich.prompt import Confirm
     from rich.status import Status
 
+    from opencontext_core import prompts
     from opencontext_core.dx.console_styles import console
 
     try:
@@ -1672,7 +1682,7 @@ def _install(args: argparse.Namespace) -> None:
 
     if already_setup and not args.yes:
         console.print("[dim]OpenContext already configured for this project.[/]")
-        proceed = Confirm.ask("Re-run setup?", default=False)
+        proceed = prompts.confirm("Re-run setup?", default=False)
         if not proceed:
             console.print("[green]Nothing to do. Your project is ready.[/]")
             console.print("  Run [cyan]opencontext pack . --query 'Explain this'[/] to start.")
@@ -1713,7 +1723,7 @@ def _install(args: argparse.Namespace) -> None:
         _install_wizard(args, console)
 
     if not args.yes:
-        proceed = Confirm.ask("Proceed with setup?", default=not already_setup)
+        proceed = prompts.confirm("Proceed with setup?", default=not already_setup)
         if not proceed:
             console.print("[yellow]Setup cancelled.[/]")
             return
@@ -2181,7 +2191,9 @@ def _instructions(action: str) -> None:
 def _clarify(idea: str, output: str | None) -> None:
     """Convert a vague idea into a structured SDD brief."""
     if not idea:
-        idea = input("Describe your idea or feature: ").strip()
+        from opencontext_core import prompts
+
+        idea = prompts.text("Describe your idea or feature").strip()
     if not idea:
         print("No idea provided.")
         return
@@ -2373,6 +2385,7 @@ def _doctor(
     scope: str,
     suggest_ignore: bool = False,
     json_output: bool = False,
+    strict: bool = False,
 ) -> None:
     from opencontext_core.dx.console_styles import console
 
@@ -2505,6 +2518,8 @@ def _doctor(
     else:
         console.print("")
         console.warning(f"{failed} check(s) failed. Review above.")
+        if strict:
+            sys.exit(1)
 
 
 def _clean(root: str, dry_run: bool, force: bool) -> None:
@@ -2539,12 +2554,9 @@ def _clean(root: str, dry_run: bool, force: bool) -> None:
 
     # confirm (unless --force)
     if not force:
-        try:
-            response = input("\nRemove all OpenContext data? [y/N]: ")
-        except (EOFError, KeyboardInterrupt):
-            print("\nAborted.")
-            return
-        if response.lower() not in ("y", "yes"):
+        from opencontext_core import prompts
+
+        if not prompts.confirm("Remove all OpenContext data?", default=False):
             print("Aborted.")
             return
 
@@ -3332,6 +3344,11 @@ def _preset(command: str, name: str | None, root: str = ".", dry_run: bool = Fal
         for preset in presets:
             table.add_row(preset.name, preset.description, preset.strategy)
         dx_console.print(table)
+        dx_console.print(
+            "[dim]These tune an existing config. Project scaffolding presets "
+            "(context-first, full, enterprise, …) live under "
+            "`opencontext setup --preset`.[/dim]"
+        )
         return
 
     if command == "apply":
@@ -3339,7 +3356,12 @@ def _preset(command: str, name: str | None, root: str = ".", dry_run: bool = Fal
             raise OpenContextError("preset name is required")
         resolved_preset = load_preset(name, root=root)
         if resolved_preset is None:
-            raise OpenContextError(f"Preset not found: {name}")
+            available = ", ".join(p.name for p in find_presets(root)) or "(none)"
+            raise OpenContextError(
+                f"Preset not found: {name}. Available: {available}. "
+                "(Setup presets like 'context-first' are separate — "
+                "see `opencontext setup --help`.)"
+            )
         assert not isinstance(resolved_preset, str)
 
         config_path = Path(root) / "opencontext.yaml"
@@ -3907,8 +3929,18 @@ def _memory(args: argparse.Namespace) -> None:
     if command in ("collect", "harvest"):
         trace_id = args.from_trace
         if trace_id == "last":
+            from opencontext_core.errors import MemoryStoreError
+
             runtime = _runtime(args.config)
-            trace = runtime.latest_trace()
+            try:
+                trace = runtime.latest_trace()
+            except MemoryStoreError:
+                # Empty state, not a failure: no agentic runs have produced traces.
+                print(
+                    "No traces to harvest yet. Run an agentic flow first "
+                    '(e.g. `opencontext loop -t "..."`), then harvest.'
+                )
+                return
         else:
             # NOTE: single trace store — trace_id maps directly to a file path.
             # Add source routing when traces span multiple stores.
