@@ -63,6 +63,9 @@ def test_execute_plan_leaves_agents_sdd_and_index_ready(tmp_path: Path, monkeypa
     assert prefs["agent_integrations"]["opencode"] is True
     assert prefs["agent_integrations"]["cursor"] is True
     assert (project / ".opencontext" / "sdd" / "context.json").exists()
-    assert (project / "AGENTS.md").exists()
-    assert (project / ".cursor" / "rules" / "opencontext.mdc").exists()
+    # Both opencode and cursor configure via the modern AGENTS.md, written through
+    # the Configurator with a real managed OpenContext block (not an empty stub).
+    agents_md = project / "AGENTS.md"
+    assert agents_md.exists()
+    assert "<!-- opencontext:instructions:start -->" in agents_md.read_text(encoding="utf-8")
     assert FakeAgentInstaller.calls

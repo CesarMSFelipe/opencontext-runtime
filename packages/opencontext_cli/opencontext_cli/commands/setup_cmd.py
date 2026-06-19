@@ -11,7 +11,7 @@ from rich.table import Table
 from rich.text import Text
 
 from opencontext_core import prompts
-from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
+from opencontext_core.adapters.agent_manifest import AgentTarget
 from opencontext_core.agent_installer import AgentInstaller
 from opencontext_core.agent_installer import AgentTarget as GlobalAgentTarget
 from opencontext_core.configurator import KNOWN_AGENTS, Configurator
@@ -824,14 +824,21 @@ def _execute_plan(
     generated_files: list[Any] = []
     agent_warnings: list[str] = []
     with console.status("[cyan]Configuring agent integrations...[/]", spinner="dots"):
-        generator = AgentIntegrationGenerator()
-        for selected_agent in agents:
-            try:
-                generated_files.extend(
-                    generator.generate(root_path, target=AgentTarget(selected_agent), force=True)
-                )
-            except ValueError:
-                agent_warnings.append(f"Unknown project-local agent target: {selected_agent}")
+        from opencontext_core.adapters.agent_manifest import _base_rules, _orchestrator_section
+
+        def _instructions(client: str) -> str:
+            return _base_rules() + _orchestrator_section(client)
+
+        known_agents = [a for a in agents if a in KNOWN_AGENTS]
+        agent_warnings.extend(
+            f"Unknown project-local agent target: {a}" for a in agents if a not in KNOWN_AGENTS
+        )
+        if known_agents:
+            report = Configurator(root_path, instructions_builder=_instructions).configure(
+                known_agents, scope="local"
+            )
+            for entry in report.get("results", []):
+                generated_files.extend(entry.get("files", []))
 
         if "mcp-server" in plan.components or "knowledge-graph" in plan.components:
             global_targets = []
