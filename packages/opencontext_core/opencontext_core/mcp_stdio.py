@@ -84,6 +84,23 @@ def _join_lines(lines: list[str], trailing_newline: bool) -> str:
     return text
 
 
+def _to_tool_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Wrap a tool's domain dict in the MCP ``tools/call`` content envelope.
+
+    Spec-strict hosts (Claude Code, VS Code) require a ``content`` array; a raw
+    domain dict placed directly in the JSON-RPC ``result`` reads as an empty tool
+    response. The structured payload is preserved under ``structuredContent`` for
+    clients that consume it, and a handler ``error`` maps to ``isError``.
+    """
+
+    is_error = "error" in result
+    return {
+        "content": [{"type": "text", "text": json.dumps(result, indent=2)}],
+        "isError": is_error,
+        "structuredContent": result,
+    }
+
+
 class MCPServer:
     """MCP server implementing stdio transport.
 
@@ -227,8 +244,6 @@ class MCPServer:
     def run(self) -> None:
         """Run the MCP server, reading from stdin and writing to stdout."""
 
-        self._send_notification("server/initialized", {"tools": list(self.tools.keys())})
-
         while True:
             message = self._read_message()
             if message is None:  # EOF
@@ -259,6 +274,15 @@ class MCPServer:
         request_id = request.get("id")
         method = request.get("method", "")
         params = request.get("params", {})
+
+        # Notifications (e.g. notifications/initialized) carry no id and MUST NOT
+        # be answered — replying to one violates JSON-RPC.
+        if method.startswith("notifications/"):
+            return
+
+        if method == "ping":
+            self._send_response(request_id, {})
+            return
 
         if method == "initialize":
             server_caps: dict[str, Any] = {"tools": {}}
@@ -302,7 +326,7 @@ class MCPServer:
             tool_name = params.get("name", "")
             tool_params = params.get("arguments", {})
             result = self._call_tool(tool_name, tool_params)
-            self._send_response(request_id, result)
+            self._send_response(request_id, _to_tool_result(result))
             return
 
         self._send_error(request_id, -32601, f"Method not found: {method}")
@@ -889,12 +913,6 @@ class MCPServer:
             "error": {"code": code, "message": message},
         }
         self._write_json(response)
-
-    def _send_notification(self, method: str, params: dict[str, Any]) -> None:
-        """Send a JSON-RPC notification."""
-
-        notification = {"jsonrpc": "2.0", "method": method, "params": params}
-        self._write_json(notification)
 
     def _send_request(self, request_id: Any, method: str, params: dict[str, Any]) -> None:
         """Send a server->client JSON-RPC request (e.g. sampling/createMessage)."""
