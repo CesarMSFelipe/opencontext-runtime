@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from opencontext_core.project.profiles import (
     TechnologyProfile,
     scanners_for_profiles,
 )
+
+_log = logging.getLogger(__name__)
 
 
 class ProjectIndexer:
@@ -79,25 +82,33 @@ class ProjectIndexer:
                     batch_count += 1
                     if batch_count % batch_size == 0:
                         _save_checkpoint(checkpoint_path, done_paths)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    # A broken parser must not silently shrink the graph — count and
+                    # log it so a systematically-failing file is visible, not hidden.
+                    kg_stats["files_failed"] = kg_stats.get("files_failed", 0) + 1
+                    _log.warning("indexing failed for %s: %s", scanned_file.relative_path, exc)
             _save_checkpoint(checkpoint_path, done_paths)
+            if kg_stats.get("files_failed"):
+                _log.warning(
+                    "indexing: %d file(s) failed to index — graph may be incomplete",
+                    kg_stats["files_failed"],
+                )
             # Single FTS5 rebuild after all files are indexed (was per-file — huge speedup)
             try:
                 self.knowledge_graph.db.rebuild_fts()
-            except Exception:
-                pass
+            except Exception as exc:
+                _log.warning("FTS rebuild failed: %s", exc)
             if indexed_files:
                 try:
                     cross = self.knowledge_graph.finalize_cross_file_edges(indexed_files)
                     kg_stats["edges"] += cross
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _log.warning("cross-file edge finalization failed: %s", exc)
             # Clear checkpoint after successful full index
             try:
                 checkpoint_path.unlink(missing_ok=True)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log.debug("checkpoint cleanup failed: %s", exc)
 
         # Run route scanners for detected profiles
         detected_profile_names = [
