@@ -165,6 +165,15 @@ class TestApplyCodegen:
         assert edits == [{"path": "a.py", "content": "x = 1\n"}]  # bad item dropped
         assert parse_file_edits("no json here") == []
 
+    def test_parse_file_edits_repairs_triple_quoted_content(self) -> None:
+        """Real-use regression: small models emit Python triple-quoted content
+        inside the JSON array, which strict json.loads rejects."""
+        from opencontext_core.agents.executor import parse_file_edits
+
+        body = "def multiply(a, b):\n    return a * b\n"
+        text = '[{"path": "src/calc.py", "content": """' + body + '"""}]'
+        assert parse_file_edits(text) == [{"path": "src/calc.py", "content": body}]
+
     def test_apply_writes_edits_generated_by_the_model(self, tmp_path: Path) -> None:
         """C4: a real executor now produces file edits so apply writes source."""
         (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
