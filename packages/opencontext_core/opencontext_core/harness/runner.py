@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from pathlib import Path
 from typing import Any, ClassVar
@@ -49,6 +50,8 @@ from opencontext_core.harness.phases import (
     VerifyPhase,
 )
 from opencontext_core.models.trace import RunEvent
+
+_log = logging.getLogger(__name__)
 
 
 class HarnessState:
@@ -533,18 +536,21 @@ class HarnessRunner:
             e["path"] if isinstance(e, dict) else getattr(e, "path", str(e))
             for e in (state.apply_edits or [])
         ]
+        # The model often writes through the host agent (no apply_edits recorded),
+        # so fall back to the working tree's actual changes — the KG must reflect
+        # what the task touched, whoever wrote it.
+        if not changed:
+            changed = self._git_changed_files(state.root)
 
         # Graph re-index of changed files only
         if changed:
             try:
-                from opencontext_core.indexing.graph_db import GraphDatabase
                 from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 
                 # Canonical KG db name — same as runtime/explore (context_graph.db).
                 db_path = state.root / ".storage" / "opencontext" / "context_graph.db"
                 if db_path.exists():
-                    db = GraphDatabase(db_path)
-                    kg = KnowledgeGraph(db)  # type: ignore[arg-type]
+                    kg = KnowledgeGraph(db_path=db_path)
                     for path in changed:
                         full = state.root / path
                         if full.exists() and full.suffix == ".py":
@@ -552,11 +558,40 @@ class HarnessRunner:
                                 kg.index_file(
                                     path, full.read_text(encoding="utf-8", errors="ignore")
                                 )
-                            except Exception:
-                                pass
-                    db.close()
+                            except Exception as exc:
+                                _log.warning("post-run re-index failed for %s: %s", path, exc)
+                    try:
+                        kg.db.rebuild_fts()  # so search reflects the re-indexed symbols
+                    except Exception as exc:
+                        _log.warning("post-run FTS rebuild failed: %s", exc)
+                    kg.close()
             except Exception:
                 pass
+
+    @staticmethod
+    def _git_changed_files(root: Path) -> list[str]:
+        """Working-tree changes (modified + untracked), relative paths. Best-effort."""
+        import subprocess
+
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except Exception:
+            return []
+        if out.returncode != 0:
+            return []
+        paths: list[str] = []
+        for line in out.stdout.splitlines():
+            entry = line[3:].strip()  # strip the "XY " status prefix
+            if " -> " in entry:  # rename: keep the new path
+                entry = entry.split(" -> ", 1)[1]
+            if entry:
+                paths.append(entry)
+        return paths
 
     @staticmethod
     def _inputs_summary(state: HarnessState) -> str:
