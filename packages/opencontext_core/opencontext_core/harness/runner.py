@@ -18,10 +18,15 @@ from opencontext_core.harness.gates import (
     ApprovalRequiredForWritesGate,
     ConfidenceGate,
     FailingTestExistsGate,
+    IncludedSourcesPresentGate,
     NoHighRiskExportsGate,
+    NoSecretLeakageGate,
+    OmissionsRecordedGate,
     PrivacyGate,
     ProviderPolicyPassedGate,
+    ReviewArtifactCreatedGate,
     SecurityScanPassedGate,
+    TraceIdCreatedGate,
 )
 from opencontext_core.harness.models import (
     BudgetMode,
@@ -83,6 +88,12 @@ class HarnessState:
         # Per-phase model override resolved by HarnessRunner before each phase.
         # None means "use the configured default".
         self.current_phase_model: Any = None
+        # Context provenance recorded by ExplorePhase, consumed by the propose
+        # phase's provenance gates (included_sources_present / omissions_recorded).
+        self.context_sources: set[str] = set()
+        self.context_required_sources: list[str] = []
+        self.context_omitted: int = 0
+        self.context_omissions_recorded: int = 0
 
 
 class HarnessRunner:
@@ -781,8 +792,38 @@ class HarnessRunner:
             return ProviderPolicyPassedGate().evaluate(
                 provider=provider, is_external=is_external, items_count=items_count
             )
+        if gate_id == "no_secret_leakage":
+            return NoSecretLeakageGate().evaluate(self._artifact_text(result))
+        if gate_id == "trace_id_created":
+            return TraceIdCreatedGate().evaluate(state.trace_ids[-1] if state.trace_ids else None)
+        if gate_id == "included_sources_present":
+            return IncludedSourcesPresentGate().evaluate(
+                getattr(state, "context_required_sources", []),
+                getattr(state, "context_sources", set()),
+            )
+        if gate_id == "omissions_recorded":
+            return OmissionsRecordedGate().evaluate(
+                getattr(state, "context_omitted", 0),
+                getattr(state, "context_omissions_recorded", 0),
+            )
+        if gate_id == "review_artifact_created":
+            run_dir = state.root / self.config.artifact_root / state.run_id
+            return ReviewArtifactCreatedGate().evaluate(run_dir)
         # Unknown / unbound declared gate: do not fabricate a result.
         return None
+
+    @staticmethod
+    def _artifact_text(result: PhaseResult) -> str:
+        """Concatenate this phase's artifact file contents for secret scanning."""
+        chunks: list[str] = []
+        for artifact in result.artifacts:
+            path = Path(artifact.path)
+            try:
+                if path.exists() and path.is_file() and path.stat().st_size < 200_000:
+                    chunks.append(path.read_text(encoding="utf-8", errors="ignore"))
+            except Exception:
+                continue
+        return "\n".join(chunks)
 
     @staticmethod
     def _scan_phase_artifacts(state: HarnessState, result: PhaseResult) -> list[str]:

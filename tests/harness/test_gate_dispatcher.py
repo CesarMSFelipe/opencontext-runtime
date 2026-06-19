@@ -58,3 +58,17 @@ def test_declared_no_high_risk_exports_gate_runs(tmp_path: Path) -> None:
     for gid in ("no_high_risk_exports", "provider_policy_passed"):
         g = next(g for g in result.gates if g.id == gid)
         assert g.status == GateStatus.PASSED
+
+
+def test_previously_unbound_provenance_gates_now_dispatch(tmp_path: Path) -> None:
+    """H5: declared gates that had no binding were silently dropped. Bind them."""
+    (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+    cfg = HarnessConfig()
+    cfg.phases["propose"] = PhaseConfig(
+        budget_tokens=6000,
+        gates=["trace_id_created", "included_sources_present", "omissions_recorded"],
+    )
+    runner = HarnessRunner(root=tmp_path, config=cfg)
+    result = runner.run("sdd", "provenance task", BudgetMode.OFF)
+    gate_ids = {g.id for g in result.gates}
+    assert {"trace_id_created", "included_sources_present", "omissions_recorded"} <= gate_ids

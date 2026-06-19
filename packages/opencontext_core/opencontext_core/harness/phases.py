@@ -186,6 +186,12 @@ class ExplorePhase(HarnessPhase):
         except Exception:
             pass  # contract building is additive, never block explore
 
+        # Record context provenance for the propose phase's provenance gates.
+        state.context_sources = {item.source for item in pack.included}
+        state.context_required_sources = list(dict.fromkeys(impact_affected_files))
+        state.context_omitted = len(pack.omitted)
+        state.context_omissions_recorded = len(pack.omissions)
+
         return PhaseResult(
             phase="explore",
             status=status,
