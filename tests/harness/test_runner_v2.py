@@ -32,5 +32,7 @@ class TestHarnessRunnerV2:
         result = runner.run("explore-only", "test task for runner v2")
         from opencontext_core.harness.models import GateStatus
 
-        assert result.status in (GateStatus.PASSED, GateStatus.WARNING, GateStatus.FAILED)
+        # A valid project + explore-only must not FAIL, and must produce artifacts.
+        assert result.status is not GateStatus.FAILED
+        assert result.artifacts
         assert result.run_id.startswith("explore-only-")

@@ -21,29 +21,15 @@ def _make_runtime(tmp_path: Path) -> OpenContextRuntime:
 
 
 class TestRuntimeV2Init:
-    def test_initializes_with_v2_enabled_attribute(self, tmp_path: Path) -> None:
+    def test_build_contract_classifies_a_bug_task(self, tmp_path: Path) -> None:
+        """The contract pins the actual classification, not just 'returns something'."""
         runtime = _make_runtime(tmp_path)
-        assert hasattr(runtime, "_v2_enabled")
-
-    def test_build_contract_returns_contract_or_none(self, tmp_path: Path) -> None:
-        """build_contract never raises — returns ContextContract or None."""
-        runtime = _make_runtime(tmp_path)
-        result = runtime.build_contract("fix auth bug")
-        # Either None (v2 not available) or a contract object
-        if result is not None:
-            assert hasattr(result, "task_type") or hasattr(result, "risk_level")
-        # Both None and a contract are acceptable
-        assert result is None or result is not None
-
-    def test_build_contract_has_task_type_and_risk_tier(self, tmp_path: Path) -> None:
-        """If v2 is enabled, the contract has task_type and risk_tier fields."""
-        runtime = _make_runtime(tmp_path)
-        if not getattr(runtime, "_v2_enabled", False):
+        if not runtime._v2_enabled:
             pytest.skip("v2 planning not available in this environment")
-        result = runtime.build_contract("fix auth bug")
-        if result is not None:
-            assert hasattr(result, "task_type")
-            assert hasattr(result, "risk_level")
+        contract = runtime.build_contract("fix the auth login bug")
+        assert contract is not None
+        assert contract.task_type == "bugfix"  # the classifier's real output
+        assert contract.risk_level in {"low", "medium", "high"}
 
     def test_build_context_pack_still_works(self, tmp_path: Path) -> None:
         """Existing build_context_pack must not regress."""
