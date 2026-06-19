@@ -180,6 +180,25 @@ class HarnessRunner:
             # planned/executor-absent reporting.
             return None
 
+    def _generate_apply_edits(self, state: HarnessState) -> list[Any]:
+        """Produce concrete file edits for the apply phase via the live gateway.
+
+        Returns ``[]`` (apply stays planned) when no real model resolves or the
+        model returns nothing parseable. Never raises — codegen failure degrades
+        to planned, it does not break the run.
+        """
+        try:
+            from opencontext_core.agents.executor import generate_apply_edits
+
+            gateway, provider, model = self._resolve_gateway()
+            if gateway is None or provider == "mock":
+                return []
+            context = {"task": state.task, "context": state.context_pack}
+            return list(generate_apply_edits(gateway, context, provider=provider, model=model))
+        except Exception as exc:
+            state.warnings.append(f"apply: codegen failed, planned only: {exc}")
+            return []
+
     def _phase_model_map(self) -> dict[str, str]:
         """Per-phase model overrides from the active SDD profile (empty if none).
 
@@ -470,6 +489,13 @@ class HarnessRunner:
                     hard_failed = True
                     # Do NOT build/run ApplyPhase — no filesystem mutation occurs.
                     continue
+
+            # Apply codegen: when a real executor is wired (host model / provider)
+            # and no edits were supplied by a caller, ask the model to produce the
+            # concrete file edits so ApplyPhase writes real source instead of a
+            # scaffold. forbidden_paths + rollback in ApplyPhase guard the write.
+            if phase_id == "apply" and not state.apply_edits and state.delegate is not None:
+                state.apply_edits = self._generate_apply_edits(state)
 
             phase_obj = self._build_phase(phase_id, budget_mode)
             if phase_obj is None:

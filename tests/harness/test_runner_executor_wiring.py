@@ -138,6 +138,64 @@ class TestRunnerNoExecutorWhenMock:
         assert getattr(state, "delegate", None) is None
 
 
+class _EditGateway:
+    """A real gateway that returns a JSON file-edit array (apply codegen)."""
+
+    def __init__(self, edits_json: str) -> None:
+        self._json = edits_json
+        self.calls: list[str] = []
+
+    def generate(self, request: LLMRequest) -> LLMResponse:
+        self.calls.append(request.prompt)
+        return LLMResponse(
+            content=self._json, provider=request.provider, model=request.model,
+            input_tokens=1, output_tokens=1,
+        )
+
+
+class TestApplyCodegen:
+    def test_parse_file_edits_tolerates_fences_and_prose(self) -> None:
+        from opencontext_core.agents.executor import parse_file_edits
+
+        text = (
+            "Here are the edits:\n```json\n"
+            '[{"path": "a.py", "content": "x = 1\\n"}, {"bad": 1}]\n```\n'
+        )
+        edits = parse_file_edits(text)
+        assert edits == [{"path": "a.py", "content": "x = 1\n"}]  # bad item dropped
+        assert parse_file_edits("no json here") == []
+
+    def test_apply_writes_edits_generated_by_the_model(self, tmp_path: Path) -> None:
+        """C4: a real executor now produces file edits so apply writes source."""
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        edits = json.dumps([{"path": "src/new.py", "content": "x = 1\n"}])
+        runner = HarnessRunner(root=tmp_path, llm_gateway=_EditGateway(edits))
+
+        result = runner.run("sdd", "add a module", BudgetMode.OFF)
+
+        assert (tmp_path / "src" / "new.py").read_text(encoding="utf-8") == "x = 1\n"
+        manifest = json.loads(
+            (tmp_path / ".opencontext" / "runs" / result.run_id / "apply-manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert manifest["status"] == "applied"
+        assert any(c["path"].endswith("new.py") for c in manifest["changes"])
+
+    def test_apply_stays_planned_when_model_returns_no_edits(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        runner = HarnessRunner(root=tmp_path, llm_gateway=_EditGateway("no edits here"))
+
+        result = runner.run("sdd", "add a module", BudgetMode.OFF)
+
+        manifest = json.loads(
+            (tmp_path / ".opencontext" / "runs" / result.run_id / "apply-manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert manifest["status"] == "planned"
+
+
 class TestRunnerFullRunWithExecutor:
     def test_full_run_records_real_executor_for_planning_phases(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")

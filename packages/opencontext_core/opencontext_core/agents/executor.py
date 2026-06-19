@@ -80,6 +80,67 @@ def _phase_handler(gateway: LLMGateway, phase: str, provider: str, model: str) -
     return _handler
 
 
+_APPLY_INSTRUCTION = (
+    "Implement the task below as concrete file edits. Output ONLY a JSON array — "
+    'each element an object with "path" (repository-relative) and "content" (the '
+    "FULL intended file contents after the edit, i.e. whole-file replacement or "
+    "create). No prose, no Markdown fences, nothing outside the array."
+)
+
+
+def parse_file_edits(text: str) -> list[dict[str, str]]:
+    """Parse a model response into ``[{"path", "content"}, ...]`` edits.
+
+    Tolerant of surrounding prose / code fences: it scans for the outermost JSON
+    array. Any element missing a string ``path``/``content`` is dropped. Returns
+    ``[]`` when nothing parseable is found, so a malformed response yields no
+    edits (ApplyPhase then reports planned, never a bad write).
+    """
+    import json
+
+    start = text.find("[")
+    end = text.rfind("]")
+    if start == -1 or end <= start:
+        return []
+    try:
+        data = json.loads(text[start : end + 1])
+    except json.JSONDecodeError:
+        return []
+    edits: list[dict[str, str]] = []
+    for item in data if isinstance(data, list) else []:
+        path = item.get("path") if isinstance(item, dict) else None
+        content = item.get("content") if isinstance(item, dict) else None
+        if isinstance(path, str) and path and isinstance(content, str):
+            edits.append({"path": path, "content": content})
+    return edits
+
+
+def generate_apply_edits(
+    gateway: LLMGateway, context: dict[str, Any], *, provider: str, model: str
+) -> list[dict[str, str]]:
+    """Ask the model to produce concrete file edits for the apply phase.
+
+    Returns ``[{"path","content"}]`` dicts for ApplyPhase to write (it enforces
+    forbidden_paths and rolls back on error). The builder persona drives it.
+    """
+    from opencontext_core.personas import persona_for_phase
+
+    persona = persona_for_phase("apply")
+    parts = [_APPLY_INSTRUCTION, f"\nTask: {context.get('task', '')}"]
+    pack = (context.get("context") or "").strip()
+    if pack:
+        parts.append(f"\n## Verified context\n{pack}")
+    request = LLMRequest(
+        prompt="\n".join(parts),
+        system_prompt=persona.system_prompt if persona else "",
+        provider=provider,
+        model=model,
+        max_output_tokens=6000,
+        metadata={"role": "generate", "phase": "apply", "persona": persona.id if persona else ""},
+    )
+    return parse_file_edits(gateway.generate(request).content)
+
+
 def build_phase_executor(
     gateway: LLMGateway | None,
     *,
