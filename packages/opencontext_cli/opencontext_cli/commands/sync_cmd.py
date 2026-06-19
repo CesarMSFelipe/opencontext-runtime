@@ -62,6 +62,14 @@ def add_sync_parser(subparsers: Any) -> None:
     config_parser.add_argument("--agent", default="opencode")
     config_parser.add_argument("--dry-run", action="store_true")
 
+    # Component-name subcommands so the natural `sync all` / `sync mcp` work,
+    # not just `sync --component <x>`. Each pins its component via set_defaults.
+    for comp in ("all", "knowledge-graph", "mcp", "plugins"):
+        comp_parser = sync_sub.add_parser(comp, help=f"Sync the {comp} component.")
+        comp_parser.add_argument("--agent", default="opencode")
+        comp_parser.add_argument("--dry-run", action="store_true")
+        comp_parser.set_defaults(component=comp)
+
     # Keep flat flags on sync itself for backward compat
     sync_parser.add_argument(
         "--component",

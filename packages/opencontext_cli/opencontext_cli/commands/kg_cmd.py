@@ -518,7 +518,10 @@ setTimeout(zoomFit, 80);
 </script>
 </body>
 </html>"""
-                html_path = os.path.join(os.getcwd(), "opencontext-kg-view.html")
+                # Write into the managed (gitignored) workspace dir, not the repo root.
+                html_dir = os.path.join(os.getcwd(), ".opencontext")
+                os.makedirs(html_dir, exist_ok=True)
+                html_path = os.path.join(html_dir, "kg-view.html")
                 with open(html_path, "w") as f:
                     f.write(html)
                 console.print()
