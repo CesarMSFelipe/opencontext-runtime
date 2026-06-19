@@ -10,6 +10,7 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from opencontext_core.compat import UTC
+from opencontext_core.context.budgeting import estimate_tokens
 from opencontext_core.models.context import ContextItem
 from opencontext_core.models.project import DependencyGraph, FileKind, ProjectFile, ProjectManifest
 from opencontext_core.retrieval.retriever import ProjectRetriever
@@ -67,7 +68,7 @@ class ManifestFallbackSource:
                     path=relative_path,
                     language="python",
                     file_type=FileKind.CODE,
-                    tokens=max(1, len(content.split())),
+                    tokens=estimate_tokens(content),
                     size_bytes=path.stat().st_size,
                     summary=content.splitlines()[0] if content.splitlines() else relative_path,
                 )

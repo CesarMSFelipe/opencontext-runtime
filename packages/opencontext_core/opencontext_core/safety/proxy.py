@@ -17,6 +17,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
+from opencontext_core.context.budgeting import estimate_tokens
+
 logger = logging.getLogger(__name__)
 
 
@@ -256,11 +258,6 @@ def _scan_prompt_injection_simple(text: str) -> list[dict[str, Any]]:
 # ── Context Firewall ────────────────────────────────────────────────────────
 
 
-def _estimate_tokens(text: str) -> int:
-    """Rough token estimate: ~4 chars per token."""
-    return len(text) // 4
-
-
 def _generate_trace_id() -> str:
     """Generate a short trace/request ID."""
     import uuid
@@ -293,7 +290,7 @@ class ContextFirewall:
         start = time.monotonic()
         trace_id = _generate_trace_id()
         all_findings: list[dict[str, Any]] = []
-        ctx_tokens = _estimate_tokens(text)
+        ctx_tokens = estimate_tokens(text)
 
         # 1. Provider check
         provider_ok = self._check_provider(provider)

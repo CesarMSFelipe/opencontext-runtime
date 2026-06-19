@@ -18,7 +18,7 @@ from opencontext_core.config import (
     load_config,
 )
 from opencontext_core.context.assembler import PromptAssembler
-from opencontext_core.context.budgeting import TokenBudgetManager
+from opencontext_core.context.budgeting import TokenBudgetManager, estimate_tokens
 from opencontext_core.context.compiler import ContextCompiler, evidence_to_context_item
 from opencontext_core.context.compression import CompressionEngine
 from opencontext_core.embeddings.extractors import items_from_manifest
@@ -699,7 +699,7 @@ class OpenContextRuntime:
                         confidence=rec.confidence,
                         freshness=FreshnessStatus.CURRENT,
                         surface=RetrievalSurface.RUNTIME,
-                        tokens=max(1, len(rec.content) // 4),
+                        tokens=estimate_tokens(rec.content),
                         protected=False,
                         classification=DataClassification.INTERNAL,
                     )

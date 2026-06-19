@@ -11,17 +11,12 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# ── Token estimation ─────────────────────────────────────────────────────────
-
-
-def _estimate_tokens(text: str) -> int:
-    """Rough token estimate: ~4 chars per token (conservative for code)."""
-    return max(1, len(text) // 4)
+from opencontext_core.context.budgeting import estimate_tokens
 
 
 def _file_tokens(path: Path) -> int:
     try:
-        return _estimate_tokens(path.read_text(encoding="utf-8", errors="ignore"))
+        return estimate_tokens(path.read_text(encoding="utf-8", errors="ignore"))
     except OSError:
         return 0
 

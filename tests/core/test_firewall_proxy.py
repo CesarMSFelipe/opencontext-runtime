@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from opencontext_core.context.budgeting import estimate_tokens as _estimate_tokens
 from opencontext_core.safety.proxy import (
     AuditEntry,
     ContextFirewall,
     ProxyAction,
     ProxyPolicy,
     SimpleProxyServer,
-    _estimate_tokens,
     _generate_trace_id,
     _scan_pii_simple,
     _scan_prompt_injection_simple,
@@ -198,7 +198,7 @@ class TestHelpers:
     """Helper function tests."""
 
     def test_estimate_tokens(self) -> None:
-        assert _estimate_tokens("hello world") == 2  # 11/4 = 2
+        assert _estimate_tokens("hello world") == 3  # ceil(11/4) = 3
         assert _estimate_tokens("x" * 100) == 25
 
     def test_trace_id(self) -> None:
