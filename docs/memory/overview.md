@@ -1,6 +1,6 @@
 # Memory System
 
-OpenContext maintains a 5-layer memory that enriches every context pack with past experience. All layers run locally on SQLite+FTS5 — no external services, no API keys.
+OpenContext maintains a 5-layer memory that enriches every context pack with past experience. By default every layer runs locally on SQLite+FTS5 — no external services, no API keys. If Engram is installed alongside OpenContext, the EPISODIC and SEMANTIC layers couple to it automatically (see [Storage](#storage)).
 
 ## Five Layers
 
@@ -82,17 +82,22 @@ opencontext memory facts
 
 ## Storage
 
-All memory lives in `.opencontext/memory.db` — a SQLite file with FTS5 virtual table for full-text search. The schema mirrors the knowledge graph for consistency.
+Local memory lives in `.opencontext/memory.db` — a SQLite file with an FTS5 virtual table for full-text search. The schema mirrors the knowledge graph for consistency.
 
-Optional remote memory (requires setup):
+### Provider
 
 ```yaml
 memory:
-  provider: remote    # requires: opencontext setup --enable persistent-memory
-  # endpoint: http://localhost:4242
+  provider: auto   # auto | local | engram
 ```
 
-Without remote provider, falls back to local automatically.
+- `auto` (default) — couple to a co-resident **Engram** install if one is detected, otherwise use the local store for every layer.
+- `local` — always use the local SQLite store for every layer.
+- `engram` — force coupling (use the local store only if Engram cannot be reached).
+
+When coupled, `CompositeMemoryStore` routes by layer: **EPISODIC/SEMANTIC → Engram**, **PROCEDURAL/FAILURE/WORKING → local SQLite** — no duplication. Engram is reached through its CLI (writes) and its on-disk store (reads); nothing is sent over the network. In `air_gapped` security mode the coupling is always force-degraded to local.
+
+Detection and targets can be overridden with `OPENCONTEXT_ENGRAM` (`0`/`1`), `OPENCONTEXT_ENGRAM_DB`, and `OPENCONTEXT_ENGRAM_PROJECT`.
 
 ## UnifiedGraph Integration
 

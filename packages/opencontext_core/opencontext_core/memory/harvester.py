@@ -7,10 +7,11 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from opencontext_core.memory.agent import AgentMemoryStore
+from opencontext_core.memory.session_summary import SessionSummary
 from opencontext_core.models.agent_memory import DecayPolicy, MemoryLayer, MemoryRecord
 
 if TYPE_CHECKING:
-    pass
+    from opencontext_core.memory_usability.context_repository import ContextRepository
 
 
 def _now() -> datetime:
@@ -47,8 +48,11 @@ class MemoryHarvester:
     SRP: only harvests, never retrieves.
     """
 
-    def __init__(self, store: AgentMemoryStore) -> None:
+    def __init__(
+        self, store: AgentMemoryStore, context_repo: ContextRepository | None = None
+    ) -> None:
         self.store = store
+        self._context_repo = context_repo
 
     def harvest(self, result: Any) -> list[MemoryRecord]:
         """Extract learnings from a HarnessRunResult and write to store."""
@@ -92,7 +96,32 @@ class MemoryHarvester:
         for rec in records:
             self.store.write(rec)
 
+        if self._context_repo is not None:
+            self._write_session_summary(result, records)
+
         return records
+
+    def _write_session_summary(self, result: Any, records: list[MemoryRecord]) -> None:
+        """Write human-readable session summary to ContextRepository."""
+        try:
+            task = getattr(result, "task", "unknown")
+            run_id = getattr(result, "run_id", "unknown")
+            status = getattr(result, "status", "unknown")
+            summary = SessionSummary(
+                goal=task,
+                accomplished=[f"Run {run_id} completed with status '{status}'."],
+                discoveries=[r.content for r in records if r.layer == MemoryLayer.PROCEDURAL],
+                next_steps=[r.content for r in records if r.layer == MemoryLayer.FAILURE],
+            )
+            assert self._context_repo is not None
+            self._context_repo.store(
+                summary.to_markdown(),
+                kind="summary",
+                source=f"harness:run:{run_id}",
+                collection="summaries",
+            )
+        except Exception:
+            pass  # summary write is best-effort
 
     def _has_test_failures(self, result: Any) -> bool:
         """Check if any gate with 'test' in the id has failed."""
