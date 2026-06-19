@@ -5,13 +5,6 @@ from opencontext_core.memory_usability.content_router import (
     ContentRouter,
     ContentType,
 )
-from opencontext_core.memory_usability.context_dag import (
-    ContextDAG,
-    ContextDAGEdge,
-    ContextDAGNode,
-    ContextSourceRef,
-    ContextSummaryNode,
-)
 from opencontext_core.memory_usability.context_repository import (
     ContextRepository,
     MemoryItem,
@@ -37,19 +30,13 @@ from opencontext_core.memory_usability.session_recorder import (
     MemoryCandidateExtractor,
     SessionMemoryRecorder,
 )
-from opencontext_core.memory_usability.temporal_memory import TemporalFact, TemporalMemoryGraph
 
 __all__ = [
     "ContentRoute",
     "ContentRouter",
     "ContentType",
-    "ContextDAG",
-    "ContextDAGEdge",
-    "ContextDAGNode",
     "ContextRepository",
     "ContextSerializer",
-    "ContextSourceRef",
-    "ContextSummaryNode",
     "HarvestResult",
     "MemoryCandidate",
     "MemoryCandidateExtractor",
@@ -68,6 +55,4 @@ __all__ = [
     "ProgressiveDisclosureMemory",
     "SerializationFormat",
     "SessionMemoryRecorder",
-    "TemporalFact",
-    "TemporalMemoryGraph",
 ]

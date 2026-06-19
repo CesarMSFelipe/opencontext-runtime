@@ -1012,16 +1012,10 @@ def _build_parser() -> argparse.ArgumentParser:
     memory_review.add_argument(
         "--content", help="The corrected memory content (required with --supersede)."
     )
-    memory_sub.add_parser("facts")
     memory_sub.add_parser(
         "doctor",
         help="Diagnose memory system health: backends, store size, conflict count.",
     )
-    memory_timeline = memory_sub.add_parser("timeline")
-    memory_timeline.add_argument("query")
-    memory_supersede = memory_sub.add_parser("supersede")
-    memory_supersede.add_argument("fact_id")
-    memory_supersede.add_argument("--by", required=True)
     memory_export = memory_sub.add_parser(
         "export", help="Export memory to a shareable JSON file (commit it for the team)."
     )
@@ -3950,18 +3944,6 @@ def _memory(args: argparse.Namespace) -> None:
             kind = next((t.split(":", 1)[1] for t in rec.tags if t.startswith("kind:")), "?")
             print(f"  {rec.id} [{kind}] {rec.content[:80]}")
         print("Confirm with 'memory review --confirm <id>' or correct with --supersede <id>.")
-        return
-    if command == "facts":
-        print(
-            "Temporal facts: scaffolded. Stored facts live in "
-            ".opencontext/context-repository/facts."
-        )
-        return
-    if command == "timeline":
-        print(f"Timeline for '{args.query}': scaffolded")
-        return
-    if command == "supersede":
-        print(f"Superseded fact {args.fact_id} by {args.by}: scaffolded")
         return
     if command == "export":
         _memory_export(repo, args.output)
