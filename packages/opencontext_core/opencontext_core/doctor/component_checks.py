@@ -432,34 +432,24 @@ class ComponentDoctor:
 
         checks = []
 
-        import importlib.util
-
         try:
-            if importlib.util.find_spec("opencontext_core.memory.topic_keys"):
-                checks.append(
-                    ComponentCheck(
-                        name="memory_topic_keys",
-                        ok=True,
-                        status="healthy",
-                        details="Topic key generator loaded",
-                    )
+            from opencontext_core.memory.backends import SQLiteMemoryBackend  # noqa: F401
+
+            checks.append(
+                ComponentCheck(
+                    name="memory_backend",
+                    ok=True,
+                    status="healthy",
+                    details="SQLite memory backend loaded",
                 )
-            else:
-                checks.append(
-                    ComponentCheck(
-                        name="memory_topic_keys",
-                        ok=False,
-                        status="missing",
-                        details="Topic key generator not available",
-                    )
-                )
+            )
         except ImportError as exc:
             checks.append(
                 ComponentCheck(
-                    name="memory_topic_keys",
+                    name="memory_backend",
                     ok=False,
                     status="error",
-                    details=f"Memory system error: {exc}",
+                    details=f"Memory backend error: {exc}",
                 )
             )
 
