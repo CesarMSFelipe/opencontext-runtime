@@ -131,7 +131,7 @@ traces:
   store_redacted_context: true
 memory:
   enabled: true
-  provider: auto
+  provider: local
   harvest_after_run: false
   require_approval: true
   store_raw: false

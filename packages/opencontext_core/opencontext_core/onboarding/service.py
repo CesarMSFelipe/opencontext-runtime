@@ -23,6 +23,7 @@ class OnboardingOptions:
     tdd_mode: str = "ask"
     sdd_model_profile: str = "hybrid"
     orchestrator_profile: str = "multi-phase"
+    memory_provider: str = "local"
     setup_mcp: bool = False
     force_agent_files: bool = False
     token_budget_per_phase: int | None = None
@@ -114,6 +115,14 @@ class OnboardingService:
                     semantic = cache.get("semantic")
                     if isinstance(semantic, dict):
                         semantic["enabled"] = False
+            # Memory backend: the wizard's explicit choice. Air-gapped forces local
+            # (no external coupling); otherwise honor the selected provider.
+            memory = config_data.get("memory")
+            if isinstance(memory, dict):
+                if options.template in ("air-gapped", "air_gapped"):
+                    memory["provider"] = "local"
+                else:
+                    memory["provider"] = options.memory_provider
             config_path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
         result.config_path = str(config_path)
 
