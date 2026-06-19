@@ -61,3 +61,36 @@ def test_verify_context_reads_harvested_agent_memory(tmp_path: Path) -> None:
 
     blob = " ".join(item.content for item in result.memory)
     assert "broke before" in blob or any("m-loginfail" in item.id for item in result.memory)
+
+
+def test_recall_is_sqlite_primary_and_deduped(tmp_path: Path) -> None:
+    """Recall reads the canonical SQLite store first; no duplicate memory ids."""
+    runtime, root = _runtime(tmp_path)
+    if not getattr(runtime, "_v2_enabled", False):
+        pytest.skip("v2 memory store not enabled in this build")
+    now = datetime.now(tz=UTC)
+    runtime._v2_memory_store.write(
+        MemoryRecord(
+            id="m-dedupe",
+            layer=MemoryLayer.SEMANTIC,
+            key="auth:design",
+            content="Authentication login uses a token guard.",
+            confidence=0.9,
+            source_refs=[],
+            decay_policy=DecayPolicy(enabled=False),
+            tags=[],
+            linked_nodes=[],
+            created_at=now,
+            updated_at=now,
+        )
+    )
+
+    result = runtime.verify_context(
+        VerifiedContextRequest(query="authentication login", root=root, include_memory=True)
+    )
+
+    ids = [item.id for item in result.memory]
+    assert len(ids) == len(set(ids)), "recall returned duplicate memory ids"
+    agent_items = [i for i in result.memory if i.provenance.get("agent_memory")]
+    # The canonical SQLite store is in the recall path (source of truth).
+    assert agent_items

@@ -666,25 +666,32 @@ class OpenContextRuntime:
 
     def _load_verified_memory(self, request: VerifiedContextRequest) -> list[EvidenceItem]:
         root = request.root or Path(self.config.project_index.root)
-        items: list[EvidenceItem] = [
-            EvidenceItem(
-                id=f"memory:{item.id}",
-                content=item.content,
-                source=item.source,
-                source_type="memory",
-                provenance={"source": item.source, "kind": item.kind, "memory_id": item.id},
-                confidence=0.8,
-                freshness=FreshnessStatus.CURRENT,
-                surface=RetrievalSurface.RUNTIME,
-                tokens=item.tokens,
-                protected=item.pin,
-                classification=item.classification,
+        # Source of truth first: the canonical SQLite AgentMemoryStore (cognitive
+        # layers, decay, reinforce, supersede). The markdown ContextRepository is a
+        # secondary human-readable layer — added only for items the canonical store
+        # does not already have, so the two can never diverge in recall.
+        items: list[EvidenceItem] = self._load_agent_memory_evidence(request.query, exclude=set())
+        seen = {i.id for i in items}
+        for item in ContextRepository(root).search(request.query)[:3]:
+            ev_id = f"memory:{item.id}"
+            if ev_id in seen:
+                continue
+            seen.add(ev_id)
+            items.append(
+                EvidenceItem(
+                    id=ev_id,
+                    content=item.content,
+                    source=item.source,
+                    source_type="memory",
+                    provenance={"source": item.source, "kind": item.kind, "memory_id": item.id},
+                    confidence=0.8,
+                    freshness=FreshnessStatus.CURRENT,
+                    surface=RetrievalSurface.RUNTIME,
+                    tokens=item.tokens,
+                    protected=item.pin,
+                    classification=item.classification,
+                )
             )
-            for item in ContextRepository(root).search(request.query)[:3]
-        ]
-        # Close the harvest->read loop: also read the canonical AgentMemoryStore that
-        # the harness harvester writes to, so prior decisions/failures resurface.
-        items.extend(self._load_agent_memory_evidence(request.query, exclude={i.id for i in items}))
         return items
 
     def _load_agent_memory_evidence(self, query: str, *, exclude: set[str]) -> list[EvidenceItem]:
