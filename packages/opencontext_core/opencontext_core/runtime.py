@@ -616,6 +616,21 @@ class OpenContextRuntime:
         trust_decision = plan.trust_decision
         if any(not gate.passed for gate in gates):
             trust_decision = TrustDecision(status="insufficient", reason="verification gate failed")
+
+        # Enforce hard gates: never SERVE context that violates policy or lacks
+        # provenance. Soft-gate failures (coverage/freshness/budget) still serve a
+        # degraded-but-clean pack; the trust decision flags it either way.
+        rendered_context = self._render_adapter_context(pack)
+        hard_failures = [
+            gate.name for gate in gates if not gate.passed and gate.name in ("policy", "provenance")
+        ]
+        if hard_failures:
+            rendered_context = ""
+            trust_decision = TrustDecision(
+                status="insufficient",
+                reason=f"context withheld: {', '.join(hard_failures)} gate failed",
+            )
+
         _aicx_compact, _aicx_delta = self._compile_aicx_for_transport(plan)
 
         # Auto-improvement feed (non-blocking): record this verification's outcome so
@@ -637,7 +652,7 @@ class OpenContextRuntime:
 
         return VerifiedContextResult(
             trace_id=trace.run_id,
-            context=self._render_adapter_context(pack),
+            context=rendered_context,
             evidence=plan.evidence,
             memory=memory,
             gates=gates,

@@ -38,14 +38,15 @@ class AICXValidator:
         if OpCode.TRUST not in ops:
             errors.append("missing TRUST instruction")
 
-        # Warn on high-risk without security gate
+        # Enforce: a high-risk request without a security gate is invalid, not just
+        # a warning — high-risk context must never transit without the security gate.
         for instr in bc.instructions:
             if instr.op == OpCode.REQUEST:
                 args = {a.split(":")[0]: a.split(":", 1)[1] for a in instr.args if ":" in a}
                 if args.get("risk") == "high":
                     gate_names = [i.args[0] for i in bc.instructions if i.op == OpCode.GATE]
                     if "security" not in gate_names:
-                        warnings.append("high-risk request missing security gate")
+                        errors.append("high-risk request missing security gate")
 
         passed = len(errors) == 0
         return BytecodeValidationReport(

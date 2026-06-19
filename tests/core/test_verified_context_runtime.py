@@ -174,6 +174,27 @@ def test_runtime_verify_context_marks_sensitive_empty_evidence_high_risk(tmp_pat
     assert result.trust_decision.status == "insufficient"
 
 
+def test_runtime_verify_context_withholds_on_hard_gate_failure(tmp_path: Path) -> None:
+    """With a manifest available, a failed policy gate withholds the served context."""
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    create_sample_project(project_root)
+    runtime = OpenContextRuntime(
+        config_path=write_config(tmp_path, project_root),
+        storage_path=tmp_path / ".storage/opencontext",
+    )
+    runtime.index_project(project_root)  # manifest present -> reaches the gate block
+
+    result = runtime.verify_context(
+        VerifiedContextRequest(query="Change secret token handling", root=project_root)
+    )
+
+    policy = next(g for g in result.gates if g.name == "policy")
+    assert not policy.passed  # high-risk -> policy gate fails
+    assert result.context == ""  # hard-gate failure withholds the served context
+    assert "withheld" in result.trust_decision.reason
+
+
 def test_safe_compression_preserves_protected_span() -> None:
     config = OpenContextConfig.model_validate(default_config_data()).context.compression
     engine = CompressionEngine(config)
