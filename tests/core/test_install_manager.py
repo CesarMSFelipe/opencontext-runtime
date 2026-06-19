@@ -36,6 +36,18 @@ class TestInstallationManager:
         assert "mcp" in result["components"]
         assert manager._is_installed()
 
+    def test_install_global_once(self, manager: InstallationManager) -> None:
+        # Global integration (MCP/agents/profiles) is installed once per machine;
+        # a second install only does per-project setup, unless force_global.
+        first = manager.install(profile=InstallProfile.MINIMAL, backup=False, yes=True)
+        assert first["global_skipped"] is False
+        second = manager.install(profile=InstallProfile.MINIMAL, backup=False, yes=True)
+        assert second["global_skipped"] is True
+        forced = manager.install(
+            profile=InstallProfile.MINIMAL, backup=False, yes=True, force_global=True
+        )
+        assert forced["global_skipped"] is False
+
     def test_install_full(self, manager: InstallationManager) -> None:
         result = manager.install(
             profile=InstallProfile.FULL,
