@@ -79,6 +79,19 @@ def test_request_sampling_returns_empty_on_error_response(
     assert server._request_sampling("be terse", "say hi", 128) == ""
 
 
+def test_sampling_prompt_is_redacted_before_send(
+    server: MCPServer, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    secret = "AKIAIOSFODNN7EXAMPLE"  # canonical AWS access-key shape
+    response = json.dumps(
+        {"jsonrpc": "2.0", "id": "oc-sampling-1", "result": {"content": {"text": "ok"}}}
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO(response + "\n"))
+    server._request_sampling("system", f"use key {secret} now", 128)
+    sent = capsys.readouterr().out
+    assert secret not in sent
+
+
 def test_initialize_without_sampling_does_not_register(server: MCPServer) -> None:
     assert get_host_sampler() is None
     server._handle_request(
