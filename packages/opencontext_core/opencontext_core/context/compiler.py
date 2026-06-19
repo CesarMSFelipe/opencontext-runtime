@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import typing
 
-from opencontext_core.config import RankingWeightsConfig
 from opencontext_core.context.packing import ContextPackBuilder, sanitize_context_pack
-from opencontext_core.context.ranking import ContextRanker
 from opencontext_core.models.context import ContextItem, ContextPackResult, ContextPriority
 from opencontext_core.retrieval.contracts import EvidenceItem, EvidencePlan
 
@@ -15,10 +13,14 @@ if typing.TYPE_CHECKING:
 
 
 class ContextCompiler:
-    """Rank, pack, redact, and explain omissions for an evidence plan."""
+    """Pack, redact, and explain omissions for an already-ranked evidence plan.
 
-    def __init__(self, *, ranking_weights: RankingWeightsConfig) -> None:
-        self._ranker = ContextRanker(ranking_weights)
+    Ranking is owned by the planner's hybrid scorer; the compiler preserves that
+    order (it used to re-rank with a weaker lexical ranker, discarding the hybrid
+    graph/memory/freshness signals the planner had just computed).
+    """
+
+    def __init__(self) -> None:
         self._packer = ContextPackBuilder()
 
     def compile(
@@ -29,7 +31,7 @@ class ContextCompiler:
     ) -> ContextPackResult:
         """Compile one planner output into a sanitized context pack."""
 
-        ranked = self._ranker.rank([evidence_to_context_item(item) for item in plan.evidence])
+        ranked = [evidence_to_context_item(item) for item in plan.evidence]
         required_priorities = {ContextPriority.P0, ContextPriority.P1}
         packed = self._packer.pack(
             ranked,

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from opencontext_core.config import RankingWeightsConfig
 from opencontext_core.context.compiler import ContextCompiler
 from opencontext_core.models.context import ContextItem, ContextPriority, DataClassification
 from opencontext_core.retrieval.contracts import EvidenceRequest, RetrievalSurface
@@ -66,14 +65,7 @@ def _request(surface: RetrievalSurface, root: Path) -> EvidenceRequest:
 
 
 def _compiler() -> ContextCompiler:
-    return ContextCompiler(
-        ranking_weights=RankingWeightsConfig(
-            relevance=0.6,
-            priority=0.2,
-            source_trust=0.1,
-            token_efficiency=0.1,
-        )
-    )
+    return ContextCompiler()
 
 
 def test_equivalent_surfaces_compile_the_same_ranked_evidence(tmp_path: Path) -> None:
