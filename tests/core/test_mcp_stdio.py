@@ -166,7 +166,33 @@ class TestMCPServer:
             server._handle_request(request)
             mock_send.assert_called_once()
             result = mock_send.call_args[0][1]
-            assert "indexed" in result
+            # MCP tools/call envelope: a content array plus structured payload.
+            assert result["content"][0]["type"] == "text"
+            assert result["isError"] is False
+            assert "indexed" in result["structuredContent"]
+        server.close()
+
+    def test_notifications_initialized_gets_no_response(self, tmp_path: Path) -> None:
+        """A JSON-RPC notification must never be answered."""
+
+        server = MCPServer(db_path=tmp_path / "test.db")
+        request = {"method": "notifications/initialized"}
+        with patch.object(server, "_send_response") as resp, patch.object(
+            server, "_send_error"
+        ) as err:
+            server._handle_request(request)
+            resp.assert_not_called()
+            err.assert_not_called()
+        server.close()
+
+    def test_ping_returns_empty_result(self, tmp_path: Path) -> None:
+        server = MCPServer(db_path=tmp_path / "test.db")
+        request = {"id": 7, "method": "ping", "params": {}}
+        with patch.object(server, "_send_response") as resp:
+            server._handle_request(request)
+            resp.assert_called_once()
+            assert resp.call_args[0][0] == 7
+            assert resp.call_args[0][1] == {}
         server.close()
 
 
