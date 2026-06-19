@@ -822,7 +822,9 @@ class HarnessRunner:
         if phase_id == "tasks":
             return TasksPhase(phase_config, budget_mode)
         if phase_id == "apply":
-            return ApplyPhase(phase_config, budget_mode)
+            return ApplyPhase(
+                phase_config, budget_mode, forbidden_paths=self.config.forbidden_paths
+            )
         if phase_id == "verify":
             return VerifyPhase(phase_config, budget_mode)
         if phase_id == "review":

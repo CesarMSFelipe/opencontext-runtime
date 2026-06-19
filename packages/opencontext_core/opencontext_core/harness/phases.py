@@ -653,6 +653,29 @@ def _write_phase_manifest(
     return manifest_path
 
 
+def _path_is_forbidden(rel_posix: str, patterns: list[str]) -> bool:
+    """True if a root-relative POSIX path matches any forbidden pattern.
+
+    Patterns are glob-or-literal (``.env``, ``*.pem``, ``secrets/``); a trailing
+    slash forbids the whole subtree. Both the full relative path and the basename
+    are tested so ``.env`` matches at any depth.
+    """
+    from fnmatch import fnmatch
+
+    name = rel_posix.rsplit("/", 1)[-1]
+    for raw in patterns:
+        pat = raw.rstrip("/")
+        if not pat:
+            continue
+        if rel_posix == pat or name == pat:
+            return True
+        if fnmatch(rel_posix, pat) or fnmatch(name, pat):
+            return True
+        if rel_posix.startswith(pat + "/"):
+            return True
+    return False
+
+
 @dataclass
 class FileEdit:
     """A single concrete file edit produced by an executor.
@@ -684,8 +707,9 @@ class CodeEditExecutor:
     the whole batch succeeds.
     """
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, forbidden_paths: list[str] | None = None) -> None:
         self.root = Path(root)
+        self.forbidden_paths = list(forbidden_paths or [])
 
     def _resolve(self, raw_path: str) -> Path:
         p = Path(raw_path)
@@ -693,8 +717,28 @@ class CodeEditExecutor:
             p = self.root / p
         return p
 
+    def _check_forbidden(self, edits: list[FileEdit]) -> None:
+        """Raise before any write if an edit targets a forbidden path.
+
+        Enforced here (the single write chokepoint) so the apply loop cannot
+        touch secrets/build output the safety config declares off-limits. Checked
+        for the whole batch up front, so a violation causes ZERO filesystem
+        mutation rather than a write-then-rollback.
+        """
+        if not self.forbidden_paths:
+            return
+        for edit in edits:
+            target = self._resolve(edit.path)
+            try:
+                rel = target.resolve().relative_to(self.root.resolve()).as_posix()
+            except ValueError:
+                rel = target.as_posix()
+            if _path_is_forbidden(rel, self.forbidden_paths):
+                raise PermissionError(f"edit to forbidden path blocked: {edit.path}")
+
     def apply(self, edits: list[FileEdit]) -> list[AppliedChange]:
         """Apply edits atomically with rollback on failure."""
+        self._check_forbidden(edits)
         applied: list[AppliedChange] = []
         # (path, original_bytes_or_None_if_created)
         rollback: list[tuple[Path, bytes | None]] = []
@@ -769,12 +813,16 @@ class ApplyPhase(HarnessPhase):
         budget_mode: BudgetMode = BudgetMode.WARN,
         *,
         verify_after_apply: Callable[[list[dict[str, Any]]], bool] | None = None,
+        forbidden_paths: list[str] | None = None,
     ) -> None:
         super().__init__(config, budget_mode)
         # Optional post-apply check. Returns True to keep the write, False to
         # roll back to the checkpoint (e.g. a post-write gate/approval rejected
         # the change). When None, a successful write is always kept.
         self._verify_after_apply = verify_after_apply
+        # Paths the executor must never write (secrets, build output). Enforced in
+        # the edit executor before any write.
+        self._forbidden_paths = list(forbidden_paths or [])
 
     @staticmethod
     def _collect_edits(state: Any) -> list[FileEdit]:
@@ -810,7 +858,7 @@ class ApplyPhase(HarnessPhase):
             # Snapshot exactly the files about to change BEFORE touching them, so
             # a post-apply rejection (or error) can restore them byte-for-byte.
             checkpoint = CheckpointStore(state.root).create(self._edit_targets(state, edits))
-            executor = CodeEditExecutor(state.root)
+            executor = CodeEditExecutor(state.root, forbidden_paths=self._forbidden_paths)
             try:
                 applied = executor.apply(edits)
                 changes = [

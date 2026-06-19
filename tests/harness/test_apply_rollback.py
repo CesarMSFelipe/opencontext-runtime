@@ -87,3 +87,34 @@ class TestApplyPhaseRollback:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         assert manifest["status"] != "applied"
         assert phase_result.status == GateStatus.FAILED
+
+
+class TestForbiddenPathEnforcement:
+    def test_executor_blocks_forbidden_path_with_zero_mutation(self, tmp_path: Path) -> None:
+        """H5: an edit to a forbidden path is blocked before any write."""
+        allowed = tmp_path / "src" / "ok.py"
+        secret = tmp_path / "secrets" / "token.txt"
+        executor = CodeEditExecutor(tmp_path, forbidden_paths=[".env", "secrets/"])
+
+        with pytest.raises(PermissionError):
+            executor.apply(
+                [
+                    FileEdit(path="src/ok.py", content="x = 1\n"),
+                    FileEdit(path="secrets/token.txt", content="leak\n"),
+                ]
+            )
+
+        # Batch check runs before any write: the allowed file is never created.
+        assert not allowed.exists()
+        assert not secret.exists()
+
+    def test_apply_phase_fails_on_forbidden_edit(self, tmp_path: Path) -> None:
+        runner = HarnessRunner(root=tmp_path)
+        runner.config.forbidden_paths = [".env"]
+        state = runner.create_run("sdd", "leak task")
+        state.apply_edits = [{"path": ".env", "content": "SECRET=1\n"}]
+        phase = runner._build_phase("apply", BudgetMode.OFF)
+        result = phase.run(state)
+
+        assert result.status == GateStatus.FAILED
+        assert not (tmp_path / ".env").exists()
