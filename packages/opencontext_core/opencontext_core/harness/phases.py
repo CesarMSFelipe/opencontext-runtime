@@ -105,7 +105,7 @@ class ExplorePhase(HarnessPhase):
         try:
             from opencontext_core.indexing.impact_analysis import ImpactAnalyzer
 
-            db_path = state.root / ".storage" / "opencontext" / "graph.db"
+            db_path = state.root / ".storage" / "opencontext" / "context_graph.db"
             if db_path.exists():
                 from opencontext_core.indexing.graph_db import GraphDatabase
 
@@ -118,7 +118,7 @@ class ExplorePhase(HarnessPhase):
                     impact_affected_tests.extend(ir.affected_tests)
                 db.close()
             else:
-                kg_error = "graph.db not found — run `opencontext index` first"
+                kg_error = "context_graph.db not found — run `opencontext index` first"
         except Exception as exc:
             kg_error = str(exc)
             # KG wiring is best-effort — don't fail the phase if KG is unavailable
