@@ -1371,8 +1371,13 @@ def _dispatch(args: argparse.Namespace) -> None:
             _pack_diff(args.base, args.head)
             return
         pack_root = Path(args.root)
-        if args.root != "." and pack_root.exists():
-            runtime.index_project(pack_root)
+        if pack_root.exists():
+            # Always index an explicit path; for `.` index only when there is no
+            # manifest yet, so a fresh checkout yields a real pack instead of an
+            # empty one (without re-indexing an already-indexed project).
+            manifest = pack_root / ".storage" / "opencontext" / "project_manifest.json"
+            if args.root != "." or not manifest.exists():
+                runtime.index_project(pack_root)
         _pack(
             runtime,
             args.query or ("Explain this project" if pack_root.exists() else args.root),

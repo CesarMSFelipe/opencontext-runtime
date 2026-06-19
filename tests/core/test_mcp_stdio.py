@@ -159,6 +159,22 @@ class TestMCPServer:
         assert result["edges"] == 0
         server.close()
 
+    def test_explicit_max_nodes_is_honored(self, tmp_path: Path) -> None:
+        """An explicit max_nodes (even 20) must not be overridden by adaptive scaling."""
+        server = MCPServer(db_path=tmp_path / "test.db")
+        server.runtime = None  # force the adaptive (non-verified) context path
+        captured: dict[str, object] = {}
+
+        def _fake_build(**kwargs: object) -> object:
+            captured.update(kwargs)
+            return object()
+
+        server.context_builder.build_context = _fake_build  # type: ignore[method-assign]
+        server.context_builder.render = lambda context: "x"  # type: ignore[method-assign]
+        server._call_tool("opencontext_context", {"task": "t", "max_nodes": 20})
+        assert captured["max_nodes"] == 20
+        server.close()
+
     def test_tools_call_method(self, tmp_path: Path) -> None:
         """Handle tools/call request."""
 

@@ -511,15 +511,15 @@ class MCPServer:
         if self.runtime is not None:
             return self._verified_context(task)
 
-        max_nodes = params.get("max_nodes", 20)
+        max_nodes = params.get("max_nodes")
         format = params.get("format", "markdown")
 
-        # Adaptive scaling: when caller uses default (20), scale from stats
-        if max_nodes == 20:
+        # Adaptive scaling only when the caller OMITS max_nodes — an explicit value
+        # (even 20) is honored, not overridden by the stats-derived default.
+        if max_nodes is None:
             try:
                 stats = self.db.get_stats()
-                file_count = stats.get("files", 0)
-                max_nodes = _compute_max_nodes(file_count)
+                max_nodes = _compute_max_nodes(stats.get("files", 0))
             except Exception:
                 max_nodes = _MAX_NODES_FALLBACK
 
