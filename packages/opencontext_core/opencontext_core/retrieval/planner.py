@@ -366,6 +366,39 @@ class RetrievalPlanner:
         scored.sort(key=lambda pair: (-pair[1], pair[0].tokens, pair[0].id))
         return [item.model_copy(update={"score": score}) for item, score in scored]
 
+    def _memory_boost_map(self, items: list[ContextItem], query: str) -> dict[str, float]:
+        """Boost candidates that recent FAILURE memory flagged as missing context.
+
+        compute_hybrid_score weights a ``recent_failure`` signal off this map, but
+        plan() never built it — so the "boost code that recently failed" promise
+        contributed 0 in prod. A FAILURE record's linked_nodes are the symbols or
+        files a past run lacked; when a current candidate matches one, lift it by
+        that record's confidence. Keyed to candidate ids so the lookup actually
+        lands. Degrades to an empty map (no boost) on any error or no store.
+        """
+
+        store = self._memory_store
+        if store is None or not items:
+            return {}
+        try:
+            from opencontext_core.models.agent_memory import MemoryLayer
+
+            records = store.search(query, scope=MemoryLayer.FAILURE, limit=25)
+        except Exception:
+            return {}
+        flagged: dict[str, float] = {}
+        for record in records:
+            for node in getattr(record, "linked_nodes", []) or []:
+                flagged[node] = max(flagged.get(node, 0.0), record.confidence)
+        if not flagged:
+            return {}
+        boost: dict[str, float] = {}
+        for item in items:
+            signal = max(flagged.get(item.id, 0.0), flagged.get(item.source, 0.0))
+            if signal > 0.0:
+                boost[item.id] = signal
+        return boost
+
     def plan(self, request: EvidenceRequest, top_k: int) -> EvidencePlan:
         """Return a traceable evidence plan for a converged retrieval request.
 
@@ -398,6 +431,7 @@ class RetrievalPlanner:
         all_items = _deduplicate([*base_items, *expanded_items])
         ranked = self.rank(
             all_items,
+            memory_boost_map=self._memory_boost_map(all_items, request.query) or None,
             graph_distance_map=graph_distance_map or None,
             query=request.query,
             focus_files=_git_focus_files(request.root),
