@@ -108,9 +108,11 @@ def test_opencontext_run_drives_harness_with_host_sampler(
     class _Result:
         run_id = "r1"
         status = "passed"
-        artifacts: list[object] = []
-        gates: list[object] = []
-        warnings: list[str] = []
+
+        def __init__(self) -> None:
+            self.artifacts: list[object] = []
+            self.gates: list[object] = []
+            self.warnings: list[str] = []
 
     def _fake_run(self: object, workflow: str, task: str, *a: object, **k: object) -> _Result:
         captured["workflow"] = workflow
