@@ -95,11 +95,22 @@ def _to_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     clients that consume it, and a handler ``error`` maps to ``isError``.
     """
 
+    from opencontext_core.safety.secrets import SecretScanner
+
     is_error = "error" in result
+    # Redact secrets before anything crosses to the host — the "redaction is
+    # automatic" guarantee. Redact the serialized form and re-parse so the
+    # structured payload is scrubbed too; fall back to the raw dict if the
+    # redacted text no longer parses.
+    text = SecretScanner().redact(json.dumps(result, indent=2))
+    try:
+        structured = json.loads(text)
+    except json.JSONDecodeError:
+        structured = result
     return {
-        "content": [{"type": "text", "text": json.dumps(result, indent=2)}],
+        "content": [{"type": "text", "text": text}],
         "isError": is_error,
-        "structuredContent": result,
+        "structuredContent": structured,
     }
 
 
@@ -932,14 +943,20 @@ class MCPServer:
         answers would otherwise deadlock the server forever on ``readline()``.
         Returns ``""`` on timeout, disconnect, or an error response.
         """
+        from opencontext_core.safety.secrets import SecretScanner
+
         self._sampling_seq = getattr(self, "_sampling_seq", 0) + 1
         req_id = f"oc-sampling-{self._sampling_seq}"
+        # Scrub secrets from the prompt before it reaches the host's model.
+        scanner = SecretScanner()
         params: dict[str, Any] = {
-            "messages": [{"role": "user", "content": {"type": "text", "text": prompt}}],
+            "messages": [
+                {"role": "user", "content": {"type": "text", "text": scanner.redact(prompt)}}
+            ],
             "maxTokens": max_tokens,
         }
         if system_prompt:
-            params["systemPrompt"] = system_prompt
+            params["systemPrompt"] = scanner.redact(system_prompt)
         self._send_request(req_id, "sampling/createMessage", params)
         deadline = time.monotonic() + timeout
         while True:

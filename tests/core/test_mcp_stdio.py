@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
-from opencontext_core.mcp_stdio import MCPServer, _compute_max_nodes
+from opencontext_core.mcp_stdio import MCPServer, _compute_max_nodes, _to_tool_result
+
+
+def test_tool_result_envelope_redacts_secrets() -> None:
+    secret = "AKIAIOSFODNN7EXAMPLE"  # canonical AWS access-key shape
+    envelope = _to_tool_result({"results": [{"snippet": f"aws_key = {secret}"}]})
+    assert secret not in envelope["content"][0]["text"]
+    assert secret not in json.dumps(envelope["structuredContent"])
+    assert envelope["isError"] is False
 
 
 class TestAdaptiveScaling:
