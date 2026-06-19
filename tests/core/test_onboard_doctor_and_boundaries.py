@@ -45,6 +45,20 @@ def test_security_doctor_defaults_fail_closed() -> None:
     assert results["providers.external_disabled"] is True
 
 
+def test_traces_raw_check_reflects_actual_config_not_security_mode() -> None:
+    # The check must verify the real trace-storage setting, not proxy through
+    # security.mode (which false-failed a hardened developer-mode config).
+    config = OpenContextConfig.model_validate(default_config_data())
+
+    config.traces.store_raw_context = False
+    raw_off = {c.name: c.ok for c in run_security_doctor(config)}
+    assert raw_off["traces.raw.disabled"] is True
+
+    config.traces.store_raw_context = True
+    raw_on = {c.name: c.ok for c in run_security_doctor(config)}
+    assert raw_on["traces.raw.disabled"] is False
+
+
 def test_plugin_manifest_is_deny_by_default() -> None:
     manifest = PluginManifest(name="demo", version="1.0.0", entrypoint="plugins.demo:activate")
     assert manifest.permissions.read_paths == []

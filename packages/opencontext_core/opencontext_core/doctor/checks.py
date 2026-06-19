@@ -126,7 +126,7 @@ def run_security_doctor(config: OpenContextConfig) -> list[DoctorCheck]:
         ),
         DoctorCheck(
             name="traces.raw.disabled",
-            ok=config.security.mode.value != "developer",
-            details="Trace sanitizer redacts prompt and context bodies outside developer mode.",
+            ok=not config.traces.store_raw_context,
+            details="Raw trace context (prompt/context bodies) is not persisted.",
         ),
     ]
