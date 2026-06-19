@@ -39,6 +39,48 @@ def test_context_pack_includes_required_context_and_enforces_budget() -> None:
     assert result.omissions[0].reason == "item_exceeds_available_budget"
 
 
+def test_non_required_item_compresses_to_fit_instead_of_omitting() -> None:
+    """M1: compression-to-fit was gated to P0/P1; a large non-required item that
+    overflows the remaining budget should compress in, not be dropped."""
+    from opencontext_core.config import (
+        CompressionStrategy,
+        OpenContextConfig,
+        default_config_data,
+    )
+    from opencontext_core.context.compression import CompressionEngine
+
+    config = OpenContextConfig.model_validate(default_config_data())
+    compression = config.context.compression.model_copy(
+        update={
+            "strategy": CompressionStrategy.SIGNATURE,
+            "protected_spans": False,
+            "adaptive": False,
+        }
+    )
+    engine = CompressionEngine(compression)
+
+    body = "\n".join(f"    total += {i}" for i in range(80))
+    source = f"def compute():\n    total = 0\n{body}\n    return total\n"
+    big = ContextItem(
+        id="big",
+        content=source,
+        source="big.py",
+        source_type="file",
+        priority=ContextPriority.P3,
+        tokens=50,
+        score=0.8,
+    )
+
+    result = ContextPackBuilder().pack(
+        [_item("required", ContextPriority.P1, 70, 0.9), big],
+        available_tokens=100,  # required (70) fits; big (50) overflows the remainder
+        required_priorities={ContextPriority.P0, ContextPriority.P1},
+        compression_engine=engine,
+    )
+
+    assert "big" in [item.id for item in result.included]
+
+
 def test_context_pack_value_per_token_ordering() -> None:
     result = ContextPackBuilder().pack(
         [

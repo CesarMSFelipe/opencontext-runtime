@@ -49,8 +49,11 @@ class ContextPackBuilder:
                 used_tokens += item.tokens
                 continue
 
-            # If it doesn't fit, try dynamic compression if engine provided
-            if compression_engine and item.priority in required:
+            # If it doesn't fit, try dynamic compression if an engine is provided.
+            # Applies to ANY priority, not just P0/P1: compressing a large item to
+            # fit is strictly better than omitting it, and it is the only reason
+            # the compression engine fires on a typical (mostly-fitting) pack.
+            if compression_engine:
                 # Attempt compression to fit remaining budget
                 remaining = available_tokens - used_tokens
                 if remaining > 10:  # Only bother if there's meaningful space
