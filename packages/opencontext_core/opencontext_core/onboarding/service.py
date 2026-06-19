@@ -122,6 +122,11 @@ class OnboardingService:
             config_path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
         result.config_path = str(config_path)
 
+        # 2b. Keep the local index/memory out of git. This was setup-only, so a
+        # project onboarded via `opencontext install` could commit its binary
+        # graph. Managed block, best-effort — never fail onboarding over it.
+        self._write_gitignore_storage_block(root)
+
         # 3. Save user preferences
         store = UserConfigStore()
         prefs = store.load()
@@ -253,6 +258,26 @@ class OnboardingService:
         report = installer.install(targets=targets, location="global", yes=True)
         configured = [r for r in report.get("results", []) if r.get("status") == "configured"]
         return bool(configured)
+
+    @staticmethod
+    def _write_gitignore_storage_block(root: Path) -> None:
+        """Add a managed .gitignore block so the local index/memory stays out of git.
+
+        Shareable config (opencontext.yaml, AGENTS.md) stays committed; the binary
+        graph and memory under .storage/ / .opencontext/ do not. Best-effort.
+        """
+        try:
+            from opencontext_core.configurator.filemerge import (
+                inject_managed_lines,
+                write_text_atomic,
+            )
+
+            path = root / ".gitignore"
+            existing = path.read_text(encoding="utf-8") if path.exists() else ""
+            merged = inject_managed_lines(existing, "storage", [".storage/", ".opencontext/"])
+            write_text_atomic(path, merged)
+        except Exception:
+            return
 
     def _agent_contract_md(self, client: str, options: OnboardingOptions) -> str:
         """Generate .opencontext/agents/<client>.md contract file."""

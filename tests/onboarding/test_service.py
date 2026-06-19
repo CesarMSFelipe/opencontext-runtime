@@ -60,6 +60,14 @@ def test_onboarding_service_run_creates_workspace(tmp_path: Path) -> None:
     assert result.root == str(tmp_path.resolve())
 
 
+def test_onboarding_writes_gitignore_storage_block(tmp_path: Path) -> None:
+    """M9: install/onboard (not just setup) must keep the local index out of git."""
+    OnboardingService().run(OnboardingOptions(root=tmp_path))
+    gitignore = (tmp_path / ".gitignore").read_text(encoding="utf-8")
+    assert ".storage/" in gitignore
+    assert ".opencontext/" in gitignore
+
+
 def test_onboarding_bridges_runtime_prefs_into_yaml(tmp_path: Path) -> None:
     """M6: prefs the runtime reads from yaml (e.g. security mode) must be synced
     during onboarding, not just saved to the prefs store."""
