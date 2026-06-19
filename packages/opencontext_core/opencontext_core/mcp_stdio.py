@@ -229,18 +229,29 @@ class MCPServer:
 
         self._send_notification("server/initialized", {"tools": list(self.tools.keys())})
 
-        for line in sys.stdin:
+        while True:
+            message = self._read_message()
+            if message is None:  # EOF
+                break
+            self._handle_request(message)
+
+    def _read_message(self) -> dict[str, Any] | None:
+        """Read one JSON-RPC message from stdin; None at EOF.
+
+        Shared by the main loop and the sampling round-trip so server->client
+        requests and incoming client messages read from one place.
+        """
+        while True:
+            line = sys.stdin.readline()
+            if not line:  # EOF
+                return None
             line = line.strip()
             if not line:
                 continue
-
             try:
-                request = json.loads(line)
+                return json.loads(line)  # type: ignore[no-any-return]
             except json.JSONDecodeError:
                 self._send_error(None, -32700, "Parse error")
-                continue
-
-            self._handle_request(request)
 
     def _handle_request(self, request: dict[str, Any]) -> None:
         """Handle a single JSON-RPC request."""
@@ -250,11 +261,20 @@ class MCPServer:
         params = request.get("params", {})
 
         if method == "initialize":
+            server_caps: dict[str, Any] = {"tools": {}}
+            client_caps = params.get("capabilities", {})
+            # If the client can sample, route the agentic loop's gateway through
+            # its selected model (MCP sampling) — zero provider config needed.
+            if isinstance(client_caps, dict) and "sampling" in client_caps:
+                from opencontext_core.llm.sampling_gateway import register_host_sampler
+
+                register_host_sampler(self._request_sampling)
+                server_caps["sampling"] = {}
             self._send_response(
                 request_id,
                 {
                     "protocolVersion": "2024-11-05",
-                    "capabilities": {"tools": {}},
+                    "capabilities": server_caps,
                     "serverInfo": {
                         "name": "opencontext-mcp",
                         "version": "0.1.0",
@@ -875,6 +895,35 @@ class MCPServer:
 
         notification = {"jsonrpc": "2.0", "method": method, "params": params}
         self._write_json(notification)
+
+    def _send_request(self, request_id: Any, method: str, params: dict[str, Any]) -> None:
+        """Send a server->client JSON-RPC request (e.g. sampling/createMessage)."""
+
+        self._write_json({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
+
+    def _request_sampling(self, system_prompt: str, prompt: str, max_tokens: int) -> str:
+        """Host sampler: run a generation on the client's selected model via MCP
+        sampling. Sends ``sampling/createMessage`` and waits for the matching
+        response, handling any client requests that interleave the round-trip.
+        """
+        self._sampling_seq = getattr(self, "_sampling_seq", 0) + 1
+        req_id = f"oc-sampling-{self._sampling_seq}"
+        params: dict[str, Any] = {
+            "messages": [{"role": "user", "content": {"type": "text", "text": prompt}}],
+            "maxTokens": max_tokens,
+        }
+        if system_prompt:
+            params["systemPrompt"] = system_prompt
+        self._send_request(req_id, "sampling/createMessage", params)
+        while True:
+            msg = self._read_message()
+            if msg is None:
+                return ""  # client disconnected mid-request
+            if msg.get("id") == req_id:
+                content = (msg.get("result") or {}).get("content", {})
+                return str(content.get("text", "")) if isinstance(content, dict) else str(content)
+            if "method" in msg:  # interleaved client request — service it
+                self._handle_request(msg)
 
     @staticmethod
     def _write_json(data: dict[str, Any]) -> None:
