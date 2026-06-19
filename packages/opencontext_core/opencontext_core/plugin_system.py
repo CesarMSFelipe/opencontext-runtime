@@ -661,6 +661,9 @@ class PluginInstaller:
                 except (json.JSONDecodeError, OSError):
                     pass
 
+            # Stamp integrity (checksum + permissions) so load() can verify it.
+            stamp_plugin_integrity(plugin_dir)
+
             # Remove backup on success
             backup_dir = plugin_dir.parent / f".{name}.bak"
             if backup_dir.exists():
@@ -752,6 +755,7 @@ class PluginInstaller:
             encoding="utf-8",
         )
 
+        stamp_plugin_integrity(plugin_dir)
         _track_plugin_in_state(name, version, install_source, repository)
 
         return InstallResult(
@@ -1210,6 +1214,32 @@ def _get_top_level_dir(members: list[str]) -> str | None:
     if "/" in first:
         return first.split("/")[0]
     return None
+
+
+def stamp_plugin_integrity(plugin_dir: Path) -> None:
+    """Stamp a freshly-installed plugin's manifest with integrity metadata.
+
+    Writes an ``entry_checksum`` (so ``load()``'s tamper-check actually verifies
+    instead of always taking the "unverified" branch) and ensures a
+    ``permissions`` block exists (so the plugin is managed under the
+    deny-by-default contract rather than flagged unmanaged). Best-effort: a
+    missing or unreadable manifest is left untouched.
+    """
+    manifest_path = plugin_dir / "plugin.json"
+    if not manifest_path.exists():
+        return
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return
+    entry = plugin_dir / manifest.get("entry_point", "plugin.py")
+    if entry.exists():
+        manifest["entry_checksum"] = f"sha256:{hashlib.sha256(entry.read_bytes()).hexdigest()}"
+    manifest.setdefault("permissions", {})
+    try:
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    except OSError:
+        return
 
 
 def _track_plugin_in_state(

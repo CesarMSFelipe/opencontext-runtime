@@ -211,17 +211,22 @@ def _plugin_init(args: Any) -> None:
 
     plugin_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- plugin.yaml ---
-    yaml_content = (
-        f"name: {name}\n"
-        f"version: 0.1.0\n"
-        f"description: {description}\n"
-        f"author: {author}\n"
-        f"entry_point: plugin.py\n"
-        f"hooks: []\n"
-    )
-    (plugin_dir / "plugin.yaml").write_text(yaml_content, encoding="utf-8")
-    print(f"  ✓ Created {name}/plugin.yaml")
+    # --- plugin.json ---
+    # Every loader reads plugin.json (not plugin.yaml); scaffolding YAML broke the
+    # create -> use round-trip. Include an empty permissions block so the plugin is
+    # managed under the deny-by-default contract; the checksum is stamped below.
+    manifest = {
+        "name": name,
+        "version": "0.1.0",
+        "description": description,
+        "author": author,
+        "entry_point": "plugin.py",
+        "hooks": [],
+        "enabled": True,
+        "permissions": {},
+    }
+    (plugin_dir / "plugin.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    print(f"  ✓ Created {name}/plugin.json")
 
     # --- plugin.py ---
     if args.template == "advanced":
@@ -273,6 +278,12 @@ def _plugin_init(args: Any) -> None:
         )
     (plugin_dir / "plugin.py").write_text(plugin_py, encoding="utf-8")
     print(f"  ✓ Created {name}/plugin.py")
+
+    # Stamp the entry-point checksum now that plugin.py exists, so load() can
+    # verify integrity instead of treating the plugin as unverified.
+    from opencontext_core.plugin_system import stamp_plugin_integrity
+
+    stamp_plugin_integrity(plugin_dir)
 
     # --- README.md ---
     readme = (

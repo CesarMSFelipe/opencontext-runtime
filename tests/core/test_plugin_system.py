@@ -93,6 +93,35 @@ def test_load_accepts_plugin_with_valid_checksum(
     assert registry.load("good") is not None  # checksum matches -> loads
 
 
+def test_stamp_plugin_integrity_makes_install_verifiable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """H3: install/init must stamp a checksum so load() verifies integrity."""
+    import json
+
+    from opencontext_core.plugin_system import stamp_plugin_integrity
+
+    pdir = tmp_path / "fresh"
+    pdir.mkdir()
+    (pdir / "plugin.py").write_text("class OpenContextPlugin:\n    name = 'p'\n", encoding="utf-8")
+    (pdir / "plugin.json").write_text(
+        json.dumps({"name": "fresh", "enabled": True, "entry_point": "plugin.py"}),
+        encoding="utf-8",
+    )
+
+    stamp_plugin_integrity(pdir)
+    manifest = json.loads((pdir / "plugin.json").read_text(encoding="utf-8"))
+    assert manifest["entry_checksum"].startswith("sha256:")
+    assert "permissions" in manifest
+    assert _registry(tmp_path, monkeypatch).load("fresh") is not None
+
+    # Tampering the entry point after stamping must be detected.
+    (pdir / "plugin.py").write_text(
+        "class OpenContextPlugin:\n    name = 'evil'\n", encoding="utf-8"
+    )
+    assert _registry(tmp_path, monkeypatch).load("fresh") is None
+
+
 class TestPluginRegistry:
     """Test plugin registry."""
 
