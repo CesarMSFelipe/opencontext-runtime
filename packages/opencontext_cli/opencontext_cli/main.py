@@ -3812,6 +3812,25 @@ def _memory(args: argparse.Namespace) -> None:
         item = repo.get(args.memory_id)
         print(yaml.safe_dump(item.model_dump(mode="json"), sort_keys=True))
         return
+    # id-targeted mutations operate on the markdown repository. If the id is an
+    # agent (SQLite) record from `memory list`/`search`, say so clearly instead of
+    # failing with a raw FileNotFoundError from the markdown store.
+    if command in ("expand", "pin", "unpin", "promote", "demote"):
+        try:
+            repo.get(args.memory_id)
+        except FileNotFoundError:
+            store = _agent_memory_store(args)
+            rec = store.get(args.memory_id) if store is not None and hasattr(store, "get") else None
+            if rec is not None:
+                print(
+                    f"'{args.memory_id}' is an agent (SQLite) memory record; "
+                    f"{command} operates on markdown memory ([md] items in 'memory list'). "
+                    "Agent records support reinforce/supersede/decay, not pin/promote."
+                )
+            else:
+                print(f"Memory item not found: {args.memory_id}")
+            return
+
     if command == "expand":
         expansion = MemoryExpansionTool(repo)
         item = expansion.expand(args.memory_id)
