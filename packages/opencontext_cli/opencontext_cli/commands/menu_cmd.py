@@ -570,11 +570,13 @@ def _cleanup_backups() -> None:
     import shutil
     from datetime import datetime, timedelta
 
-    from rich.prompt import IntPrompt
-
+    from opencontext_core import prompts
     from opencontext_core.state import ConfigBackupManager
 
-    days = IntPrompt.ask("Keep backups newer than (days)", default=30)
+    try:
+        days = int(prompts.text("Keep backups newer than (days)", default="30"))
+    except (TypeError, ValueError):
+        days = 30
     backups = ConfigBackupManager.list_backups()
     cutoff = datetime.now() - timedelta(days=days)
     removed = 0
