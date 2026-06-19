@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from opencontext_core.harness.budget import TokenBudgetEnforcer
 from opencontext_core.harness.checkpoint import CheckpointStore
 from opencontext_core.harness.config import PhaseConfig
 from opencontext_core.harness.gates import (
@@ -56,6 +57,21 @@ class HarnessPhase:
     def run(self, state: Any) -> PhaseResult:
         """Execute the phase. Override in subclasses."""
         raise NotImplementedError
+
+    def _token_ledger(self, phase: str, used_tokens: int) -> PhaseLedger:
+        """Build a PhaseLedger with its status computed by the budget enforcer.
+
+        Phases used to construct PhaseLedger directly, leaving status at its
+        default PASSED — so the TokenBudgetGate was a no-op even when a phase blew
+        its budget. Route through the enforcer so an over-budget phase actually
+        WARNs (or FAILs in strict mode).
+        """
+        return TokenBudgetEnforcer().evaluate(
+            phase=phase,
+            used_tokens=used_tokens,
+            budget_tokens=self.config.budget_tokens,
+            mode=self.budget_mode,
+        )
 
 
 class ExplorePhase(HarnessPhase):
@@ -127,12 +143,7 @@ class ExplorePhase(HarnessPhase):
             ProjectIndexExistsGate().evaluate(state.root),
             ContextPackCreatedGate().evaluate(len(pack.included)),
         ]
-        ledger = PhaseLedger(
-            phase="explore",
-            used_tokens=pack.used_tokens,
-            budget_tokens=self.config.budget_tokens,
-            budget_mode=self.budget_mode,
-        )
+        ledger = self._token_ledger("explore", pack.used_tokens)
         gates.append(TokenBudgetGate().evaluate(ledger))
 
         status = (
@@ -499,12 +510,7 @@ class ProposePhase(HarnessPhase):
             ArtifactPersistedGate().evaluate(proposal_path),
         ]
 
-        ledger = PhaseLedger(
-            phase="propose",
-            used_tokens=0,
-            budget_tokens=self.config.budget_tokens,
-            budget_mode=self.budget_mode,
-        )
+        ledger = self._token_ledger("propose", 0)
         gates.append(TokenBudgetGate().evaluate(ledger))
 
         status = (
@@ -1039,12 +1045,7 @@ _None._
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(spec_path),
         ]
-        ledger = PhaseLedger(
-            phase="spec",
-            used_tokens=0,
-            budget_tokens=self.config.budget_tokens,
-            budget_mode=self.budget_mode,
-        )
+        ledger = self._token_ledger("spec", 0)
         gates.append(TokenBudgetGate().evaluate(ledger))
 
         status = (
@@ -1164,12 +1165,7 @@ This section describes the high-level architecture for implementing: {task}.
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(design_path),
         ]
-        ledger = PhaseLedger(
-            phase="design",
-            used_tokens=0,
-            budget_tokens=self.config.budget_tokens,
-            budget_mode=self.budget_mode,
-        )
+        ledger = self._token_ledger("design", 0)
         gates.append(TokenBudgetGate().evaluate(ledger))
 
         status = (
@@ -1301,12 +1297,7 @@ class TasksPhase(HarnessPhase):
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(tasks_path),
         ]
-        ledger = PhaseLedger(
-            phase="tasks",
-            used_tokens=0,
-            budget_tokens=self.config.budget_tokens,
-            budget_mode=self.budget_mode,
-        )
+        ledger = self._token_ledger("tasks", 0)
         gates.append(TokenBudgetGate().evaluate(ledger))
 
         status = (

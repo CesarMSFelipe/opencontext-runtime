@@ -50,3 +50,15 @@ class TestTokenBudgetEnforcer:
         ledger = self.enforcer.evaluate("explore", 10000, 6000)
         assert ledger.budget_mode == BudgetMode.WARN
         assert ledger.status == GateStatus.WARNING
+
+
+class TestPhaseLedgerComputesStatus:
+    def test_phase_token_ledger_routes_through_enforcer(self) -> None:
+        """H5: phases built PhaseLedger directly, leaving status PASSED so the
+        budget gate was a no-op. The base helper must compute real status."""
+        from opencontext_core.harness.config import PhaseConfig
+        from opencontext_core.harness.phases import HarnessPhase
+
+        phase = HarnessPhase(PhaseConfig(budget_tokens=100), BudgetMode.WARN)
+        assert phase._token_ledger("explore", 50).status == GateStatus.PASSED
+        assert phase._token_ledger("explore", 500).status == GateStatus.WARNING
