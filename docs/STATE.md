@@ -22,6 +22,39 @@ All four gates verified at the CI scope (`ruff check .`, `ruff format --check .`
 
 ---
 
+## Agentic Execution — model access without forced provider config
+
+The agentic loop no longer requires configuring a provider/API key. Resolution
+order (highest first): **injected gateway → host model via MCP sampling → explicit
+provider → mock**. Air-gapped forbids the host/provider paths.
+
+- **Host model (zero-config, preferred):** `llm/sampling_gateway.py` —
+  `SamplingGateway` adapts the host agent's selected model (Claude Code, Codex,
+  OpenCode, …) via MCP `sampling`. `register_host_sampler()` is the injection
+  point; gateway resolution in `runtime._gateway_from_config` and
+  `HarnessRunner._resolve_gateway` prefer it over the mock default — so running
+  inside an AI agent uses that agent's model with no provider config. *(The
+  server↔client `sampling/createMessage` transport in `mcp_stdio.py` is the
+  remaining host-dependent step; the gateway + registry + resolution are wired and
+  tested.)*
+- **Explicit provider (standalone/headless):** `llm/provider_gateway.py` bridges
+  `providers/adapters.py` (Anthropic/OpenAI/OpenRouter/Ollama) to the `LLMGateway`
+  protocol. `_gateway_from_config` no longer raises for real providers; building a
+  runtime never requires a key (a missing key only fails at call time).
+- **Persona auto-switch + verified context:** `personas.PHASE_PERSONAS` /
+  `persona_for_phase()` map each phase to a persona (notably **OC Tester** for the
+  `apply`/`test` phases, **OC Reviewer** for verify/review). The executor injects
+  the phase persona's system prompt and the explore phase's **verified context
+  pack** into each request (was: bare task + phase only).
+- **Messaging reframed:** the "no model" warning no longer says "configure a
+  provider (ANTHROPIC_API_KEY)"; it says the artifact is a plan for the host
+  agent's model, and a provider is only for standalone runs.
+
+New persona **OC Tester** (`personas.py`) — senior-QA charter enforcing the four
+standards in `docs/TEST_QUALITY_REVIEW.md`.
+
+---
+
 ## Navigable Prompts & Interactive UX — ✅ Done
 
 Every interactive prompt now routes through one helper module,
