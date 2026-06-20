@@ -117,6 +117,20 @@ class TestReplaceSymbolBody:
         # File is left completely intact.
         assert _read(root) == before
 
+    def test_rejects_edit_that_breaks_python(self, indexed_project: tuple[MCPServer, Path]) -> None:
+        # Fail closed: an edit that leaves the file syntactically invalid (here an
+        # unclosed paren) must be rejected and the file left intact, not written.
+        server, root = indexed_project
+        before = _read(root)
+        result = server._call_tool(
+            "opencontext_replace_symbol_body",
+            {"symbol": "audit_login", "file": "src/auth.py", "body": "def audit_login(:"},
+        )
+        assert result.get("applied") is False
+        assert "invalid Python" in result.get("error", "")
+        assert "hint" in result  # points the agent at passing the full definition
+        assert _read(root) == before  # nothing written
+
 
 class TestInsertBeforeSymbol:
     def test_inserts_code_above_symbol(self, indexed_project: tuple[MCPServer, Path]) -> None:
@@ -193,6 +207,18 @@ class TestRenameSymbol:
         )
         assert "error" in result
         assert result.get("applied") is False
+        assert _read(root) == before
+
+    def test_rename_rejects_python_keyword(self, indexed_project: tuple[MCPServer, Path]) -> None:
+        # 'class' passes str.isidentifier() but renaming to it would break syntax.
+        server, root = indexed_project
+        before = _read(root)
+        result = server._call_tool(
+            "opencontext_rename_symbol",
+            {"symbol": "audit_login", "file": "src/auth.py", "new_name": "class"},
+        )
+        assert result.get("applied") is False
+        assert "keyword" in result.get("error", "")
         assert _read(root) == before
 
     def test_rename_unresolved_symbol_returns_error(

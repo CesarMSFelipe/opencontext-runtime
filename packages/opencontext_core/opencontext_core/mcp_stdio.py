@@ -87,6 +87,25 @@ def _join_lines(lines: list[str], trailing_newline: bool) -> str:
     return text
 
 
+def _python_syntax_error(file_path: str, text: str) -> str | None:
+    """For a ``.py`` file, return a message if ``text`` is not parseable, else None.
+
+    The symbol-edit tools fail closed: an edit that would leave the file
+    syntactically broken is rejected rather than written, so an agent can't
+    silently corrupt source (e.g. replacing a whole def with only its body).
+    """
+
+    if not file_path.endswith(".py"):
+        return None
+    import ast
+
+    try:
+        ast.parse(text)
+    except SyntaxError as exc:
+        return f"invalid Python after edit: {exc.msg} (line {exc.lineno})"
+    return None
+
+
 def _to_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     """Wrap a tool's domain dict in the MCP ``tools/call`` content envelope.
 
@@ -820,6 +839,14 @@ class MCPServer:
 
         replacement = _split_lines(body)[0]
         new_lines = lines[:start] + replacement + lines[end:]
+        syntax_err = _python_syntax_error(node.file_path, _join_lines(new_lines, trailing))
+        if syntax_err:
+            return {
+                "error": syntax_err,
+                "applied": False,
+                "symbol": symbol,
+                "hint": "pass the full definition (signature + body), not just the body",
+            }
         applied = self._write_file_lines(node.file_path, new_lines, trailing)
         return {
             "tool": "opencontext_replace_symbol_body",
@@ -862,6 +889,9 @@ class MCPServer:
         insert_at = max(0, min(insert_at, len(lines)))
         block = _split_lines(content)[0]
         new_lines = lines[:insert_at] + block + lines[insert_at:]
+        syntax_err = _python_syntax_error(node.file_path, _join_lines(new_lines, trailing))
+        if syntax_err:
+            return {"error": syntax_err, "applied": False, "symbol": symbol}
         applied = self._write_file_lines(node.file_path, new_lines, trailing)
         return {
             "tool": tool,
@@ -893,6 +923,10 @@ class MCPServer:
             return {"error": "Missing 'new_name'", "applied": False}
         if not new_name.isidentifier():
             return {"error": f"Invalid identifier: {new_name}", "applied": False}
+        import keyword
+
+        if keyword.iskeyword(new_name) or keyword.issoftkeyword(new_name):
+            return {"error": f"'{new_name}' is a Python keyword", "applied": False}
 
         node = self._resolve_symbol(symbol, file)
         if node is None or node.id is None:
