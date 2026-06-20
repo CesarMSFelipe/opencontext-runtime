@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -59,7 +60,7 @@ class ProjectIndexer:
         dependency_graph = DependencyGraphBuilder().build(scanned_files)
         detections = self._detect_profiles(project_root, [file.path for file in project_files])
         profiles = self._profiles_from_detections(detections)
-        primary_profile = self._primary_profile(detections, profiles)
+        primary_profile = self._primary_profile(detections, profiles, scanned_files)
 
         # Populate knowledge graph with batch checkpointing
         # Checkpoint persists which files have been indexed so interrupted runs resume.
@@ -211,6 +212,7 @@ class ProjectIndexer:
         self,
         detections: list[ProfileDetectionResult],
         profiles: list[str],
+        scanned_files: list[ScannedFile] | None = None,
     ) -> str:
         if self.config.profile != GENERIC_PROFILE:
             return self.config.profile
@@ -219,8 +221,29 @@ class ProjectIndexer:
             for detection in detections
             if detection.profile != GENERIC_PROFILE and detection.score > 0
         ]
+        lang_counts = Counter(
+            f.language for f in (scanned_files or []) if getattr(f, "language", None)
+        )
+        known = {detection.profile for detection in detections}
         if non_generic:
-            return max(non_generic, key=lambda detection: detection.score).profile
+            top = max(non_generic, key=lambda detection: detection.score)
+            # When the top detection is a *language* profile (its name is a language
+            # with source files here), prefer the dominant code language if another
+            # has strictly more files — marker-based detection misses a language with
+            # loose source files (e.g. .py with no pyproject.toml), so a 2-python +
+            # 1-js repo should be "python", not "javascript". Framework profiles keep
+            # priority since their name is a marker/runtime, not a per-file language.
+            if top.profile in lang_counts:
+                top_files = lang_counts.get(top.profile, 0)
+                for language, count in lang_counts.most_common():
+                    if language in known and count > top_files:
+                        return language
+            return top.profile
+        # Nothing detected by markers — fall back to the dominant code language that
+        # has a known profile (ignores yaml/markdown/… which have no profile).
+        for language, _count in lang_counts.most_common():
+            if language in known:
+                return language
         return profiles[0]
 
 
