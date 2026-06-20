@@ -186,11 +186,11 @@ def handle_kg(args: Any) -> None:
                 ],
             )
     elif command == "trace":
-        console.header(f"Trace: {symbol} -> ...")
         source_name = getattr(args, "source", "")
         target_name = getattr(args, "target", "")
         max_depth = getattr(args, "max_depth", 10)
         json_output = getattr(args, "json", False)
+        console.header(f"Trace: {source_name} -> {target_name}")
 
         from opencontext_core.indexing.call_graph import CallGraphAnalyzer
 

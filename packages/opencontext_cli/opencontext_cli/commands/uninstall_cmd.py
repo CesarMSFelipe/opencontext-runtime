@@ -154,7 +154,12 @@ def handle_uninstall(args: Any) -> None:
             for result in report["results"]:
                 console.print(f"  [bold]{result['agent']}[/]")
                 for action in result.get("plan", []):
-                    console.print(f"    [dim]{action}[/]")
+                    if isinstance(action, dict):
+                        verb = action.get("action", "change")
+                        path = action.get("path", "")
+                        console.print(f"    [dim]{verb} {path}[/]")
+                    else:
+                        console.print(f"    [dim]{action}[/]")
             if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE"):
                 console.print(f"  [dim]would purge: {', '.join(_PURGE_TARGETS)}[/]")
         return

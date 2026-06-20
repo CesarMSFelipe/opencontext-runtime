@@ -962,7 +962,9 @@ def _build_parser() -> argparse.ArgumentParser:
     for report_command in ("weekly", "cost", "security", "quality"):
         report_sub.add_parser(report_command)
 
-    memory_parser = subparsers.add_parser("memory", help="Progressive memory commands.")
+    memory_parser = subparsers.add_parser(
+        "memory", help="Progressive memory commands.", formatter_class=_PublicHelpFormatter
+    )
     memory_sub = memory_parser.add_subparsers(dest="memory_command", required=True)
     memory_sub.add_parser("init", help="Create context repository layout.")
     memory_sub.add_parser("list", help="List local memory.")
@@ -972,8 +974,11 @@ def _build_parser() -> argparse.ArgumentParser:
     memory_expand.add_argument("memory_id")
     memory_show = memory_sub.add_parser("show", help="Show a memory item by id.")
     memory_show.add_argument("memory_id")
-    for pin_command in ("pin", "unpin"):
-        pin_parser = memory_sub.add_parser(pin_command)
+    for pin_command, pin_help in (
+        ("pin", "Pin a memory so it is never auto-pruned."),
+        ("unpin", "Remove a pin, letting the memory age out normally."),
+    ):
+        pin_parser = memory_sub.add_parser(pin_command, help=pin_help)
         pin_parser.add_argument("memory_id")
     memory_harvest = memory_sub.add_parser("collect", help="Collect memory candidates from traces.")
     memory_harvest.add_argument("--from-trace", default="last")
@@ -986,13 +991,13 @@ def _build_parser() -> argparse.ArgumentParser:
     memory_harvest_alias = memory_sub.add_parser("harvest", help=argparse.SUPPRESS)
     memory_harvest_alias.add_argument("--from-trace", default="last")
     memory_harvest_alias.add_argument("--yes", action="store_true")
-    memory_promote = memory_sub.add_parser("promote")
+    memory_promote = memory_sub.add_parser("promote", help="Promote a memory to a higher tier.")
     memory_promote.add_argument("memory_id")
     memory_promote.add_argument("--to", default="system")
-    memory_demote = memory_sub.add_parser("demote")
+    memory_demote = memory_sub.add_parser("demote", help="Demote a memory to a lower tier.")
     memory_demote.add_argument("memory_id")
     memory_demote.add_argument("--to", default="archive")
-    memory_sub.add_parser("prune")
+    memory_sub.add_parser("prune", help="Remove archived and expired memories.")
     memory_gc = memory_sub.add_parser("gc", help="Garbage-collect expired and superseded memories.")
     memory_gc.add_argument(
         "--dry-run", action="store_true", help="Show what would be pruned without deleting."
@@ -1738,7 +1743,7 @@ def _install(args: argparse.Namespace) -> None:
     console.print("  Will configure:")
     console.print("    • Project index + knowledge graph")
     console.print(f"    • SDD/TDD (mode: {tdd})")
-    console.print("    • Agent integration (opencode)")
+    console.print("    • Agent integration (your installed agents)")
     console.print("    • Harness workflow")
     console.print()
 
@@ -1763,10 +1768,19 @@ def _install(args: argparse.Namespace) -> None:
 
     # Honor the editor the wizard asked about. Previously hard-coded to "opencode",
     # so a claude-code/codex dev got opencode files and no wiring for their own agent.
-    # Falls back to opencode only when no editor was chosen (non-interactive install).
     _chosen_editor = os.environ.get("_OC_WIZARD_EDITOR", "").strip()
     _have_editor = bool(_chosen_editor) and _chosen_editor != "other"
-    active_clients = [_chosen_editor] if _have_editor else ["opencode"]
+    if _have_editor:
+        active_clients = [_chosen_editor]
+    else:
+        # Non-interactive (--yes / non-TTY): wire the agents actually installed on
+        # this machine instead of a blanket 'opencode'. Fall back to opencode only
+        # when none are detected.
+        try:
+            _detected = _AgentInstaller(project_root=root).detect_installed_agents()
+            active_clients = [t.value for t in _detected if t.value != "generic"] or ["opencode"]
+        except Exception:
+            active_clients = ["opencode"]
 
     summary: list[str] = []
     options = OnboardingOptions(

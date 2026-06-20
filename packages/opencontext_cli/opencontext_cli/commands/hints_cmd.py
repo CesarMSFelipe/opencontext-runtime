@@ -11,9 +11,9 @@ from opencontext_core.dx.console_styles import console
 
 def add_hints_parser(subparsers: Any) -> None:
     """Add hints command parsers."""
-    import argparse
-
-    hints_parser = subparsers.add_parser("hints", help=argparse.SUPPRESS)
+    # Visible in --help: `opencontext status` actively tells users to run
+    # `opencontext hints init`, so the command must be discoverable.
+    hints_parser = subparsers.add_parser("hints", help="Manage harness error hints.")
     hints_sub = hints_parser.add_subparsers(dest="hints_command", required=True)
     hints_sub.add_parser("init", help="Initialize .opencontexthints file.")
     hints_sub.add_parser("show", help="Show combined hints.")

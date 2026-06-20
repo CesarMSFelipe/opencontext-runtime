@@ -40,7 +40,10 @@ def test_demo_shows_before_after(tmp_path: Path, capsys: pytest.CaptureFixture) 
     out = capsys.readouterr().out
     assert "OpenContext demo" in out
     assert "Without OpenContext" in out
-    assert "less" in out  # the reduction headline
+    # Honest headline: a real reduction ("% less") on large repos, or a truthful
+    # "no reduction at this size" on a tiny one — never a false "0.0% less".
+    assert ("less" in out) or ("no reduction" in out)
+    assert "0.0% less" not in out
 
 
 def test_demo_rejects_missing_path(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:

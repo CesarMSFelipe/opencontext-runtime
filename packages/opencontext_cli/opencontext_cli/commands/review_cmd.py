@@ -204,10 +204,9 @@ def handle_review(args: Any) -> None:
 
     rich_console = RichConsole()
 
-    if not getattr(args, "party", False):
-        rich_console.print("[yellow]Use --party for party mode review.[/]")
-        return
-
+    # Party mode is the only review mode, so it is the default. --party is still
+    # accepted (no-op) for back-compat; previously its absence made the command a
+    # silent no-op that read and discarded stdin.
     roles = [
         r.strip() for r in getattr(args, "roles", "architect,security,performance,ux").split(",")
     ]
