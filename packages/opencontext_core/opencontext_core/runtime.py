@@ -96,8 +96,10 @@ class BudgetAwareLLMGateway:
         # enforced upstream by the planner's token budget, and provider/secret
         # policy by ContextFirewall.check_provider_call — so only budget risks are
         # fatal here (a context-free generation is valid, not a gate failure).
-        # NOTE: if a budget swap ever routes to a *different* provider than the
-        # firewall approved, re-run check_provider_call on `routed.provider`.
+        # A budget swap only ever routes to a LOCAL provider (ollama/lmstudio/…),
+        # which adds no external egress beyond what the firewall already approved,
+        # so no provider re-check is needed; the local backend is honored by
+        # ProviderGateway.generate's re-dispatch on routed.provider.
         gate_report = self.quality_gate.evaluate(
             context_tokens=0,
             max_tokens=1_000_000,
