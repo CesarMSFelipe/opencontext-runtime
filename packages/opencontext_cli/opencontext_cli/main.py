@@ -464,8 +464,8 @@ def _build_parser() -> argparse.ArgumentParser:
     onboard_parser.add_argument(
         "--sdd-profile",
         choices=["default", "cheap", "hybrid", "premium"],
-        default="hybrid",
-        help="SDD model profile (which models to use per phase).",
+        default="default",
+        help="SDD model profile (which models to use per phase; default = your client's model).",
     )
     onboard_parser.add_argument(
         "--orchestrator-profile",
@@ -1162,7 +1162,7 @@ def _dispatch(args: argparse.Namespace) -> None:
             getattr(args, "setup_mcp", False),
             agent=getattr(args, "agent", None),
             tdd=getattr(args, "tdd", "ask"),
-            sdd_profile=getattr(args, "sdd_profile", "hybrid"),
+            sdd_profile=getattr(args, "sdd_profile", "default"),
             orchestrator_profile=getattr(args, "orchestrator_profile", "multi-phase"),
             token_budget_per_phase=getattr(args, "token_budget_per_phase", None),
             force_agent_files=getattr(args, "force_agent_files", False),
@@ -1612,6 +1612,27 @@ def _install_wizard(args: Any, console: Any) -> None:
         except Exception:
             pass
 
+    # Step 2b — model routing across SDD phases. 'default' = your client's model
+    # everywhere (no surprise model picks); presets route per phase/persona and
+    # can be tuned later with `opencontext models set-persona`.
+    chosen_profile = prompts.select(
+        "Model routing across SDD phases?",
+        [
+            ("default", "Default — your client's model for every phase"),
+            ("cheap", "Economy — cheap models to explore, strong for design"),
+            ("hybrid", "Balanced — mix of cheap and strong"),
+            ("premium", "Premium — strongest models everywhere"),
+        ],
+        default="default",
+    )
+    if chosen_profile:
+        try:
+            import os
+
+            os.environ["_OC_WIZARD_SDD_PROFILE"] = chosen_profile
+        except Exception:
+            pass
+
     # Step 3 — API key (only if not already set and editor needs LLM)
     try:
         from opencontext_core.providers.detect import detect_provider
@@ -1782,13 +1803,16 @@ def _install(args: argparse.Namespace) -> None:
             active_clients = ["opencode"]
 
     summary: list[str] = []
+    # Default to the client's model everywhere ('default' profile); the wizard's
+    # preset choice (if any) overrides. No surprise model assignments out of the box.
+    _sdd_profile = os.environ.get("_OC_WIZARD_SDD_PROFILE", "").strip() or "default"
     options = OnboardingOptions(
         root=root,
         template="generic",
         security_mode="private_project",
         tdd_mode=tdd,
         active_clients=active_clients,
-        sdd_model_profile="hybrid",
+        sdd_model_profile=_sdd_profile,
         orchestrator_profile="opencontext",
         token_budget_per_phase=3000,
     )
@@ -2007,7 +2031,7 @@ def _onboard(
     setup_mcp: bool = False,
     agent: str | None = None,
     tdd: str = "ask",
-    sdd_profile: str = "hybrid",
+    sdd_profile: str = "default",
     orchestrator_profile: str = "multi-phase",
     token_budget_per_phase: int | None = None,
     force_agent_files: bool = False,
