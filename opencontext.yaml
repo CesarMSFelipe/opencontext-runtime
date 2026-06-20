@@ -180,8 +180,34 @@ context_storage:
 workflows:
   code_assistant:
     steps:
-    - context_explore
-    - context_propose
-    - llm_generate
-    - trace_persist
+    - project.load_manifest
+    - project.retrieve
+    - context.rank
+    - context.pack
+    - context.compress
+    - prompt.assemble
+    - llm.generate
+    - trace.persist
+  sdd:
+    steps:
+    - project.load_manifest
+    - context.explore
+    - context.propose
+    - context.test
+    - context.verify
+    - context.review
+    - context.archive
+    - trace.sdd_persist
+  sdd_apply:
+    steps:
+    - project.load_manifest
+    - context.explore
+    - context.propose
+    - context.apply
+    - context.test
+    - context.verify
+    - context.review
+    - context.up-code
+    - context.archive
+    - trace.sdd_persist
 ui_language: en
