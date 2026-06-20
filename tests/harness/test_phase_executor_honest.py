@@ -113,6 +113,21 @@ class TestPlanningPhasesAbsentExecutor:
         manifest = _read_manifest(result)
         assert manifest["status"] == "planned"
 
+    def test_tasks_scaffold_uses_task_files_not_internal_paths(self, tmp_path: Path) -> None:
+        # Regression: when the design scaffold lists no files, the fallback used to
+        # hard-code OpenContext's own paths (harness/gates.py) into every project's
+        # task plan. It must use the files explore surfaced for THIS task instead.
+        state = _make_state(tmp_path)
+        run_dir = tmp_path / ".opencontext" / "runs" / state.run_id
+        (run_dir / "design.md").write_text("# Design\n\nNo files listed.\n", encoding="utf-8")
+        state.context_required_sources = ["src/cart.py"]
+
+        result = TasksPhase(_cfg(tmp_path, "tasks"), BudgetMode.OFF).run(state)
+        tasks = json.loads(Path(result.artifacts[0].path).read_text(encoding="utf-8"))
+        all_paths = [p for t in tasks["tasks"] for p in t["file_paths"]]
+        assert "src/cart.py" in all_paths
+        assert not any("harness/gates" in p for p in all_paths)
+
     def test_artifact_still_persisted_when_absent(self, tmp_path: Path) -> None:
         """Persistence behavior is unchanged — the scaffold is still written."""
         state = _make_state(tmp_path)
