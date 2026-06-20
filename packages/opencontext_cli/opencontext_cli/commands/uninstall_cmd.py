@@ -51,6 +51,33 @@ def _strip_project_managed_blocks(root: object, scope: str) -> None:
             pass
 
 
+_PURGE_TARGETS = (".opencontext", ".storage", "opencontext.yaml", "harness.yaml")
+
+
+def _purge_project_artifacts(root: object) -> list[str]:
+    """Delete OpenContext's project-local artifacts. Best-effort; returns what
+    was removed. Only paths under ``root`` are touched.
+    """
+    import shutil
+    from pathlib import Path
+
+    base = Path(str(root))
+    removed: list[str] = []
+    for name in _PURGE_TARGETS:
+        target = base / name
+        if not target.exists():
+            continue
+        try:
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+            removed.append(name)
+        except Exception:
+            pass
+    return removed
+
+
 console = Console()
 
 
@@ -82,6 +109,11 @@ def add_uninstall_parser(subparsers: Any) -> None:
         "--dry-run", action="store_true", help="Preview the removal without changing anything."
     )
     parser.add_argument("--root", default=".", help="Project root (for project-scoped agents).")
+    parser.add_argument(
+        "--purge",
+        action="store_true",
+        help="Also delete project artifacts (.opencontext/, .storage/, *.yaml configs).",
+    )
 
 
 def handle_uninstall(args: Any) -> None:
@@ -123,6 +155,8 @@ def handle_uninstall(args: Any) -> None:
                 console.print(f"  [bold]{result['agent']}[/]")
                 for action in result.get("plan", []):
                     console.print(f"    [dim]{action}[/]")
+            if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE"):
+                console.print(f"  [dim]would purge: {', '.join(_PURGE_TARGETS)}[/]")
         return
 
     # Destructive: require explicit confirmation unless --yes (or non-interactive
@@ -132,6 +166,11 @@ def handle_uninstall(args: Any) -> None:
             console.print("[yellow]Refusing non-interactive uninstall; pass --yes.[/]")
             return
         console.print(f"About to remove OpenContext from: [bold]{', '.join(valid)}[/]")
+        if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE"):
+            console.print(
+                "[red]--purge will DELETE[/] "
+                f"[bold]{', '.join(_PURGE_TARGETS)}[/] under the project root."
+            )
         if not prompts.confirm("Proceed?", default=False):
             console.print("[yellow]Uninstall cancelled.[/]")
             return
@@ -140,6 +179,22 @@ def handle_uninstall(args: Any) -> None:
     if unknown:
         report["skipped"] = unknown
     _strip_project_managed_blocks(getattr(args, "root", "."), scope)
+
+    # Full uninstall: clear the global install ledger so a later reinstall re-runs
+    # global setup instead of short-circuiting on "already installed".
+    full_uninstall = getattr(args, "all_agents", False) or not requested
+    if full_uninstall:
+        try:
+            from opencontext_core.install_manager import InstallationManager
+
+            if InstallationManager().clear_state():
+                report["state_cleared"] = True
+        except Exception:
+            pass
+
+    if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE") and scope == "local":
+        report["purged"] = _purge_project_artifacts(getattr(args, "root", "."))
+
     if json_output:
         print(json.dumps(report, indent=2))
         return
@@ -156,6 +211,10 @@ def handle_uninstall(args: Any) -> None:
             console.print(f"    [dim]{file_path}[/]")
     for agent in unknown:
         console.print(f"  [yellow]- {agent} (unknown, skipped)[/]")
+    if report.get("state_cleared"):
+        console.print("  [dim]global install state cleared (reinstall will re-run setup)[/]")
+    if report.get("purged"):
+        console.print(f"  [dim]purged: {', '.join(report['purged'])}[/]")
 
 
 def _parse_agents(values: list[str] | None) -> list[str]:

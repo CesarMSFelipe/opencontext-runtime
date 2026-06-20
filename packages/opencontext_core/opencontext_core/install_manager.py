@@ -385,6 +385,19 @@ class InstallationManager:
         """Check if OpenContext is installed."""
         return self.state_path.exists()
 
+    def clear_state(self) -> bool:
+        """Remove the install-state ledger.
+
+        ``opencontext install`` skips global setup when this ledger exists, so a
+        full uninstall must clear it — otherwise a later reinstall silently skips
+        re-wiring the global MCP/agent integration. Returns True if a file was
+        removed.
+        """
+        if self.state_path.exists():
+            self.state_path.unlink()
+            return True
+        return False
+
     def _load_state(self) -> InstallState | None:
         """Load installation state."""
         if not self.state_path.exists():
