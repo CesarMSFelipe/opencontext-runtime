@@ -1272,12 +1272,21 @@ class TasksPhase(HarnessPhase):
                         }
                     )
             else:
-                # Default task if no files extracted
+                # No files in the design scaffold (e.g. no model filled it). Use the
+                # files the explore phase actually surfaced for THIS task — never a
+                # hard-coded path (which previously leaked OpenContext's own internals
+                # into every project's task plan).
+                candidate_files = list(
+                    dict.fromkeys(getattr(state, "context_required_sources", []) or [])
+                )
+                if not candidate_files:
+                    sources: set[str] = getattr(state, "context_sources", set()) or set()
+                    candidate_files = sorted({str(s).split(":")[0] for s in sources})
                 tasks.append(
                     {
                         "id": "task-1",
                         "description": f"Implement feature: {task}",
-                        "file_paths": ["harness/gates.py", "tests/harness/test_harness_gates.py"],
+                        "file_paths": candidate_files,
                         "complexity": "medium",
                     }
                 )
