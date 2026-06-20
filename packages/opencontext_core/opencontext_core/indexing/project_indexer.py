@@ -14,6 +14,7 @@ from opencontext_core.indexing.dependency_graph import DependencyGraphBuilder
 from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 from opencontext_core.indexing.scanner import ProjectScanner, ScannedFile
 from opencontext_core.indexing.symbol_extractor import ExtractableFile, SymbolExtractor
+from opencontext_core.indexing.tree_sitter_parser import LANGUAGE_EXTENSIONS
 from opencontext_core.models.project import ProjectManifest, Symbol
 from opencontext_core.project.profiles import (
     GENERIC_PROFILE,
@@ -30,6 +31,12 @@ _log = logging.getLogger(__name__)
 # in sync with TreeSitterParser._parse_with_tree_sitter.
 _KG_LANGUAGES = frozenset(
     {"python", "javascript", "typescript", "go", "rust", "java", "php"}
+)
+
+# File extensions whose language the KG extracts symbols for. Used to decide which
+# changed files to re-index after a task (kept in sync with _KG_LANGUAGES).
+_KG_EXTENSIONS = frozenset(
+    ext for ext, lang in LANGUAGE_EXTENSIONS.items() if lang in _KG_LANGUAGES
 )
 
 

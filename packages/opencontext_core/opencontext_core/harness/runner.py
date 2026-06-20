@@ -589,18 +589,20 @@ class HarnessRunner:
         if changed:
             try:
                 from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+                from opencontext_core.indexing.project_indexer import _KG_EXTENSIONS
 
                 # Canonical KG db name — same as runtime/explore (context_graph.db).
                 db_path = state.root / ".storage" / "opencontext" / "context_graph.db"
-                py_changed = {p for p in changed if (state.root / p).suffix == ".py"}
-                if db_path.exists() and py_changed:
+                kg_changed = {p for p in changed if (state.root / p).suffix in _KG_EXTENSIONS}
+                if db_path.exists() and kg_changed:
                     kg = KnowledgeGraph(db_path=db_path)
                     try:
                         # reindex_files re-parses, rebuilds FTS, AND finalizes
                         # cross-file edges — the manual per-file loop skipped the
                         # last step, leaving call edges (which power graph ranking)
-                        # stale after every task.
-                        kg.reindex_files(py_changed, state.root)
+                        # stale after every task. Covers every KG language (not just
+                        # .py) so JS/TS/Go/Rust/Java/PHP edits also refresh the graph.
+                        kg.reindex_files(kg_changed, state.root)
                     except Exception as exc:
                         _log.warning("post-run re-index failed: %s", exc)
                     kg.close()
