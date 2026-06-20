@@ -172,7 +172,7 @@ class TestEvidenceConversion:
 
 
 class TestFirewallScan:
-    def test_rule_evidence_with_secret_is_blocked_by_firewall(self, tmp_path: Path) -> None:
+    def test_rule_evidence_with_secret_is_redacted_by_firewall(self, tmp_path: Path) -> None:
         rules_dir = tmp_path / ".opencontext" / "rules"
         rules_dir.mkdir(parents=True)
         # A raw secret-looking value inside a rule file.
@@ -186,8 +186,10 @@ class TestFirewallScan:
 
         firewall = ContextFirewall(_config())
         decision = firewall.check_context_export(items, sink="context_pack")
-        assert decision.allowed is False
-        assert "secret" in decision.reason
+        # Redact-and-continue: the export is allowed but the raw secret is stripped
+        # from every exported item rather than hard-failing the pack.
+        assert decision.allowed is True
+        assert all(secret not in item.content for item in items)
 
 
 class TestSkipAndFailSafe:

@@ -24,7 +24,7 @@ def test_secret_findings_are_fingerprint_only() -> None:
     assert findings[0].redacted_value.startswith("[REDACTED:")
 
 
-def test_context_firewall_blocks_raw_secret_export() -> None:
+def test_context_firewall_redacts_raw_secret_export() -> None:
     config = default_config_data()
     firewall = ContextFirewall(OpenContextConfig.model_validate(config))
     item = ContextItem(
@@ -39,8 +39,12 @@ def test_context_firewall_blocks_raw_secret_export() -> None:
 
     decision = firewall.check_context_export([item], sink="test")
 
-    assert decision.allowed is False
-    assert decision.reason == "raw_secret_detected_before_context_export"
+    # Redact-and-continue: a local export sanitizes in place instead of hard-failing,
+    # so a benign secret-like fixture no longer breaks `pack`. The raw value is gone.
+    assert decision.allowed is True
+    assert item.redacted is True
+    assert "sk-abcdefghijklmnopqrstuvwxyz123456" not in item.content
+    assert any("redacted_secrets" in w for w in decision.warnings)
 
 
 def test_sanitized_pack_passes_context_firewall() -> None:

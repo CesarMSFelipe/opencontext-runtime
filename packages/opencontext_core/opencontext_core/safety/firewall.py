@@ -56,17 +56,29 @@ class ContextFirewall:
         """Block raw secret-bearing context before export-like sinks."""
 
         warnings = self._context_warnings(items)
+        redacted_ids: list[str] = []
         for item in items:
+            # Redact-and-continue: a benign secret-like fixture (a .env example, an
+            # sk-… token in a test) must not hard-fail a local export (pack/context).
+            # Sanitizing in place strips the raw value, so downstream sinks — including
+            # the provider egress gate (check_provider_call) — still see clean content.
             if self._secret_scanner.scan(item.content):
-                return _blocked(
-                    "raw_secret_detected_before_context_export",
-                    [
-                        "Redact the context item before export.",
-                        "Omit the source from the pack.",
-                        "Keep the operation local and sanitized.",
-                    ],
-                    warnings,
-                )
+                redacted = self._secret_scanner.redact(item.content)
+                if self._secret_scanner.scan(redacted):
+                    # Redaction could not fully sanitize — keep the hard block.
+                    return _blocked(
+                        "raw_secret_detected_before_context_export",
+                        [
+                            "Redact the context item before export.",
+                            "Omit the source from the pack.",
+                            "Keep the operation local and sanitized.",
+                        ],
+                        warnings,
+                    )
+                item.content = redacted
+                item.redacted = True
+                item.metadata["redacted"] = True
+                redacted_ids.append(item.id)
             if item.classification in {DataClassification.SECRET, DataClassification.REGULATED}:
                 if not item.redacted and item.metadata.get("redacted") is not True:
                     return _blocked(
@@ -77,6 +89,8 @@ class ContextFirewall:
                         ],
                         warnings,
                     )
+        if redacted_ids:
+            warnings.append(f"redacted_secrets={len(redacted_ids)}")
         return FirewallDecision(
             allowed=True,
             reason=f"{sink}_allowed",
