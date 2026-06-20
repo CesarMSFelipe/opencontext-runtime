@@ -372,13 +372,17 @@ opencontext bridges scan . --type HTTP --json
 
 14 MCP tools. Compatible with Claude Code, Cursor, Copilot, Windsurf, OpenCode, and any MCP-compatible editor.
 
-`opencontext install` writes three agent personas to your editor's agents directory. In OpenCode, press **Tab** to switch to one. In Claude Code, they appear as subagents.
+`opencontext install` writes seven OC personas to your editor's agents directory. In OpenCode, press **Tab** to switch to one. In Claude Code, they appear as subagents. Each SDD phase runs as the persona suited to it.
 
-| Persona | Role |
-|---------|------|
-| **OC Orchestrator** | Plans and delegates. Coordinates the full SDD workflow — explore → spec → design → apply → verify — using sub-agents for each phase. Delegates reading 4+ files, writing 2+ files, and every commit to a focused sub-step. |
-| **OC Professor** | Teaching mentor. Explains the why and the concept before the code, grounded in your actual codebase via the knowledge graph. |
-| **OC Reviewer** | Rigorous reviewer. Code review (one finding per line, severity-tagged), GGA quality gate enforcement, and judgment-day adversarial review of harness artifacts. |
+| Persona | SDD phase | Role |
+|---------|-----------|------|
+| **OC Orchestrator** | propose · spec · tasks | Thin coordinator: plans, delegates, and verifies through the gates. Delegates reading 4+ files, writing 2+ files, and every commit to a focused sub-step. |
+| **OC Explorer** | explore | Investigates the codebase: maps the territory before any change via the knowledge graph. |
+| **OC Architect** | design | Designs the technical approach: architecture, components, data flow. |
+| **OC Builder** | apply | Implements the design: writes code that matches existing patterns. |
+| **OC Tester** | test | Senior QA: writes behavior tests that fail when the code breaks. |
+| **OC Reviewer** | verify · review | Rigorous reviewer: code review (one finding per line), quality gates, adversarial review. |
+| **OC Professor** | — | Teaching mentor: explains the why and the concept before the code, grounded in your real code. |
 
 **Multi-agent execution:** the OC Orchestrator is a thin coordinator — it never does all the work itself. Reading, writing, and verifying are always delegated to specialized sub-agents. When you run the harness (`opencontext loop`), each phase runs in its own context: explore → propose → spec → design → tasks → apply → verify → archive. Phases that can run in parallel do.
 
@@ -572,7 +576,7 @@ opencontext verify      # confirm all checks pass
 opencontext doctor      # deep diagnostics if something looks wrong
 ```
 
-`opencontext install` auto-detects Claude Code, OpenCode, Cursor, Copilot, Windsurf, and more. It writes MCP config and the three OC personas (Orchestrator, Professor, Reviewer) to your editor's agents directory.
+`opencontext install` auto-detects Claude Code, OpenCode, Cursor, Copilot, Windsurf, and more. It writes MCP config and the seven OC personas (Orchestrator, Explorer, Architect, Builder, Tester, Reviewer, Professor) to your editor's agents directory.
 
 </td>
 </tr>
