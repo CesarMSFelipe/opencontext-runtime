@@ -30,6 +30,19 @@ ROLES = (
     "orchestrate",
 )
 
+# Per-persona is the recommended way to route SDD models: each persona owns its
+# SDD phase(s), so "the Architect uses opus" reads better than a phase or role id.
+# short name -> (persona id written to sdd.persona_models, SDD phase(s) it covers)
+PERSONAS: dict[str, tuple[str, str]] = {
+    "explorer": ("oc-explorer", "explore"),
+    "orchestrator": ("oc-orchestrator", "propose/spec/tasks"),
+    "architect": ("oc-architect", "design"),
+    "builder": ("oc-builder", "apply"),
+    "tester": ("oc-tester", "test (TDD)"),
+    "reviewer": ("oc-reviewer", "verify/review"),
+    "professor": ("oc-professor", "teaching"),
+}
+
 
 def _find_config(start: Path | None = None) -> Path | None:
     """Locate the nearest opencontext.yaml from ``start`` (or cwd) upward."""
@@ -49,18 +62,23 @@ def add_models_parser(subparsers: Any) -> None:
         description=(
             "Set the model per functional role. Your agent CLI fixes the provider; "
             "OpenContext routes the model per role via MCP sampling hints.\n\n"
-            "  opencontext models show                     Show role -> model\n"
-            "  opencontext models set-role generate opus   Use opus for generation\n"
-            "  opencontext models set-role classify haiku  Use haiku for classification\n"
-            "  opencontext models set-default sonnet       Default model for unset roles"
+            "  opencontext models show                       Show persona/role -> model\n"
+            "  opencontext models set-persona architect opus Use opus for the design phase\n"
+            "  opencontext models set-default sonnet         Default (your client's model)\n"
+            "  opencontext models set-role generate opus     Advanced: per functional role"
         ),
     )
     sub = parser.add_subparsers(dest="models_command", required=True)
-    sub.add_parser("show", help="Show the default and per-role model map.")
-    set_role = sub.add_parser("set-role", help="Set the model for one role.")
+    sub.add_parser("show", help="Show the default, per-persona, and per-role model map.")
+    set_persona = sub.add_parser(
+        "set-persona", help="Set the model for an SDD persona (recommended)."
+    )
+    set_persona.add_argument("persona", choices=tuple(PERSONAS))
+    set_persona.add_argument("model", help="Model id/hint (e.g. opus, sonnet, haiku, 5.4-mini).")
+    set_role = sub.add_parser("set-role", help="Advanced: set the model for one functional role.")
     set_role.add_argument("role", choices=ROLES)
     set_role.add_argument("model", help="Model id/hint (e.g. opus, sonnet, haiku, 5.4-mini).")
-    set_default = sub.add_parser("set-default", help="Set the default model for unset roles.")
+    set_default = sub.add_parser("set-default", help="Set the default model for unset personas.")
     set_default.add_argument("model")
 
 
@@ -74,6 +92,8 @@ def handle_models(args: Any) -> int:
     command = args.models_command
     if command == "show":
         return _show(cfg_path)
+    if command == "set-persona":
+        return _set_persona(cfg_path, args.persona, args.model)
     if command == "set-role":
         return _set_role(cfg_path, args.role, args.model)
     if command == "set-default":
@@ -93,15 +113,38 @@ def _show(cfg_path: Path) -> int:
     data = _load(cfg_path)
     models = data.get("models", {}) or {}
     default = (models.get("default", {}) or {}).get("model", "—")
+    persona_models = (data.get("sdd", {}) or {}).get("persona_models", {}) or {}
+
+    console.print(f"[bold]default[/] (your client's model): {default}")
+
+    personas = Table(title="Per-persona models (recommended) — SDD phase routing")
+    personas.add_column("Persona", style="cyan")
+    personas.add_column("SDD phase(s)", style="dim")
+    personas.add_column("Model")
+    for name, (persona_id, phases) in PERSONAS.items():
+        personas.add_row(name, phases, str(persona_models.get(persona_id, "(default)")))
+    console.print(personas)
+
     roles = models.get("roles", {}) or {}
-    table = Table(title="Models — provider is fixed by your agent CLI")
-    table.add_column("Role", style="cyan")
-    table.add_column("Model")
-    table.add_row("default", str(default))
-    for role in ROLES:
-        entry = roles.get(role) or {}
-        table.add_row(role, str(entry.get("model", "(default)")))
-    console.print(table)
+    if any((roles.get(r) or {}).get("model") for r in ROLES):
+        advanced = Table(title="Per-role models (advanced fallback)")
+        advanced.add_column("Role", style="cyan")
+        advanced.add_column("Model")
+        for role in ROLES:
+            entry = roles.get(role) or {}
+            advanced.add_row(role, str(entry.get("model", "(default)")))
+        console.print(advanced)
+    return 0
+
+
+def _set_persona(cfg_path: Path, persona: str, model: str) -> int:
+    persona_id = PERSONAS[persona][0]
+    data = _load(cfg_path)
+    sdd = data.setdefault("sdd", {})
+    persona_models = sdd.setdefault("persona_models", {})
+    persona_models[persona_id] = model
+    _save(cfg_path, data)
+    console.print(f"[green]Set[/] sdd.persona_models.{persona_id} = {model}  ({persona})")
     return 0
 
 
