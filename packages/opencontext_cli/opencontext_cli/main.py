@@ -1034,7 +1034,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     memory_import.add_argument("path", help="Path to an exported memory JSON file.")
 
-    # Status command
     status_parser = subparsers.add_parser("status", help="Show project status.")
     status_parser.add_argument("root", nargs="?", default=".", help="Project root.")
 

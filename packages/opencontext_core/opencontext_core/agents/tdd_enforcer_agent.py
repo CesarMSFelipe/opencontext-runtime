@@ -33,6 +33,6 @@ class TDDEnforcerAgent(BaseAgent):
             "passed": passed,
             "test_count": int(m.group(1)) if m else 0,
             "failure_count": int(f.group(1)) if f else 0,
-            "output": result.stdout[-2000:],  # last 2000 chars
+            "output": result.stdout[-2000:],
             "cycle_status": "green" if passed else "red",
         }

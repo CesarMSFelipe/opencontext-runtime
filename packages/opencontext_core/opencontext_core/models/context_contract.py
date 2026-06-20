@@ -48,5 +48,5 @@ class ContextContract(BaseModel):
     def to_yaml(self) -> str:
         """Serialize to human-readable YAML."""
         data = self.model_dump()
-        # Convert VerificationGate objects to dicts (already done by model_dump)
+        # model_dump() already recursed nested models into dicts, so yaml.dump won't choke.
         return yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)

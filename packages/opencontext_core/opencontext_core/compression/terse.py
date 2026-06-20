@@ -512,7 +512,7 @@ class TerseCompressor:
 
         result = self._restore_technical_content(compressed, placeholder_map)
 
-        # Step 4: Clean up spacing
+        # Normalize whitespace/punctuation left behind by word-level substitutions
         result = self._cleanup_spacing(result)
 
         return result

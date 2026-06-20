@@ -257,7 +257,6 @@ def _looks_like_code(content: str) -> bool:
     if len(lines) < 3:
         return False
 
-    # Count indicators
     indicators = 0
     for line in lines:
         s = line.strip()

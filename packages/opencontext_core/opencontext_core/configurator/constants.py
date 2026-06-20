@@ -67,7 +67,7 @@ def agent_home(agent_id: str) -> Path:
 
 
 # Filename of the MCP config inside the agent's config directory.
-# gemini-cli and codex keep MCP config inside an existing settings/config file.
+# Listed agents keep MCP config in a specific named file; anything not listed defaults to mcp.json.
 _MCP_FILENAME: dict[str, str] = {
     "gemini-cli": "settings.json",
     "codex": "config.toml",

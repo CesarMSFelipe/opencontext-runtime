@@ -6,7 +6,7 @@ import re
 
 from opencontext_core.models.project import FileKind, ProjectFile, Symbol
 
-# CAMEL_RE tokenizes queries; underscores are stripped here then re-split by _split_camel
+# CAMEL_RE drops underscores/punctuation (token delimiters); _split_camel then splits CamelCase
 CAMEL_RE = re.compile(r"[A-Za-z0-9]+")
 QUERY_STOPWORDS = {
     "a",

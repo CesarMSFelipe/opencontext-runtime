@@ -180,7 +180,7 @@ def _find_block_end(lines: list[str], start: int, *, max_lines: int = 120) -> in
     for i in range(start + 1, limit):
         line = lines[i]
         if not line.strip():
-            continue  # skip blank lines
+            continue
         indent = len(line) - len(line.lstrip())
         if indent <= base_indent and line.strip() and not line.strip().startswith("#"):
             return i
