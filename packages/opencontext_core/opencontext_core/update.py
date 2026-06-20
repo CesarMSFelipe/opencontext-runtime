@@ -7,6 +7,7 @@ external services or telemetry.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -88,7 +89,14 @@ class UpdateChecker:
             cached = cls._load_cache()
             if cached and cached.last_check:
                 last = datetime.fromisoformat(cached.last_check)
-                if datetime.now() - last < CACHE_DURATION and cached.check:
+                # Bust the cache when the installed version changed since it was
+                # written, else `update` would echo a stale version that
+                # contradicts `--version` after an up/downgrade within the window.
+                if (
+                    datetime.now() - last < CACHE_DURATION
+                    and cached.check
+                    and cached.check.current_version == current
+                ):
                     return cached.check
 
         # Fetch from PyPI
@@ -253,16 +261,46 @@ class UpdateChecker:
 
     @classmethod
     def _compare_versions(cls, v1: str, v2: str) -> int:
-        """Compare two semver strings. Returns -1, 0, or 1."""
+        """Compare two PEP 440 / semver version strings. Returns -1, 0, or 1.
 
-        parts1 = [int(x) for x in v1.split(".")]
-        parts2 = [int(x) for x in v2.split(".")]
-        for a, b in zip(parts1, parts2, strict=False):
-            if a < b:
-                return -1
-            if a > b:
-                return 1
-        return 0
+        Must tolerate pre-release tags (e.g. ``0.2.1b0``) — a bare ``int()`` parse
+        crashed on those, and because the caller swallows exceptions it silently
+        reported every release as up-to-date for pre-release installs.
+        """
+
+        try:
+            from packaging.version import InvalidVersion, Version
+
+            try:
+                pa, pb = Version(v1), Version(v2)
+                return -1 if pa < pb else (1 if pa > pb else 0)
+            except InvalidVersion:
+                pass
+        except ImportError:
+            pass
+
+        # Dependency-free fallback: compare numeric release parts; a version with a
+        # pre-release suffix (e.g. '1b0') sorts before the same release without one.
+        def parse(version: str) -> tuple[list[int], int]:
+            release: list[int] = []
+            pre = 0  # 0 = final release, -1 = carries a pre-release suffix
+            for seg in version.split("."):
+                match = re.match(r"(\d+)(.*)", seg)
+                if not match:
+                    release.append(0)
+                    continue
+                release.append(int(match.group(1)))
+                if match.group(2):
+                    pre = -1
+            return release, pre
+
+        r1, p1 = parse(v1)
+        r2, p2 = parse(v2)
+        width = max(len(r1), len(r2))
+        r1 += [0] * (width - len(r1))
+        r2 += [0] * (width - len(r2))
+        key1, key2 = (r1, p1), (r2, p2)
+        return -1 if key1 < key2 else (1 if key1 > key2 else 0)
 
     @classmethod
     def _load_cache(cls) -> UpdateState:
