@@ -320,7 +320,15 @@ install_opencontext() {
         fi
 
         if [ -n "$VENV_BIN" ] && [ -f "$VENV_BIN/opencontext" ]; then
-            _add_venv_to_path "$VENV_BIN"
+            # If ~/.local/bin is already on PATH, link there so 'opencontext' works
+            # immediately in the current shell — no reload needed. Otherwise edit rc.
+            if echo ":$PATH:" | grep -q ":$HOME/.local/bin:"; then
+                mkdir -p "$HOME/.local/bin"
+                ln -sf "$VENV_BIN/opencontext" "$HOME/.local/bin/opencontext"
+                echo "✓ Linked opencontext into ~/.local/bin (on PATH — no reload needed)"
+            else
+                _add_venv_to_path "$VENV_BIN"
+            fi
         fi
     fi
 
