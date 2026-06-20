@@ -18,7 +18,7 @@ from opencontext_core.onboarding.service import (
 def test_onboarding_options_defaults() -> None:
     opts = OnboardingOptions(root=Path("/tmp/test"))
     assert opts.tdd_mode == "ask"
-    assert opts.sdd_model_profile == "hybrid"
+    assert opts.sdd_model_profile == "default"
     assert opts.orchestrator_profile == "multi-phase"
     assert opts.active_clients == ["opencode"]
     assert opts.token_budget_per_phase is None

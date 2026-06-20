@@ -21,7 +21,9 @@ class OnboardingOptions:
     security_mode: str = "private_project"
     active_clients: list[str] = field(default_factory=lambda: ["opencode"])
     tdd_mode: str = "ask"
-    sdd_model_profile: str = "hybrid"
+    # 'default' = the client's selected model for every phase (no surprise model
+    # picks); presets (cheap/hybrid/premium) route per phase, tunable per persona.
+    sdd_model_profile: str = "default"
     orchestrator_profile: str = "multi-phase"
     memory_provider: str = "local"
     setup_mcp: bool = False
