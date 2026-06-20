@@ -152,9 +152,19 @@ class TokenOptimizer:
             else:
                 efficiency = 1.0
 
-            recommended = int(avg_usage * 1.2)
+            # ACON-lite: operations that FAILED while context was omitted are
+            # evidence the pack was over-compressed (needed info was dropped).
+            # Widen the budget for that op type proportional to that rate, instead
+            # of shrinking blindly toward average usage. Capped at +50%; needs
+            # real omissions, so a clean history leaves the budget untouched.
+            fail_omit = sum(
+                1 for m in op_metrics if m.success is False and m.context_items_omitted > 0
+            )
+            acon_boost = 1.0 + min(0.5, fail_omit / len(op_metrics))
+
+            recommended = int(avg_usage * 1.2 * acon_boost)
             min_budget = int(avg_usage * 0.8)
-            max_budget = int(avg_usage * 2.0)
+            max_budget = int(avg_usage * 2.0 * acon_boost)
             confidence = min(len(op_metrics) / 50, 1.0)
 
             self._budgets[op_type] = TokenBudgetProfile(
