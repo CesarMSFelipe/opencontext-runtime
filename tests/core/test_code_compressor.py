@@ -95,9 +95,9 @@ def test_empty_input_returns_empty() -> None:
 def test_shorten_locals_does_not_corrupt_strings_or_spacing() -> None:
     cc = CodeCompressor()
     src = (
-        'def greet(username):\n'
+        "def greet(username):\n"
         '    message = "hello username"\n'
-        '    return compute(username, beta_value)\n'
+        "    return compute(username, beta_value)\n"
     )
     out = cc._shorten_locals(src, language="python")
     # The identifier inside the string literal is NOT renamed.

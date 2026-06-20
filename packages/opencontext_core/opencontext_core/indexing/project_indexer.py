@@ -29,9 +29,7 @@ _log = logging.getLogger(__name__)
 # Languages the tree-sitter parser has real symbol extractors for. Files in other
 # languages are still scanned/searchable but don't get graph symbols+edges. Keep
 # in sync with TreeSitterParser._parse_with_tree_sitter.
-_KG_LANGUAGES = frozenset(
-    {"python", "javascript", "typescript", "go", "rust", "java", "php"}
-)
+_KG_LANGUAGES = frozenset({"python", "javascript", "typescript", "go", "rust", "java", "php"})
 
 # File extensions whose language the KG extracts symbols for. Used to decide which
 # changed files to re-index after a task (kept in sync with _KG_LANGUAGES).

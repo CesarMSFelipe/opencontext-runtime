@@ -202,9 +202,10 @@ class TestMCPServer:
 
         server = MCPServer(db_path=tmp_path / "test.db")
         request = {"method": "notifications/initialized"}
-        with patch.object(server, "_send_response") as resp, patch.object(
-            server, "_send_error"
-        ) as err:
+        with (
+            patch.object(server, "_send_response") as resp,
+            patch.object(server, "_send_error") as err,
+        ):
             server._handle_request(request)
             resp.assert_not_called()
             err.assert_not_called()
