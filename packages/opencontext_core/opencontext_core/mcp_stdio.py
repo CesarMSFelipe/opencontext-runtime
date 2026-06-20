@@ -7,6 +7,7 @@ Supports JSON-RPC 2.0 style communication.
 from __future__ import annotations
 
 import json
+import os
 import re
 import select
 import sys
@@ -147,6 +148,9 @@ class MCPServer:
         self.policy: ToolPermissionPolicy = policy or ToolPermissionPolicy(
             allowed_tools=set(self._default_tool_names())
         )
+        # Raw stdin line buffer (see _next_line): we manage line splitting ourselves
+        # so select() can't strand a buffered line on a batched write.
+        self._inbuf: str = ""
 
         # Tool definitions
         self.tools: dict[str, dict[str, Any]] = {
@@ -278,6 +282,44 @@ class MCPServer:
                 break
             self._handle_request(message)
 
+    def _next_line(self, timeout: float | None) -> str | None:
+        """Return the next newline-terminated line from stdin (newline stripped),
+        or None on EOF, or — when ``timeout`` is given — None if no line arrives
+        before it.
+
+        Reads raw bytes via the fd and splits lines into ``self._inbuf`` itself, so a
+        host that batches several JSON-RPC messages into one write is never stranded
+        by ``select`` (which reflects the kernel pipe, not Python's text buffer).
+        Falls back to a blocking ``readline`` when stdin has no real fd (e.g. an
+        in-memory test buffer).
+        """
+        while "\n" not in self._inbuf:
+            try:
+                fd = sys.stdin.fileno()
+            except Exception:
+                fd = None
+            if fd is None:
+                chunk = sys.stdin.readline()
+                if not chunk:
+                    break  # EOF
+                self._inbuf += chunk
+                continue
+            if timeout is not None:
+                ready, _, _ = select.select([fd], [], [], timeout)
+                if not ready:
+                    return None
+            raw = os.read(fd, 65536)
+            if not raw:
+                break  # EOF
+            self._inbuf += raw.decode("utf-8", errors="replace")
+        if "\n" in self._inbuf:
+            line, _, self._inbuf = self._inbuf.partition("\n")
+            return line
+        if self._inbuf:  # trailing partial line at EOF
+            line, self._inbuf = self._inbuf, ""
+            return line
+        return None
+
     def _read_message(self) -> dict[str, Any] | None:
         """Read one JSON-RPC message from stdin; None at EOF.
 
@@ -285,8 +327,8 @@ class MCPServer:
         requests and incoming client messages read from one place.
         """
         while True:
-            line = sys.stdin.readline()
-            if not line:  # EOF
+            line = self._next_line(None)
+            if line is None:
                 return None
             line = line.strip()
             if not line:
@@ -1036,25 +1078,16 @@ class MCPServer:
     def _read_message_before(self, deadline: float) -> dict[str, Any] | None:
         """Read one JSON-RPC message, or None if ``deadline`` passes first.
 
-        Uses ``select`` on a real stdin fd so a silent host cannot block forever;
-        when stdin has no pollable fd (e.g. an in-memory test buffer) it falls
-        back to a plain blocking read.
+        Goes through ``_next_line`` (shared buffer) so a silent host cannot block
+        forever AND a host that batches messages into one write is not stranded.
         """
-        try:
-            fd = sys.stdin.fileno()
-        except Exception:
-            fd = None
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return None
-            if fd is not None:
-                ready, _, _ = select.select([fd], [], [], remaining)
-                if not ready:
-                    return None
-            line = sys.stdin.readline()
-            if not line:
-                return None  # EOF
+            line = self._next_line(remaining)
+            if line is None:
+                return None  # EOF or timed out
             line = line.strip()
             if not line:
                 continue

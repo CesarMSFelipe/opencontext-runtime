@@ -163,3 +163,26 @@ def test_initialize_without_sampling_does_not_register(server: MCPServer) -> Non
         {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}}
     )
     assert get_host_sampler() is None
+
+
+def test_read_message_before_handles_batched_writes(
+    server: MCPServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Two JSON-RPC messages written in ONE os.write must both be read. The old
+    # select()+buffered-readline stranded the second line in the text buffer and
+    # returned empty (turning a delivered sampling response into an empty answer).
+    import os
+    import time
+
+    r, w = os.pipe()
+    os.write(
+        w,
+        b'{"jsonrpc":"2.0","id":1,"method":"x"}\n'
+        b'{"jsonrpc":"2.0","id":"oc-sampling-1","result":{"content":{"text":"ok"}}}\n',
+    )
+    os.close(w)
+    monkeypatch.setattr(sys, "stdin", os.fdopen(r, "r"))
+    first = server._read_message_before(time.monotonic() + 2)
+    second = server._read_message_before(time.monotonic() + 2)
+    assert first is not None and first["id"] == 1
+    assert second is not None and second["id"] == "oc-sampling-1"
