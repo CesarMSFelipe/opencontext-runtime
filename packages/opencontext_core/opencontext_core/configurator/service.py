@@ -60,6 +60,12 @@ class Configurator:
 
         When ``dry_run`` is true, nothing is written: each agent's result
         describes the planned changes (which files, created vs modified) instead.
+
+        ``scope`` is advisory and echoed in the report; it does NOT move files
+        between the project and the home dir. Each file's location is determined
+        per-agent by the adapter: AGENTS.md-honoring agents get project-root
+        instructions, while MCP config, personas, and CLAUDE.md/GEMINI.md agents
+        always write to the agent's own config dir under home.
         """
 
         results = [self.configure_one(agent_id, scope, dry_run=dry_run) for agent_id in agents]
@@ -117,6 +123,9 @@ class Configurator:
         The inverse of :meth:`configure`: strips the managed instructions block and
         the ``opencontext`` MCP entry (and agent-specific extras) without touching
         anything the developer authored.
+
+        ``scope`` is advisory (see :meth:`configure`): removal targets are the same
+        adapter-determined paths regardless of scope.
         """
 
         results = [self.deconfigure_one(agent_id, scope, dry_run=dry_run) for agent_id in agents]
