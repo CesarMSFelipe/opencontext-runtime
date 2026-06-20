@@ -104,8 +104,11 @@ class FTSRetrievalSource:
         db.close()
         items: list[ContextItem] = []
         for rank_idx, row in enumerate(rows):
-            # FTS5 rank is negative (lower = better); normalize to [0,1]
-            raw_rank = row.get("rank") or -(rank_idx + 1)
+            # FTS5 rank is negative (lower = better); normalize to [0,1].
+            # Explicit None check: rank 0.0 is a valid (best) score, not "missing".
+            raw_rank = row.get("rank")
+            if raw_rank is None:
+                raw_rank = -(rank_idx + 1)
             score = max(0.01, 1.0 / (1.0 - raw_rank))  # monotonic, bounded
             file_path = row.get("file_path", "")
             symbol_path = f"{file_path}:{row.get('line', 0)}"
