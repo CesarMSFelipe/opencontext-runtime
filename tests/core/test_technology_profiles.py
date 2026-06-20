@@ -50,6 +50,22 @@ def test_dominant_code_language_wins_without_markers(tmp_path: Path) -> None:
     assert manifest.profile == "python"
 
 
+def test_generic_directories_do_not_trigger_a_framework_profile(tmp_path: Path) -> None:
+    # A project that merely has src//tests//components//routes/ dirs of Python is NOT
+    # Node/Rust/Drupal — those need a real manifest (package.json / Cargo.toml /
+    # *.info.yml). Regression: 'src/' alone used to score the Node profile to 1.0.
+    for sub in ("src", "tests", "components", "routes"):
+        (tmp_path / sub).mkdir()
+        (tmp_path / sub / "mod.py").write_text("x = 1\n", encoding="utf-8")
+    config = ProjectIndexConfig(root=str(tmp_path), profile="generic", ignore=[])
+
+    manifest = ProjectIndexer(config, "dirs-only", profiles=first_party_profiles()).build_manifest()
+
+    assert "node" not in manifest.technology_profiles
+    assert manifest.technology_profiles == ["generic"]
+    assert manifest.profile == "python"  # dominant code language, not a framework
+
+
 def test_first_party_profile_registry_suggests_safe_commands() -> None:
     profiles = {profile.name: profile for profile in first_party_profiles()}
     python_commands = profiles["python"].suggest_validation_commands()

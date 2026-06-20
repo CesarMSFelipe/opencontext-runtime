@@ -119,6 +119,23 @@ class DrupalTechnologyProfile(MarkerTechnologyProfile):
         "config/install",
         "config/schema",
     )
+    # templates// and components// alone are not Drupal; require a Drupal-specific
+    # manifest, hook file, or src/ plugin path.
+    required_any_markers = (
+        ".info.yml",
+        ".services.yml",
+        ".routing.yml",
+        ".permissions.yml",
+        ".links.menu.yml",
+        ".module",
+        ".install",
+        "src/Controller",
+        "src/Form",
+        "src/Plugin",
+        "src/EventSubscriber",
+        "config/install",
+        "config/schema",
+    )
     score_divisor = 4
     workflow_packs = (
         WorkflowPackReference(name="drupal-review", mode="review"),
@@ -191,6 +208,17 @@ class NodeTechnologyProfile(MarkerTechnologyProfile):
         "routes/",
         "components/",
         "tests/",
+    )
+    # Bare src//routes//components//tests/ are shared with every other ecosystem;
+    # require a real Node manifest before claiming the project is Node.
+    required_any_markers = (
+        "package.json",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "tsconfig.json",
+        "vite.config.ts",
+        "next.config.js",
     )
     workflow_packs = (WorkflowPackReference(name="node-review", mode="review"),)
     validation_commands = (
@@ -352,6 +380,8 @@ class RustTechnologyProfile(MarkerTechnologyProfile):
 
     name = "rust"
     markers = ("Cargo.toml", "Cargo.lock", "src/main.rs", "src/lib.rs", "tests/")
+    # A bare tests/ dir is not Rust; require a Cargo manifest or a crate entrypoint.
+    required_any_markers = ("Cargo.toml", "Cargo.lock", "src/main.rs", "src/lib.rs")
 
 
 class TerraformTechnologyProfile(MarkerTechnologyProfile):
