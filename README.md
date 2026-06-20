@@ -386,19 +386,20 @@ opencontext bridges scan . --type HTTP --json
 
 **Multi-agent execution:** the OC Orchestrator is a thin coordinator — it never does all the work itself. Reading, writing, and verifying are always delegated to specialized sub-agents. When you run the harness (`opencontext loop`), each phase runs in its own context: explore → propose → spec → design → tasks → apply → verify → archive. Phases that can run in parallel do.
 
-<h3>Runs on top of your agent — you choose the model per role</h3>
+<h3>Runs on top of your agent — you choose the model per persona</h3>
 
 OpenContext is the agentic system **on top of** your coding agent, not another agent CLI. Your agent (Claude Code, Codex, OpenCode, …) **fixes the provider**: when OpenContext needs a generation it asks your agent to run it on the agent's own model via MCP sampling — **zero provider or API-key config** on the OpenContext side.
 
-What you control is **which model each unit of work uses**, forwarded to your agent as an MCP `modelPreferences` hint so it picks the matching model:
+What you control is **which model each unit of work uses**, forwarded to your agent as an MCP `modelPreferences` hint. `default` is your agent's own model — nothing is chosen for you unless you ask:
 
 ```bash
-# functional roles (runtime + MCP tools)        # SDD harness phases
-opencontext models set-role generate opus       opencontext profile set hybrid design opus
-opencontext models set-role classify haiku      opencontext profile set hybrid explore haiku
+# SDD phases, by persona (recommended)            # functional roles (runtime + MCP tools)
+opencontext models set-persona architect opus     opencontext models set-role generate opus
+opencontext models set-persona explorer haiku     opencontext models set-role classify haiku
+opencontext models set-default sonnet             # default for anything unset
 ```
 
-Two axes, both delivered as sampling hints: **roles** (classify / retrieve / rerank / generate / …) drive the runtime and MCP tools; **phases** (explore / design / apply / …) drive the SDD harness. Spend a cheap model where it doesn't matter and a strong one where it does — all within your agent's own provider. (Prefer OpenContext to run a model itself? Set a real provider per role; local providers like ollama work too.)
+Two independent axes, both delivered as sampling hints: **personas** map 1:1 to the SDD phases (Architect → design, Explorer → explore, Builder → apply, …) and drive the harness; **roles** (classify / retrieve / rerank / generate / …) drive the runtime and MCP tools. At install you pick a preset (`default` / `cheap` / `hybrid` / `premium`). Spend a cheap model where it doesn't matter and a strong one where it does — all within your agent's own provider. (Prefer OpenContext to run a model itself? Set a real provider per role; local providers like ollama work too.)
 
 > **After `opencontext install`:** reload your shell (`source ~/.bashrc`) if PATH changed, then **restart your agent** so it loads the OpenContext MCP server.
 
