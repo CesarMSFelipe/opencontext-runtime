@@ -25,6 +25,7 @@ from opencontext_cli.commands.git_cmd import add_git_parser, handle_git
 from opencontext_cli.commands.hints_cmd import add_hints_parser, handle_hints
 from opencontext_cli.commands.kg_cmd import add_kg_parser, handle_kg
 from opencontext_cli.commands.loop_cmd import add_loop_commands, handle_loop
+from opencontext_cli.commands.models_cmd import add_models_parser, handle_models
 from opencontext_cli.commands.mutation_cmd import add_mutation_commands, handle_mutation
 from opencontext_cli.commands.persona_cmd import add_persona_parser, handle_persona
 from opencontext_cli.commands.plugin_cmd import add_plugin_parser, handle_plugin
@@ -707,6 +708,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_uninstall_parser(subparsers)
     add_stack_parser(subparsers)
     add_profile_parser(subparsers)
+    add_models_parser(subparsers)
     add_persona_parser(subparsers)
     add_sync_parser(subparsers)
     # ── Health & Updates ──────────────────────────────────────────────
@@ -1302,6 +1304,8 @@ def _dispatch(args: argparse.Namespace) -> None:
         return
     if command == "profile":
         sys.exit(handle_profile(args))
+    if command == "models":
+        sys.exit(handle_models(args))
     if command == "persona":
         sys.exit(handle_persona(args))
     if command == "stack":
@@ -1736,13 +1740,20 @@ def _install(args: argparse.Namespace) -> None:
     from opencontext_core.install_manager import InstallationManager, InstallState
     from opencontext_core.onboarding.service import OnboardingOptions, OnboardingService
 
+    # Honor the editor the wizard asked about. Previously hard-coded to "opencode",
+    # so a claude-code/codex dev got opencode files and no wiring for their own agent.
+    # Falls back to opencode only when no editor was chosen (non-interactive install).
+    _chosen_editor = os.environ.get("_OC_WIZARD_EDITOR", "").strip()
+    _have_editor = bool(_chosen_editor) and _chosen_editor != "other"
+    active_clients = [_chosen_editor] if _have_editor else ["opencode"]
+
     summary: list[str] = []
     options = OnboardingOptions(
         root=root,
         template="generic",
         security_mode="private_project",
         tdd_mode=tdd,
-        active_clients=["opencode"],
+        active_clients=active_clients,
         sdd_model_profile="hybrid",
         orchestrator_profile="opencontext",
         token_budget_per_phase=3000,
@@ -1801,6 +1812,10 @@ def _install(args: argparse.Namespace) -> None:
 
     console.print()
     console.print("[bold]Next steps:[/]")
+    console.print(
+        "  [yellow]↻ Restart your agent (Claude Code / Codex / OpenCode) so it loads "
+        "the OpenContext MCP server.[/]"
+    )
     console.print("  [cyan]opencontext harness run --workflow sdd --task 'Your task'[/]")
     console.print("  [cyan]opencontext config wizard[/]")
     console.print("  [cyan]opencontext pack . --query 'Explain this code' --copy[/]")
