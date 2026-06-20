@@ -1527,6 +1527,27 @@ def _template_config(template: str) -> dict[str, Any]:
     return config_data
 
 
+# Agents that run as MCP hosts and support sampling — generation uses their own
+# model (no provider/API key needed on the OpenContext side).
+_SAMPLING_CLIENTS = {
+    "opencode",
+    "claude-code",
+    "codex",
+    "cursor",
+    "windsurf",
+    "vscode-copilot",
+    "gemini-cli",
+    "kilo-code",
+    "kiro-ide",
+    "kimi-code",
+    "qwen-code",
+    "cline",
+    "roo",
+    "zed",
+    "continue",
+}
+
+
 def _install_wizard(args: Any, console: Any) -> None:
     """Interactive wizard: language → editor → API key."""
     from rich.console import Console as _Console
@@ -1826,10 +1847,21 @@ def _install(args: argparse.Namespace) -> None:
         _cfg = _yaml.safe_load((root / "opencontext.yaml").read_text(encoding="utf-8"))
         _provider = _cfg.get("models", {}).get("default", {}).get("provider", "mock")
         if str(_provider) == "mock":
-            console.print(
-                "[yellow]Tip:[/] Using mock provider. Run [cyan]opencontext config wizard[/] "
-                "to connect a real provider."
-            )
+            if set(active_clients) & _SAMPLING_CLIENTS:
+                _names = ", ".join(active_clients)
+                console.print(
+                    f"[green]Generation[/] runs on your agent's model ({_names}) via MCP "
+                    "sampling — no provider or API key needed. The 'mock' provider only "
+                    "affects the standalone [cyan]opencontext ask[/] CLI."
+                )
+                console.print(
+                    "  Pick a model per role: [cyan]opencontext models set-role generate opus[/]"
+                )
+            else:
+                console.print(
+                    "[yellow]Tip:[/] Using mock provider. Run [cyan]opencontext config wizard[/] "
+                    "to connect a real provider (only needed for the standalone CLI)."
+                )
             console.print()
     except Exception:
         pass
