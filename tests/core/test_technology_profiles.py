@@ -54,14 +54,16 @@ def test_generic_directories_do_not_trigger_a_framework_profile(tmp_path: Path) 
     # A project that merely has src//tests//components//routes/ dirs of Python is NOT
     # Node/Rust/Drupal — those need a real manifest (package.json / Cargo.toml /
     # *.info.yml). Regression: 'src/' alone used to score the Node profile to 1.0.
-    for sub in ("src", "tests", "components", "routes"):
-        (tmp_path / sub).mkdir()
+    for sub in ("src", "src/components", "src/app", "src/pages", "tests", "routes"):
+        (tmp_path / sub).mkdir(parents=True)
         (tmp_path / sub / "mod.py").write_text("x = 1\n", encoding="utf-8")
     config = ProjectIndexConfig(root=str(tmp_path), profile="generic", ignore=[])
 
     manifest = ProjectIndexer(config, "dirs-only", profiles=first_party_profiles()).build_manifest()
 
-    assert "node" not in manifest.technology_profiles
+    # None of node/react/next/rust/drupal may fire on a generic dir layout alone.
+    for framework in ("node", "react", "next", "rust", "drupal"):
+        assert framework not in manifest.technology_profiles
     assert manifest.technology_profiles == ["generic"]
     assert manifest.profile == "python"  # dominant code language, not a framework
 

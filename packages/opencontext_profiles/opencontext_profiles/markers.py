@@ -239,6 +239,14 @@ class ReactTechnologyProfile(MarkerTechnologyProfile):
         "vite.config.ts",
         "public/index.html",
     )
+    # A bare src/components/ dir is not React; require a real manifest or an App entry.
+    required_any_markers = (
+        "package.json",
+        "vite.config.ts",
+        "src/App.jsx",
+        "src/App.tsx",
+        "public/index.html",
+    )
     workflow_packs = (WorkflowPackReference(name="react-review", mode="review"),)
     validation_commands = (
         SafeCommand(name="npm_test", command=("npm", "test")),
@@ -258,6 +266,14 @@ class NextTechnologyProfile(MarkerTechnologyProfile):
         "pages/index.tsx",
         "src/app",
         "src/pages",
+    )
+    # Bare src/app/ or src/pages/ dirs are not Next; require a Next config or router entry.
+    required_any_markers = (
+        "next.config.js",
+        "next.config.mjs",
+        "next.config.ts",
+        "app/page.tsx",
+        "pages/index.tsx",
     )
     workflow_packs = (WorkflowPackReference(name="next-review", mode="review"),)
     validation_commands = (
