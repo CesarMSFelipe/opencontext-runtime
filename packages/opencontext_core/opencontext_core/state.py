@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import shutil
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from opencontext_core.user_prefs import UserConfigStore
@@ -252,6 +252,52 @@ class ConfigBackupManager:
         if not UserConfigStore.CONFIG_FILE.exists() and not StateStore.STATE_FILE.exists():
             return None
         return cls.create_backup(description="auto-pre-change")
+
+    @classmethod
+    def cleanup(cls, keep_days: int = 30) -> tuple[int, int]:
+        """Remove backups older than ``keep_days`` and rebuild the index from disk.
+
+        Returns ``(removed, remaining)``. Rebuilding from disk is what drops stale
+        index entries for directories that were deleted out from under us.
+        """
+
+        cls.ensure_dir()
+        cutoff = datetime.now() - timedelta(days=keep_days)
+        descriptions = {entry.id: entry.description for entry in cls._load_index()}
+        removed = 0
+
+        for entry_dir in sorted(cls.BACKUP_DIR.iterdir()):
+            if not (entry_dir.is_dir() and entry_dir.name.startswith("backup-")):
+                continue
+            try:
+                ts = datetime.strptime(entry_dir.name.replace("backup-", ""), "%Y%m%dT%H%M%S")
+            except ValueError:
+                continue
+            if ts < cutoff:
+                try:
+                    shutil.rmtree(entry_dir)
+                    removed += 1
+                except OSError:
+                    continue
+
+        rebuilt: list[BackupEntry] = []
+        for entry_dir in sorted(cls.BACKUP_DIR.iterdir(), reverse=True):  # newest first
+            if not (entry_dir.is_dir() and entry_dir.name.startswith("backup-")):
+                continue
+            try:
+                files = sorted(f.name for f in entry_dir.iterdir() if f.is_file())
+            except OSError:
+                continue
+            rebuilt.append(
+                BackupEntry(
+                    id=entry_dir.name,
+                    timestamp=entry_dir.name.replace("backup-", ""),
+                    description=descriptions.get(entry_dir.name, "auto-pre-change"),
+                    files=files,
+                )
+            )
+        cls._save_index(rebuilt)
+        return removed, len(rebuilt)
 
     @classmethod
     def _load_index(cls) -> list[BackupEntry]:

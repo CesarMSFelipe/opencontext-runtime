@@ -567,9 +567,6 @@ def _restore_backup() -> None:
 
 def _cleanup_backups() -> None:
     """Clean up old backups."""
-    import shutil
-    from datetime import datetime, timedelta
-
     from opencontext_core import prompts
     from opencontext_core.state import ConfigBackupManager
 
@@ -577,19 +574,7 @@ def _cleanup_backups() -> None:
         days = int(prompts.text("Keep backups newer than (days)", default="30"))
     except (TypeError, ValueError):
         days = 30
-    backups = ConfigBackupManager.list_backups()
-    cutoff = datetime.now() - timedelta(days=days)
-    removed = 0
-    for b in backups:
-        try:
-            ts = datetime.strptime(b.timestamp, "%Y%m%dT%H%M%S")
-            if ts < cutoff:
-                backup_dir = ConfigBackupManager.BACKUP_DIR / b.id
-                if backup_dir.exists():
-                    shutil.rmtree(backup_dir)
-                removed += 1
-        except (ValueError, OSError):
-            continue
+    removed, _ = ConfigBackupManager.cleanup(days)
     console.print(f"[green]✓ Removed {removed} backup(s) older than {days} days[/]")
 
 

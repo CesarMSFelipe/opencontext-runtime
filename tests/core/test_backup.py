@@ -101,3 +101,26 @@ def test_multiple_backups_all_in_list(tmp_path: Path) -> None:
     listed_ids = {b.id for b in backups}
     for bid in ids:
         assert bid in listed_ids
+
+
+def test_cleanup_removes_old_and_rebuilds_index(tmp_path: Path) -> None:
+    """cleanup() drops dirs past the cutoff and rebuilds the index from disk.
+
+    Rebuilding is what removes a stale index entry whose directory is already gone.
+    """
+    old_dir = ConfigBackupManager.BACKUP_DIR / "backup-20000101T000000"
+    old_dir.mkdir()
+    (old_dir / "user-config.json").write_text("{}", encoding="utf-8")
+    fresh = ConfigBackupManager.create_backup("keep-me")
+    # Seed a stale index entry pointing at a directory that does not exist.
+    stale = BackupEntry(id="backup-19990101T000000", timestamp="19990101T000000", description="x")
+    ConfigBackupManager._save_index([*ConfigBackupManager.list_backups(), stale])
+
+    removed, remaining = ConfigBackupManager.cleanup(keep_days=30)
+
+    assert removed == 1  # the year-2000 dir; the year-1999 stale entry had no dir
+    assert not old_dir.exists()
+    ids = {b.id for b in ConfigBackupManager.list_backups()}
+    assert fresh in ids
+    assert "backup-19990101T000000" not in ids  # stale entry pruned by rebuild
+    assert remaining == len(ids)

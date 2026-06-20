@@ -7,7 +7,6 @@ OpenContext user preferences.
 
 from __future__ import annotations
 
-import json
 import sys
 from typing import Any
 
@@ -299,45 +298,6 @@ def _config_restore(backup_id: str) -> None:
 def _config_cleanup(keep_days: int) -> None:
     """Clean up old backups beyond keep_days."""
 
-    from datetime import datetime, timedelta
-
-    backups = ConfigBackupManager.list_backups()
-    cutoff = datetime.now() - timedelta(days=keep_days)
-    removed = 0
-
-    for b in backups:
-        try:
-            ts = datetime.strptime(b.timestamp, "%Y%m%dT%H%M%S")
-            if ts < cutoff:
-                backup_dir = ConfigBackupManager.BACKUP_DIR / b.id
-                if backup_dir.exists():
-                    import shutil
-
-                    shutil.rmtree(backup_dir)
-                removed += 1
-        except (ValueError, OSError):
-            continue
-
-    # Rebuild index from disk — removes stale index entries for deleted dirs
-    index = []
-    for entry_dir in sorted(ConfigBackupManager.BACKUP_DIR.iterdir()):
-        if entry_dir.is_dir() and entry_dir.name.startswith("backup-"):
-            try:
-                ts_str = entry_dir.name.replace("backup-", "")
-                desc = "auto-pre-change"
-                files = sorted(f.name for f in entry_dir.iterdir() if f.is_file())
-                index.append(
-                    {
-                        "id": entry_dir.name,
-                        "timestamp": ts_str,
-                        "description": desc,
-                        "files": files,
-                    }
-                )
-            except OSError:
-                continue
-
-    ConfigBackupManager.INDEX_FILE.write_text(json.dumps(index, indent=2), encoding="utf-8")
-
+    removed, remaining = ConfigBackupManager.cleanup(keep_days)
     print(f"  ✓ Removed {removed} backup(s) older than {keep_days} days")
-    print(f"    {len(index)} backup(s) remaining")
+    print(f"    {remaining} backup(s) remaining")
