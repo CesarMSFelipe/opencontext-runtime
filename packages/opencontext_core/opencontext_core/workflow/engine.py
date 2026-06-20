@@ -130,6 +130,7 @@ class WorkflowEngine:
                 for inp in inputs:
                     state.metadata["current_input"] = inp
                     self._run_named_step(state, fan_step)
+                state.metadata.pop("current_input", None)  # don't leak into the trace
 
         else:
             step_name = (

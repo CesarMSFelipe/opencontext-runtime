@@ -114,6 +114,9 @@ class CallBudgetManager:
                 model=model,
                 limit=limit or self.config.default_limit,
             )
+        elif limit is not None:
+            # Re-registering with an explicit limit updates it (was silently ignored).
+            self._usage[key].limit = limit
         self._usage[key].reset_if_needed(self.config.window_hours)
 
     def check_budget(self, provider: str, model: str) -> tuple[bool, int]:

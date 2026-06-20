@@ -13,7 +13,7 @@ from opencontext_core.embeddings.protocols import EmbeddingGenerator
 class DeterministicEmbeddingGenerator(EmbeddingGenerator):
     """Deterministic embedding generator using seeded random from text hash.
 
-    Produces consistent vectors without external API calls.uitable for
+    Produces consistent vectors without external API calls. Suitable for
     development, testing, and air-gapped deployments.
 
     The vector is derived from SHA256 hash of the text, expanded to the
