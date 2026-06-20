@@ -106,6 +106,12 @@ def _show(manager: SDDProfileManager, name: str, as_json: bool) -> int:
 
 
 def _create(manager: SDDProfileManager, name: str, description: str, base: str | None) -> int:
+    if name in manager.DEFAULT_PROFILES:
+        console.print(
+            f"[yellow]'{name}' is a built-in profile.[/] Copy it under a new name: "
+            f"[cyan]opencontext profile create my-{name} --from {name}[/]"
+        )
+        return 1
     assignments: dict[str, str] = {}
     if base is not None:
         base_profile = manager.get_profile(base)
@@ -121,6 +127,12 @@ def _create(manager: SDDProfileManager, name: str, description: str, base: str |
 
 
 def _set_phase(manager: SDDProfileManager, name: str, phase: str, model: str) -> int:
+    if name in manager.DEFAULT_PROFILES:
+        console.print(
+            f"[yellow]'{name}' is a built-in profile and can't be modified in place.[/] "
+            f"Copy it first: [cyan]opencontext profile create my-{name} --from {name}[/]"
+        )
+        return 1
     profile = manager.get_profile(name)
     if profile is None:
         console.print(f"[red]Profile not found:[/] {name}. Create it first with 'profile create'.")

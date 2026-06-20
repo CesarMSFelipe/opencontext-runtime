@@ -556,7 +556,13 @@ class SimpleProxyServer:
                         200,
                         {
                             "action": decision.action.value,
-                            "text": decision.redacted_text or text,
+                            # Never echo the raw payload on BLOCK — that would re-emit
+                            # the secret the firewall just refused to let through.
+                            "text": (
+                                ""
+                                if decision.action == ProxyAction.BLOCK
+                                else (decision.redacted_text or text)
+                            ),
                             "findings": [
                                 {"kind": f["kind"], "severity": f["severity"]}
                                 for f in decision.findings[:10]

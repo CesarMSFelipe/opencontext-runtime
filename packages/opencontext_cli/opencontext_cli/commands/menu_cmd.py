@@ -644,9 +644,12 @@ def _run_uninstall() -> None:
         console.print("[green]✓ Global installation state removed[/]")
 
     import shutil
-    from pathlib import Path
 
-    config_dir = Path.home() / ".config" / "opencontext"
+    from opencontext_core.user_prefs import UserConfigStore
+
+    # Canonical config dir (honors XDG_CONFIG_HOME / %APPDATA%), not a hardcode —
+    # otherwise an XDG/Windows install leaves the real config dir behind.
+    config_dir = UserConfigStore.CONFIG_DIR
     if config_dir.exists():
         shutil.rmtree(config_dir, ignore_errors=True)
         console.print(f"[green]✓ Config directory removed: {config_dir}[/]")
