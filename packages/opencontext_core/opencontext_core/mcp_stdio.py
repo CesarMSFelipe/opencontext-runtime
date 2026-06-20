@@ -898,7 +898,7 @@ class MCPServer:
         if node is None or node.id is None:
             return {"error": f"Symbol not found: {symbol}", "applied": False}
 
-        # definition line, then add each known call site from the graph.
+        # Collect rename targets: start with the definition line, then add each call site.
         targets: dict[str, set[int]] = {node.file_path: {node.line}}
         for site_file, site_line in self._reference_sites(node.id):
             targets.setdefault(site_file, set()).add(site_line)

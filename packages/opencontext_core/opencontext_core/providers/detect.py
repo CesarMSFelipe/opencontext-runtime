@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 @dataclass
 class DetectedProvider:
-    name: str  # anthropic | openai | openrouter | ollama | mock
+    name: str  # anthropic | openai | openrouter | google | mistral | ollama | mock
     api_key: str  # empty string for local/mock
     model: str  # sensible default for this provider
     source: str  # env_var | ollama_local | fallback

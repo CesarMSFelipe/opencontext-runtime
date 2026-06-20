@@ -312,7 +312,6 @@ class CompressionEngine:
             )
             return self._result(item, compressed_item, CompressionStrategy.DEEP, "lossy_deep")
         except BackendUnavailableError:
-            # Degrade to compact
             return self._compress_compact(item)
 
     def _compress_smart_crusher(self, item: ContextItem) -> CompressionResult:

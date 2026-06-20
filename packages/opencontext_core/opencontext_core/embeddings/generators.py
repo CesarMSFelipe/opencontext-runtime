@@ -28,8 +28,7 @@ class DeterministicEmbeddingGenerator(EmbeddingGenerator):
         """Generate deterministic embeddings for texts."""
         import asyncio
 
-        # Simulate some async I/O delay for realistic batching behavior
-        await asyncio.sleep(0)  # yield to event loop
+        await asyncio.sleep(0)  # yield to event loop so concurrent embeds interleave
 
         vectors = []
         for text in texts:

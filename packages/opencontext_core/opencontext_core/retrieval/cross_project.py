@@ -35,7 +35,6 @@ class CrossProjectRetriever:
         self.max_tokens_per_project = max_tokens_per_project
         self._local_retriever = ProjectRetriever(manifest)
 
-        # Auto-discover tunnels if enabled
         if auto_discover:
             discover_tunnels_from_manifest(manifest, tunnel_store)
 

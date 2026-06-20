@@ -29,7 +29,6 @@ class AgentTarget(StrEnum):
     KIRO_IDE = "kiro-ide"
     QWEN_CODE = "qwen-code"
     PI = "pi"
-    # P1.5 additions
     AIDER = "aider"
     CLINE = "cline"
     ROO = "roo"

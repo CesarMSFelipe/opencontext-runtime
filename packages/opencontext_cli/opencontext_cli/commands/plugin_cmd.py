@@ -285,7 +285,6 @@ def _plugin_init(args: Any) -> None:
 
     stamp_plugin_integrity(plugin_dir)
 
-    # --- README.md ---
     readme = (
         f"# {name}\n\n"
         f"{description}\n\n"

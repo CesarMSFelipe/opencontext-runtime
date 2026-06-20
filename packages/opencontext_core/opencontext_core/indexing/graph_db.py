@@ -223,7 +223,7 @@ class GraphDatabase:
         if self._conn is None:
             self._conn = sqlite3.connect(str(self.db_path))
             self._conn.row_factory = sqlite3.Row
-            # Enable FTS5 if available
+            # WAL journal mode: concurrent readers don't block the writer.
             self._conn.execute("PRAGMA journal_mode=WAL")
         return self._conn
 
@@ -396,7 +396,6 @@ class GraphDatabase:
                 ),
             )
 
-        # Prune nodes of this file that are no longer present (symbol removed/renamed).
         # Prune stale nodes (present in DB for this file but absent from new parse).
         # Their edges go with them; inbound edges from other files become dangling
         # until those callers are re-indexed.
