@@ -45,6 +45,93 @@ _EMPTY_LINE_RE = re.compile(r"\n\s*\n")
 _MULTI_SPACE_RE = re.compile(r"  +")
 
 
+def _python_comment_columns(content: str) -> dict[int, int] | None:
+    """Map 1-based line -> column where a real ``#`` comment starts.
+
+    Uses ``tokenize`` so a ``#`` inside a string literal is never mistaken for a
+    comment. Returns ``None`` when the source cannot be tokenized (caller then
+    falls back to naive splitting, acceptable on already-broken code).
+    """
+    import io
+    import tokenize
+
+    cols: dict[int, int] = {}
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(content).readline):
+            if tok.type == tokenize.COMMENT:
+                row, col = tok.start
+                if row not in cols or col < cols[row]:
+                    cols[row] = col
+    except (tokenize.TokenError, IndentationError, SyntaxError, ValueError):
+        return None
+    return cols
+
+
+def _strip_inline_line_comment(line: str, marker: str) -> str | None:
+    """Return the code before an *unquoted* ``marker`` (e.g. ``//``), else ``None``.
+
+    Tracks ``'`` ``"`` and `` ` `` string state with backslash escapes so a marker
+    inside a string (``"http://x"``) is not treated as a comment.
+    """
+    quote: str | None = None
+    i = 0
+    n = len(line)
+    mlen = len(marker)
+    while i < n:
+        ch = line[i]
+        if quote is not None:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+            i += 1
+            continue
+        if ch in "'\"`":
+            quote = ch
+            i += 1
+            continue
+        if line[i : i + mlen] == marker:
+            return line[:i]
+        i += 1
+    return None
+
+
+def _ast_strip_python_docstrings(content: str) -> str | None:
+    """Blank only real docstrings (first string stmt of module/class/def).
+
+    Returns ``None`` when the source is not parseable Python, so callers keep the
+    blunt regex strictly for unparseable input — triple-quoted *data* strings
+    (SQL, templates) survive on the valid-Python path.
+    """
+    import ast
+
+    try:
+        tree = ast.parse(content)
+    except (SyntaxError, ValueError):
+        return None
+    lines = content.split("\n")
+    for node in ast.walk(tree):
+        if not isinstance(
+            node, ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+        ):
+            continue
+        body = getattr(node, "body", None)
+        if not body:
+            continue
+        first = body[0]
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            start = first.lineno
+            end = getattr(first, "end_lineno", start) or start
+            for i in range(start - 1, min(end, len(lines))):
+                lines[i] = ""
+    return "\n".join(lines)
+
+
 class CodeCompressor:
     """Compress source code while preserving semantic structure.
 
@@ -134,6 +221,9 @@ class CodeCompressor:
         """Remove docstrings, leaving just the function/class signature."""
         if self._ts_available and language:
             return self._ts_strip_docstrings(content, language)
+        ast_stripped = _ast_strip_python_docstrings(content)
+        if ast_stripped is not None:
+            return ast_stripped
         return _DOCSTRING_RE.sub("", content)
 
     def _ts_strip_docstrings(self, content: str, language: str) -> str:
@@ -159,34 +249,39 @@ class CodeCompressor:
                             lines[docstring_start - 1] = sig
             return "\n".join(line for line in lines if line.strip())
         except Exception:
+            ast_stripped = _ast_strip_python_docstrings(content)
+            if ast_stripped is not None:
+                return ast_stripped
             return _DOCSTRING_RE.sub("", content)
 
     def _strip_comments(self, content: str, *, language: str | None = None) -> str:
         """Remove comments but keep shebangs and pragmas."""
+        _PRAGMAS = ("noqa", "pragma:", "type: ignore", "# coding:")
         if language == "python":
+            comment_cols = _python_comment_columns(content)
+            if comment_cols is None:
+                return self._strip_comments_python_naive(content, _PRAGMAS)
             lines = content.splitlines()
-            cleaned: list[str] = []
-            for line in lines:
-                stripped = line.strip()
-                # Preserve shebang, coding, noqa, pragma, type: ignore
-                _PRAGMAS = ("noqa", "pragma:", "type: ignore", "# coding:")
-                if stripped.startswith("#!"):
+            cleaned = []
+            for idx, line in enumerate(lines, start=1):
+                if line.lstrip().startswith("#!"):
                     cleaned.append(line)
                     continue
-                if any(marker in stripped for marker in _PRAGMAS):
-                    cleaned.append(line)
+                col = comment_cols.get(idx)
+                if col is None:
+                    cleaned.append(line)  # no real comment (a '#' here is in a string)
                     continue
-                if _COMMENT_RE.search(stripped) and not stripped.startswith("#"):
-                    # Inline comment on code line — strip the comment, keep code
-                    code_part = _COMMENT_RE.split(line)[0].rstrip()
-                    if code_part:
-                        cleaned.append(code_part)
+                comment_text = line[col:]
+                if any(marker in comment_text for marker in _PRAGMAS):
+                    cleaned.append(line)  # preserve pragma/coding/noqa line as-is
                     continue
-                if stripped.startswith("#"):
-                    continue  # comment-only line
-                cleaned.append(line)
+                code_part = line[:col].rstrip()
+                if code_part:
+                    cleaned.append(code_part)
+                # else: comment-only line -> drop
             return "\n".join(cleaned)
-        # Generic: remove comment lines, keep inline comments with code
+        # Generic: remove comment lines, keep inline comments with code. The // is
+        # only a comment when it is not inside a string literal.
         lines = content.splitlines()
         result: list[str] = []
         for line in lines:
@@ -195,13 +290,32 @@ class CodeCompressor:
                 result.append(line)
             elif stripped.startswith("//") or stripped.startswith("/*"):
                 continue
-            elif "//" in stripped:
-                code_part = line.split("//")[0].rstrip()
-                if code_part:
-                    result.append(code_part)
             else:
-                result.append(line)
+                code = _strip_inline_line_comment(line, "//")
+                if code is None:
+                    result.append(line)  # no real // comment
+                elif code.rstrip():
+                    result.append(code.rstrip())
         return "\n".join(result)
+
+    @staticmethod
+    def _strip_comments_python_naive(content: str, pragmas: tuple[str, ...]) -> str:
+        """Naive line-based comment strip — only for source ``tokenize`` rejects."""
+        cleaned: list[str] = []
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#!") or any(marker in stripped for marker in pragmas):
+                cleaned.append(line)
+                continue
+            if _COMMENT_RE.search(stripped) and not stripped.startswith("#"):
+                code_part = _COMMENT_RE.split(line)[0].rstrip()
+                if code_part:
+                    cleaned.append(code_part)
+                continue
+            if stripped.startswith("#"):
+                continue
+            cleaned.append(line)
+        return "\n".join(cleaned)
 
     def _compress_to_signatures(self, content: str, *, language: str | None = None) -> str:
         """Reduce to just function/class signatures and imports."""
