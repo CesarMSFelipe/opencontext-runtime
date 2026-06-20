@@ -73,6 +73,50 @@ def deterministic_rng(seed: int) -> Any:
     return next_float
 
 
+class OllamaEmbeddingGenerator(EmbeddingGenerator):
+    """Real local embeddings via a co-resident Ollama daemon (no external API).
+
+    Calls ``POST {host}/api/embeddings`` once per text with the configured model
+    (e.g. ``nomic-embed-text``). The host defaults to ``$OLLAMA_HOST`` or
+    ``http://localhost:11434``. ``dimensions()`` reflects the model's real vector
+    width once the first embedding is seen, falling back to the configured value.
+    """
+
+    def __init__(self, model: str, *, dimensions: int = 768, host: str | None = None) -> None:
+        import os
+
+        self._model = model
+        self._dimensions = dimensions
+        self._host = (host or os.environ.get("OLLAMA_HOST") or "http://localhost:11434").rstrip("/")
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        import asyncio
+
+        return [await asyncio.to_thread(self._embed_one, text) for text in texts]
+
+    def _embed_one(self, text: str) -> list[float]:
+        import json
+        import urllib.request
+
+        payload = json.dumps({"model": self._model, "prompt": text}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self._host}/api/embeddings",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            vector = json.loads(resp.read()).get("embedding") or []
+        if vector:
+            self._dimensions = len(vector)
+        return [float(v) for v in vector]
+
+    def dimensions(self) -> int:
+        return self._dimensions
+
+    def model_name(self) -> str:
+        return f"ollama-{self._model}"
+
+
 class MockEmbeddingGenerator(EmbeddingGenerator):
     """Mock generator that returns zero vectors (for unit tests)."""
 
@@ -99,6 +143,9 @@ def create_generator(config: OpenContextConfig) -> EmbeddingGenerator:
         return DeterministicEmbeddingGenerator(dimensions=dimensions)
     elif provider == "mock":
         return MockEmbeddingGenerator(dimensions=dimensions)
+    elif provider == "ollama":
+        model = getattr(config.embedding, "model", "nomic-embed-text")
+        return OllamaEmbeddingGenerator(model=model, dimensions=dimensions)
     else:
         # External providers require adapter packages outside core.
         raise ValueError(
