@@ -128,6 +128,25 @@ class TestTokenOptimizer:
         optimizer = TokenOptimizer(feedback, storage_path=tmp_path, default_budget=5000)
         assert optimizer.get_budget("unknown") == 5000
 
+    def test_acon_widens_budget_when_failures_omit_context(self, tmp_path: Path) -> None:
+        # ACON-lite: same token usage, but one op type FAILED while omitting context
+        # (over-compressed). Its budget must be widened vs a clean op type, not shrunk.
+        feedback = FeedbackCollector(storage_path=tmp_path)
+        optimizer = TokenOptimizer(feedback, storage_path=tmp_path)
+
+        for _ in range(6):  # clean history — all succeed, nothing omitted
+            op_id = feedback.start_operation("clean", "q", tokens_budgeted=2000)
+            feedback.finish_operation(op_id, tokens_used=1000, success=True)
+        for _ in range(6):  # failed while context was omitted -> over-compressed
+            op_id = feedback.start_operation("starved", "q", tokens_budgeted=2000)
+            feedback.finish_operation(
+                op_id, tokens_used=1000, context_items_omitted=4, success=False
+            )
+
+        budgets = optimizer.optimize_budgets()
+        # Same avg usage (1000) but the starved type gets a larger budget.
+        assert budgets["starved"].recommended_budget > budgets["clean"].recommended_budget
+
     def test_report_savings(self, tmp_path: Path) -> None:
         feedback = FeedbackCollector(storage_path=tmp_path)
         optimizer = TokenOptimizer(feedback, storage_path=tmp_path)
