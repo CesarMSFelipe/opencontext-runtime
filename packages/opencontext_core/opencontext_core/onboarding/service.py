@@ -149,7 +149,7 @@ class OnboardingService:
         # provider/model/security from yaml, not from the prefs store.
         from opencontext_core.config_sync import sync_runtime_prefs_to_yaml
 
-        sync_runtime_prefs_to_yaml(prefs, root=root)
+        sync_runtime_prefs_to_yaml(prefs, root=root, overwrite=False)
 
         # 4. Index project
         try:

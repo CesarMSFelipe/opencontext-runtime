@@ -69,3 +69,23 @@ def test_sync_all_runtime_prefs_from_prefs_object(tmp_path: Path) -> None:
     assert data["embedding"]["enabled"] is True
     assert data["models"]["default"]["provider"] == "anthropic"
     assert "embedding.enabled" in applied and "models.default.provider" in applied
+
+
+def test_fill_only_does_not_stomp_explicit_project_provider(tmp_path: Path) -> None:
+    """Real-use regression: install bridged the global mock prefs over a
+    hand-written ollama models.default. Fill-only must leave the explicit value
+    and still gap-fill keys the project omitted."""
+    (tmp_path / "opencontext.yaml").write_text(
+        "project:\n  name: t\n"
+        "models:\n  default:\n    provider: ollama\n    model: qwen2.5:7b-instruct\n",
+        encoding="utf-8",
+    )
+    prefs = UserPreferences()  # global default provider is mock
+    prefs.features.embeddings = True
+
+    sync_runtime_prefs_to_yaml(prefs, root=tmp_path, overwrite=False)
+
+    data = _loaded(tmp_path)
+    assert data["models"]["default"]["provider"] == "ollama"  # explicit value kept
+    assert data["models"]["default"]["model"] == "qwen2.5:7b-instruct"
+    assert data["embedding"]["enabled"] is True  # absent key still gap-filled

@@ -26,11 +26,19 @@ RUNTIME_PREF_TO_YAML: dict[str, str] = {
 }
 
 
-def sync_pref_to_yaml(pref_key: str, value: object, *, root: str | Path = ".") -> bool:
+def sync_pref_to_yaml(
+    pref_key: str, value: object, *, root: str | Path = ".", overwrite: bool = True
+) -> bool:
     """Patch the yaml path mapped to ``pref_key`` with ``value``. Return True if applied.
 
     No-ops for unmapped keys or when no project config exists. Validates the
     result loads and reverts on failure (never corrupts the file).
+
+    With ``overwrite=False`` (fill-only), a path already present in the project
+    config is left untouched — the explicit project value wins over the global
+    pref. Install uses this so a hand-written ``models.default`` (e.g. ollama) is
+    never stomped by the global mock default; ``config set``/wizard keep
+    ``overwrite=True`` so an explicit toggle still updates the file.
     """
     yaml_path = RUNTIME_PREF_TO_YAML.get(pref_key)
     if yaml_path is None:
@@ -55,6 +63,8 @@ def sync_pref_to_yaml(pref_key: str, value: object, *, root: str | Path = ".") -
                 nxt = {}
                 cursor[part] = nxt
             cursor = nxt
+        if not overwrite and parts[-1] in cursor:
+            return False
         cursor[parts[-1]] = value
         config_file.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
         load_config(config_file)  # raises if the value is invalid
@@ -73,15 +83,19 @@ def _resolve_pref(prefs: Any, dotted: str) -> tuple[bool, object]:
     return True, obj
 
 
-def sync_runtime_prefs_to_yaml(prefs: Any, *, root: str | Path = ".") -> list[str]:
+def sync_runtime_prefs_to_yaml(
+    prefs: Any, *, root: str | Path = ".", overwrite: bool = True
+) -> list[str]:
     """Sync every mapped runtime pref from ``prefs`` into opencontext.yaml.
 
     Returns the list of yaml paths actually applied (empty when there is no
-    project config or nothing mapped resolved).
+    project config or nothing mapped resolved). Pass ``overwrite=False`` from
+    bootstrap (install/onboarding) so an explicit project config wins over the
+    global prefs and is only gap-filled, never stomped.
     """
     applied: list[str] = []
     for pref_key, yaml_path in RUNTIME_PREF_TO_YAML.items():
         found, value = _resolve_pref(prefs, pref_key)
-        if found and sync_pref_to_yaml(pref_key, value, root=root):
+        if found and sync_pref_to_yaml(pref_key, value, root=root, overwrite=overwrite):
             applied.append(yaml_path)
     return applied
