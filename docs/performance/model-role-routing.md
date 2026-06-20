@@ -16,7 +16,16 @@ opencontext models show                            # persona -> phase -> model
 `default` means **your client's selected model** — the out-of-the-box behavior,
 with no model picked for you. At install you pick a preset
 (`default` / `cheap` / `hybrid` / `premium`); `default` keeps the client's model
-for every phase. Per-role overrides (`set-role`) remain as an advanced fallback.
+for every phase.
+
+There are two independent axes (both fall back to `default` = the client's model):
+
+- **Per persona** (`set-persona`) routes the **SDD phases** of the dev loop
+  (explore/design/apply/…). Resolution: SDD profile → persona override →
+  explicit `models.phases` override.
+- **Per role** (`set-role`) routes **functional operations** outside the phase
+  loop (classify, retrieve, rerank, compress, generate, validate, …), e.g. in
+  `ask`/retrieval. This is a separate axis, not a fallback of per-persona.
 
 ## Purpose
 ModelRoleRouter maps classifier, retriever, compressor, generator, critic, and verifier roles to provider/model aliases.
