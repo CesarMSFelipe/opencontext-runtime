@@ -58,8 +58,18 @@ def is_ignored(path: Path, root: Path, ignore_patterns: list[str]) -> bool:
 
     parts = set(Path(relative).parts)
     for pattern in ignore_patterns:
-        normalized = pattern.strip("/")
+        raw = pattern.strip()
+        anchored = raw.startswith("/")  # gitignore: leading slash anchors to root
+        normalized = raw.strip("/")
         if not normalized:
+            continue
+        if anchored:
+            # Anchored patterns match only at the repo root, not nested occurrences:
+            # '/build' ignores top-level build/ but not src/build/.
+            if relative == normalized or relative.startswith(f"{normalized}/"):
+                return True
+            if fnmatch(relative, normalized):
+                return True
             continue
         if normalized in parts:
             return True

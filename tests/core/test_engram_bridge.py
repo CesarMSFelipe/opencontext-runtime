@@ -100,6 +100,36 @@ def test_read_layer_filter(tmp_path: Path) -> None:
     assert [r["id"] for r in semantic["results"]] == ["2"]
 
 
+def test_layer_filter_pushed_into_sql_survives_a_burst(tmp_path: Path) -> None:
+    # Regression: the layer filter must run in SQL, not after the limit*4 over-fetch.
+    # A burst of recent episodic rows would otherwise fill the over-fetch window and
+    # starve a single older semantic row out of the result entirely.
+    db = tmp_path / "engram.db"
+    con = sqlite3.connect(db)
+    con.executescript(_SCHEMA)
+    rows: list[tuple[Any, ...]] = [
+        (i, "session_summary", f"compression run {i}", "compression detail",
+         f"k{i}", "proj", None, f"2026-06-{i:02d}T00:00:00")
+        for i in range(1, 13)
+    ]
+    rows.append(
+        (99, "architecture", "compression design", "compression detail",
+         "k99", "proj", None, "2026-01-01T00:00:00")  # older, would be starved
+    )
+    con.executemany(
+        "INSERT INTO observations "
+        "(id, type, title, content, topic_key, project, deleted_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    con.commit()
+    con.close()
+
+    client = EngramCliClient(db_path=db, project="proj")
+    semantic = client.mem_search(query="compression", type="semantic", limit=2)
+    assert [r["id"] for r in semantic["results"]] == ["99"]
+
+
 def test_read_missing_db_returns_empty(tmp_path: Path) -> None:
     client = EngramCliClient(db_path=tmp_path / "nope.db", project="proj")
     assert client.mem_search(query="anything")["results"] == []

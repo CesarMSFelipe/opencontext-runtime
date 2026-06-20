@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.harness.models import BudgetMode, GateStatus, HarnessArtifact
 from opencontext_core.harness.phases import (
     ApplyPhase,
@@ -103,6 +105,28 @@ class TestVerifyPhase:
         assert len(phase_result.artifacts) >= 1
         report_path = Path(phase_result.artifacts[0].path)
         assert report_path.exists()
+
+    def test_run_tests_neutral_skip_does_not_run_full_suite(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Regression: when no changed file maps to a test file, verify must return a
+        # neutral skip WITHOUT shelling out to pytest over the whole repo (slow, and
+        # unrelated pre-existing failures would spuriously WARN the gate).
+        from opencontext_core.harness import phases as phases_module
+
+        runner = HarnessRunner(root=tmp_path)
+        cfg = runner.config.phases.get("verify")
+        phase = VerifyPhase(cfg, BudgetMode.OFF)
+
+        def _boom(*_a: object, **_k: object) -> object:
+            raise AssertionError("pytest must not run when no scoped tests resolve")
+
+        monkeypatch.setattr(phases_module.subprocess, "run", _boom)
+
+        result = phase._run_tests(tmp_path, ["src/only_source.py"])
+        assert result["exit_code"] == 0
+        assert result["passed"] == 0 and result["failed"] == 0
+        assert result["output"] == "no scoped tests for changed files"
 
     def test_verify_report_structure(self, tmp_path: Path) -> None:
         runner = HarnessRunner(root=tmp_path)
