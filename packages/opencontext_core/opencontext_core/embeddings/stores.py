@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,8 @@ from opencontext_core.embeddings.models import (
     VectorSearchResult,
 )
 from opencontext_core.embeddings.protocols import VectorStore
+
+_log = logging.getLogger(__name__)
 
 
 class LocalVectorStore(VectorStore):
@@ -31,6 +34,7 @@ class LocalVectorStore(VectorStore):
         self._vectors: dict[str, list[float]] = {}  # item_id -> vector
         self._metadata: dict[str, EmbeddedItem] = {}  # item_id -> EmbeddedItem
         self._dirty: set[str] = set()  # Pending items not yet persisted
+        self._warned_dim_mismatch = False
         self._load()
 
     def _load(self) -> None:
@@ -73,7 +77,7 @@ class LocalVectorStore(VectorStore):
         persisted_items: list[EmbeddedItem] = []
         for item in items:
             vector = item.vector
-            if vector is None:
+            if not vector:  # skip None and empty (e.g. embedder unreachable)
                 continue
             self._vectors[item.id] = vector
             self._metadata[item.id] = item
@@ -104,9 +108,25 @@ class LocalVectorStore(VectorStore):
         query_norm = [v / q_mag for v in query_vector]
 
         scores = []
+        dim = len(query_norm)
         for item_id, vector in self._vectors.items():
             metadata = self._metadata.get(item_id)
             if metadata is None:
+                continue
+
+            # Dimension contract: cosine across mismatched dims is meaningless
+            # (e.g. embedding provider/model changed after the store was built —
+            # local 1536d vs ollama nomic 768d). Skip stale vectors instead of
+            # silently truncating via zip().
+            if len(vector) != dim:
+                if not self._warned_dim_mismatch:
+                    _log.warning(
+                        "vector dim mismatch (stored=%d query=%d); skipping stale "
+                        "vectors — rebuild embeddings after changing provider/model",
+                        len(vector),
+                        dim,
+                    )
+                    self._warned_dim_mismatch = True
                 continue
 
             # Apply filters if provided

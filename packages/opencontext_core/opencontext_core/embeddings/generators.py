@@ -82,12 +82,21 @@ class OllamaEmbeddingGenerator(EmbeddingGenerator):
     width once the first embedding is seen, falling back to the configured value.
     """
 
-    def __init__(self, model: str, *, dimensions: int = 768, host: str | None = None) -> None:
+    def __init__(
+        self,
+        model: str,
+        *,
+        dimensions: int = 768,
+        host: str | None = None,
+        timeout: float = 8.0,
+    ) -> None:
         import os
 
         self._model = model
         self._dimensions = dimensions
         self._host = (host or os.environ.get("OLLAMA_HOST") or "http://localhost:11434").rstrip("/")
+        self._timeout = timeout
+        self._unreachable = False  # negative-cache: stop retrying once the daemon is down
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         import asyncio
@@ -96,7 +105,14 @@ class OllamaEmbeddingGenerator(EmbeddingGenerator):
 
     def _embed_one(self, text: str) -> list[float]:
         import json
+        import urllib.error
         import urllib.request
+
+        # Once the daemon is confirmed down, skip the network round-trip entirely so
+        # retrieval/indexing degrade gracefully instead of paying one timeout per
+        # text when running without local models.
+        if self._unreachable:
+            return []
 
         payload = json.dumps({"model": self._model, "prompt": text}).encode("utf-8")
         req = urllib.request.Request(
@@ -104,8 +120,14 @@ class OllamaEmbeddingGenerator(EmbeddingGenerator):
             data=payload,
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            vector = json.loads(resp.read()).get("embedding") or []
+        try:
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                vector = json.loads(resp.read()).get("embedding") or []
+        except (urllib.error.URLError, OSError, TimeoutError, ValueError):
+            # Ollama unreachable/slow/garbage: fail fast and let callers treat this
+            # as "no semantic vector" (planner skips, worker stores nothing).
+            self._unreachable = True
+            return []
         if vector:
             self._dimensions = len(vector)
         return [float(v) for v in vector]
