@@ -321,8 +321,6 @@ def sdd_flow(request: PreparedContextRequest) -> ScaffoldResponse:
     )
 
     # Verify - security scan
-    from opencontext_core.dx.security_reports import scan_project
-
     scan = scan_project(request.root)
 
     # Review - check for high-risk patterns

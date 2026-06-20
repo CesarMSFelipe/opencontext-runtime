@@ -119,6 +119,15 @@ class ProjectIndexer:
                     kg_stats["edges"] += cross
                 except Exception as exc:
                     _log.warning("cross-file edge finalization failed: %s", exc)
+            # Authoritative totals: the incremental counters miss the nodes/edges of
+            # files skipped on a resumed run (already in the checkpoint), so read the
+            # real counts from the graph instead of under-reporting them.
+            try:
+                real = self.knowledge_graph.db.get_stats()
+                kg_stats["nodes"] = real.get("nodes", kg_stats["nodes"])
+                kg_stats["edges"] = real.get("edges", kg_stats["edges"])
+            except Exception as exc:
+                _log.debug("kg get_stats failed: %s", exc)
             # Clear checkpoint after successful full index
             try:
                 checkpoint_path.unlink(missing_ok=True)

@@ -8,6 +8,7 @@ items for embedding.
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 import time
 from datetime import datetime
@@ -18,6 +19,8 @@ from opencontext_core.embeddings.generators import create_generator
 from opencontext_core.embeddings.models import EmbeddedItem, EmbeddingStats
 from opencontext_core.embeddings.protocols import EmbeddingGenerator, VectorStore
 from opencontext_core.embeddings.stores import LocalVectorStore
+
+_log = logging.getLogger(__name__)
 
 
 class AsyncEmbeddingWorker:
@@ -138,7 +141,7 @@ class AsyncEmbeddingWorker:
 
             except Exception as exc:
                 # Log error but keep worker alive
-                print(f"Embedding worker error: {exc}", flush=True)
+                _log.error("embedding worker error: %s", exc)
 
         # Final flush
         if batch:
@@ -183,7 +186,7 @@ class AsyncEmbeddingWorker:
                 self._stats.last_activity = datetime.now()
 
         except Exception as exc:
-            print(f"Batch embedding failed: {exc}", flush=True)
+            _log.warning("batch embedding failed: %s", exc)
             with self._lock:
                 self._stats.failed_count += len(batch)
 
@@ -209,7 +212,7 @@ class AsyncEmbeddingWorker:
                 self._queue.put_nowait(item)
                 queued += 1
             except asyncio.QueueFull:
-                print(f"Embedding queue full, dropping {len(items) - queued} items", flush=True)
+                _log.warning("embedding queue full, dropping %d items", len(items) - queued)
                 break
 
         with self._lock:
@@ -219,7 +222,7 @@ class AsyncEmbeddingWorker:
         # Verify we're under 150ms
         elapsed = (time.time() - start) * 1000
         if elapsed > 150:
-            print(f"Warning: enqueue took {elapsed:.1f}ms, exceeds 150ms guarantee", flush=True)
+            _log.warning("enqueue took %.1fms, exceeds 150ms guarantee", elapsed)
 
         return queued
 
