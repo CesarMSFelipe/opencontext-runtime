@@ -101,3 +101,7 @@ def handle_verify(args: Any) -> None:
 
         if not report.is_healthy:
             sys.exit(1)
+
+    # Honest exit code for the rich path too, so CI can gate on `opencontext verify`.
+    if not report.is_healthy:
+        sys.exit(1)

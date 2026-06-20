@@ -5,7 +5,6 @@ After setup or sync, run these checks to verify everything is working.
 
 from __future__ import annotations
 
-import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -14,21 +13,6 @@ from typing import Any
 
 from opencontext_core.state import StateStore
 from opencontext_core.user_prefs import UserConfigStore
-
-
-def _opencode_mcp_paths() -> list[Path]:
-    """Platform-appropriate OpenCode MCP config paths."""
-    paths: list[Path] = []
-    home = Path.home()
-    # Linux / macOS (.config convention)
-    paths.append(home / ".config" / "opencode" / "mcp.json")
-    if sys.platform == "win32":
-        appdata = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
-        paths.append(appdata / "opencode" / "mcp.json")
-        paths.append(home / "AppData" / "Roaming" / "opencode" / "mcp.json")
-    elif sys.platform == "darwin":
-        paths.append(home / "Library" / "Application Support" / "opencode" / "mcp.json")
-    return paths
 
 
 @dataclass
@@ -70,7 +54,6 @@ class VerificationReport:
 
 def check_python_version() -> CheckResult:
     """Verify Python 3.12+."""
-    import sys
 
     major, minor = sys.version_info[:2]
     if major >= 3 and minor >= 12:
@@ -126,25 +109,40 @@ def check_knowledge_graph() -> CheckResult:
 
 
 def check_mcp_config() -> CheckResult:
-    """Verify MCP configuration."""
+    """Verify the opencontext MCP server is wired into any known agent.
+
+    Scans every agent the configurator supports (not just OpenCode), so a user
+    running claude-code/cursor/codex/etc. isn't told "Not configured" just
+    because OpenCode is absent. Detection is a substring check on the agent's
+    MCP config so it works across the JSON/TOML/YAML wire shapes uniformly.
+    """
     prefs = UserConfigStore().load()
     if not prefs.features.mcp_server:
         return CheckResult("MCP Server", "skipped", "Not enabled")
 
-    # Check OpenCode MCP config across platform paths
-    import json
+    from opencontext_core.configurator.adapter import iter_adapters
 
-    for mcp_path in _opencode_mcp_paths():
-        if mcp_path.exists():
-            try:
-                config = json.loads(mcp_path.read_text(encoding="utf-8"))
-                if "mcpServers" in config and "opencontext" in config["mcpServers"]:
-                    return CheckResult("MCP Server", "passed", f"Configured at {mcp_path}")
-                return CheckResult(
-                    "MCP Server", "warning", "MCP config exists but opencontext entry missing"
-                )
-            except Exception:
-                return CheckResult("MCP Server", "warning", "MCP config exists but invalid")
+    configured: list[str] = []
+    present_without_entry: list[str] = []
+    for adapter in iter_adapters():
+        try:
+            if not adapter.mcp_config_path.exists():
+                continue
+            text = adapter.mcp_config_path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        (configured if "opencontext" in text else present_without_entry).append(adapter.agent_id)
+
+    if configured:
+        agents = ", ".join(sorted(configured))
+        return CheckResult("MCP Server", "passed", f"Configured for {agents}")
+    if present_without_entry:
+        agents = ", ".join(sorted(present_without_entry))
+        return CheckResult(
+            "MCP Server",
+            "warning",
+            f"MCP config present without opencontext entry: {agents}",
+        )
     return CheckResult("MCP Server", "warning", "Not configured — use 'opencontext install'")
 
 
@@ -171,7 +169,9 @@ def check_state() -> CheckResult:
     state = StateStore.load()
     total = len(state.components)
     if total == 0:
-        return CheckResult("Installation State", "warning", "No components tracked")
+        # An empty ledger is the normal, healthy state for a project-local install
+        # (only global installs register components). Not an error → don't warn.
+        return CheckResult("Installation State", "passed", "No global components tracked")
 
     details = []
     for _cid, cs in state.components.items():
