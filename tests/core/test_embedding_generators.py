@@ -42,3 +42,10 @@ def test_ollama_host_defaults_and_strips_trailing_slash(monkeypatch) -> None:
     monkeypatch.setenv("OLLAMA_HOST", "http://example:1234/")
     gen = OllamaEmbeddingGenerator("nomic-embed-text")
     assert gen._host == "http://example:1234"
+
+
+def test_null_embedding_worker_is_running_does_not_raise() -> None:
+    from opencontext_core.embeddings.worker import NullAsyncEmbeddingWorker
+
+    # __init__ used to skip setting _running, so is_running() raised AttributeError.
+    assert NullAsyncEmbeddingWorker().is_running() is False

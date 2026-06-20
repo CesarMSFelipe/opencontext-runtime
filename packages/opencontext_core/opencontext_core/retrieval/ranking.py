@@ -44,9 +44,6 @@ def _split_camel(term: str) -> list[str]:
     return [p for p in parts if len(p) > 1]
 
 
-CAMEL_RE = re.compile(r"[A-Za-z0-9]+")
-
-
 class RetrievalScorer:
     """Scores manifest entries with simple deterministic hybrid relevance."""
 

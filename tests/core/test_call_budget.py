@@ -104,3 +104,10 @@ def test_budget_status_returns_all_providers() -> None:
     assert "ollama/phi3" in status
     assert status["openai/gpt-4"]["limit"] == 100
     assert status["ollama/phi3"]["type"] == "local"
+
+
+def test_register_usage_updates_existing_limit() -> None:
+    manager = CallBudgetManager()
+    manager.register_usage("openai", "gpt-4o", limit=5)
+    manager.register_usage("openai", "gpt-4o", limit=100)  # was silently ignored
+    assert manager._usage[("openai", "gpt-4o")].limit == 100

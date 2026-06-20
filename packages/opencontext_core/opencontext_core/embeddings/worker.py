@@ -258,7 +258,9 @@ class NullAsyncEmbeddingWorker(AsyncEmbeddingWorker):
     """No-op worker for when embeddings are disabled."""
 
     def __init__(self) -> None:
-        pass
+        # Set the inherited state the no-op overrides don't, so is_running() (which
+        # reads self._running) doesn't raise AttributeError.
+        self._running = False
 
     def start(self) -> None:
         pass
