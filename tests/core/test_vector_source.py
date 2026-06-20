@@ -164,3 +164,20 @@ def test_planner_factory_attaches_vector_when_enabled(tmp_path: Path) -> None:
     planner = RetrievalPlanner.from_config(manifest, config, storage_path=tmp_path / "st")
     source_names = {s.name for s in planner.sources}
     assert "vector" in source_names
+
+
+def test_search_result_carries_project_name_for_scoping(tmp_path: Path) -> None:
+    gen = DeterministicEmbeddingGenerator(dimensions=64)
+    store = _seed_store(tmp_path / "vs", gen)
+    query_vec = asyncio.run(gen.embed(["rate limiter"]))[0]
+    results = store.search(query_vec, top_k=5)
+    assert results
+    # project_name rides along so the planner can scope without a broken get()-by-id.
+    assert results[0].metadata.get("project_name") == "demo"
+
+
+def test_delete_persists_across_reload(tmp_path: Path) -> None:
+    gen = DeterministicEmbeddingGenerator(dimensions=64)
+    _seed_store(tmp_path / "vs", gen).delete("emb-1")
+    reloaded = LocalVectorStore(tmp_path / "vs")
+    assert reloaded.get("emb-1") is None

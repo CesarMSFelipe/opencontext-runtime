@@ -207,19 +207,18 @@ class VectorRetrievalSource:
         return [_vector_result_to_item(result, query) for result in results]
 
     def _result_in_project(self, result: Any) -> bool:
-        """Best-effort check that a search result belongs to this project."""
+        """Check that a search result belongs to this project.
 
-        getter = getattr(self._store, "get", None)
-        if getter is None:
-            return True
-        try:
-            record = getter(result.item_id)
-        except Exception as exc:
-            _log.debug("project check failed for %r: %s", getattr(result, "item_id", "?"), exc)
-            return True
-        if record is None:
-            return True
-        return getattr(record, "project_name", self._project_name) == self._project_name
+        The store carries the item's ``project_name`` in the result metadata, so we
+        read it directly instead of a get()-by-id round-trip (search returns the
+        source id, the store is keyed by the storage id — the lookup always missed
+        and silently let every project through).
+        """
+        meta = getattr(result, "metadata", None) or {}
+        project = meta.get("project_name") if isinstance(meta, dict) else None
+        if project is None:
+            return True  # unknown provenance — don't drop (back-compat)
+        return bool(project == self._project_name)
 
 
 class RetrievalPlanner:

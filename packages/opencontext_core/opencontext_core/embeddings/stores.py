@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 from pathlib import Path
 from typing import Any
 
@@ -159,7 +160,10 @@ class LocalVectorStore(VectorStore):
                     content=metadata.content,
                     source_type=metadata.item_type,
                     source_path=metadata.metadata.get("source_path", ""),
-                    metadata=metadata.metadata,
+                    # Carry project_name so callers can scope results without a
+                    # get()-by-id round-trip (search returns the source id, but the
+                    # store is keyed by the storage id — the lookup always missed).
+                    metadata={**metadata.metadata, "project_name": metadata.project_name},
                 )
             )
         return results
@@ -168,22 +172,37 @@ class LocalVectorStore(VectorStore):
         """Retrieve a specific embedding record."""
         return self._metadata.get(item_id)
 
+    def _rewrite_file(self) -> None:
+        """Rewrite index.jsonl from in-memory state (atomic). Makes deletes survive
+        a restart and compacts any duplicate lines accumulated by re-indexing."""
+        self.embeddings_dir.mkdir(parents=True, exist_ok=True)
+        tmp = self.index_path.with_suffix(".jsonl.tmp")
+        with tmp.open("w", encoding="utf-8") as handle:
+            for item in self._metadata.values():
+                if item.vector is not None:
+                    handle.write(item.model_dump_json() + "\n")
+        os.replace(tmp, self.index_path)
+
     def delete(self, item_id: str) -> None:
-        """Delete an embedding (mark for cleanup on rebuild)."""
+        """Delete an embedding; the change is persisted so it survives a restart."""
+        if item_id not in self._metadata and item_id not in self._vectors:
+            return
         self._vectors.pop(item_id, None)
         self._metadata.pop(item_id, None)
         self._dirty.discard(item_id)
-        # Note: Actual file line removal requires rebuild; for v0.1 we leave it
+        self._rewrite_file()
 
     def clear_project(self, project_name: str) -> None:
-        """Clear all embeddings for a project."""
+        """Clear all embeddings for a project; persisted so deletions survive."""
         to_remove = [
             item_id for item_id, meta in self._metadata.items() if meta.project_name == project_name
         ]
+        if not to_remove:
+            return
         for item_id in to_remove:
             self._vectors.pop(item_id, None)
             self._metadata.pop(item_id, None)
-        # For v0.1, we don't rewrite the file; real cleanup would need rebuild
+        self._rewrite_file()
 
     def stats(self) -> EmbeddingStats:
         """Get storage statistics."""
