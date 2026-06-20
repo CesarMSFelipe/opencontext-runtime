@@ -234,6 +234,37 @@ class TestRenameSymbol:
         assert result.get("applied") is False
         assert _read(root) == before
 
+    def test_rename_updates_import_statement(self, tmp_path: Path) -> None:
+        # Regression: renaming a symbol updated the def + call sites but left
+        # `from m import <old>` dangling, so the importer no longer resolved.
+        root = tmp_path / "proj"
+        (root / "pkg").mkdir(parents=True)
+        (root / "pkg" / "db.py").write_text(
+            "def get_user(name):\n    return name\n", encoding="utf-8"
+        )
+        (root / "pkg" / "auth.py").write_text(
+            "from pkg.db import get_user\n\n\ndef login(u):\n    return get_user(u)\n",
+            encoding="utf-8",
+        )
+        config = KnowledgeGraphConfig(enabled=True, languages=["python"])
+        kg = KnowledgeGraph(config=config, db_path=tmp_path / "kg.db")
+        kg.index_project(root)
+        kg.close()
+        server = MCPServer(db_path=tmp_path / "kg.db", project_root=root)
+        try:
+            result = server._call_tool(
+                "opencontext_rename_symbol",
+                {"symbol": "get_user", "file": "pkg/db.py", "new_name": "fetch_user"},
+            )
+        finally:
+            server.close()
+
+        assert result.get("applied") is True
+        auth = (root / "pkg" / "auth.py").read_text(encoding="utf-8")
+        assert "from pkg.db import fetch_user" in auth  # import updated
+        assert "return fetch_user(u)" in auth  # call site updated
+        assert "get_user" not in auth  # no dangling reference
+
 
 class TestWritePolicyGate:
     def test_write_tool_denied_when_not_allowlisted(

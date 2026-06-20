@@ -87,6 +87,9 @@ def _join_lines(lines: list[str], trailing_newline: bool) -> str:
     return text
 
 
+_IMPORT_LINE_RE = re.compile(r"^\s*(?:from\s+\S+\s+import|import)\b")
+
+
 def _python_syntax_error(file_path: str, text: str) -> str | None:
     """For a ``.py`` file, return a message if ``text`` is not parseable, else None.
 
@@ -945,6 +948,7 @@ class MCPServer:
             except OSError:
                 continue
             file_hits = 0
+            rewritten_idxs: set[int] = set()
             for line_no in line_numbers:
                 idx = line_no - 1
                 if 0 <= idx < len(lines):
@@ -952,7 +956,20 @@ class MCPServer:
                     if hits:
                         lines[idx] = rewritten
                         file_hits += hits
+                        rewritten_idxs.add(idx)
                         updated.append({"file": rel_path, "line": line_no, "occurrences": hits})
+            # Also fix `from m import <symbol>` lines in this file: a rename that
+            # touches the call sites but not the import leaves a dangling import that
+            # no longer resolves. Restricted to import lines so unrelated same-named
+            # tokens elsewhere are not rewritten.
+            for idx, line in enumerate(lines):
+                if idx in rewritten_idxs or not _IMPORT_LINE_RE.match(line):
+                    continue
+                rewritten, hits = _replace_identifier(line, symbol, new_name)
+                if hits:
+                    lines[idx] = rewritten
+                    file_hits += hits
+                    updated.append({"file": rel_path, "line": idx + 1, "occurrences": hits})
             if file_hits and self._write_file_lines(rel_path, lines, trailing):
                 files_touched += 1
 
