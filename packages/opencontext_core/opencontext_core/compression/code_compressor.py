@@ -112,9 +112,7 @@ def _ast_strip_python_docstrings(content: str) -> str | None:
         return None
     lines = content.split("\n")
     for node in ast.walk(tree):
-        if not isinstance(
-            node, ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
-        ):
+        if not isinstance(node, ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
             continue
         body = getattr(node, "body", None)
         if not body:

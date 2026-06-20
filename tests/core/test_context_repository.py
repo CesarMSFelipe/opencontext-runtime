@@ -26,12 +26,16 @@ def test_context_repository_dedups_near_identical_auto_stores(tmp_path: Path) ->
         "login route and document the new config keys. Run {rid} completed passed."
     )
     first = repo.store(
-        body.format(rid="abc123"), kind="summary", source="harness:run:abc123",
+        body.format(rid="abc123"),
+        kind="summary",
+        source="harness:run:abc123",
         collection="summaries",
     )
     # Same summary, only the run id differs — should collapse onto the first.
     second = repo.store(
-        body.format(rid="def456"), kind="summary", source="harness:run:def456",
+        body.format(rid="def456"),
+        kind="summary",
+        source="harness:run:def456",
         collection="summaries",
     )
 

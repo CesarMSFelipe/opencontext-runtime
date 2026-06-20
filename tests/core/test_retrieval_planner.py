@@ -217,8 +217,11 @@ def test_recent_failure_memory_boosts_matching_candidate(tmp_path: Path) -> None
             return [SimpleNamespace(linked_nodes=["src/b.py"], confidence=0.9)]
 
     request = EvidenceRequest(
-        query="login", root=tmp_path, surface=RetrievalSurface.RUNTIME,
-        max_tokens=1000, risk_level="normal",
+        query="login",
+        root=tmp_path,
+        surface=RetrievalSurface.RUNTIME,
+        max_tokens=1000,
+        risk_level="normal",
     )
 
     boosted = RetrievalPlanner([_Source()], memory_store=_Memory())

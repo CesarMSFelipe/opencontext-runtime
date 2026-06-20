@@ -372,9 +372,7 @@ class ContextFirewall:
             provider=provider or "unknown",
             model=model or "unknown",
             action=action,
-            findings=[
-                {k: f[k] for k in ("kind", "severity", "value")} for f in all_findings[:20]
-            ],
+            findings=[{k: f[k] for k in ("kind", "severity", "value")} for f in all_findings[:20]],
             context_size_tokens=ctx_tokens,
             duration_ms=round(duration, 1),
             policy_snapshot=self.policy.to_dict(),

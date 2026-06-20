@@ -108,13 +108,29 @@ def test_layer_filter_pushed_into_sql_survives_a_burst(tmp_path: Path) -> None:
     con = sqlite3.connect(db)
     con.executescript(_SCHEMA)
     rows: list[tuple[Any, ...]] = [
-        (i, "session_summary", f"compression run {i}", "compression detail",
-         f"k{i}", "proj", None, f"2026-06-{i:02d}T00:00:00")
+        (
+            i,
+            "session_summary",
+            f"compression run {i}",
+            "compression detail",
+            f"k{i}",
+            "proj",
+            None,
+            f"2026-06-{i:02d}T00:00:00",
+        )
         for i in range(1, 13)
     ]
     rows.append(
-        (99, "architecture", "compression design", "compression detail",
-         "k99", "proj", None, "2026-01-01T00:00:00")  # older, would be starved
+        (
+            99,
+            "architecture",
+            "compression design",
+            "compression detail",
+            "k99",
+            "proj",
+            None,
+            "2026-01-01T00:00:00",
+        )  # older, would be starved
     )
     con.executemany(
         "INSERT INTO observations "

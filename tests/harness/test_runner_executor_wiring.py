@@ -148,8 +148,11 @@ class _EditGateway:
     def generate(self, request: LLMRequest) -> LLMResponse:
         self.calls.append(request.prompt)
         return LLMResponse(
-            content=self._json, provider=request.provider, model=request.model,
-            input_tokens=1, output_tokens=1,
+            content=self._json,
+            provider=request.provider,
+            model=request.model,
+            input_tokens=1,
+            output_tokens=1,
         )
 
 

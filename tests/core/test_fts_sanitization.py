@@ -68,9 +68,18 @@ def test_fts_source_scores_best_match_highest(tmp_path: Path) -> None:
     db.upsert_nodes(
         [
             Node(
-                id=None, name=name, kind="function", file_path=f"src/{name}.py", line=1,
-                column=0, end_line=5, language="python", container=None,
-                docstring="authenticate a user", signature=f"def {name}()", is_exported=True,
+                id=None,
+                name=name,
+                kind="function",
+                file_path=f"src/{name}.py",
+                line=1,
+                column=0,
+                end_line=5,
+                language="python",
+                container=None,
+                docstring="authenticate a user",
+                signature=f"def {name}()",
+                is_exported=True,
             )
             for name in ("authenticate", "authenticate_user", "reauthenticate")
         ]
