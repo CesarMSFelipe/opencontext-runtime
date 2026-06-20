@@ -140,7 +140,11 @@ class TestWorkflowTracks:
         orch.run_phase("verify", "# Verify\n")
         assert orch.is_complete()
 
-    def test_standard_track_five_phases(self, tmp_path: Path) -> None:
+    def test_standard_track_includes_propose_so_spec_and_design_can_run(
+        self, tmp_path: Path
+    ) -> None:
+        # Regression: standard omitted propose, but spec/design require proposal.json,
+        # so they were never schedulable and per-phase model routing never fired.
         config = SDDConfig(
             artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}},
             track="standard",
@@ -149,8 +153,15 @@ class TestWorkflowTracks:
         orch.start_change("test")
 
         assert orch._track == "standard"
-        phases = ["explore", "spec", "design", "apply", "verify"]
-        for phase in phases:
+        # propose precedes spec/design; spec is not schedulable until propose is done.
+        orch.run_phase("explore", "# explore\n")
+        assert "propose" in orch.get_next_phases()
+        assert "spec" not in orch.get_next_phases()
+        orch.run_phase("propose", "# propose\n")
+        assert "spec" in orch.get_next_phases()
+        assert "design" in orch.get_next_phases()
+
+        for phase in ["spec", "design", "apply", "verify"]:
             orch.run_phase(phase, f"# {phase}\n")
         assert orch.is_complete()
 

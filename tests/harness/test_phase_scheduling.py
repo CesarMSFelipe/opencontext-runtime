@@ -67,9 +67,11 @@ class TestPhaseScheduling:
         assert isinstance(track_deps, dict)
 
         assert set(scheduled) == set(track_phases)
-        # propose/tasks/archive/review are NOT in the standard track.
-        assert "propose" not in scheduled
+        # propose IS required (spec/design read proposal.json); tasks/archive/review
+        # are still NOT in the lighter standard track.
+        assert "propose" in scheduled
         assert "tasks" not in scheduled
+        assert "archive" not in scheduled
         # Order respects the standard track's own dependency map.
         assert _topologically_valid(scheduled, track_deps)  # type: ignore[arg-type]
 
