@@ -190,6 +190,13 @@ class AsyncEmbeddingWorker:
             with self._lock:
                 self._stats.failed_count += len(batch)
 
+    def _enqueue_one(self, item: EmbeddedItem) -> None:
+        """Put one item on the queue from within the worker loop (drops if full)."""
+        try:
+            self._queue.put_nowait(item)
+        except asyncio.QueueFull:
+            _log.warning("embedding queue full, dropping item")
+
     def enqueue_sync(self, items: list[EmbeddedItem]) -> int:
         """Synchronously enqueue items for embedding.
 
@@ -205,15 +212,21 @@ class AsyncEmbeddingWorker:
         queued = 0
 
         for item in items:
-            try:
-                if not self._running:
-                    break
-                # Use put_nowait to avoid blocking
-                self._queue.put_nowait(item)
-                queued += 1
-            except asyncio.QueueFull:
-                _log.warning("embedding queue full, dropping %d items", len(items) - queued)
+            if not self._running:
                 break
+            loop = self._loop
+            if loop is not None and loop.is_running():
+                # asyncio.Queue is not thread-safe to mutate from the producer
+                # thread — schedule the put on the worker's own event loop.
+                loop.call_soon_threadsafe(self._enqueue_one, item)
+                queued += 1
+            else:
+                try:
+                    self._queue.put_nowait(item)
+                    queued += 1
+                except asyncio.QueueFull:
+                    _log.warning("embedding queue full, dropping %d items", len(items) - queued)
+                    break
 
         with self._lock:
             self._stats.pending_count = self._queue.qsize()

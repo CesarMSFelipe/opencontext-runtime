@@ -185,9 +185,9 @@ class CallBudgetManager:
                     )
             return (preferred_provider, model, "no_fallback_available")
 
-        for local in local_providers:
+        if local_providers:
+            local = local_providers[0]
             return (local, _LOCAL_DEFAULT_MODELS.get(local, model), "paid_unavailable_using_local")
-
         return (preferred_provider, model, "fallback_failed")
 
     def budget_status(self) -> dict[str, dict[str, Any]]:

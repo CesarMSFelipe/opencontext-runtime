@@ -95,8 +95,10 @@ class KnowledgeGraph:
         parsed = self.parser.parse_file_status(file_path, content)
         parsed_symbols, parsed_edges = parsed.symbols, parsed.edges
 
-        # Insert file record. The content hash powers staleness detection (has the
-        # file changed since it was indexed?); it was previously stored empty.
+        # Insert file record. The content hash is the staleness signal (has the file
+        # changed since it was indexed?). last_modified is intentionally 0: index_file
+        # receives content, not an absolute path, so there's no mtime to record — the
+        # hash, not the mtime, drives reindexing.
         self.db.upsert_file(
             FileRecord(
                 id=None,
