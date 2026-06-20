@@ -67,11 +67,15 @@ WORKFLOW_TRACKS: dict[str, dict[str, object]] = {
         },
     },
     "standard": {
-        "phases": ["explore", "spec", "design", "apply", "verify"],
+        # propose is required: SpecPhase/DesignPhase read proposal.json, which only
+        # ProposePhase writes. Omitting it made spec+design fail their preconditions
+        # (and never reach the executor, so per-phase model routing never fired).
+        "phases": ["explore", "propose", "spec", "design", "apply", "verify"],
         "deps": {
             "explore": [],
-            "spec": ["explore"],
-            "design": ["explore"],
+            "propose": ["explore"],
+            "spec": ["propose"],
+            "design": ["propose"],
             "apply": ["spec", "design"],
             "verify": ["apply"],
         },
