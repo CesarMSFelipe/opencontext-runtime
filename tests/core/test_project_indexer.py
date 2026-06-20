@@ -110,3 +110,15 @@ def test_symfony_profile_detection(tmp_path: Path) -> None:
 
     assert "symfony" in manifest.technology_profiles
     assert manifest.profile == "symfony"
+
+
+def test_kg_extensions_cover_all_kg_languages() -> None:
+    # The post-run harness re-index filters changed files by _KG_EXTENSIONS; it must
+    # cover every KG language (not just python) so JS/TS/Go/Rust/Java/PHP edits also
+    # refresh the graph after a task.
+    from opencontext_core.indexing.project_indexer import _KG_EXTENSIONS, _KG_LANGUAGES
+    from opencontext_core.indexing.tree_sitter_parser import LANGUAGE_EXTENSIONS
+
+    covered = {LANGUAGE_EXTENSIONS[ext] for ext in _KG_EXTENSIONS}
+    assert covered == set(_KG_LANGUAGES)
+    assert {".py", ".js", ".ts", ".go", ".rs", ".java", ".php"} <= _KG_EXTENSIONS
