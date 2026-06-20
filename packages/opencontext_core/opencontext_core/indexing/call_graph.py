@@ -147,10 +147,7 @@ class CallGraphAnalyzer:
             List of caller dicts with name, file, line, depth.
         """
 
-        results: list[dict[str, Any]] = []
-        visited: set[str] = set()
-        self._get_callers_recursive(str(node_id), depth, 1, results, visited)
-        return results
+        return self._bfs(str(node_id), depth, callers=True)
 
     def get_callees(self, node_id: int | str, depth: int = 1) -> list[dict[str, Any]]:
         """Find all symbols called by the given node.
@@ -163,90 +160,62 @@ class CallGraphAnalyzer:
             List of callee dicts with name, file, line, depth.
         """
 
+        return self._bfs(str(node_id), depth, callers=False)
+
+    def _bfs(self, start_id: str, max_depth: int, *, callers: bool) -> list[dict[str, Any]]:
+        """Level-order traversal of the call graph from ``start_id``.
+
+        Records each reachable node ONCE at its minimal depth. The previous DFS with
+        a shared visited set recorded whichever path arrived first (wrong depth) and
+        could drop a node entirely when a longer in-budget path consumed the depth
+        budget first. ``callers=True`` walks target->source edges; else source->target.
+        """
+        if callers:
+            query = (
+                "SELECT n.id, n.name, n.file_path, n.line, n.end_line, n.kind, "
+                "e.source_node_id AS rel_id "
+                "FROM edges e JOIN nodes n ON e.source_node_id = n.id "
+                "WHERE e.target_node_id = ? AND e.kind = 'calls'"
+            )
+        else:
+            query = (
+                "SELECT n.id, n.name, n.file_path, n.line, n.end_line, n.kind, "
+                "e.target_node_id AS rel_id "
+                "FROM edges e JOIN nodes n ON e.target_node_id = n.id "
+                "WHERE e.source_node_id = ? AND e.kind = 'calls'"
+            )
+
+        conn = self.db._connect()
         results: list[dict[str, Any]] = []
-        visited: set[str] = set()
-        self._get_callees_recursive(str(node_id), depth, 1, results, visited)
+        visited: set[str] = {start_id}
+        frontier: list[str] = [start_id]
+        for current_depth in range(1, max_depth + 1):
+            next_frontier: list[str] = []
+            for nid in frontier:
+                for row in conn.execute(query, (nid,)).fetchall():
+                    rel_id = row["rel_id"]
+                    if rel_id is None:
+                        continue
+                    rel_key = str(rel_id)
+                    if rel_key in visited:
+                        continue
+                    visited.add(rel_key)
+                    results.append(
+                        {
+                            "id": rel_id,
+                            "name": row["name"],
+                            "file_path": row["file_path"],
+                            "line": row["line"],
+                            "end_line": row["end_line"],
+                            "kind": row["kind"],
+                            "depth": current_depth,
+                        }
+                    )
+                    next_frontier.append(rel_key)
+            frontier = next_frontier
+            if not frontier:
+                break
         return results
-
-    def _get_callers_recursive(
-        self,
-        node_id: str,
-        max_depth: int,
-        current_depth: int,
-        results: list[dict[str, Any]],
-        visited: set[str],
-    ) -> None:
-        if current_depth > max_depth or node_id in visited:
-            return
-
-        visited.add(node_id)
-
-        conn = self.db._connect()
-        rows = conn.execute(
-            """
-            SELECT n.name, n.file_path, n.line, n.kind, e.source_node_id
-            FROM edges e
-            JOIN nodes n ON e.source_node_id = n.id
-            WHERE e.target_node_id = ? AND e.kind = 'calls'
-            """,
-            (node_id,),
-        ).fetchall()
-
-        for row in rows:
-            caller_id = str(row["source_node_id"])
-            if caller_id not in visited:
-                results.append(
-                    {
-                        "name": row["name"],
-                        "file_path": row["file_path"],
-                        "line": row["line"],
-                        "kind": row["kind"],
-                        "depth": current_depth,
-                    }
-                )
-                self._get_callers_recursive(
-                    caller_id, max_depth, current_depth + 1, results, visited
-                )
-
-    def _get_callees_recursive(
-        self,
-        node_id: str,
-        max_depth: int,
-        current_depth: int,
-        results: list[dict[str, Any]],
-        visited: set[str],
-    ) -> None:
-        if current_depth > max_depth or node_id in visited:
-            return
-
-        visited.add(node_id)
-
-        conn = self.db._connect()
-        rows = conn.execute(
-            """
-            SELECT n.name, n.file_path, n.line, n.kind, e.target_node_id
-            FROM edges e
-            JOIN nodes n ON e.target_node_id = n.id
-            WHERE e.source_node_id = ? AND e.kind = 'calls'
-            """,
-            (node_id,),
-        ).fetchall()
-
-        for row in rows:
-            callee_id = str(row["target_node_id"])
-            if callee_id and callee_id not in visited:
-                results.append(
-                    {
-                        "name": row["name"],
-                        "file_path": row["file_path"],
-                        "line": row["line"],
-                        "kind": row["kind"],
-                        "depth": current_depth,
-                    }
-                )
-                self._get_callees_recursive(
-                    callee_id, max_depth, current_depth + 1, results, visited
-                )
 
     def get_call_chains(self, start_node_id: int, max_depth: int = 3) -> list[CallChain]:
         """Get all call chains starting from a node.

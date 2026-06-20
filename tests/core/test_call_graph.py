@@ -111,3 +111,30 @@ class TestFindPath:
         assert result.hops == 1  # BFS finds shortest path first
         assert result.path[1]["name"] == "format_output"
         db.close()
+
+
+class TestCallersCallees:
+    """get_callers/get_callees must record minimal depth and expose node ids."""
+
+    def test_callees_record_minimal_depth(self, tmp_path: Path) -> None:
+        db = _make_db(tmp_path / "test.db")
+        analyzer = CallGraphAnalyzer(db)
+        callees = analyzer.get_callees(1, depth=5)  # main
+        by_name = {c["name"]: c["depth"] for c in callees}
+        # format_output is a DIRECT callee of main (edge 1->5): depth 1, not 2 via helper.
+        assert by_name.get("format_output") == 1
+        assert by_name.get("helper") == 1
+        assert by_name.get("parse") == 2
+        # Each result carries its node id (enables context_builder dedup).
+        assert all("id" in c for c in callees)
+        db.close()
+
+    def test_callers_record_minimal_depth(self, tmp_path: Path) -> None:
+        db = _make_db(tmp_path / "test.db")
+        analyzer = CallGraphAnalyzer(db)
+        # format_output (5) is called directly by both main (1) and helper (2).
+        callers = analyzer.get_callers(5, depth=5)
+        by_name = {c["name"]: c["depth"] for c in callers}
+        assert by_name.get("main") == 1
+        assert by_name.get("helper") == 1
+        db.close()

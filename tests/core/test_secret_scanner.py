@@ -30,7 +30,11 @@ def test_secret_scanner_redacts_common_patterns() -> None:
 def test_secret_scanner_redacts_full_private_key_body() -> None:
     # The whole-key finding overlaps the BEGIN-marker finding; redaction must not
     # leave the key body in the gap between the marker and the END line.
-    pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIabcKEYMATERIAL1234567890\n-----END RSA PRIVATE KEY-----"
+    pem = (
+        "-----BEGIN RSA PRIVATE KEY-----\n"
+        "MIIabcKEYMATERIAL1234567890\n"
+        "-----END RSA PRIVATE KEY-----"
+    )
     redacted = SecretScanner().redact(pem)
     assert "KEYMATERIAL" not in redacted
     assert "MIIabc" not in redacted
