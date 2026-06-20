@@ -113,7 +113,9 @@ class EngramCliClient:
     ) -> dict[str, Any]:
         want_layer = (type or "").lower() or None
         try:
-            rows = self._read(query, limit=limit, project=project or self._project)
+            rows = self._read(
+                query, limit=limit, project=project or self._project, want_layer=want_layer
+            )
         except Exception as exc:
             _log.warning("engram read failed (query=%r): %s", str(query)[:80], exc)
             return {"results": []}
@@ -137,21 +139,32 @@ class EngramCliClient:
                 break
         return {"results": results}
 
-    def _read(self, query: str, *, limit: int, project: str) -> list[dict[str, Any]]:
+    def _read(
+        self, query: str, *, limit: int, project: str, want_layer: str | None = None
+    ) -> list[dict[str, Any]]:
         if not query.strip() or not self._db.exists():
             return []
         con = sqlite3.connect(f"file:{self._db}?mode=ro", uri=True, timeout=self._timeout)
         try:
             like = f"%{query.strip()}%"
-            cur = con.execute(
+            sql = (
                 "SELECT id, type, title, content, topic_key, project "
                 "FROM observations "
                 "WHERE deleted_at IS NULL AND project = ? "
                 "AND (title LIKE ? OR content LIKE ?) "
-                "ORDER BY updated_at DESC LIMIT ?",
-                # over-fetch: the per-layer filter above trims back to `limit`
-                (project, like, like, max(limit * 4, limit)),
             )
+            params: list[Any] = [project, like, like]
+            # Push the layer filter into SQL so a recent burst of one layer can't
+            # starve the requested layer out of the over-fetch window.
+            episodic_types = tuple(t for t, layer in _ENGRAM_TO_LAYER.items() if layer == "episodic")
+            if want_layer in ("episodic", "semantic") and episodic_types:
+                placeholders = ",".join("?" * len(episodic_types))
+                op = "IN" if want_layer == "episodic" else "NOT IN"
+                sql += f"AND type {op} ({placeholders}) "
+                params.extend(episodic_types)
+            sql += "ORDER BY updated_at DESC LIMIT ?"
+            params.append(max(limit * 4, limit))
+            cur = con.execute(sql, params)
             cols = [c[0] for c in cur.description]
             return [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
         finally:
