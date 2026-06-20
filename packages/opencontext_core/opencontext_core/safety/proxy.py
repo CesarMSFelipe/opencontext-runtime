@@ -373,8 +373,7 @@ class ContextFirewall:
             model=model or "unknown",
             action=action,
             findings=[
-                {k: f["value"] if k == "value" else f[k] for k in ("kind", "severity", "value")}
-                for f in all_findings[:20]
+                {k: f[k] for k in ("kind", "severity", "value")} for f in all_findings[:20]
             ],
             context_size_tokens=ctx_tokens,
             duration_ms=round(duration, 1),
