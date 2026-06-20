@@ -49,6 +49,19 @@ class ProviderGateway:
         self._model = model
 
     def generate(self, request: LLMRequest) -> LLMResponse:
+        adapter = self._adapter
+        # Honor a routed provider (e.g. a budget swap to a local backend) instead of
+        # always calling the construction-time adapter. Otherwise a swap to 'ollama'
+        # would still hit the Anthropic/OpenAI adapter with model='llama3' and 404.
+        # Budget swaps only ever target LOCAL providers, so this re-dispatch adds no
+        # external egress the firewall did not already approve.
+        if request.provider and request.provider != self._provider:
+            adapter_cls = _ADAPTERS.get(request.provider)
+            if adapter_cls is not None:
+                api_key = os.environ.get(_KEY_ENV.get(request.provider, ""), "").strip() or None
+                adapter = adapter_cls(
+                    ProviderConfig(name=request.provider, api_key=api_key, max_tokens=4000)
+                )
         model = request.model or self._model
         messages: list[dict[str, str]] = []
         if request.system_prompt:
@@ -56,7 +69,7 @@ class ProviderGateway:
         messages.append({"role": "user", "content": request.prompt})
         # The adapter raises ProviderError if its API key is missing — that
         # surfaces as a phase failure/warning rather than producing a fake answer.
-        resp = self._adapter.chat(
+        resp = adapter.chat(
             messages,
             model=model,
             max_tokens=request.max_output_tokens,

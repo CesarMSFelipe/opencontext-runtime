@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from opencontext_core.context.budgeting import estimate_tokens
 from opencontext_core.context.prompt_cache import PromptPrefixCachePlanner
 from opencontext_core.models.context import PromptSection
+from opencontext_core.operating_model.call_budget import _LOCAL_DEFAULT_MODELS
 
 
 class CachePlan(BaseModel):
@@ -225,7 +226,9 @@ class ModelRoleRouter:
 
                 available, _ = self.budget_manager.check_budget(local, model)
                 if available:
-                    return {"provider": local, "model": model}
+                    # Substitute a local-appropriate model: the paid model name
+                    # (e.g. gpt-4o) 404s against a local backend like ollama.
+                    return {"provider": local, "model": _LOCAL_DEFAULT_MODELS.get(local, model)}
 
         # 2. Use budget manager to select best provider based on remaining calls
         if hasattr(self.budget_manager, "select_provider"):
@@ -252,7 +255,7 @@ class ModelRoleRouter:
 
                 local_available, _ = self.budget_manager.check_budget(local, model)
                 if local_available:
-                    return {"provider": local, "model": model}
+                    return {"provider": local, "model": _LOCAL_DEFAULT_MODELS.get(local, model)}
 
         return {"provider": provider, "model": model}
 

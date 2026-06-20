@@ -28,6 +28,18 @@ def test_model_role_router_with_budget_uses_paid_for_complex() -> None:
     assert result["provider"] == "openai"
 
 
+def test_model_role_router_substitutes_local_model_on_delegate() -> None:
+    # A simple-task delegate to a local provider must not carry the paid model name
+    # (gpt-4o), which would 404 against a local backend like ollama.
+    router = ModelRoleRouter(
+        roles={"generate": {"provider": "openai", "model": "gpt-4o"}},
+        budget_manager=CallBudgetManager(),
+    )
+    result = router.route_with_budget("generate", task_complexity="summarize")
+    assert result["provider"] in ("ollama", "lmstudio", "localai")
+    assert result["model"] != "gpt-4o"
+
+
 def test_model_role_router_delegates_when_budget_low() -> None:
     config = CallBudgetConfig(local_preference_threshold=5)
     manager = CallBudgetManager(config=config)
