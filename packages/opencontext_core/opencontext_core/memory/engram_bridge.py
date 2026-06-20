@@ -156,7 +156,9 @@ class EngramCliClient:
             params: list[Any] = [project, like, like]
             # Push the layer filter into SQL so a recent burst of one layer can't
             # starve the requested layer out of the over-fetch window.
-            episodic_types = tuple(t for t, layer in _ENGRAM_TO_LAYER.items() if layer == "episodic")
+            episodic_types = tuple(
+                t for t, layer in _ENGRAM_TO_LAYER.items() if layer == "episodic"
+            )
             if want_layer in ("episodic", "semantic") and episodic_types:
                 placeholders = ",".join("?" * len(episodic_types))
                 op = "IN" if want_layer == "episodic" else "NOT IN"

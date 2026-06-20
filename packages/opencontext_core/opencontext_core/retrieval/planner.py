@@ -984,12 +984,12 @@ def _embed_query(generator: Any, query: str) -> list[float]:
     try:
         vectors = asyncio.run(generator.embed([query]))
     except RuntimeError:
-        # Already inside a running loop: use a dedicated loop instead.
-        loop = asyncio.new_event_loop()
-        try:
-            vectors = loop.run_until_complete(generator.embed([query]))
-        finally:
-            loop.close()
+        # Already inside a running loop on this thread — you can't nest loops, so
+        # run the coroutine on a dedicated worker thread with its own loop.
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            vectors = pool.submit(lambda: asyncio.run(generator.embed([query]))).result()
     except Exception as exc:
         _log.debug("query embedding failed: %s", exc)
         return []

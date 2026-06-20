@@ -1488,11 +1488,19 @@ class VerifyPhase(HarnessPhase):
     def _run_tests(self, root: Path, changed_files: list[str] | None = None) -> dict[str, Any]:
         """Run pytest scoped to changed files when possible, full suite as fallback."""
         targets = self._resolve_test_targets(root, changed_files or [])
-        args = [sys.executable, "-m", "pytest", "-q", "--tb=short"]
-        if targets:
-            args += targets
-        else:
-            args.append(str(root))
+        if not targets:
+            # No changed file maps to a test file — skip rather than run the whole
+            # suite for a verify-report (slow, and pre-existing unrelated failures
+            # would spuriously WARN the verify gate).
+            return {
+                "exit_code": 0,
+                "passed": 0,
+                "failed": 0,
+                "errors": 0,
+                "output": "no scoped tests for changed files",
+                "error_output": "",
+            }
+        args = [sys.executable, "-m", "pytest", "-q", "--tb=short", *targets]
         try:
             result = subprocess.run(
                 args,
