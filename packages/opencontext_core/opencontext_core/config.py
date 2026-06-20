@@ -54,7 +54,15 @@ class ModelProviderConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    provider: str = Field(description="Provider key such as mock.")
+    provider: str = Field(
+        default="host",
+        description=(
+            "Provider key. Defaults to 'host' — the client/agent's own provider via "
+            "MCP sampling (claude-code→Anthropic, codex→OpenAI). The client fixes the "
+            "provider, so a role usually needs only a model. Set explicitly (anthropic, "
+            "openai, ollama, mock, …) only for OpenContext's standalone provider gateways."
+        ),
+    )
     model: str = Field(description="Provider-specific model identifier.")
     private_endpoint: bool = Field(
         default=False,

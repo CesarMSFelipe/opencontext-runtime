@@ -20,8 +20,12 @@ from collections.abc import Callable
 
 from opencontext_core.models.llm import LLMRequest, LLMResponse
 
-# (system_prompt, user_prompt, max_tokens) -> generated text from the host model.
-HostSampler = Callable[[str, str, int], str]
+# (system_prompt, user_prompt, max_tokens, model) -> generated text from the host
+# model. ``model`` is the per-role/per-phase model OpenContext wants; the sampler
+# forwards it to the client as an MCP ``modelPreferences`` hint so the client can
+# pick e.g. opus for design vs haiku for exploration. None / a placeholder means
+# "let the client use its currently selected model".
+HostSampler = Callable[[str, str, int, "str | None"], str]
 
 _host_sampler: HostSampler | None = None
 
@@ -45,7 +49,12 @@ class SamplingGateway:
         self._model = model
 
     def generate(self, request: LLMRequest) -> LLMResponse:
-        content = self._sampler(request.system_prompt, request.prompt, request.max_output_tokens)
+        content = self._sampler(
+            request.system_prompt,
+            request.prompt,
+            request.max_output_tokens,
+            request.model,
+        )
         return LLMResponse(
             content=content,
             provider="host",

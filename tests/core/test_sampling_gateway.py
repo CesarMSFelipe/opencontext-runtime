@@ -27,12 +27,12 @@ from opencontext_core.runtime import OpenContextRuntime
 
 
 @pytest.fixture
-def host_sampler() -> Iterator[list[tuple[str, str, int]]]:
+def host_sampler() -> Iterator[list[tuple[str, str, int, str | None]]]:
     """Register a recording host sampler and clear it afterward."""
-    calls: list[tuple[str, str, int]] = []
+    calls: list[tuple[str, str, int, str | None]] = []
 
-    def _sampler(system: str, prompt: str, max_tokens: int) -> str:
-        calls.append((system, prompt, max_tokens))
+    def _sampler(system: str, prompt: str, max_tokens: int, model: str | None = None) -> str:
+        calls.append((system, prompt, max_tokens, model))
         return "HOST MODEL OUTPUT"
 
     register_host_sampler(_sampler)
@@ -44,7 +44,7 @@ def host_sampler() -> Iterator[list[tuple[str, str, int]]]:
 
 def test_registry_round_trip() -> None:
     assert get_host_sampler() is None
-    register_host_sampler(lambda s, p, n: "x")
+    register_host_sampler(lambda s, p, n, m: "x")
     try:
         assert get_host_sampler() is not None
     finally:
@@ -65,7 +65,8 @@ def test_sampling_gateway_calls_host_and_returns_content(host_sampler: list) -> 
     )
     assert resp.content == "HOST MODEL OUTPUT"
     assert resp.provider == "host"
-    assert host_sampler == [("be terse", "write a test", 256)]  # sampler got the real args
+    # sampler got the real args including the per-role model (forwarded as a hint)
+    assert host_sampler == [("be terse", "write a test", 256, "m")]
 
 
 def _mock_runtime(tmp: Path) -> OpenContextRuntime:

@@ -92,6 +92,34 @@ def test_sampling_prompt_is_redacted_before_send(
     assert secret not in sent
 
 
+def test_sampling_sends_per_role_model_as_preference_hint(
+    server: MCPServer, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The per-role/per-phase model is forwarded to the client as an MCP
+    # modelPreferences hint, so the client picks the matching model.
+    response = json.dumps(
+        {"jsonrpc": "2.0", "id": "oc-sampling-1", "result": {"content": {"text": "ok"}}}
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO(response + "\n"))
+    server._request_sampling("system", "design the module", 128, model="claude-opus-4")
+    sent = capsys.readouterr().out
+    assert "modelPreferences" in sent
+    assert "claude-opus-4" in sent
+
+
+def test_sampling_omits_hint_for_placeholder_model(
+    server: MCPServer, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A placeholder model means "use the client's selected model" — send no hint.
+    response = json.dumps(
+        {"jsonrpc": "2.0", "id": "oc-sampling-1", "result": {"content": {"text": "ok"}}}
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO(response + "\n"))
+    server._request_sampling("system", "hi", 128, model="mock")
+    sent = capsys.readouterr().out
+    assert "modelPreferences" not in sent
+
+
 def test_opencontext_run_requires_task(server: MCPServer) -> None:
     assert "error" in server._call_tool("opencontext_run", {})
 
@@ -101,7 +129,7 @@ def test_opencontext_run_drives_harness_with_host_sampler(
 ) -> None:
     """C3: the in-process run tool drives the harness where the host sampler is
     live (the standalone loop runs in a separate process where it is absent)."""
-    register_host_sampler(lambda s, p, m: "ok")
+    register_host_sampler(lambda s, p, n, m: "ok")
 
     captured: dict[str, str] = {}
 

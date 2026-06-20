@@ -983,7 +983,13 @@ class MCPServer:
         self._write_json({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
 
     def _request_sampling(
-        self, system_prompt: str, prompt: str, max_tokens: int, *, timeout: float = 60.0
+        self,
+        system_prompt: str,
+        prompt: str,
+        max_tokens: int,
+        model: str | None = None,
+        *,
+        timeout: float = 60.0,
     ) -> str:
         """Host sampler: run a generation on the client's selected model via MCP
         sampling. Sends ``sampling/createMessage`` and waits for the matching
@@ -1007,6 +1013,12 @@ class MCPServer:
         }
         if system_prompt:
             params["systemPrompt"] = scanner.redact(system_prompt)
+        # Per-role/per-phase model → MCP modelPreferences hint, so the client picks
+        # the matching model (opus/sonnet/haiku, codex 5.4-mini/5.5, …) for this unit
+        # of work. A placeholder ("mock"/"host-selected") means "use whatever model
+        # the user already selected in their agent" — we send no hint.
+        if model and model not in ("host-selected", "mock", "mock-llm"):
+            params["modelPreferences"] = {"hints": [{"name": model}]}
         self._send_request(req_id, "sampling/createMessage", params)
         deadline = time.monotonic() + timeout
         while True:
