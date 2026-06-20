@@ -204,15 +204,24 @@ def context_propose(state: WorkflowRunState, services: WorkflowServices) -> str:
     )
 
 
-def context_apply(state: WorkflowRunState, services: WorkflowServices) -> str:
-    """Apply phase: execute proposed changes with safety checks (SDD style)."""
-    if "proposed_context" not in state.metadata and "proposal" not in state.metadata:
-        raise WorkflowExecutionError("No proposal to apply. Run propose phase first.")
+def _require_proposal(state: WorkflowRunState, message: str) -> Any:
+    """Return the validated proposal context pack, or raise if no propose phase ran.
+
+    ``context_propose`` writes both ``proposed_context`` (read by trace persistence)
+    and ``proposal``; either is accepted here so every downstream phase shares one
+    guard+validate instead of repeating it.
+    """
     from opencontext_core.models.context import ContextPackResult
 
-    proposal = ContextPackResult.model_validate(
-        state.metadata.get("proposed_context") or state.metadata["proposal"]
-    )
+    raw = state.metadata.get("proposed_context") or state.metadata.get("proposal")
+    if raw is None:
+        raise WorkflowExecutionError(message)
+    return ContextPackResult.model_validate(raw)
+
+
+def context_apply(state: WorkflowRunState, services: WorkflowServices) -> str:
+    """Apply phase: execute proposed changes with safety checks (SDD style)."""
+    proposal = _require_proposal(state, "No proposal to apply. Run propose phase first.")
     return (
         f"applied proposal: {len(proposal.included)} context items ready for "
         f"implementation (safe execution scaffold)"
@@ -223,14 +232,7 @@ def context_test(state: WorkflowRunState, services: WorkflowServices) -> str:
     """Test phase: validate proposed changes (SDD style)."""
     from opencontext_core.safety.classification import enforce_classification_invariants
 
-    if "proposed_context" not in state.metadata and "proposal" not in state.metadata:
-        raise WorkflowExecutionError("No proposal to test.")
-
-    from opencontext_core.models.context import ContextPackResult
-
-    proposal = ContextPackResult.model_validate(
-        state.metadata.get("proposed_context") or state.metadata["proposal"]
-    )
+    proposal = _require_proposal(state, "No proposal to test.")
 
     enforce_classification_invariants(
         proposal.included, proposal.omitted, state.prompt if hasattr(state, "prompt") else None
@@ -249,14 +251,7 @@ def context_test(state: WorkflowRunState, services: WorkflowServices) -> str:
 
 def context_verify(state: WorkflowRunState, services: WorkflowServices) -> str:
     """Verify phase: comprehensive verification (SDD style)."""
-    if "proposed_context" not in state.metadata and "proposal" not in state.metadata:
-        raise WorkflowExecutionError("No proposal to verify.")
-
-    from opencontext_core.models.context import ContextPackResult
-
-    ContextPackResult.model_validate(
-        state.metadata.get("proposed_context") or state.metadata["proposal"]
-    )
+    _require_proposal(state, "No proposal to verify.")
 
     from pathlib import Path
 
@@ -271,14 +266,7 @@ def context_verify(state: WorkflowRunState, services: WorkflowServices) -> str:
 
 def context_review(state: WorkflowRunState, services: WorkflowServices) -> str:
     """Review phase: final review and approval (SDD style)."""
-    if "proposed_context" not in state.metadata and "proposal" not in state.metadata:
-        raise WorkflowExecutionError("No proposal to review.")
-
-    from opencontext_core.models.context import ContextPackResult
-
-    proposal = ContextPackResult.model_validate(
-        state.metadata.get("proposed_context") or state.metadata["proposal"]
-    )
+    proposal = _require_proposal(state, "No proposal to review.")
 
     high_risk_items = [
         item for item in proposal.included if item.classification.value in ("secret", "regulated")
@@ -297,28 +285,14 @@ def context_review(state: WorkflowRunState, services: WorkflowServices) -> str:
 
 def context_archive(state: WorkflowRunState, services: WorkflowServices) -> str:
     """Archive phase: persist and clean up (SDD style)."""
-    if "proposed_context" not in state.metadata and "proposal" not in state.metadata:
-        raise WorkflowExecutionError("No proposal to archive.")
-
-    from opencontext_core.models.context import ContextPackResult
-
-    proposal = ContextPackResult.model_validate(
-        state.metadata.get("proposed_context") or state.metadata["proposal"]
-    )
+    proposal = _require_proposal(state, "No proposal to archive.")
 
     return f"archived proposal: {len(proposal.included)} items archived"
 
 
 def context_up_code(state: WorkflowRunState, services: WorkflowServices) -> str:
     """Up-code phase: update code with proposal (SDD style)."""
-    if "proposed_context" not in state.metadata and "proposal" not in state.metadata:
-        raise WorkflowExecutionError("No proposal to up-code.")
-
-    from opencontext_core.models.context import ContextPackResult
-
-    proposal = ContextPackResult.model_validate(
-        state.metadata.get("proposed_context") or state.metadata["proposal"]
-    )
+    proposal = _require_proposal(state, "No proposal to up-code.")
 
     state.metadata["upcode_suggestions"] = {
         "items_count": len(proposal.included),
