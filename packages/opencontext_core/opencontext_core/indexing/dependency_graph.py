@@ -116,25 +116,35 @@ def _edge(
 def _resolve_target(source: str, target: str, path_set: set[str]) -> str | None:
     if target in path_set:
         return target
-    candidates = []
+    candidates: list[str] = []
     if target.startswith("."):
-        source_dir = Path(source).parent
-        candidates.append((source_dir / target).as_posix())
-    module_path = target.replace(".", "/").replace("\\", "/")
-    candidates.extend(
-        [
-            module_path,
-            f"{module_path}.py",
-            f"{module_path}.js",
-            f"{module_path}.ts",
-            f"{module_path}.php",
-            f"{module_path}/__init__.py",
-            f"{module_path}/index.js",
-            f"{module_path}/index.ts",
-        ]
-    )
+        # Python relative import: leading dots = levels up from the source's
+        # directory ('.util' -> source_dir/util, '..util' -> parent/util, '.' ->
+        # the package itself). Previously this produced 'source_dir/.util' and the
+        # module-path branch mangled it, so relative imports never resolved.
+        dots = len(target) - len(target.lstrip("."))
+        remainder = target[dots:].replace(".", "/")
+        base = Path(source).parent
+        for _ in range(dots - 1):
+            base = base.parent
+        stem = (base / remainder).as_posix() if remainder else base.as_posix()
+        candidates.extend([f"{stem}.py", f"{stem}/__init__.py", stem])
+    else:
+        module_path = target.replace(".", "/").replace("\\", "/")
+        candidates.extend(
+            [
+                module_path,
+                f"{module_path}.py",
+                f"{module_path}.js",
+                f"{module_path}.ts",
+                f"{module_path}.php",
+                f"{module_path}/__init__.py",
+                f"{module_path}/index.js",
+                f"{module_path}/index.ts",
+            ]
+        )
     for candidate in candidates:
-        normalized = candidate.replace("/./", "/").lstrip("./")
+        normalized = candidate.replace("/./", "/")
         if normalized in path_set:
             return normalized
     return None
