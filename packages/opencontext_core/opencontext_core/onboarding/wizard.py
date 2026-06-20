@@ -279,7 +279,9 @@ class OnboardingWizard:
                 "reinforce, supersede, hybrid recall)",
             },
         ]
-        return str(prompts.select("Memory backend", choices, default="engram"))
+        # Default to local so Engram coupling is an explicit opt-in (matching the
+        # docstring), not what you get by pressing Enter.
+        return str(prompts.select("Memory backend", choices, default="local"))
 
     def _run_onboarding(self, options: OnboardingOptions) -> OnboardingResult:
         service = OnboardingService()
