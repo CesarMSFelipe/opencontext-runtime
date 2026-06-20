@@ -147,7 +147,7 @@ class EngramMemoryStore:
             self.contradict(contradicted_id, evidence)
 
         try:
-            self._client.mem_save(
+            result = self._client.mem_save(
                 title=memory.key,
                 content=memory.content,
                 type=memory.layer.value,
@@ -156,8 +156,16 @@ class EngramMemoryStore:
                 capture_prompt=False,
             )
         except Exception as exc:
-            # Persist failure must not raise; callers treat the local id as the handle.
+            # Persist failure must not raise; empty handle signals "not persisted"
+            # so a CompositeMemoryStore can fall back to the local store.
             _log.warning("engram write failed (key=%r): %s", memory.key, exc)
+            return ""
+        # Clients that report success explicitly (the CLI bridge) gate the handle
+        # on it; clients that return nothing meaningful (MCP/mocks) are trusted.
+        ok = result.get("ok", True) if isinstance(result, dict) else True
+        if not ok:
+            _log.warning("engram write reported failure (key=%r)", memory.key)
+            return ""
         return memory.id
 
     def reinforce(self, memory_id: str, evidence: EvidenceRef) -> None:

@@ -9,10 +9,14 @@ Both backing stores are unchanged; this class only adds routing.
 
 from __future__ import annotations
 
+import logging
+
 from opencontext_core.memory.agent import AgentMemoryStore
 from opencontext_core.memory.fusion import reciprocal_rank_fusion
 from opencontext_core.models.agent_memory import MemoryLayer, MemoryRecord
 from opencontext_core.models.evidence import EvidenceRef
+
+_log = logging.getLogger(__name__)
 
 _ENGRAM_LAYERS = {MemoryLayer.EPISODIC, MemoryLayer.SEMANTIC}
 _LOCAL_LAYERS = {MemoryLayer.PROCEDURAL, MemoryLayer.FAILURE, MemoryLayer.WORKING}
@@ -51,7 +55,18 @@ class CompositeMemoryStore:
         return [all_by_id[rid] for rid in ranked_ids[:limit] if rid in all_by_id]
 
     def write(self, memory: MemoryRecord) -> str:
-        return self._store_for_layer(memory.layer).write(memory)
+        store = self._store_for_layer(memory.layer)
+        handle = store.write(memory)
+        # Durability fallback: if the engram-routed write did not persist (empty
+        # handle), keep the memory locally rather than silently dropping it.
+        if store is self._engram and not handle:
+            _log.warning(
+                "engram write did not persist (key=%r, layer=%s); falling back to local store",
+                memory.key,
+                memory.layer.value,
+            )
+            return self._local.write(memory)
+        return handle
 
     def reinforce(self, memory_id: str, evidence: EvidenceRef) -> None:
         # Try local first, then engram; both are no-ops if ID not found

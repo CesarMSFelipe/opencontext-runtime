@@ -126,8 +126,8 @@ def test_save_never_raises_on_missing_binary(tmp_path: Path) -> None:
     client = EngramCliClient(
         db_path=tmp_path / "engram.db", project="proj", binary="definitely-not-a-binary-xyz"
     )
-    # No exception, returns a dict.
-    assert client.mem_save(title="t", content="c", type="episodic") == {}
+    # No exception, and reports the write as not persisted so callers can fall back.
+    assert client.mem_save(title="t", content="c", type="episodic") == {"ok": False}
 
 
 def _cfg(provider: str) -> Any:

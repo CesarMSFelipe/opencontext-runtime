@@ -181,10 +181,19 @@ class EngramCliClient:
         if scope:
             cmd += ["--scope", str(scope)]
         try:
-            subprocess.run(cmd, capture_output=True, timeout=self._timeout, check=False)
+            proc = subprocess.run(cmd, capture_output=True, timeout=self._timeout, check=False)
         except Exception as exc:  # missing binary, timeout — never propagate
             _log.warning("engram save failed (title=%r): %s", str(title)[:80], exc)
-        return {}
+            return {"ok": False}
+        if proc.returncode != 0:
+            _log.warning(
+                "engram save exited %d (title=%r): %s",
+                proc.returncode,
+                str(title)[:80],
+                (proc.stderr or b"").decode("utf-8", "replace")[:200],
+            )
+            return {"ok": False}
+        return {"ok": True}
 
 
 def default_engram_client() -> EngramCliClient | None:
