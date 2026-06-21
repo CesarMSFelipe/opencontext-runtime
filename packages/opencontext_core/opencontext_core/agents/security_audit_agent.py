@@ -33,7 +33,7 @@ class SecurityAuditAgent(BaseAgent):
                         for m in pattern.finditer(content):
                             findings.append(
                                 {
-                                    "file": str(f.relative_to(self.project_root)),
+                                    "file": f.relative_to(self.project_root).as_posix(),
                                     "line": content[: m.start()].count("\n") + 1,
                                     "match": m.group(0)[:60],
                                 }

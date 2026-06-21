@@ -91,7 +91,7 @@ class BridgeDetector:
         root: Path,
     ) -> list[CrossLanguageBridge]:
         found: list[CrossLanguageBridge] = []
-        rel_path = str(file_path.relative_to(root))
+        rel_path = file_path.relative_to(root).as_posix()
         lines = content.splitlines()
 
         for i, line in enumerate(lines, start=1):

@@ -90,7 +90,7 @@ class BackupManager:
             size_bytes=backup_path.stat().st_size,
             hash=content_hash,
             pinned=False,
-            files=[str(f.relative_to(self.project_root)) for f in files_to_backup],
+            files=[f.relative_to(self.project_root).as_posix() for f in files_to_backup],
         )
 
         self._add_to_index(info)

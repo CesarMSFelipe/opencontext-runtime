@@ -62,7 +62,7 @@ class FrameworkRouter:
 
     def _scan_file(self, file_path: Path, content: str, root: Path) -> list[RouteDefinition]:
         found: list[RouteDefinition] = []
-        rel_path = str(file_path.relative_to(root))
+        rel_path = file_path.relative_to(root).as_posix()
         lines = content.splitlines()
         for i, line in enumerate(lines, start=1):
             for pattern, framework, _default_method in _PATTERNS:

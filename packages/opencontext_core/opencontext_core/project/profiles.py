@@ -204,7 +204,7 @@ class DjangoRouteScanner:
                 if fn == "urls.py":
                     full = Path(dirpath) / fn
                     try:
-                        results.append(str(full.relative_to(root)))
+                        results.append(full.relative_to(root).as_posix())
                     except ValueError:
                         continue
         return results
@@ -272,7 +272,7 @@ class FastAPIRouteScanner:
                     if fn.endswith(".py"):
                         full = Path(dirpath) / fn
                         try:
-                            py_files.append(str(full.relative_to(project_root)))
+                            py_files.append(full.relative_to(project_root).as_posix())
                         except ValueError:
                             continue
 

@@ -66,7 +66,7 @@ class ReleaseEvidenceBuilder:
         base = Path(root)
         files = [
             FileEvidence(
-                path=str(path.relative_to(base) if base.is_dir() else path.name),
+                path=(path.relative_to(base).as_posix() if base.is_dir() else path.name),
                 sha256=_hash_bytes(path.read_bytes()),
                 size_bytes=path.stat().st_size,
             )

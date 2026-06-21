@@ -222,7 +222,7 @@ class CheckRunner:
                     ]
                 ):
                     continue
-                matched.add(str(path.relative_to(self.project_path)))
+                matched.add(path.relative_to(self.project_path).as_posix())
 
         return sorted(matched)
 

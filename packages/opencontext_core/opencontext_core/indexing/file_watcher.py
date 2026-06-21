@@ -53,7 +53,7 @@ class _WatchdogHandler(FileSystemEventHandler):
     def _rel_path(self, abs_path: str) -> str | None:
         try:
             p = Path(abs_path).resolve()
-            return str(p.relative_to(self.watcher.root))
+            return p.relative_to(self.watcher.root).as_posix()
         except (ValueError, OSError):
             return None
 
@@ -151,7 +151,7 @@ class FileWatcher:
         # Check for modified/created files
         current_files: set[str] = set()
         for file_path in self._iter_files():
-            rel_path = str(file_path.relative_to(self.root))
+            rel_path = file_path.relative_to(self.root).as_posix()
             current_files.add(rel_path)
 
             mtime = file_path.stat().st_mtime
@@ -191,7 +191,7 @@ class FileWatcher:
         for dirpath, _dirnames, filenames in os.walk(self.root):
             for filename in filenames:
                 file_path = Path(dirpath) / filename
-                rel_path = str(file_path.relative_to(self.root))
+                rel_path = file_path.relative_to(self.root).as_posix()
 
                 if self._is_excluded(rel_path):
                     continue
@@ -208,7 +208,7 @@ class FileWatcher:
     def _scan_all(self) -> None:
         """Initial scan to populate file states."""
         for file_path in self._iter_files():
-            rel_path = str(file_path.relative_to(self.root))
+            rel_path = file_path.relative_to(self.root).as_posix()
             mtime = file_path.stat().st_mtime
             content_hash = self._hash_file(file_path)
             self._file_states[rel_path] = (mtime, content_hash)
