@@ -234,3 +234,147 @@ This proposal is largely orchestration on top of existing capabilities:
 The net new work is: the **rules schema + evaluator**, the **architecture analyzer**
 (cycles/god-files/boundaries/complexity), the **language standards registry**, the
 **baseline/ratchet store**, and the **wiring** into harness/CLI/CI/MCP.
+
+## 11. Concrete design (implementation map)
+
+Proposed home: a new `opencontext_core/quality/` package (one already exists for
+`ci_checks.py` — extend it). Module layout:
+
+```
+opencontext_core/quality/
+  rules.py        # config schema + loader (QualityRules, load_rules)
+  architecture.py # ArchitectureAnalyzer over the knowledge graph
+  languages.py    # LanguageStandards registry + LanguageQualityRunner
+  evaluator.py    # QualityEvaluator: analyzer + runner -> verdict
+  baseline.py     # BaselineStore (save/load/diff, ratchet)
+  models.py       # Finding, RuleVerdict, QualityReport (reuse ci_checks enums)
+  ci_checks.py    # (existing) — register architecture/quality as checks
+```
+
+Reuse, don't rebuild: `ci_checks.py` already defines `CheckSeverity`, `CheckStatus`,
+`CheckResult`, `CheckDefinition`, `CheckRunner` — the new findings normalize into those,
+so `opencontext ci-check run` and the new gate share one result type.
+
+### 11.1 Architecture analyzer (over the existing graph)
+
+Inputs are already in the graph DB: `nodes(id, kind, file, line, …)` and
+`edges(source_node_id, target_node_id, kind, call_site_file, call_site_line)`.
+
+- **Cycles** (`max_cycles`): build a file-level (or module-level) directed graph from
+  `edges` (kinds `from_import`/`import`/`calls`), run **Tarjan SCC**; any SCC with >1 node
+  (or a self-loop) is a cycle. Report the participating files. `graph_analysis` has no
+  `detect_cycles` yet — add Tarjan there (it already loads adjacency).
+- **God-files / coupling** (`no_god_files`, `max_coupling`): use
+  `graph_analysis.compute_centrality()` → `Centrality.in_degree`/`out_degree`. A god-file =
+  in_degree above a threshold (derived from the distribution, e.g. > p95 or an absolute
+  cap) and/or LOC over a cap. Coupling grade maps degree bands to A–F.
+- **Layers / boundaries**: glob-match each node's `file` to a layer; for every edge, if the
+  (source layer → target layer) pair is disallowed by a `[[boundaries]]` rule, it's a
+  violation. Pure path + edge lookup, no new parsing.
+- **Complexity** (`max_cc`): per-symbol cyclomatic complexity from the tree-sitter AST we
+  already parse (count branch/loop/boolean-op nodes per function via a small per-language
+  query). Start with Python; extend per language.
+
+All of this is deterministic and reads the graph that `index` already builds — **zero
+model calls, no re-parse beyond complexity**.
+
+### 11.2 Language standards runner
+
+`LanguageStandards` registry maps `language -> [tool specs]`, seeded by the profiles'
+existing `validation_commands` (`SafeCommand`) and extended (ruff/mypy/ruff-format,
+eslint/tsc, gofmt/go vet/golangci-lint, clippy/rustfmt, phpstan/phpcs/pint, …). Each tool
+spec declares: command, how to scope to files, parser (exit-code or regex/JSON → findings),
+and whether it is `required` for the project's `mode`.
+
+`LanguageQualityRunner`:
+1. Resolve languages of the changed files (technology profiles + extension map).
+2. Run each language's tools over the **diff scope** via the existing `SafeCommand`
+   execution (already sandbysed/allowlisted).
+3. Normalize stdout/exit → `Finding(file, line, rule, severity, message)`.
+4. Missing required tool → a `tool_missing` finding (configurable: block or skip).
+
+### 11.3 Evaluator + finding model
+
+`QualityEvaluator.evaluate(changed_files, rules, baseline) -> QualityReport`:
+- runs ArchitectureAnalyzer + LanguageQualityRunner,
+- applies per-rule severity + thresholds,
+- in `ratchet`, filters out findings present in the baseline (only **new** ones count),
+- returns a `QualityReport(findings, score, status)` where `status` maps to the harness
+  `GateStatus` (FAILED/WARNING/PASSED) and to a CLI exit code.
+
+### 11.4 Baseline / ratchet store
+
+`.opencontext/quality-baseline.json`: `{ "findings": [ {key, file, rule, severity} ],
+"metrics": {cycles, god_files, max_cc, …}, "generated_at" }`. Finding **key** =
+`sha1(rule + normalized_file + symbol_or_line_bucket)` so cosmetic line shifts don't churn.
+Diff: `new = current_keys − baseline_keys`. `gate --save` writes it; `ratchet` mode blocks
+only on `new`.
+
+### 11.5 Harness integration
+
+- Declare an `architecture_clean` (and `quality_standards`) gate in the verify (and/or
+  apply) phase config. The runner's `_dispatch_declared_gates(...)` already routes by
+  `gate_id` — add a branch that calls `QualityEvaluator` and returns a `PhaseGate`.
+- Capture the baseline at **explore** (run start) into run state; evaluate after **apply**.
+- Under `BudgetMode.STRICT` a FAILED quality gate fails the phase (the fix loop kicks in);
+  otherwise it's a WARNING. Findings go into the trace + are surfaced to the Builder for the
+  fix iteration.
+
+### 11.6 CLI / CI
+
+- `opencontext quality gate --save` → write baseline.
+- `opencontext quality check [--json] [--diff]` → evaluate; exit `0` (clean) / `1`
+  (violation). Human table + `--json` for CI.
+- Register the architecture/quality evaluation as discoverable `ci-check` definitions so
+  `opencontext ci-check run` covers it too — one rules source, two entry points.
+- Add `opencontext quality check` to the project's CI workflow (and OpenContext's own
+  `test.yml`, dogfood).
+
+### 11.7 MCP tool
+
+`opencontext_quality` (args: `scope` = `diff|all`, optional `rules`): returns the
+`QualityReport` (findings + score). Lets the agent self-check mid-apply before the gate.
+Registered like the other 14 tools in `mcp_stdio`.
+
+## 12. Open decisions (need a call before building)
+
+1. **Rules location**: standalone `.opencontext/quality.toml` vs a `quality:` block in
+   `opencontext.yaml`. (Lean: standalone toml — co-located, diffable, matches the
+   per-project convention.)
+2. **MVP rule set**: which rules ship enforcing first. (Lean: `max_cycles=0` +
+   `no_god_files` + `boundaries` + per-language lint/type via profile commands.)
+3. **Default mode** out of the box: `off` / `warn` / `ratchet`. (Lean: `warn`, so adoption
+   never blocks day one; teams opt into `ratchet`/`strict`.)
+4. **Missing-tool policy** for a required language tool: block vs skip-with-notice. (Lean:
+   skip-with-notice by default; `strict` makes it a block.)
+5. **Granularity of architecture** (file-level vs module/package-level cycles & layers).
+   (Lean: file-level MVP, module-level as a follow-up.)
+6. **Monorepo / multi-language**: per-subtree rules? (Defer; single root rules first.)
+7. **Layer seeding**: hand-authored `[[layers]]` vs inferred from the dependency graph.
+   (Lean: hand-authored MVP; offer an `infer` helper later.)
+
+## 13. Acceptance criteria
+
+- A change that introduces an import cycle **fails** `opencontext quality check` (exit 1)
+  and, in `strict`, fails the harness verify gate.
+- `gate --save` then a clean change → exit 0; a new god-file/boundary violation → exit 1;
+  a *pre-existing* violation under `ratchet` → exit 0 (not blocked).
+- Per-language lint/type findings on changed files are reported and gate-enforced where the
+  tool is present; a missing required tool is reported, never a silent pass.
+- Deterministic: same inputs → same report. Zero model calls in the check path.
+- Perf: architecture analysis is incremental off the graph; language tools run on the diff;
+  a typical change evaluates in seconds, not minutes.
+- Dogfood: OpenContext's own repo passes its own `quality check` in CI.
+
+## 14. Sequencing & rough effort
+
+- **Phase 1 (MVP, ~medium):** `rules.py` + `architecture.py` (cycles/god-files/boundaries) +
+  `languages.py` seeded from profiles + `baseline.py` + `opencontext quality gate/check`
+  CLI + harness gate in **warn**. Ship behind `mode=off` default until validated.
+- **Phase 2 (~medium):** STRICT/ratchet enforcement in harness + CI wiring + MCP tool +
+  complexity (`max_cc`) + richer language registry.
+- **Phase 3 (~larger):** duplication/depth metrics + rolled-up score + per-persona wiring +
+  evolution tracking.
+
+Each phase is a self-contained SDD change with its own tests; Phase 1 delivers a usable,
+honest `quality check` even before enforcement is turned on.
