@@ -198,6 +198,25 @@ one, while still **forcing** that things only get better.
 - **Cross-language architecture** is limited to what the graph can parse; the language
   coverage tracks the indexer's language support.
 
+### Token cost
+
+Enforcement is **deterministic and native — there is no model in the check path** — so the
+checks themselves cost **zero tokens** (graph analysis + subprocess linters/type-checkers).
+
+- **Clean change → ~0 token overhead.** The gate passes without any model call.
+- **Violation → bounded extra tokens.** Only when a rule fails does the agent run an extra
+  fix iteration (model tokens), proportional to the fix. The violation report fed back is a
+  compact `file:line:rule` structure, not raw tool output.
+- **Net saver over time.** A degraded architecture costs more tokens on *every future
+  task* (more files to read, larger context packs, tangled dependencies). Keeping the
+  codebase clean keeps context packs small — fewer tokens per task — so enforcement
+  *reduces* long-run consumption. It complements the adaptive retrieval budget and
+  rehydration summarization.
+- **Cost-control levers:** scope checks to the diff; feed compact reports (not raw linter
+  dumps) into context; `ratchet` mode blocks only *new* violations so the agent never
+  churns on legacy; run the gate once per phase (post-apply), not per edit. Note that
+  subprocess linters add wall-clock latency, not tokens — a separate, smaller cost.
+
 ## 10. What we reuse (already built)
 
 This proposal is largely orchestration on top of existing capabilities:
