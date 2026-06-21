@@ -40,7 +40,12 @@ This is the whole point — what happens with **no config at all**:
 5. **One-line summary.** The run reports a compact health delta (e.g. `architecture
    9120 → 9180 ▲`); only a regression the agent could not resolve is surfaced to the user.
 
-Everything below — explicit rules, layers/boundaries, CLI, CI, strictness — is an
+The only config most users ever touch is two keys: **`enabled`** (turn the whole
+architecture feature on/off) and **`max_fix_loops`** (cap the in-loop self-correction
+attempts so it never burns tokens). Both have sensible defaults — on, and a small loop cap —
+so even those are optional.
+
+Everything else below — explicit rules, layers/boundaries, CLI, CI, strictness — is an
 **optional refinement** layered on this default. The sensor works out of the box; teams opt
 into hard standards only when they want them.
 
@@ -105,8 +110,11 @@ beyond regression-catching: pin absolute thresholds, declare layers/boundaries, 
 language to `strict`. A single declarative file, e.g. `.opencontext/quality.toml`:
 
 ```toml
-mode = "ratchet"            # off | warn | strict | ratchet
-baseline = ".opencontext/quality-baseline.json"
+enabled       = true        # master on/off switch for the architecture feature
+max_fix_loops = 3           # self-correction budget: in-loop fix attempts before
+                            # the regression is surfaced to the user (token guard)
+mode          = "ratchet"   # off | warn | strict | ratchet
+baseline      = ".opencontext/quality-baseline.json"
 
 [architecture]
 max_cycles    = 0
@@ -370,13 +378,15 @@ Settled by the zero-config / in-loop direction:
   thresholds are opt-in. CLI/CI are optional surfaces.
 - **Built-in signal set** (no config): new cycles, new god-file, worsened coupling, health
   score drop. These need no user input.
+- **User controls** = two config keys: `enabled` (on/off) and `max_fix_loops` (token guard
+  on self-correction). Both default sensibly; nothing else is required.
 
 Still genuinely open:
 
 1. **Health score formula** — how the built-in signals roll into one number + what counts
    as a "drop". Needs to be stable, explainable, and cheap. (The headline UX is this score.)
-2. **Self-correction budget** — how many in-loop fix iterations before the harness gives up
-   and surfaces the regression to the user (don't burn tokens looping).
+2. **`max_fix_loops` default** — the out-of-the-box value (e.g. 2–3) before surfacing the
+   regression to the user.
 3. **Optional rules location** — standalone `.opencontext/quality.toml` vs a `quality:` block
    in `opencontext.yaml`. (Lean: standalone toml.)
 4. **Optional language tool depth** — when a project opts into `strict`, which extra tools
