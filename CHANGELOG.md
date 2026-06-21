@@ -5,6 +5,30 @@ All notable changes to OpenContext Runtime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-06-21
+
+### Added
+
+- **Per-persona model routing**: `opencontext models set-persona <persona> <model>` routes each SDD phase by its persona (Architect → design, Explorer → explore, …), delivered to the agent as an MCP sampling hint. `models show` lists persona → phase → model. Per-role routing remains a separate axis for functional operations.
+- **Install model preset**: the install wizard asks one model-routing question (`default` / `cheap` / `hybrid` / `premium`); `default` keeps the client's own model for every phase — no model is chosen for you. This is now the universal default (was `hybrid`).
+- **Recursive summarization at rehydration**: memory recall over-fetches candidate items and compresses them back to the prompt budget — via the cheap `summarize` role when a model is bound, else a deterministic line-boundary trim — so more signal fits the same rehydration tokens. No-op when recall already fits.
+- **Adaptive retrieval budget (ACON-lite)**: the token optimizer widens the retrieval budget for an operation type when its history shows failures that coincided with omitted context (bounded +50%, clean histories untouched). The harness co-records each run's outcome with its omission count to feed the signal.
+
+### Changed
+
+- Default SDD model profile is now `default` (the client's model for every phase) instead of `hybrid`, across install, onboard, and `OnboardingOptions`.
+
+### Fixed
+
+- **Harness `propose` gate**: the declared `trace_id_created` gate failed on every standalone run because no phase propagated a trace id; explore now records the (already-persisted) retrieval trace, so `propose` passes.
+- **MCP symbol-edit tools fail closed**: `replace_symbol_body` / `insert_*` reject an edit that would leave a `.py` file unparseable (file left intact, with a hint to pass the full definition); `rename_symbol` rejects Python keywords and now also updates `from … import` statements, so a cross-module rename no longer leaves a dangling import.
+- **Tasks scaffold** uses the files explore surfaced for the task instead of hard-coded internal paths.
+- **`benchmark run --format json`** emits pure JSON — the status spinner no longer corrupts machine-readable output.
+
+### Docs
+
+- Documentation professionalization: corrected commands/claims verified against the CLI, folded orphaned pages into the mkdocs nav (175/181), fixed broken in-site links, and added OSS hygiene (SECURITY reporting channel, Code of Conduct, CONTRIBUTING dev-setup, issue/PR templates).
+
 ## [1.3.0] - 2026-06-20
 
 ### Added
