@@ -2,43 +2,66 @@
 
 Status: **proposal** (not implemented). Owner: TBD. Target: a new minor release.
 
-## 1. Goal
+## Goal
 
-Give OpenContext a **native, forcing** quality layer: a system that makes every change
-the agent produces meet **architecture standards** (cross-language) and **per-language
-code-quality standards**, fail-closed, at the moment of change and again at merge — so the
-codebase cannot silently degrade as the agent works at machine speed.
+Give the SDD loop a **continuous architecture-quality sense**: as the agent works, the
+harness measures the project's architecture and per-language code health, and when a change
+would **degrade** it, the loop catches that **inside the same run** and the agent
+self-corrects — automatically, before the change is accepted.
 
-"Forcing" means: when a rule is violated in strict mode, the work is **blocked**, not
-warned. The agent must fix it before the change is accepted.
+It must feel like a built-in sensor, not a chore: **zero configuration to start, invisible
+until it matters.** The user is never asked to author rules, wire CI, or run a command for
+the default behavior to work. Forcing happens *in the agent loop*; the human is only
+involved if the agent cannot fix the regression itself.
 
 ### Non-goals
 
-- Not aesthetic or subjective "perfect design" — we enforce the **measurable**.
-- Not a replacement for each language's own linters/type-checkers — we **orchestrate and
-  enforce** them, we do not reimplement them.
-- Not runtime/performance profiling.
-- Not an external service or binary dependency — it is native and client-side.
+- Not a config exercise — the default path needs **zero setup** (no rules file required).
+- Not primarily a CLI/CI chore the user runs — it lives **in the agentic loop**; CLI/CI are
+  optional surfaces on the same engine.
+- Not aesthetic or subjective "perfect design" — it senses the **measurable**.
+- Not a replacement for each language's linters/type-checkers — it **orchestrates** them.
+- Not an external service or binary dependency — native and client-side.
 
-## 2. Principles
+## Default experience (zero-config, in-loop)
 
-- **Native + client-side.** Runs on the data and tools we already have; no new runtime
-  dependency, no model in the enforcement path (deterministic).
-- **Language-agnostic core + per-language adapters.** Architecture rules work off the
-  knowledge graph (any indexed language); code-quality rules delegate to each language's
-  canonical tools.
-- **Fail-closed in strict mode**, advisory otherwise. Severity is per-rule.
-- **Baseline / ratchet adoption.** Capture a baseline; block *new* violations even when
-  legacy ones exist. Teams adopt without a big-bang cleanup, then tighten over time.
-- **Degrade honestly.** If a required language tool is absent, say so explicitly — never
-  report "pass" for a check that did not run. (For a true forcing gate, missing required
-  tools is a configurable failure, not a silent skip.)
-- **One contract, many enforcement points.** The same rules drive the agent loop, the CLI,
-  and CI — no drift between "what the agent checks" and "what the PR checks".
+This is the whole point — what happens with **no config at all**:
 
-## 3. What it enforces
+1. **Session snapshot.** At run start (`explore`) the harness records an architecture
+   **health baseline** from the knowledge graph it already builds — a single score plus the
+   built-in signals (cycles, god-files, coupling). No rules file needed.
+2. **Agent works** through the normal SDD phases.
+3. **Session re-check.** After `apply`, the harness recomputes health on the changed scope
+   and **diffs against the snapshot**. Built-in regression rules (no *new* cycles, no *new*
+   god-file, no *new* boundary break, health score not dropping) apply automatically.
+4. **Self-correction in the loop.** If the change degraded architecture, the finding is fed
+   back to the agent (Builder/Reviewer persona) and it fixes it **in the same run** — like
+   the existing test/verify feedback. The user sees nothing unless asked.
+5. **One-line summary.** The run reports a compact health delta (e.g. `architecture
+   9120 → 9180 ▲`); only a regression the agent could not resolve is surfaced to the user.
 
-### 3.1 Architecture (cross-language, from the knowledge graph)
+Everything below — explicit rules, layers/boundaries, CLI, CI, strictness — is an
+**optional refinement** layered on this default. The sensor works out of the box; teams opt
+into hard standards only when they want them.
+
+## Principles
+
+- **Zero-config by default.** Sensible built-in signals + regression detection with no
+  rules file. Configuration only *tightens* behavior; it is never required.
+- **In the loop, low-friction.** The harness runs it automatically and the agent
+  self-corrects; the user is not asked to invoke anything for the default behavior.
+- **Native + deterministic.** Runs off the knowledge graph and existing tools; no new
+  dependency, no model in the sense/check path.
+- **Regression-first (ratchet by default).** Block what this change made *worse*; never
+  block on pre-existing debt. Hard absolute thresholds are opt-in.
+- **Degrade honestly.** Never report "clean" for a check that did not actually run; a
+  missing optional language tool is reported, not silently passed.
+- **Optional surfaces, one engine.** The same engine also powers an optional CLI/CI gate for
+  teams that want a manual or merge-time check — but that is additive, not the default.
+
+## What it enforces
+
+### Architecture (cross-language, from the knowledge graph)
 
 Computed from the existing `dependency_graph` + `call_graph` + `graph_analysis`:
 
@@ -51,7 +74,7 @@ Computed from the existing `dependency_graph` + `call_graph` + `graph_analysis`:
 | `max_complexity` (`max_cc`) | Cyclomatic complexity per symbol | tree-sitter AST (branch/loop counting) |
 | `max_depth` | Directory / nesting depth ceiling | path analysis |
 
-### 3.2 Per-language code quality (delegated to each language's tools)
+### Per-language code quality (delegated to each language's tools)
 
 We already detect the project's stack (technology profiles) and each profile already
 declares its canonical `validation_commands` (e.g. Python → `ruff` / `mypy` / `pytest`;
@@ -68,16 +91,18 @@ A small **language → standards** registry maps each language to its tool set a
 are the seed; the registry extends them (e.g. add `eslint`, `tsc`, `clippy`, `gofmt`,
 `go vet`, `golangci-lint`, `ruff format --check`).
 
-### 3.3 Tests
+### Tests
 
 Reuses the harness's existing TDD-first pre-gate and scoped test run, plus **test-gap
 detection** from the graph: changed public symbols with no corresponding test file are
 flagged (configurable: warn or block).
 
-## 4. Rules configuration
+## Optional rules (opt-in hard standards)
 
-A single declarative file, e.g. `.opencontext/quality.toml` (or a `quality:` block in
-`opencontext.yaml`), version-controlled with the project:
+**The default needs no rules file** — built-in regression detection (cycles, god-files,
+coupling, health score) runs with zero config. This file is only for teams that want to go
+beyond regression-catching: pin absolute thresholds, declare layers/boundaries, or set a
+language to `strict`. A single declarative file, e.g. `.opencontext/quality.toml`:
 
 ```toml
 mode = "ratchet"            # off | warn | strict | ratchet
@@ -111,35 +136,35 @@ profile = "standard"        # gofmt -l, go vet, golangci-lint
 Each rule carries a severity; `mode` sets the global posture and `ratchet` compares
 against the baseline so only regressions block.
 
-## 5. Where it integrates (the forcing points)
+## Where it integrates
 
-The same engine runs at three points, driven by the same config:
+The **default and only required** integration is agent-time and automatic. Everything else
+is an optional surface on the same engine, for teams that want it.
 
-1. **Agent-time — the harness gate (primary forcing function).**
-   - At run start (explore) capture the quality baseline.
-   - After **apply**, before **verify** completes, run the engine over the changed scope.
-   - In `strict`/`ratchet` mode under `BudgetMode.STRICT`, a violation makes the phase
-     **FAIL** → the agent cannot close the change until it is fixed. This extends the
-     existing gate-dispatch + `GGARulesPhase` machinery rather than adding a parallel one.
-   - Per-persona: the **Architect** consults the rules during *design*; the **Builder**
-     gets violations as actionable feedback during *apply*; the **Reviewer** enforces in
+1. **Agent-time — the harness gate (default, automatic, zero-config).**
+   - At run start (`explore`) capture the architecture-health snapshot automatically.
+   - After **apply**, recompute on the changed scope and diff against the snapshot.
+   - A regression is fed back to the agent, which self-corrects **in the same run** (like
+     the existing test/verify feedback) — the user is not involved. Under `BudgetMode.STRICT`
+     an unresolved regression fails the phase. This extends the existing gate-dispatch +
+     `GGARulesPhase` machinery, not a parallel system.
+   - Per-persona: the **Architect** sees health during *design*; the **Builder** gets the
+     regression as actionable feedback during *apply*; the **Reviewer** confirms in
      *verify*/*review*.
 
-2. **CLI — standalone + scriptable.**
-   - `opencontext quality gate --save` — snapshot the baseline.
-   - `opencontext quality gate` / `opencontext quality check` — evaluate, exit `0`/`1`.
-   - Unifies with the existing `quality` and `ci-check` commands (one rules source).
+2. **MCP — mid-edit self-check (optional, agent-driven).**
+   - An `opencontext_quality` tool lets the agent check the changed scope while editing and
+     self-correct before the gate even runs. Still no user action.
 
-3. **Merge-time — CI.**
-   - Add `opencontext quality check` to the project's CI (and surface it via `ci-check`),
-     so a PR that degrades architecture or violates language standards **cannot merge**.
-   - Dogfood: wire it into OpenContext's own `test.yml`.
+3. **CLI — optional, for humans who want a manual check.**
+   - `opencontext quality check` / `gate --save` — evaluate / snapshot, exit `0`/`1`.
+   - Shares the engine + (optional) rules with the in-loop gate — one source of truth.
 
-4. **MCP — mid-edit self-correction.**
-   - Expose an `opencontext_quality` tool so the agent (inside its editor) can check the
-     changed scope while editing and self-correct before the gate runs.
+4. **CI — optional merge-time gate.**
+   - For teams that also want PRs blocked: add `opencontext quality check` to CI (surfaced
+     via `ci-check`). Opt-in; the in-loop gate already protects the agent's own changes.
 
-## 6. Engine components
+## Engine components
 
 All four reuse existing subsystems; this is mostly wiring + a rules layer.
 
@@ -156,7 +181,7 @@ All four reuse existing subsystems; this is mostly wiring + a rules layer.
 - **Reporter** — emits a normalized result into the harness gate, the CLI exit code, and
   the trace (so every decision is auditable).
 
-## 7. Adoption / ratchet strategy
+## Adoption / ratchet strategy
 
 1. Ship in `warn` — visible, non-blocking; teams see their findings.
 2. `opencontext quality gate --save` captures the baseline.
@@ -166,7 +191,7 @@ All four reuse existing subsystems; this is mostly wiring + a rules layer.
 This makes the system adoptable on a real, imperfect codebase without halting work on day
 one, while still **forcing** that things only get better.
 
-## 8. Phased plan
+## Phased plan
 
 - **Phase 1 — MVP (architecture core + language quality via profiles).**
   - Architecture analyzer: `max_cycles`, `no_god_files`, `layers`/`boundaries`.
@@ -185,7 +210,7 @@ one, while still **forcing** that things only get better.
   - Duplication/redundancy and depth metrics; a single rolled-up quality score.
   - Per-persona wiring (Architect/Reviewer); evolution tracking across runs.
 
-## 9. Honest ceilings & risks
+## Honest ceilings & risks
 
 - **Measurable, not magic.** It enforces cycles, coupling, god-files, boundaries,
   complexity, lint/type/test standards — not subjective design quality.
@@ -217,7 +242,7 @@ checks themselves cost **zero tokens** (graph analysis + subprocess linters/type
   churns on legacy; run the gate once per phase (post-apply), not per edit. Note that
   subprocess linters add wall-clock latency, not tokens — a separate, smaller cost.
 
-## 10. What we reuse (already built)
+## What we reuse (already built)
 
 This proposal is largely orchestration on top of existing capabilities:
 
@@ -235,7 +260,7 @@ The net new work is: the **rules schema + evaluator**, the **architecture analyz
 (cycles/god-files/boundaries/complexity), the **language standards registry**, the
 **baseline/ratchet store**, and the **wiring** into harness/CLI/CI/MCP.
 
-## 11. Concrete design (implementation map)
+## Concrete design (implementation map)
 
 Proposed home: a new `opencontext_core/quality/` package (one already exists for
 `ci_checks.py` — extend it). Module layout:
@@ -255,7 +280,7 @@ Reuse, don't rebuild: `ci_checks.py` already defines `CheckSeverity`, `CheckStat
 `CheckResult`, `CheckDefinition`, `CheckRunner` — the new findings normalize into those,
 so `opencontext ci-check run` and the new gate share one result type.
 
-### 11.1 Architecture analyzer (over the existing graph)
+### Architecture analyzer (over the existing graph)
 
 Inputs are already in the graph DB: `nodes(id, kind, file, line, …)` and
 `edges(source_node_id, target_node_id, kind, call_site_file, call_site_line)`.
@@ -278,7 +303,7 @@ Inputs are already in the graph DB: `nodes(id, kind, file, line, …)` and
 All of this is deterministic and reads the graph that `index` already builds — **zero
 model calls, no re-parse beyond complexity**.
 
-### 11.2 Language standards runner
+### Language standards runner
 
 `LanguageStandards` registry maps `language -> [tool specs]`, seeded by the profiles'
 existing `validation_commands` (`SafeCommand`) and extended (ruff/mypy/ruff-format,
@@ -293,7 +318,7 @@ and whether it is `required` for the project's `mode`.
 3. Normalize stdout/exit → `Finding(file, line, rule, severity, message)`.
 4. Missing required tool → a `tool_missing` finding (configurable: block or skip).
 
-### 11.3 Evaluator + finding model
+### Evaluator + finding model
 
 `QualityEvaluator.evaluate(changed_files, rules, baseline) -> QualityReport`:
 - runs ArchitectureAnalyzer + LanguageQualityRunner,
@@ -302,7 +327,7 @@ and whether it is `required` for the project's `mode`.
 - returns a `QualityReport(findings, score, status)` where `status` maps to the harness
   `GateStatus` (FAILED/WARNING/PASSED) and to a CLI exit code.
 
-### 11.4 Baseline / ratchet store
+### Baseline / ratchet store
 
 `.opencontext/quality-baseline.json`: `{ "findings": [ {key, file, rule, severity} ],
 "metrics": {cycles, god_files, max_cc, …}, "generated_at" }`. Finding **key** =
@@ -310,7 +335,7 @@ and whether it is `required` for the project's `mode`.
 Diff: `new = current_keys − baseline_keys`. `gate --save` writes it; `ratchet` mode blocks
 only on `new`.
 
-### 11.5 Harness integration
+### Harness integration
 
 - Declare an `architecture_clean` (and `quality_standards`) gate in the verify (and/or
   apply) phase config. The runner's `_dispatch_declared_gates(...)` already routes by
@@ -320,7 +345,7 @@ only on `new`.
   otherwise it's a WARNING. Findings go into the trace + are surfaced to the Builder for the
   fix iteration.
 
-### 11.6 CLI / CI
+### CLI / CI
 
 - `opencontext quality gate --save` → write baseline.
 - `opencontext quality check [--json] [--diff]` → evaluate; exit `0` (clean) / `1`
@@ -330,30 +355,37 @@ only on `new`.
 - Add `opencontext quality check` to the project's CI workflow (and OpenContext's own
   `test.yml`, dogfood).
 
-### 11.7 MCP tool
+### MCP tool
 
 `opencontext_quality` (args: `scope` = `diff|all`, optional `rules`): returns the
 `QualityReport` (findings + score). Lets the agent self-check mid-apply before the gate.
 Registered like the other 14 tools in `mcp_stdio`.
 
-## 12. Open decisions (need a call before building)
+## Open decisions (need a call before building)
 
-1. **Rules location**: standalone `.opencontext/quality.toml` vs a `quality:` block in
-   `opencontext.yaml`. (Lean: standalone toml — co-located, diffable, matches the
-   per-project convention.)
-2. **MVP rule set**: which rules ship enforcing first. (Lean: `max_cycles=0` +
-   `no_god_files` + `boundaries` + per-language lint/type via profile commands.)
-3. **Default mode** out of the box: `off` / `warn` / `ratchet`. (Lean: `warn`, so adoption
-   never blocks day one; teams opt into `ratchet`/`strict`.)
-4. **Missing-tool policy** for a required language tool: block vs skip-with-notice. (Lean:
-   skip-with-notice by default; `strict` makes it a block.)
-5. **Granularity of architecture** (file-level vs module/package-level cycles & layers).
-   (Lean: file-level MVP, module-level as a follow-up.)
-6. **Monorepo / multi-language**: per-subtree rules? (Defer; single root rules first.)
-7. **Layer seeding**: hand-authored `[[layers]]` vs inferred from the dependency graph.
-   (Lean: hand-authored MVP; offer an `infer` helper later.)
+Settled by the zero-config / in-loop direction:
 
-## 13. Acceptance criteria
+- **Default behavior**: in-loop, automatic, **regression-based (ratchet)** with built-in
+  signals — no rules file, the agent self-corrects. `strict` (hard block) and absolute
+  thresholds are opt-in. CLI/CI are optional surfaces.
+- **Built-in signal set** (no config): new cycles, new god-file, worsened coupling, health
+  score drop. These need no user input.
+
+Still genuinely open:
+
+1. **Health score formula** — how the built-in signals roll into one number + what counts
+   as a "drop". Needs to be stable, explainable, and cheap. (The headline UX is this score.)
+2. **Self-correction budget** — how many in-loop fix iterations before the harness gives up
+   and surfaces the regression to the user (don't burn tokens looping).
+3. **Optional rules location** — standalone `.opencontext/quality.toml` vs a `quality:` block
+   in `opencontext.yaml`. (Lean: standalone toml.)
+4. **Optional language tool depth** — when a project opts into `strict`, which extra tools
+   per language beyond the profile defaults, and missing-tool policy (block vs notice).
+5. **Architecture granularity** — file-level vs module/package-level cycles & layers.
+   (Lean: file-level first.)
+6. **Monorepo / multi-language** per-subtree rules. (Defer; single root first.)
+
+## Acceptance criteria
 
 - A change that introduces an import cycle **fails** `opencontext quality check` (exit 1)
   and, in `strict`, fails the harness verify gate.
@@ -366,7 +398,7 @@ Registered like the other 14 tools in `mcp_stdio`.
   a typical change evaluates in seconds, not minutes.
 - Dogfood: OpenContext's own repo passes its own `quality check` in CI.
 
-## 14. Sequencing & rough effort
+## Sequencing & rough effort
 
 - **Phase 1 (MVP, ~medium):** `rules.py` + `architecture.py` (cycles/god-files/boundaries) +
   `languages.py` seeded from profiles + `baseline.py` + `opencontext quality gate/check`
