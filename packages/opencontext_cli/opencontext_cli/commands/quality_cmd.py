@@ -81,6 +81,28 @@ def _changed_files(root: Path) -> list[str]:
         return []
 
 
+def _record_evolution(root: Path, report: Any) -> None:
+    """Append this evaluation to ``.opencontext/quality-evolution.json`` (best-effort).
+
+    Phase 3 evolution tracking: records the health score + sub-scores per run so the
+    trend is queryable across runs. A write failure never fails the check.
+    """
+    try:
+        from datetime import UTC, datetime
+
+        from opencontext_core.quality.evolution import (
+            EVOLUTION_FILENAME,
+            EvolutionStore,
+            entry_from_health,
+        )
+
+        EvolutionStore(root / EVOLUTION_FILENAME).append(
+            **entry_from_health(report.health, timestamp=datetime.now(UTC).isoformat())
+        )
+    except Exception:
+        pass  # evolution logging is best-effort; never block the check
+
+
 def handle_quality_check(args: Any) -> None:
     """Run the full quality evaluation and exit 0 (clean) / 1 (violation).
 
@@ -95,6 +117,7 @@ def handle_quality_check(args: Any) -> None:
     evaluator = QualityEvaluator(root)
     changed = _changed_files(root) if diff_only else []
     report = evaluator.evaluate(changed)
+    _record_evolution(root, report)
     report_dict = report.to_report_dict()
 
     if json_output:

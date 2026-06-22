@@ -113,7 +113,9 @@ class ArchitectureRules:
     god_file_loc: int = 600  # LOC cap for a god-file
     max_cc: int = 25
     max_coupling: str = "B"  # letter grade A..F or numeric string
-    max_depth: int = 0  # 0 = disabled
+    max_depth: int = 0  # 0 = disabled (DIRECTORY nesting)
+    min_duplicate_tokens: int = 40  # min shared normalized tokens before a clone is flagged
+    max_nesting: int = 5  # CODE block-nesting ceiling per function (0 disables)
     layers: tuple[LayerRule, ...] = ()
     boundaries: tuple[BoundaryRule, ...] = ()
 
@@ -335,6 +337,14 @@ def _parse_architecture(raw: Any) -> ArchitectureRules:
         max_coupling=max_coupling,
         max_depth=_coerce_int(
             table.get("max_depth"), key="architecture.max_depth", default=defaults.max_depth
+        ),
+        min_duplicate_tokens=_coerce_int(
+            table.get("min_duplicate_tokens"),
+            key="architecture.min_duplicate_tokens",
+            default=defaults.min_duplicate_tokens,
+        ),
+        max_nesting=_coerce_int(
+            table.get("max_nesting"), key="architecture.max_nesting", default=defaults.max_nesting
         ),
         layers=_parse_layers(table.get("layers")),
         boundaries=_parse_boundaries(table.get("boundaries")),

@@ -73,7 +73,9 @@ class QualityMetrics:
     max_in_degree: int = 0  # worst fan-in (coupling)
     max_out_degree: int = 0  # worst fan-out
     boundary_violations: int = 0
-    max_depth: int = 0  # deepest directory nesting among changed files
+    duplication: int = 0  # count of near-duplicate function pairs/clusters in scope
+    max_depth: int = 0  # deepest DIRECTORY nesting among changed files
+    max_nesting: int = 0  # deepest CODE block-nesting among in-scope functions
     node_count: int = 0  # graph size (for normalization context)
     edge_count: int = 0
 
@@ -86,7 +88,9 @@ class QualityMetrics:
             "max_in_degree": self.max_in_degree,
             "max_out_degree": self.max_out_degree,
             "boundary_violations": self.boundary_violations,
+            "duplication": self.duplication,
             "max_depth": self.max_depth,
+            "max_nesting": self.max_nesting,
             "node_count": self.node_count,
             "edge_count": self.edge_count,
         }
@@ -105,7 +109,9 @@ class QualityMetrics:
             max_in_degree=int(d.get("max_in_degree", 0)),
             max_out_degree=int(d.get("max_out_degree", 0)),
             boundary_violations=int(d.get("boundary_violations", 0)),
+            duplication=int(d.get("duplication", 0)),
             max_depth=int(d.get("max_depth", 0)),
+            max_nesting=int(d.get("max_nesting", 0)),
             node_count=int(d.get("node_count", 0)),
             edge_count=int(d.get("edge_count", 0)),
         )

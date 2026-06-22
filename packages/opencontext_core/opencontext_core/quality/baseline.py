@@ -63,7 +63,11 @@ class BaselineStore:
 
     # Schema version stamped into the file; bumping it invalidates old baselines
     # (load returns None on an unrecognized version -> a fresh snapshot is taken).
-    SCHEMA_VERSION = 1
+    # NOTE: bumped 1 -> 2 when QualityMetrics gained the Phase-3 duplication /
+    # max_nesting fields, so any baseline written before those signals existed is
+    # rejected by load() (returns None) and re-snapshotted rather than diffed
+    # against absent metrics.
+    SCHEMA_VERSION = 2
 
     def __init__(self, path: Path) -> None:
         """``path`` is ``root / rules.baseline_path`` (the baseline JSON file)."""

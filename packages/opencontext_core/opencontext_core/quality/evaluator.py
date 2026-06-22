@@ -69,10 +69,13 @@ W_COUPLING = 8  # per unit of in-degree above the soft knee
 W_CC = 10  # per complexity point over the configured max_cc
 W_BOUNDARY = 150  # per declared-boundary break
 W_DEPTH = 30  # per directory level over DEPTH_FREE
+W_DUP = 60  # per near-duplicate (clone) pair
+W_NESTING = 25  # per code block-nesting level over NESTING_FREE
 
 # Soft knees / free allowances: signal below these costs nothing.
 COUPLING_KNEE = 12  # fan-in at or below the knee is free
-DEPTH_FREE = 8  # nesting depth at or below this is free
+DEPTH_FREE = 8  # directory nesting depth at or below this is free
+NESTING_FREE = 4  # code block-nesting at or below this is free (soft knee)
 
 # Per-signal caps so each term is bounded (and the score cannot overflow/underflow).
 _CAP_CYCLES = 10
@@ -84,6 +87,8 @@ _CAP_COUPLING = 40
 _CAP_CC = 50
 _CAP_BOUNDARY = 20
 _CAP_DEPTH = 10
+_CAP_DUP = 20  # at most 20 clone pairs contribute to the penalty
+_CAP_NESTING = 8  # at most 8 nesting levels over the free knee contribute
 
 
 def _cap(value: int, ceiling: int) -> int:
@@ -185,10 +190,14 @@ class QualityEvaluator:
     def compute_health(metrics: QualityMetrics, rules: QualityRules) -> HealthScore:
         """The SINGLE health-score definition (see module weights).
 
-        Pure integer arithmetic over ~7 signals from :class:`QualityMetrics`:
-        no subprocess, no model. ``components`` carries the per-signal penalty so
-        the one-line summary and the trace can explain exactly why the score
-        moved. The result is clamped to ``[0, PERFECT_SCORE]``.
+        Pure integer arithmetic over the :class:`QualityMetrics` signals
+        (cycles / god-files / coupling / complexity / boundary / directory-depth
+        plus the Phase-3 duplication + code-nesting signals): no subprocess, no
+        model. ``components`` carries the per-signal penalty — including the new
+        ``duplication`` and ``nesting`` sub-scores — so the one-line summary and
+        the trace can explain exactly why the rolled-up score moved. Every term
+        is capped and the result is clamped to ``[0, PERFECT_SCORE]`` so no single
+        signal can dominate.
         """
         max_cc_threshold = rules.architecture.max_cc
 
@@ -202,6 +211,13 @@ class QualityEvaluator:
             "complexity": W_CC * _cap(max(0, metrics.max_cc - max_cc_threshold), _CAP_CC),
             "boundary": W_BOUNDARY * _cap(metrics.boundary_violations, _CAP_BOUNDARY),
             "depth": W_DEPTH * _cap(max(0, metrics.max_depth - DEPTH_FREE), _CAP_DEPTH),
+            # Phase-3 depth signals folded into the same rolled-up score. Both are
+            # bounded so neither a clone storm nor a deeply-nested function can
+            # dominate the total or push it out of [0, PERFECT_SCORE]:
+            #  * duplication is a flat per-pair penalty (like god_files),
+            #  * nesting is a soft-knee penalty over NESTING_FREE (like depth).
+            "duplication": W_DUP * _cap(metrics.duplication, _CAP_DUP),
+            "nesting": W_NESTING * _cap(max(0, metrics.max_nesting - NESTING_FREE), _CAP_NESTING),
         }
         penalty = sum(components.values())
         score = PERFECT_SCORE - penalty

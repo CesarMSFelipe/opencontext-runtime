@@ -960,6 +960,40 @@ def _phase_skill_rules(phase: str, max_skills: int = 2) -> str:
         return ""
 
 
+# Metrics surfaced (in this fixed order) in the Architect@design health block.
+# Each is a key in ``state.architecture_baseline_dict`` (``QualityMetrics.as_dict``).
+# Order is deterministic — duplication/max_nesting (the Phase-3 depth+redundancy
+# signals) lead so the design persona sees them first.
+_DESIGN_HEALTH_METRICS: tuple[str, ...] = (
+    "duplication",
+    "max_nesting",
+    "cycles",
+    "god_files",
+    "max_cc",
+)
+
+
+def _render_health_for_design(snapshot: dict[str, Any]) -> str:
+    """Format the explore architecture-health snapshot for the design persona.
+
+    ``snapshot`` is ``state.architecture_baseline_dict`` — the JSON-safe mirror
+    ``ExplorePhase`` writes (``metrics.as_dict() | {'score': ...}``), so it
+    already carries the Phase-3 ``duplication`` / ``max_nesting`` signals. This is
+    PURE string formatting: deterministic, fixed key order, ZERO model calls and
+    ZERO subprocess. An empty/falsy snapshot yields ``""`` (nothing to surface).
+    """
+    if not snapshot:
+        return ""
+    score = int(snapshot.get("score", 0))
+    parts = ", ".join(f"{name} {int(snapshot.get(name, 0))}" for name in _DESIGN_HEALTH_METRICS)
+    return (
+        "## Architecture health\n"
+        f"architecture health: {score} — {parts}\n"
+        "Account for these signals in the design: avoid adding duplication, deep "
+        "nesting, cycles, or god-files; prefer flattening and extracting shared logic."
+    )
+
+
 def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
     """Invoke the wired executor for a work-producing phase, honestly.
 
@@ -990,6 +1024,16 @@ def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
     skill_rules = _phase_skill_rules(phase)
     if skill_rules:
         base_context = f"{base_context}\n\n{skill_rules}" if base_context else skill_rules
+    # Architect@design surfacing (Phase-3, seam 4): the design persona sees the
+    # current architecture-health snapshot (captured at explore) so design
+    # decisions are grounded in real duplication/nesting/cycle/god-file signals.
+    # Additive — mirrors the skill_rules append; only for the design phase.
+    if phase == "design":
+        snapshot = getattr(state, "architecture_baseline_dict", None) or {}
+        if snapshot:
+            health_block = _render_health_for_design(snapshot)
+            if health_block:
+                base_context = f"{base_context}\n\n{health_block}" if base_context else health_block
     context = {
         "task": getattr(state, "task", ""),
         "phase": phase,

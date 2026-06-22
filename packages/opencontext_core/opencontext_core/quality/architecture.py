@@ -26,6 +26,7 @@ deterministic (sorted iteration, integer signals) and makes zero model calls.
 from __future__ import annotations
 
 import fnmatch
+import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,6 +51,14 @@ _COUPLING_BANDS: tuple[tuple[int, str], ...] = (
     (20, "E"),
     (30, "F"),
 )
+
+# Near-duplicate (clone) detection knobs. Deterministic, in-process only.
+# A function body is tokenized (split on non-alphanumeric), windowed into
+# fixed-width K-token shingles, and each shingle hashed. Two functions are a
+# near-duplicate when their shared-shingle count clears the configured
+# ``min_duplicate_tokens`` AND their Jaccard overlap is at least ``_DUP_OVERLAP``.
+_DUP_SHINGLE = 5  # shingle window width (tokens per shingle)
+_DUP_OVERLAP = 0.85  # Jaccard-style overlap ratio required to flag a pair
 
 
 @dataclass(frozen=True)
@@ -84,6 +93,45 @@ class ComplexityFinding:
 
 
 @dataclass(frozen=True)
+class DuplicationFinding:
+    """A near-duplicate (clone) pair of functions, ordered canonically.
+
+    The pair is canonically ordered so ``(file_a, symbol_a) <= (file_b,
+    symbol_b)`` — this makes the composite pair fingerprint (used as the
+    ``Finding.symbol``) stable and unique per distinct clone, exactly like the
+    per-cycle fingerprint. ``tokens`` is the size of the shared shingle overlap.
+    """
+
+    file_a: str
+    symbol_a: str
+    line_a: int
+    file_b: str
+    symbol_b: str
+    line_b: int
+    tokens: int
+
+
+@dataclass(frozen=True)
+class NestingFinding:
+    """A single over-threshold CODE block-nesting hotspot (not directory depth)."""
+
+    file: str
+    symbol: str
+    depth: int
+    line: int
+
+
+@dataclass(frozen=True)
+class _DupFunction:
+    """Internal: one function's clone-detection fingerprint (shingle set)."""
+
+    file: str
+    symbol: str
+    line: int
+    shingles: frozenset[tuple[str, ...]]
+
+
+@dataclass(frozen=True)
 class ArchitectureReport:
     """The aggregate result of an architecture pass.
 
@@ -100,6 +148,8 @@ class ArchitectureReport:
     metrics: QualityMetrics
     findings: tuple[Finding, ...]
     skipped: tuple[str, ...] = ()
+    duplication: tuple[DuplicationFinding, ...] = ()
+    nesting: tuple[NestingFinding, ...] = ()
 
 
 class ArchitectureAnalyzer:
@@ -162,8 +212,12 @@ class ArchitectureAnalyzer:
         god_files = self.detect_god_files(rules)
         boundary_violations = self.detect_boundaries(rules.layers, rules.boundaries)
         complexity, complexity_skipped = self._compute_complexity(rules, scope=scope)
+        duplication, dup_skipped = self._compute_duplication(rules, scope=scope)
+        nesting, nesting_skipped = self._compute_nesting(rules, scope=scope)
 
         skipped: list[str] = list(complexity_skipped)
+        skipped.extend(dup_skipped)
+        skipped.extend(nesting_skipped)
         if self.scanned_files is None:
             skipped.append("max_cycles:no-source-scanned")
 
@@ -178,11 +232,11 @@ class ArchitectureAnalyzer:
             reported_cycles = cycles
 
         findings = self._build_findings(
-            rules, reported_cycles, god_files, boundary_violations, complexity
+            rules, reported_cycles, god_files, boundary_violations, complexity, duplication, nesting
         )
 
         metrics = self._build_metrics(
-            cycles, god_files, complexity, boundary_violations, scope=scope
+            cycles, god_files, complexity, boundary_violations, duplication, nesting, scope=scope
         )
 
         return ArchitectureReport(
@@ -193,6 +247,8 @@ class ArchitectureAnalyzer:
             metrics=metrics,
             findings=findings,
             skipped=tuple(dict.fromkeys(skipped)),
+            duplication=duplication,
+            nesting=nesting,
         )
 
     # -- individual passes ------------------------------------------------- #
@@ -392,6 +448,147 @@ class ArchitectureAnalyzer:
         findings.sort(key=lambda f: (f.file, f.line, f.symbol))
         return tuple(findings), ()
 
+    def _compute_duplication(
+        self,
+        rules: ArchitectureRules,
+        *,
+        scope: set[str] | None,
+    ) -> tuple[tuple[DuplicationFinding, ...], tuple[str, ...]]:
+        """Deterministic in-process near-duplicate (clone) detection.
+
+        For every in-scope function it pulls the normalized body via
+        :meth:`TreeSitterParser.function_blocks`, tokenizes it (split on
+        non-alphanumeric), windows the tokens into fixed-width ``_DUP_SHINGLE``
+        shingles, and forms a shingle set. Two functions are a near-duplicate
+        when the shared-shingle count clears ``rules.min_duplicate_tokens`` AND
+        their Jaccard overlap is at least ``_DUP_OVERLAP``. ALL function pairs in
+        the in-scope set are compared in a fully deterministic order (functions
+        sorted by ``(file, line, symbol)``, iterate ``i < j``); functions below
+        the minimum size are skipped. One :class:`DuplicationFinding` is emitted
+        per flagged pair, the pair ordered canonically.
+
+        Mirrors :meth:`_compute_complexity`: ``((), ())`` when no source is
+        scanned, ``((), ('no_duplication:tree-sitter-unavailable',))`` when the
+        parser is unavailable. Pure AST + string hashing — no subprocess, no
+        model (the ``snapshot`` zero-subprocess contract holds).
+
+        Duplication is a CROSS-file / whole-graph signal like cycles: the shingle
+        sets are computed over EVERY in-scope function, and a pair is reported
+        when EITHER of its two sites is in ``scope`` (mirrors the cycle
+        ``any(member in scope ...)`` rule).
+        """
+        if not self.scanned_files:
+            return (), ()
+
+        if not self._parser.is_available():
+            return (), ("no_duplication:tree-sitter-unavailable",)
+
+        # Build the per-function shingle sets over the whole scanned set (a clone
+        # may pair an in-scope site with an out-of-scope partner — the cross-file
+        # signal needs both sides), then report only pairs touching ``scope``.
+        functions: list[_DupFunction] = []
+        for scanned in self.scanned_files:
+            rel = Path(scanned.relative_path).as_posix()
+            for symbol, start_line, _end_line, body in self._parser.function_blocks(
+                scanned.content, scanned.language
+            ):
+                shingles = self._shingles(body)
+                # Skip a function below the minimum size (tiny/boilerplate units
+                # such as trivial getters never churn the ratchet).
+                if len(shingles) < rules.min_duplicate_tokens:
+                    continue
+                functions.append(
+                    _DupFunction(file=rel, symbol=symbol, line=start_line, shingles=shingles)
+                )
+
+        # Fully deterministic comparison order.
+        functions.sort(key=lambda fn: (fn.file, fn.line, fn.symbol))
+
+        results: list[DuplicationFinding] = []
+        for i in range(len(functions)):
+            for j in range(i + 1, len(functions)):
+                a = functions[i]
+                b = functions[j]
+                shared = a.shingles & b.shingles
+                shared_count = len(shared)
+                if shared_count < rules.min_duplicate_tokens:
+                    continue
+                union = len(a.shingles | b.shingles)
+                overlap = shared_count / union if union else 0.0
+                if overlap < _DUP_OVERLAP:
+                    continue
+                # Report only when EITHER site is in scope (cross-file rule).
+                if scope is not None and a.file not in scope and b.file not in scope:
+                    continue
+                # Canonical pair ordering by (file, symbol).
+                first, second = a, b
+                if (first.file, first.symbol) > (second.file, second.symbol):
+                    first, second = b, a
+                results.append(
+                    DuplicationFinding(
+                        file_a=first.file,
+                        symbol_a=first.symbol,
+                        line_a=first.line,
+                        file_b=second.file,
+                        symbol_b=second.symbol,
+                        line_b=second.line,
+                        tokens=shared_count,
+                    )
+                )
+        results.sort(key=lambda d: (d.file_a, d.line_a, d.symbol_a, d.file_b, d.line_b, d.symbol_b))
+        return tuple(results), ()
+
+    def _compute_nesting(
+        self,
+        rules: ArchitectureRules,
+        *,
+        scope: set[str] | None,
+    ) -> tuple[tuple[NestingFinding, ...], tuple[str, ...]]:
+        """Per-symbol CODE block-nesting depth over scope (mirrors complexity).
+
+        Calls :meth:`TreeSitterParser.max_nesting_depth`; a row whose depth
+        exceeds ``rules.max_nesting`` becomes a :class:`NestingFinding`. Returns
+        ``(findings, skipped)``; ``('max_nesting:tree-sitter-unavailable',)`` when
+        the parser is unavailable, ``()`` when no source is scanned. Sorted by
+        ``(file, line, symbol)``. This is CODE nesting, distinct from the
+        directory-depth metric.
+        """
+        if not self.scanned_files:
+            return (), ()
+
+        if not self._parser.is_available():
+            return (), ("max_nesting:tree-sitter-unavailable",)
+
+        findings: list[NestingFinding] = []
+        for scanned in self.scanned_files:
+            rel = Path(scanned.relative_path).as_posix()
+            if scope is not None and rel not in scope:
+                continue
+            rows = self._parser.max_nesting_depth(scanned.content, scanned.language)
+            for symbol, depth, line in rows:
+                if depth > rules.max_nesting:
+                    findings.append(NestingFinding(file=rel, symbol=symbol, depth=depth, line=line))
+        findings.sort(key=lambda f: (f.file, f.line, f.symbol))
+        return tuple(findings), ()
+
+    @staticmethod
+    def _shingles(normalized_body: str) -> frozenset[tuple[str, ...]]:
+        """Fixed-width token shingle set for a normalized function body.
+
+        Tokens are the alphanumeric runs of ``normalized_body`` (split on every
+        non-alphanumeric char); the tokens are windowed into ``_DUP_SHINGLE``-wide
+        shingles. The shingle tuples are hashable and order-independent as a set,
+        so the resulting set is deterministic for identical input. A body with
+        fewer than ``_DUP_SHINGLE`` tokens yields the empty set (too small to
+        clone-match).
+        """
+        tokens = [tok for tok in re.split(r"[^0-9A-Za-z]+", normalized_body) if tok]
+        if len(tokens) < _DUP_SHINGLE:
+            return frozenset()
+        return frozenset(
+            tuple(tokens[i : i + _DUP_SHINGLE]) for i in range(len(tokens) - _DUP_SHINGLE + 1)
+        )
+
     def _build_findings(
         self,
         rules: ArchitectureRules,
@@ -399,6 +596,8 @@ class ArchitectureAnalyzer:
         god_files: tuple[GodFile, ...],
         boundary_violations: tuple[BoundaryViolation, ...],
         complexity: tuple[ComplexityFinding, ...],
+        duplication: tuple[DuplicationFinding, ...] = (),
+        nesting: tuple[NestingFinding, ...] = (),
     ) -> tuple[Finding, ...]:
         """Normalize every typed result into ``Finding(category='architecture')``."""
         findings: list[Finding] = []
@@ -495,6 +694,56 @@ class ArchitectureAnalyzer:
                 )
             )
 
+        # Duplication is gated on its size knob (always on when a pair clears
+        # min_duplicate_tokens — the pass already enforced that). The composite
+        # ``symbol`` is the canonical pair fingerprint: it is what makes
+        # ``finding_key`` UNIQUE per distinct clone-pair (exactly the
+        # ``cycle_fingerprint`` precedent). Without it every dup would hash to one
+        # key and the ratchet would silently mask new clones.
+        if rules.min_duplicate_tokens > 0:
+            for dup in duplication:
+                pair_fingerprint = f"dup:{dup.file_a}:{dup.symbol_a}|{dup.file_b}:{dup.symbol_b}"
+                findings.append(
+                    Finding(
+                        rule="no_duplication",
+                        severity=CheckSeverity.WARNING,
+                        message=(
+                            f"{dup.symbol_a} duplicates {dup.symbol_b} ({dup.tokens} shared tokens)"
+                        ),
+                        file=dup.file_a,
+                        line=dup.line_a,
+                        symbol=pair_fingerprint,
+                        suggestion="Extract the shared logic into one reusable unit.",
+                        category="architecture",
+                        metadata={
+                            "file_b": dup.file_b,
+                            "symbol_b": dup.symbol_b,
+                            "line_b": dup.line_b,
+                            "tokens": dup.tokens,
+                        },
+                    )
+                )
+
+        # Nesting gates on its ceiling knob (0 disables), mirroring how
+        # ``max_cycles`` gates the cycle block. Symbol-scoped key like ``max_cc``.
+        if rules.max_nesting > 0:
+            for nest in nesting:
+                findings.append(
+                    Finding(
+                        rule="max_nesting",
+                        severity=CheckSeverity.WARNING,
+                        message=(
+                            f"{nest.symbol} nests {nest.depth} levels deep (> {rules.max_nesting})"
+                        ),
+                        file=nest.file,
+                        line=nest.line,
+                        symbol=nest.symbol,
+                        suggestion="Flatten with guard clauses or extracted helpers.",
+                        category="architecture",
+                        metadata={"depth": nest.depth},
+                    )
+                )
+
         return tuple(findings)
 
     def _build_metrics(
@@ -503,6 +752,8 @@ class ArchitectureAnalyzer:
         god_files: tuple[GodFile, ...],
         complexity: tuple[ComplexityFinding, ...],
         boundary_violations: tuple[BoundaryViolation, ...],
+        duplication: tuple[DuplicationFinding, ...],
+        nesting: tuple[NestingFinding, ...],
         *,
         scope: set[str] | None,
     ) -> QualityMetrics:
@@ -510,7 +761,9 @@ class ArchitectureAnalyzer:
 
         ``cycles`` here is the WHOLE-graph cycle list (not the scope-filtered one)
         so the headline cycle count is graph-global; the per-file/per-symbol
-        metrics use the (already scope-filtered) god-file/complexity results.
+        metrics use the (already scope-filtered) god-file/complexity/nesting
+        results. ``duplication`` counts ALL clone pairs found (a whole-graph
+        signal like cycles); ``max_nesting`` uses the scope-filtered nesting rows.
         """
         centrality = self._centrality()
         max_in = max((c.in_degree for c in centrality.values()), default=0)
@@ -528,7 +781,9 @@ class ArchitectureAnalyzer:
             max_in_degree=max_in,
             max_out_degree=max_out,
             boundary_violations=len(boundary_violations),
+            duplication=len(duplication),
             max_depth=max_depth,
+            max_nesting=max((n.depth for n in nesting), default=0),
             node_count=node_count,
             edge_count=edge_count,
         )

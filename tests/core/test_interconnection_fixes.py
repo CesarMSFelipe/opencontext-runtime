@@ -96,3 +96,24 @@ def test_ci_check_run_folds_in_architecture_quality(monkeypatch, tmp_path, capsy
     assert ARCHITECTURE_CHECK_NAME in names, (
         f"ci-check run must surface the architecture/quality check; got {names}"
     )
+
+
+def test_quality_check_records_evolution(tmp_path) -> None:
+    """Phase 3: `quality check` appends to the evolution log (built but was unwired)."""
+    import json
+
+    import pytest
+
+    from opencontext_cli.commands import quality_cmd
+
+    args = SimpleNamespace(path=str(tmp_path), json=True, diff=False)
+    # handle_quality_check raises SystemExit(exit_code) by CLI convention; the
+    # evolution append happens before the exit.
+    with pytest.raises(SystemExit):
+        quality_cmd.handle_quality_check(args)
+
+    root = Path(str(tmp_path)).resolve()
+    evo = root / ".opencontext" / "quality-evolution.json"
+    assert evo.exists(), "quality check must append to the evolution log across runs"
+    rows = json.loads(evo.read_text())
+    assert rows and "score" in rows[0]
