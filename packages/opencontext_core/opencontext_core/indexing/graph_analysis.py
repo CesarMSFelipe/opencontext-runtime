@@ -48,6 +48,19 @@ class GodNode:
 
 
 @dataclass(frozen=True)
+class Cycle:
+    """A strongly-connected component (a dependency/call cycle).
+
+    ``nodes`` is the SORTED tuple of member ids (call cycles) or file paths
+    (import cycles), so the value is stable across runs; ``size`` is its length.
+    A self-loop yields a one-member cycle.
+    """
+
+    nodes: tuple[str, ...]  # member ids (or paths), sorted
+    size: int
+
+
+@dataclass(frozen=True)
 class Hub:
     """A broker node ranked by a deterministic betweenness approximation."""
 
@@ -186,6 +199,31 @@ class GraphAnalyzer:
         ]
         gods.sort(key=lambda g: (-g.score, g.node_id))
         return gods
+
+    # ---- cycles (Tarjan SCC) ------------------------------------------
+
+    def detect_cycles(self, adjacency: dict[str, set[str]] | None = None) -> list[Cycle]:
+        """Detect dependency/call cycles via Tarjan strongly-connected components.
+
+        When ``adjacency`` is ``None`` the adjacency is built from the persisted
+        call graph (``_directed_adjacency`` over ``self._edge_kinds``), so the
+        result is the set of *call* cycles. When ``adjacency`` is supplied (a
+        path-keyed directed graph, e.g. file-level import edges from
+        :class:`DependencyGraphBuilder`), Tarjan runs over it directly so the
+        result is the set of *import* cycles.
+
+        Returns only SCCs that represent a real cycle: a component of size > 1,
+        or a single node with a self-loop. Each :class:`Cycle` carries its member
+        ids sorted, and the returned list is sorted by that member tuple, so the
+        output is fully deterministic for identical graph content. The
+        implementation is an iterative (explicit-stack) Tarjan so a deep graph
+        cannot blow the Python recursion limit; it uses only the standard library.
+        """
+        if adjacency is None:
+            names = self._load_node_names()
+            edges = self._load_edges()
+            adjacency = self._directed_adjacency(names, edges)
+        return _tarjan_scc(adjacency)
 
     # ---- community detection ------------------------------------------
 
@@ -329,6 +367,87 @@ class GraphAnalyzer:
             god_node=is_god,
             centrality=score,
         )
+
+
+# ---- cycles (Tarjan SCC, iterative, deterministic) --------------------------
+
+
+def _tarjan_scc(adjacency: dict[str, set[str]]) -> list[Cycle]:
+    """Iterative Tarjan SCC returning only cycle components, sorted deterministically.
+
+    A component is a cycle when it has more than one member, or it is a single
+    node that links to itself (a self-loop). Neighbors are visited in sorted
+    order and the returned list is sorted by each component's sorted member
+    tuple, so identical input always yields identical output. Nodes referenced
+    only as edge targets (not keys) are tolerated — they are treated as having no
+    outgoing edges.
+    """
+    index_counter = 0
+    indices: dict[str, int] = {}
+    lowlink: dict[str, int] = {}
+    on_stack: dict[str, bool] = {}
+    stack: list[str] = []
+    components: list[list[str]] = []
+
+    nodes = sorted(adjacency)
+
+    def successors(node: str) -> list[str]:
+        # Sorted for determinism; tolerate target-only nodes (absent as keys).
+        return sorted(adjacency.get(node, ()))
+
+    for start in nodes:
+        if start in indices:
+            continue
+        # Explicit DFS stack of (node, iterator-position) frames.
+        work: list[tuple[str, int]] = [(start, 0)]
+        succ_cache: dict[str, list[str]] = {}
+        while work:
+            node, child_idx = work[-1]
+            if child_idx == 0:
+                indices[node] = index_counter
+                lowlink[node] = index_counter
+                index_counter += 1
+                stack.append(node)
+                on_stack[node] = True
+                succ_cache[node] = successors(node)
+
+            succ = succ_cache[node]
+            if child_idx < len(succ):
+                work[-1] = (node, child_idx + 1)
+                child = succ[child_idx]
+                if child not in indices:
+                    work.append((child, 0))
+                elif on_stack.get(child):
+                    lowlink[node] = min(lowlink[node], indices[child])
+                continue
+
+            # All successors processed: if root of an SCC, pop the component.
+            if lowlink[node] == indices[node]:
+                component: list[str] = []
+                while True:
+                    member = stack.pop()
+                    on_stack[member] = False
+                    component.append(member)
+                    if member == node:
+                        break
+                components.append(component)
+
+            work.pop()
+            if work:
+                parent = work[-1][0]
+                lowlink[parent] = min(lowlink[parent], lowlink[node])
+
+    cycles: list[Cycle] = []
+    for component in components:
+        if len(component) > 1:
+            members = tuple(sorted(component))
+            cycles.append(Cycle(nodes=members, size=len(members)))
+        else:
+            node = component[0]
+            if node in adjacency.get(node, set()):  # self-loop
+                cycles.append(Cycle(nodes=(node,), size=1))
+    cycles.sort(key=lambda c: c.nodes)
+    return cycles
 
 
 # ---- community / modularity helpers (pure, deterministic) -------------------

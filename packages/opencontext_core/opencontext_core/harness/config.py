@@ -18,6 +18,16 @@ class PhaseConfig:
     # Override for ConfidenceGate's baseline complexity (0.0=trivial, 1.0=very complex).
     # If None, ConfidenceGate uses its built-in defaults per phase.
     complexity: float | None = None
+    # Surgical-first explore (per-phase override; falls back to
+    # :attr:`HarnessConfig.surgical_explore` when None, then True in the phase
+    # itself). :attr:`surgical_coverage_floor` is the per-required-symbol
+    # coverage threshold below which the explore phase widens the pack to
+    # full budget. Both are real PhaseConfig attributes (previous code used
+    # ``getattr(self.config, "surgical_explore", True)`` on a PhaseConfig that
+    # never declared them — yielding True/1.0 by silent default and making it
+    # impossible to disable surgical-from-yaml without editing code).
+    surgical_explore: bool | None = None
+    surgical_coverage_floor: float | None = None
 
 
 @dataclass
@@ -125,6 +135,13 @@ class HarnessConfig:
                 gates=[
                     "security_scan_passed",
                     "no_high_risk_exports",
+                    # Architecture/code-quality enforcement (zero-config sensor).
+                    # architecture_clean diffs post-apply health vs the explore
+                    # snapshot; quality_standards runs the per-language tools over
+                    # the changed scope. Both dispatch via _dispatch_one_gate and
+                    # only FAIL the run under BudgetMode.STRICT (WARN otherwise).
+                    "architecture_clean",
+                    "quality_standards",
                 ],
             ),
             "review": PhaseConfig(
@@ -204,15 +221,32 @@ class HarnessConfig:
             )
 
         phases_data = data.get("phases", {})
+        # :attr:`surgical_explore` / :attr:`surgical_coverage_floor` are
+        # workflow-level defaults that flow down into the ``explore`` phase
+        # when the phase section does NOT override them explicitly. This keeps
+        # the zero-config surface unchanged when the user only sets
+        # ``workflow_defaults.surgical_explore``. Per-phase values still win
+        # when explicitly declared under ``phases.<name>``. Implemented here
+        # (rather than in the dataclass defaults) so the explore phase can
+        # distinguish "explicitly set to True" from "fell through the default".
+        global_surgical = config.surgical_explore
+        global_surgical_floor = config.surgical_coverage_floor
         if isinstance(phases_data, dict):
             for phase_name, phase_cfg in phases_data.items():
-                if isinstance(phase_cfg, dict):
-                    config.phases[phase_name] = PhaseConfig(
-                        budget_tokens=phase_cfg.get("budget_tokens", 6000),
-                        gates=phase_cfg.get("gates", []),
-                        confidence_threshold=phase_cfg.get("confidence_threshold"),
-                        complexity=phase_cfg.get("complexity"),
-                    )
+                if not isinstance(phase_cfg, dict):
+                    continue
+                phase_surgical = phase_cfg.get("surgical_explore", global_surgical)
+                phase_surgical_floor = phase_cfg.get(
+                    "surgical_coverage_floor", global_surgical_floor
+                )
+                config.phases[phase_name] = PhaseConfig(
+                    budget_tokens=phase_cfg.get("budget_tokens", 6000),
+                    gates=phase_cfg.get("gates", []),
+                    confidence_threshold=phase_cfg.get("confidence_threshold"),
+                    complexity=phase_cfg.get("complexity"),
+                    surgical_explore=phase_surgical,
+                    surgical_coverage_floor=phase_surgical_floor,
+                )
 
         agents_data = data.get("agents", {})
         if isinstance(agents_data, dict):

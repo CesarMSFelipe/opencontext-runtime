@@ -87,7 +87,7 @@ class TestMCPServer:
         """Server initializes with correct tools."""
 
         server = MCPServer(db_path=tmp_path / "test.db")
-        assert len(server.tools) == 18
+        assert len(server.tools) == 19
         assert "opencontext_search" in server.tools
         assert "opencontext_context" in server.tools
         assert "opencontext_callers" in server.tools
@@ -106,6 +106,8 @@ class TestMCPServer:
         assert "opencontext_memory_search" in server.tools
         assert "opencontext_memory_context" in server.tools
         assert "opencontext_memory_judge" in server.tools
+        # architecture & code-quality gate tool
+        assert "opencontext_quality" in server.tools
         server.close()
 
     def test_handle_initialize(self, tmp_path: Path) -> None:
@@ -130,7 +132,7 @@ class TestMCPServer:
             server._handle_request(request)
             mock_send.assert_called_once()
             result = mock_send.call_args[0][1]
-            assert len(result["tools"]) == 18
+            assert len(result["tools"]) == 19
             assert all("name" in t for t in result["tools"])
             assert all("description" in t for t in result["tools"])
         server.close()

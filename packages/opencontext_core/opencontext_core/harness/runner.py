@@ -6,7 +6,14 @@ import json
 import logging
 import uuid
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    # Type-only import: the quality package imports harness.models, so importing
+    # it at runtime here would create a cycle. The gate code imports
+    # QualityEvaluator lazily (inside the dispatch branch); this annotation never
+    # triggers a runtime import thanks to `from __future__ import annotations`.
+    from opencontext_core.quality.models import HealthScore
 
 from opencontext_core.agents.sdd_orchestrator import (
     PHASE_DEPENDENCIES,
@@ -91,6 +98,29 @@ class HarnessState:
         self.context_required_sources: list[str] = []
         self.context_omitted: int = 0
         self.context_omissions_recorded: int = 0
+        # Explore-phase debug metadata. Populated by :class:`ExplorePhase` so the
+        # archiver / ``persist_run`` can write the surgical-vs-broad arm choice into
+        # the persisted ``run.json`` (auditability: \"why did this run use the broad
+        # pack?\"). Defaults mirror the zero-config defaults so non-explore runs
+        # also persist harmlessly.
+        self.explore_arm: str = "OC-SURGICAL"
+        self.explore_expanded: bool = False
+        self.explore_surgical_tokens: int = 0
+        self.explore_broad_tokens: int = 0
+        self.explore_kg_available: bool = False
+        self.explore_arm_metadata: dict[str, Any] = {}
+        # Omitted source paths from the context pack — used by the harvester to
+        # populate the FAILURE:missing_context linked_nodes so a future run's
+        # ``recent_failure`` boost can actually activate (``pack.omitted`` only
+        # carried an integer count into ``state.context_omitted``).
+        self.context_omitted_paths: list[str] = []
+        # Architecture-health baseline captured at explore (run start) from the
+        # knowledge graph, diffed by the verify-phase architecture_clean gate.
+        # None until explore snapshots it (best-effort); a None baseline makes the
+        # verify gate SKIPPED rather than reporting a false "clean". The dict
+        # mirror is the JSON-safe view fed to the trace/serialization.
+        self.architecture_baseline: HealthScore | None = None
+        self.architecture_baseline_dict: dict[str, Any] = {}
 
 
 class HarnessRunner:
@@ -853,6 +883,10 @@ class HarnessRunner:
         if gate_id == "review_artifact_created":
             run_dir = state.root / self.config.artifact_root / state.run_id
             return ReviewArtifactCreatedGate().evaluate(run_dir)
+        if gate_id == "architecture_clean":
+            return self._eval_architecture_gate(state, result)
+        if gate_id == "quality_standards":
+            return self._eval_quality_standards_gate(state, result)
         # Unknown / unbound declared gate: do not fabricate a result.
         return None
 
@@ -888,6 +922,231 @@ class HarnessRunner:
             except Exception:
                 continue
         return findings
+
+    # -- architecture & code-quality gates (deterministic, zero model calls) --
+
+    @staticmethod
+    def _quality_db_path(root: Path) -> Path:
+        """Path to the persisted knowledge graph the quality engine reads."""
+        return root / ".storage" / "opencontext" / "context_graph.db"
+
+    # Working-tree paths that are byproducts / control-plane, NOT source the graph
+    # is built from. These are written *after* (or independently of) the graph and
+    # are not indexed, so a newer mtime here is NOT evidence the graph is stale:
+    #   .storage/      — the DB itself + its WAL/shm sidecars + memory.db
+    #   .opencontext/  — config (quality.toml), run artifacts, the quality baseline
+    #   .git/          — VCS internals
+    # All are excluded from indexing (DEFAULT_IGNORE_PATTERNS), so the staleness
+    # check only considers changed SOURCE files.
+    _STALE_IGNORE_PREFIXES: ClassVar[tuple[str, ...]] = (
+        ".storage/",
+        ".opencontext/",
+        ".git/",
+    )
+
+    @classmethod
+    def _graph_is_stale(cls, root: Path, changed_files: list[str]) -> bool:
+        """True if the graph DB is OLDER than any changed SOURCE file.
+
+        The apply->verify re-check relies on ApplyPhase's best-effort mid-flow
+        reindex. If that silently failed the graph would not reflect the change
+        and the gate would diff against a stale graph and report a false "clean".
+        We detect that by comparing the DB mtime against the changed *source*
+        files' mtimes: if a changed source file is newer than the graph, the
+        graph is stale and the caller returns SKIPPED rather than a misleading
+        PASS.
+
+        Internal byproducts (``.storage/`` — including the DB's own WAL/shm
+        sidecars and ``memory.db`` — ``.opencontext/runs/``, ``.git/``) are
+        excluded: they are written by indexing/runs *after* the graph and would
+        otherwise make every check spuriously "stale". Best-effort — an
+        unreadable mtime is treated as "not stale" (the snapshot path itself
+        degrades honestly downstream).
+        """
+        db_path = cls._quality_db_path(root)
+        try:
+            if not db_path.exists():
+                return False
+            db_mtime = db_path.stat().st_mtime
+        except OSError:
+            return False
+        for rel in changed_files:
+            norm = rel.replace("\\", "/")
+            if norm.startswith(cls._STALE_IGNORE_PREFIXES):
+                continue
+            try:
+                fp = root / rel
+                if fp.exists() and fp.stat().st_mtime > db_mtime:
+                    return True
+            except OSError:
+                continue
+        return False
+
+    def _eval_architecture_gate(self, state: HarnessState, result: PhaseResult) -> PhaseGate:
+        """architecture_clean — diff post-apply health vs the explore snapshot.
+
+        Recomputes a token-free architecture-only health snapshot over the fresh
+        (post-apply) graph and diffs it against the baseline captured at explore.
+        Calls ONLY the deterministic evaluator (graph analysis) — never the model
+        / ``state.delegate``. Returns a WARNING on a health drop, PASSED when the
+        score held or improved, and SKIPPED (with a reason) when there is no
+        baseline or the graph is stale — never a false "clean".
+
+        The dispatched gate fails the run only under ``BudgetMode.STRICT`` (see
+        the gate-dispatch loop), which is exactly the WARN-by-default /
+        FAIL-under-STRICT posture; this method itself does not decide that.
+        """
+        baseline = getattr(state, "architecture_baseline", None)
+        if baseline is None:
+            return PhaseGate(
+                id="architecture_clean",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message="architecture: no explore baseline (snapshot unavailable)",
+                metadata={"reason": "no-baseline"},
+            )
+
+        changed = self._git_changed_files(state.root)
+        if not changed:
+            return PhaseGate(
+                id="architecture_clean",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message=(
+                    "architecture: no changed files (non-git project, empty tree, "
+                    "or no working-tree diff — snapshotting the whole repo can "
+                    "mask regressions; scope the run with a git workflow for an "
+                    "actual regression signal)"
+                ),
+                metadata={"reason": "no-changed-files"},
+            )
+        if self._graph_is_stale(state.root, changed):
+            return PhaseGate(
+                id="architecture_clean",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message="architecture: graph stale vs changed files (reindex incomplete)",
+                metadata={"reason": "stale-graph"},
+            )
+
+        try:
+            from opencontext_core.quality.evaluator import QualityEvaluator
+
+            evaluator = QualityEvaluator(state.root)
+            current = evaluator.snapshot(changed_files=changed)
+            verdict = evaluator.evaluate_health_regression(baseline, current, evaluator.rules)
+        except Exception as exc:  # pragma: no cover - best-effort, degrade honestly
+            return PhaseGate(
+                id="architecture_clean",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message=f"architecture: evaluation unavailable ({exc})",
+                metadata={"reason": "error"},
+            )
+
+        delta = current.delta(baseline)
+        message = f"architecture {baseline.score} -> {current.score}"
+        if verdict.status.value == "passed":
+            status = GateStatus.PASSED
+        else:
+            # The evaluator already encodes STRICT->error / else->warning in the
+            # verdict severity; the run-level gate status surfaces WARNING and the
+            # dispatch loop escalates to FAILED under BudgetMode.STRICT.
+            status = (
+                GateStatus.FAILED
+                if verdict.severity.value in ("error", "critical")
+                else GateStatus.WARNING
+            )
+        return PhaseGate(
+            id="architecture_clean",
+            phase="verify",
+            status=status,
+            message=message,
+            metadata={
+                "baseline": baseline.score,
+                "current": current.score,
+                "delta": delta,
+                "components": dict(current.components),
+                "new_findings": [
+                    {
+                        "rule": f.rule,
+                        "severity": f.severity.value,
+                        "message": f.message,
+                        "file": f.file,
+                        "line": f.line,
+                    }
+                    for f in verdict.findings
+                ],
+            },
+        )
+
+    def _eval_quality_standards_gate(self, state: HarnessState, result: PhaseResult) -> PhaseGate:
+        """quality_standards — run the per-language tools over the changed scope.
+
+        Runs the full :meth:`QualityEvaluator.evaluate` (architecture findings +
+        the language tool subprocesses + the ratchet diff) on the changed files
+        and maps the resulting :class:`QualityReport` status straight onto a
+        :class:`PhaseGate`. Deterministic subprocess + graph work only — never the
+        model. Like the architecture gate it only fails the run under
+        ``BudgetMode.STRICT``; otherwise a violation is a WARNING fed to the
+        Builder for the in-loop fix.
+        """
+        changed = self._git_changed_files(state.root)
+        if not changed:
+            return PhaseGate(
+                id="quality_standards",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message=(
+                    "quality: no changed files (non-git project, empty tree, "
+                    "or no working-tree diff — running the full tool set would "
+                    "report lots of pre-existing violations unrelated to this run)"
+                ),
+                metadata={"reason": "no-changed-files"},
+            )
+        if self._graph_is_stale(state.root, changed):
+            return PhaseGate(
+                id="quality_standards",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message="quality: graph stale vs changed files (reindex incomplete)",
+                metadata={"reason": "stale-graph"},
+            )
+        try:
+            from opencontext_core.quality.evaluator import QualityEvaluator
+
+            evaluator = QualityEvaluator(state.root)
+            report = evaluator.evaluate(changed)
+        except Exception as exc:  # pragma: no cover - best-effort, degrade honestly
+            return PhaseGate(
+                id="quality_standards",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message=f"quality: evaluation unavailable ({exc})",
+                metadata={"reason": "error"},
+            )
+
+        return PhaseGate(
+            id="quality_standards",
+            phase="verify",
+            status=report.status,
+            message=report.summary or f"quality {report.health.score}",
+            metadata={
+                "health": report.health.score,
+                "findings": [
+                    {
+                        "rule": f.rule,
+                        "severity": f.severity.value,
+                        "message": f.message,
+                        "file": f.file,
+                        "line": f.line,
+                        "category": f.category,
+                    }
+                    for f in report.new_findings
+                ],
+                "skipped": list(report.skipped),
+            },
+        )
 
     def _build_phase(self, phase_id: str, budget_mode: BudgetMode) -> HarnessPhase | None:
         """Build a phase instance by ID."""
@@ -1042,6 +1301,21 @@ class HarnessRunner:
                 return {k: _serialize(v) for k, v in obj.items()}
             return obj
 
+        # Explore-phase debug metadata is surfaced via ``state`` so that
+        # :class:`ArchivePhase` and a developer audit can answer "why did this run
+        # use the broad pack?" without re-running the explore. The fields are
+        # populated by :class:`ExplorePhase.run` (state.explore_arm, etc.); they
+        # default to zero-explore-no-op values when not set so a workflow that
+        # skips ``explore`` (``apply-only``, ``quick``) still persists cleanly.
+        explore_meta = getattr(state, "explore_arm_metadata", {}) or {}
+        if not explore_meta:
+            explore_meta = {
+                "arm": getattr(state, "explore_arm", "OC-SURGICAL"),
+                "expanded": bool(getattr(state, "explore_expanded", False)),
+                "surgical_tokens": int(getattr(state, "explore_surgical_tokens", 0) or 0),
+                "broad_tokens": int(getattr(state, "explore_broad_tokens", 0) or 0),
+                "kg_available": bool(getattr(state, "explore_kg_available", False)),
+            }
         files = {
             "run.json": {
                 "run_id": result.run_id,
@@ -1051,6 +1325,14 @@ class HarnessRunner:
                     result.status.value if hasattr(result.status, "value") else str(result.status)
                 ),
                 "created_at": result.created_at,
+                "metadata": {
+                    "explore": explore_meta,
+                    "context_pack": {
+                        "selected": len(getattr(state, "context_sources", set()) or set()),
+                        "omitted": int(getattr(state, "context_omitted", 0) or 0),
+                        "omitted_paths": list(getattr(state, "context_omitted_paths", []) or []),
+                    },
+                },
             },
             "ledger.json": {"ledgers": _serialize(result.ledgers)},
             "gates.json": {"gates": _serialize(result.gates)},

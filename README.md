@@ -57,7 +57,7 @@ OpenContext is the layer **between your coding agent and your codebase** — it 
 | **Your model, per persona** | Pick the model for each SDD phase in `opencontext.yaml`; it is sent to your agent as an MCP sampling hint. |
 | **Persistent memory** | Local store plus co-resident Engram coexistence, with progressive, token-aware recall. |
 | **Security by default** | Redaction, secret scanning, fail-closed posture, offline-first. |
-| **18 MCP tools** | Search, context, call graph, impact, symbol edits, memory — inside Claude Code, OpenCode, Codex. |
+| **19 MCP tools** | Search, context, call graph, impact, symbol edits, memory, quality — inside Claude Code, OpenCode, Codex. |
 
 </td>
 </tr>
@@ -401,7 +401,7 @@ opencontext bridges scan . --type HTTP --json
 
 <h3>Agent Interface</h3>
 
-18 MCP tools. Compatible with Claude Code, Cursor, Copilot, Windsurf, OpenCode, and any MCP-compatible editor.
+19 MCP tools. Compatible with Claude Code, Cursor, Copilot, Windsurf, OpenCode, and any MCP-compatible editor.
 
 `opencontext install` writes seven OC personas to your editor's agents directory. In OpenCode, press **Tab** to switch to one. In Claude Code, they appear as subagents. Each SDD phase runs as the persona suited to it.
 
@@ -445,11 +445,11 @@ Two independent axes, both delivered as sampling hints: **phases** (≙ personas
 </div>
 
 <p align="center">
-  <img src="docs/assets/mcp-tools.svg" alt="18 MCP tools: 9 read tools (search, context, callers, callees, impact, node, files, status, trace), 4 symbol-level edit tools, an in-process agentic run tool, and 4 memory tools (save, search, context, judge)" width="720">
+  <img src="docs/assets/mcp-tools.svg" alt="19 MCP tools: 9 read tools (search, context, callers, callees, impact, node, files, status, trace), 4 symbol-level edit tools, an in-process agentic run tool, 4 memory tools (save, search, context, judge), and 1 architecture-quality tool" width="720">
 </p>
 
 <p align="center">
-  <sub>Agent Interface · 18 MCP tools · 9 read + 4 symbol-level edits + 1 agentic run + 4 memory</sub>
+  <sub>Agent Interface · 19 MCP tools · 9 read + 4 symbol-level edits + 1 agentic run + 4 memory + 1 quality</sub>
 </p>
 
 <div align="center">

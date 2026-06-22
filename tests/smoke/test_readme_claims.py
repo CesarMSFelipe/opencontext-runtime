@@ -365,6 +365,7 @@ class TestMCPTools:
             "opencontext_memory_search",
             "opencontext_memory_context",
             "opencontext_memory_judge",
+            "opencontext_quality",
         }
     )
 
