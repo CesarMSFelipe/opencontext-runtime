@@ -26,14 +26,9 @@ from opencontext_core.doctor.deep import (
     run_deep_diagnostics,
 )
 from opencontext_core.evaluation.benchmark_suite import (
-    BenchmarkSuite,
-    BenchmarkSuiteResult,
     ContextScore,
     ContextScorer,
     QualityDimension,
-    compare_results,
-    format_benchmark_result,
-    format_benchmark_result_json,
 )
 from opencontext_core.plugin_system import (
     InstallResult,
@@ -115,8 +110,6 @@ __all__ = [
     # Firewall
     "AuditEntry",
     # Benchmark
-    "BenchmarkSuite",
-    "BenchmarkSuiteResult",
     "ChainStrategy",
     "CheckResult",
     "ComponentDef",
@@ -168,9 +161,6 @@ __all__ = [
     "UserPreferences",
     "VerificationReport",
     "build_plan",
-    "compare_results",
-    "format_benchmark_result",
-    "format_benchmark_result_json",
     "format_cost",
     "format_duration",
     "format_tokens",

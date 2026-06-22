@@ -12,10 +12,10 @@ from opencontext_cli.main import (
     _init,
     _pack,
     _pack_diff,
-    _packs,
     _provider_simulate,
     _security,
     _tokens,
+    _workflows,
 )
 from opencontext_core.runtime import OpenContextRuntime
 
@@ -91,9 +91,9 @@ def test_more_required_scaffolds(tmp_path: Path, monkeypatch, capsys) -> None:
     (tmp_path / "workflow-packs/example").mkdir(parents=True)
     (tmp_path / "workflow-packs/example/workflow.yaml").write_text("name: example\n")
 
-    _packs("list")
+    _workflows("list", None)
     assert json.loads(capsys.readouterr().out) == ["example"]
-    _packs("inspect", "example")
+    _workflows("inspect", "example")
     assert json.loads(capsys.readouterr().out)["status"] == "available"
 
 

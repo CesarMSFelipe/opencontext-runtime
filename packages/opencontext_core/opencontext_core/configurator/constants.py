@@ -19,8 +19,10 @@ MCP_SERVER_ENTRY: dict[str, object] = {
     "args": ["mcp"],
 }
 
-# Tool names auto-allowed for agents that support a permissions allow-list.
-ALLOWED_TOOLS: tuple[str, ...] = (
+# The opencontext MCP read tools (knowledge graph) in claude-code allow-list form
+# (``mcp__<server>__<tool>``). These let an agent traverse the KG instead of
+# grepping the tree.
+KG_READ_TOOLS: tuple[str, ...] = (
     "mcp__opencontext__opencontext_search",
     "mcp__opencontext__opencontext_context",
     "mcp__opencontext__opencontext_callers",
@@ -30,6 +32,17 @@ ALLOWED_TOOLS: tuple[str, ...] = (
     "mcp__opencontext__opencontext_files",
     "mcp__opencontext__opencontext_status",
 )
+
+# The opencontext MCP memory tools (proactive persistent memory).
+MEMORY_TOOLS: tuple[str, ...] = (
+    "mcp__opencontext__opencontext_memory_save",
+    "mcp__opencontext__opencontext_memory_search",
+    "mcp__opencontext__opencontext_memory_context",
+    "mcp__opencontext__opencontext_memory_judge",
+)
+
+# Tool names auto-allowed for agents that support a permissions allow-list.
+ALLOWED_TOOLS: tuple[str, ...] = KG_READ_TOOLS
 
 
 def agent_home(agent_id: str) -> Path:
@@ -80,6 +93,21 @@ def mcp_config_path(agent_id: str) -> Path:
     """Resolve the MCP config file path for an agent."""
 
     return agent_home(agent_id) / _MCP_FILENAME.get(agent_id, "mcp.json")
+
+
+# Agents that also read a project-scoped (repo-root) MCP config, so a single repo
+# can expose the OpenContext tools without touching the user's global config.
+# Claude Code reads ``<repo>/.mcp.json``; the home file alone does not enable the
+# server per-repo. Value is the project-relative filename.
+_PROJECT_MCP_FILENAME: dict[str, str] = {
+    "claude-code": ".mcp.json",
+}
+
+
+def project_mcp_filename(agent_id: str) -> str | None:
+    """Project-relative MCP config filename for an agent, or None if it has none."""
+
+    return _PROJECT_MCP_FILENAME.get(agent_id)
 
 
 # Instructions filename for agents that use a named file rather than AGENTS.md.
@@ -158,13 +186,21 @@ OPENCONTEXT_COMMANDS: tuple[tuple[str, str, str], ...] = (
     (
         "oc-new",
         "Start a new SDD change — runs the full flow automatically",
-        "Start a new spec-driven change and drive the whole flow in order, "
-        "switching to each phase's persona and using OpenContext's MCP tools:\n"
-        "explore (Explorer) -> propose/spec/tasks (Orchestrator) -> design "
-        "(Architect) -> approval gate -> apply (Builder, tests first) -> verify "
-        "(Reviewer) -> archive. Build context with `opencontext_context` and check "
-        "`opencontext_impact` before any edit; pause for approval before writing "
-        "code.\n\nChange: $ARGUMENTS",
+        "Start a new spec-driven change and drive the whole flow in order by "
+        "SPAWNING each phase's persona subagent with the Task tool (the main "
+        "thread sequences and gates, it does not do the work):\n"
+        "explore -> `subagent_type: oc-explorer`; propose/spec/tasks -> "
+        "`subagent_type: oc-orchestrator`; design -> `subagent_type: oc-architect`; "
+        "approval gate; apply (tests first) -> `subagent_type: oc-tester` then "
+        "`subagent_type: oc-builder`; verify -> `subagent_type: oc-reviewer`; "
+        "archive -> `subagent_type: oc-orchestrator`.\n"
+        "Memory loop every phase: derive a change `<slug>`; each persona PRIMES at "
+        "start with `opencontext_memory_context` for `change:<slug>` and SAVES at "
+        "end with `opencontext_memory_save` (`key`/`tags` = `change:<slug>`; layer "
+        "SEMANTIC for facts, PROCEDURAL for patterns, FAILURE for errors).\n"
+        "Build context with `opencontext_context` and check `opencontext_impact` "
+        "before any edit; pause for approval before writing code.\n\n"
+        "Change: $ARGUMENTS",
     ),
 )
 

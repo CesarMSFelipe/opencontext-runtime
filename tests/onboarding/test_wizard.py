@@ -89,6 +89,28 @@ class TestOnboardingWizard:
             agents=["opencode", "cursor"],
         )
 
+    def test_wizard_non_interactive_defaults_to_opencode_when_no_agent_present(
+        self, tmp_path: Path
+    ) -> None:
+        """With no agent CLI on the (isolated) host, the default selection is opencode."""
+        result = OnboardingWizard(root=tmp_path).run(non_interactive=True)
+        assert result.active_clients == ["opencode"]
+
+    def test_wizard_non_interactive_configures_claude_code_when_present(
+        self, tmp_path: Path
+    ) -> None:
+        """A non-interactive wizard run on a host with Claude Code configures it by
+        default — writing the project ``.mcp.json`` opencontext entry — with no flags."""
+        import json
+
+        (Path.home() / ".claude").mkdir(parents=True, exist_ok=True)
+
+        result = OnboardingWizard(root=tmp_path).run(non_interactive=True)
+
+        assert "claude-code" in result.active_clients
+        servers = json.loads((tmp_path / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
+        assert "opencontext" in servers
+
     def test_wizard_non_interactive_detection(self) -> None:
         """In a test environment, is_interactive should return False."""
         wizard = OnboardingWizard(root=".")

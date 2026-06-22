@@ -12,10 +12,13 @@ from opencontext_core.onboarding.service import (
     OnboardingOptions,
     OnboardingResult,
     OnboardingService,
+    default_active_clients,
 )
 
 
 def test_onboarding_options_defaults() -> None:
+    # isolate_user_home points Path.home() at an empty tmp dir, so no agent CLI is
+    # detected and the field falls back to the opencode baseline.
     opts = OnboardingOptions(root=Path("/tmp/test"))
     assert opts.tdd_mode == "ask"
     assert opts.sdd_model_profile == "default"
@@ -24,6 +27,46 @@ def test_onboarding_options_defaults() -> None:
     assert opts.token_budget_per_phase is None
     assert opts.force_agent_files is False
     assert opts.setup_mcp is False
+
+
+def test_default_active_clients_falls_back_to_opencode_when_none_present() -> None:
+    """With no agent CLI on the host (empty isolated home), use the opencode baseline."""
+    assert default_active_clients() == ["opencode"]
+
+
+def test_default_active_clients_detects_claude_code_when_present() -> None:
+    """A host with Claude Code (``~/.claude``) is configured without any flag.
+
+    Regression: the default skipped claude-code, so Claude Code users never got the
+    OpenContext MCP server / persona files / permissions out of the box.
+    """
+    (Path.home() / ".claude").mkdir(parents=True, exist_ok=True)
+    assert "claude-code" in default_active_clients()
+
+
+def test_onboarding_options_default_includes_detected_claude_code() -> None:
+    """The OnboardingOptions field default reflects detected agents, not a fixed list."""
+    (Path.home() / ".claude").mkdir(parents=True, exist_ok=True)
+    assert "claude-code" in OnboardingOptions(root=Path("/tmp/test")).active_clients
+
+
+def test_default_onboarding_configures_claude_code_mcp_when_present(tmp_path: Path) -> None:
+    """End-to-end: with Claude Code present, a DEFAULT onboarding (no active_clients
+    override, no flags) writes the project-root ``.mcp.json`` opencontext entry for
+    claude-code. This is the second MCP-registration root cause: the default path
+    used to skip claude-code, so the entry was never written for Claude Code users.
+    """
+    (Path.home() / ".claude").mkdir(parents=True, exist_ok=True)
+
+    result = OnboardingService().run(OnboardingOptions(root=tmp_path, force_agent_files=True))
+
+    assert "claude-code" in result.active_clients
+
+    project_mcp = tmp_path / ".mcp.json"
+    assert project_mcp.exists(), "claude-code project .mcp.json must be written by default"
+    servers = json.loads(project_mcp.read_text(encoding="utf-8")).get("mcpServers", {})
+    assert "opencontext" in servers
+    assert servers["opencontext"]["command"] == "opencontext"
 
 
 def test_onboarding_options_custom() -> None:

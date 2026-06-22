@@ -38,12 +38,43 @@
   <img src="docs/assets/divider.svg" alt="" width="720">
 </p>
 
+<!-- ─────────────── THE WHOLE SYSTEM, AT A GLANCE ─────────────── -->
+
+<div id="at-a-glance" align="center">
+
+<table>
+<tr>
+<td width="760">
+
+<h3>The whole system, at a glance</h3>
+
+OpenContext is the layer **between your coding agent and your codebase** — it prepares verified context, runs a controlled agentic workflow, and keeps both governed. Everything below is one of these six pillars.
+
+| Pillar | What it does |
+|--------|--------------|
+| **Context packs + code graph** | Call-graph-traced, token-budgeted context in one deterministic call — no grep loops, no full-file reads. |
+| **Controlled SDD loop** | `explore → … → archive`, seven personas, gates and strict TDD — bounded and human-in-the-loop, not "go do everything". |
+| **Your model, per persona** | Pick the model for each SDD phase in `opencontext.yaml`; it is sent to your agent as an MCP sampling hint. |
+| **Persistent memory** | Local store plus co-resident Engram coexistence, with progressive, token-aware recall. |
+| **Security by default** | Redaction, secret scanning, fail-closed posture, offline-first. |
+| **18 MCP tools** | Search, context, call graph, impact, symbol edits, memory — inside Claude Code, OpenCode, Codex. |
+
+</td>
+</tr>
+</table>
+
+</div>
+
 <p align="center">
-  <img src="docs/assets/demo-terminal.svg" alt="Real opencontext explain output on tiangolo/fastapi — task: add OAuth2 bearer token auth — 14 files, 11,740 tokens, 1 call" width="720">
+  <img src="docs/assets/divider.svg" alt="" width="720">
 </p>
 
 <p align="center">
-  <sub>Real output · tiangolo/fastapi · 1,121 Python files · 1 call replaces 4–8 grep+read rounds</sub>
+  <img src="docs/assets/demo-terminal.svg" alt="Real opencontext explain output on tiangolo/fastapi — task: add OAuth2 bearer token auth — a verified pack in one call instead of a grep/read loop" width="720">
+</p>
+
+<p align="center">
+  <sub>Real output · tiangolo/fastapi · one call replaces a multi-round grep+read loop</sub>
 </p>
 
 <p align="center">
@@ -79,11 +110,11 @@ AI coding agents usually discover context through repeated search and full-file 
 </p>
 
 <p align="center">
-  <img src="docs/assets/before-after.svg" alt="Without OpenContext: agent grep+read loop — ~65,000 tokens, 4-8 rounds, no call graph. With OpenContext: 11,740 tokens, 82% less, 1 call, call graph traced." width="720">
+  <img src="docs/assets/before-after.svg" alt="Without OpenContext: agent grep+read loop over many rounds, no call graph. With OpenContext: far fewer tokens, one call, call graph traced." width="720">
 </p>
 
 <p align="center">
-  <sub>Benchmark · tiangolo/fastapi · add OAuth2 auth · 82% fewer tokens, 1 call</sub>
+  <sub>Benchmark · tiangolo/fastapi · add OAuth2 auth · far fewer tokens, one call instead of a grep/read loop</sub>
 </p>
 
 <p align="center">
@@ -159,7 +190,7 @@ opencontext install     # stack detection · editor setup · index repo
 
 Every benchmark runs on a public repository. No hidden dataset. No hosted service. No benchmark-only path. Fully reproducible with `opencontext explain`.
 
-**Benchmark methodology:** "Agent loop" means reading full files discovered via grep-style search, without call-graph tracing. OpenContext numbers come from `opencontext explain` on the same public repositories. Real agent behavior varies by model, editor, and tool strategy.
+**Benchmark methodology:** "Agent loop" means reading full files discovered via grep-style search, without call-graph tracing. OpenContext returns one verified pack from `opencontext explain` on the same public repositories — far fewer tokens, one call instead of a grep/read loop. We make no fixed percentage claim: completeness and latency are measured directly by the honest efficiency benchmark (`opencontext benchmark`), and real agent behavior varies by model, editor, and tool strategy.
 
 </td>
 </tr>
@@ -168,11 +199,11 @@ Every benchmark runs on a public repository. No hidden dataset. No hosted servic
 </div>
 
 <p align="center">
-  <img src="docs/assets/stats-bar.svg" alt="62-82% fewer tokens · 4-8 rounds to 1 call · call graph included · deterministic" width="720">
+  <img src="docs/assets/stats-bar.svg" alt="far fewer tokens · many rounds to one call · call graph included · deterministic" width="720">
 </p>
 
 <p align="center">
-  <img src="docs/assets/benchmark-card-requests.svg" alt="psf/requests — fix retry bug: grep+read ~16,657 tok 4 rounds vs opencontext 6,301 tok 1 call — 62% fewer tokens" width="720">
+  <img src="docs/assets/benchmark-card-requests.svg" alt="psf/requests — fix retry bug: grep+read over several rounds vs opencontext one call — far fewer tokens" width="720">
 </p>
 
 <p align="center">
@@ -180,7 +211,7 @@ Every benchmark runs on a public repository. No hidden dataset. No hosted servic
 </p>
 
 <p align="center">
-  <img src="docs/assets/benchmark-card-fastapi.svg" alt="tiangolo/fastapi — add OAuth2 auth: grep+read ~65,000 tok 4-8 rounds vs opencontext 11,740 tok 1 call — 82% fewer tokens" width="720">
+  <img src="docs/assets/benchmark-card-fastapi.svg" alt="tiangolo/fastapi — add OAuth2 auth: grep+read over many rounds vs opencontext one call — far fewer tokens" width="720">
 </p>
 
 <p align="center">
@@ -188,7 +219,7 @@ Every benchmark runs on a public repository. No hidden dataset. No hosted servic
 </p>
 
 <p align="center">
-  <img src="docs/assets/benchmark-numbers.svg" alt="4 benchmarks: requests retry 62%, requests SSL 37%, fastapi OAuth2 82%, django overview impractical to 1560 tokens" width="720">
+  <img src="docs/assets/benchmark-numbers.svg" alt="4 public-repo benchmarks: retry bug, SSL verify, OAuth2 auth, project overview — grep+read loop vs one OpenContext call, far fewer tokens" width="720">
 </p>
 
 <p align="center">
@@ -370,7 +401,7 @@ opencontext bridges scan . --type HTTP --json
 
 <h3>Agent Interface</h3>
 
-14 MCP tools. Compatible with Claude Code, Cursor, Copilot, Windsurf, OpenCode, and any MCP-compatible editor.
+18 MCP tools. Compatible with Claude Code, Cursor, Copilot, Windsurf, OpenCode, and any MCP-compatible editor.
 
 `opencontext install` writes seven OC personas to your editor's agents directory. In OpenCode, press **Tab** to switch to one. In Claude Code, they appear as subagents. Each SDD phase runs as the persona suited to it.
 
@@ -390,16 +421,20 @@ opencontext bridges scan . --type HTTP --json
 
 OpenContext is the agentic system **on top of** your coding agent, not another agent CLI. Your agent (Claude Code, Codex, OpenCode, …) **fixes the provider**: when OpenContext needs a generation it asks your agent to run it on the agent's own model via MCP sampling — **zero provider or API-key config** on the OpenContext side.
 
-What you control is **which model each unit of work uses**, forwarded to your agent as an MCP `modelPreferences` hint. `default` is your agent's own model — nothing is chosen for you unless you ask:
+What you control is **which model each unit of work uses** — declared in `opencontext.yaml` and sent to your agent as an MCP `modelPreferences` hint. Anything unset uses your agent's own model; nothing is chosen for you:
 
-```bash
-# SDD phases, by persona (recommended)            # functional roles (runtime + MCP tools)
-opencontext models set-persona architect opus     opencontext models set-role generate opus
-opencontext models set-persona explorer haiku     opencontext models set-role classify haiku
-opencontext models set-default sonnet             # default for anything unset
+```yaml
+# opencontext.yaml — pick the model per SDD phase (the provider is always your agent's)
+models:
+  phases:
+    explore: { model: haiku }    # cheap where it doesn't matter
+    design:  { model: opus }     # strong where it does
+    apply:   { model: sonnet }
+  roles:                         # optional second axis: functional ops + MCP tools
+    classify: { model: haiku }
 ```
 
-Two independent axes, both delivered as sampling hints: **personas** map 1:1 to the SDD phases (Architect → design, Explorer → explore, Builder → apply, …) and drive the harness; **roles** (classify / retrieve / rerank / generate / …) drive the runtime and MCP tools. At install you pick a preset (`default` / `cheap` / `hybrid` / `premium`). Spend a cheap model where it doesn't matter and a strong one where it does — all within your agent's own provider. (Prefer OpenContext to run a model itself? Set a real provider per role; local providers like ollama work too.)
+Two independent axes, both delivered as sampling hints: **phases** (≙ personas: Architect → design, Explorer → explore, Builder → apply, …) drive the SDD harness; **roles** (classify / retrieve / rerank / generate / …) drive the runtime and MCP tools. At install you pick a preset (`default` / `cheap` / `hybrid` / `premium`) that writes this block for you; a command shortcut also exists (`opencontext models set-persona architect opus`) — it just edits the same file. (Prefer OpenContext to run a model itself? Set a real provider per role; local providers like ollama work too.)
 
 > **After `opencontext install`:** reload your shell (`source ~/.bashrc`) if PATH changed, then **restart your agent** so it loads the OpenContext MCP server.
 
@@ -410,11 +445,11 @@ Two independent axes, both delivered as sampling hints: **personas** map 1:1 to 
 </div>
 
 <p align="center">
-  <img src="docs/assets/mcp-tools.svg" alt="14 MCP tools: 9 read tools (search, context, callers, callees, impact, node, files, status, trace), 4 symbol-level edit tools, and an in-process agentic run tool" width="720">
+  <img src="docs/assets/mcp-tools.svg" alt="18 MCP tools: 9 read tools (search, context, callers, callees, impact, node, files, status, trace), 4 symbol-level edit tools, an in-process agentic run tool, and 4 memory tools (save, search, context, judge)" width="720">
 </p>
 
 <p align="center">
-  <sub>Agent Interface · 14 MCP tools · 9 read + 4 symbol-level edits + 1 agentic run</sub>
+  <sub>Agent Interface · 18 MCP tools · 9 read + 4 symbol-level edits + 1 agentic run + 4 memory</sub>
 </p>
 
 <div align="center">

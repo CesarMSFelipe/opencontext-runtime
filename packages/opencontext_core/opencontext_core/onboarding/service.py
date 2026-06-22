@@ -11,6 +11,36 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+# Used only as the fallback when no agent CLI is detected on the host. Detection
+# (below) is preferred — we configure what is actually present, not a fixed list.
+_FALLBACK_CLIENTS: tuple[str, ...] = ("opencode",)
+
+
+def default_active_clients() -> list[str]:
+    """Agent clients to configure when the caller did not specify any.
+
+    Detects the agent CLIs actually present on this host — Claude Code (``~/.claude``),
+    OpenCode, Cursor, Codex, etc. — by the presence of each agent's config dir, the
+    same signal the live installer's detector uses. Every detected agent is configured.
+    This is why a default ``opencontext install`` on a machine with Claude Code now
+    writes its MCP entry, persona files, and permissions with no extra flags, instead
+    of the old hard-coded ``["opencode"]`` that silently skipped every other agent.
+
+    Uses :meth:`Configurator.detect_installed` (a pure read of ``~`` — it creates no
+    directories), so calling it at ``OnboardingOptions`` construction has no side
+    effects. Falls back to :data:`_FALLBACK_CLIENTS` only when nothing is detected (or
+    detection raises), so a bare project still gets a sane baseline.
+    """
+    try:
+        from opencontext_core.configurator.service import Configurator
+
+        clients = Configurator().detect_installed()
+        if clients:
+            return clients
+    except Exception:
+        pass
+    return list(_FALLBACK_CLIENTS)
+
 
 @dataclass
 class OnboardingOptions:
@@ -19,7 +49,9 @@ class OnboardingOptions:
     root: Path
     template: str = "generic"
     security_mode: str = "private_project"
-    active_clients: list[str] = field(default_factory=lambda: ["opencode"])
+    # Default to whatever agent CLIs are actually installed (detected), so a no-flag
+    # install configures Claude Code et al. out of the box; opencode-only fallback.
+    active_clients: list[str] = field(default_factory=default_active_clients)
     tdd_mode: str = "ask"
     # 'default' = the client's selected model for every phase (no surprise model
     # picks); presets (cheap/hybrid/premium) route per phase, tunable per persona.

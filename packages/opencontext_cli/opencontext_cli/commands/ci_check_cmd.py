@@ -67,6 +67,16 @@ def add_ci_check_parser(subparsers: Any) -> None:
     check_run = check_sub.add_parser("run", help="Run all checks.")
     check_run.add_argument("--file", help="Run on specific file only.")
     check_run.add_argument("--json", action="store_true")
+    check_run.add_argument(
+        "--no-refresh",
+        action="store_true",
+        help="Use the existing pinned index for the contextbench gate (CI fast path).",
+    )
+    check_run.add_argument(
+        "--suite",
+        default="examples/evals/contextbench.yaml",
+        help="ContextBench suite for the efficiency/parity gate.",
+    )
     check_create = check_sub.add_parser("create", help="Create a new check template.")
     check_create.add_argument("name", help="Check name.")
     check_create.add_argument("--description", default="", help="Check description.")
@@ -120,11 +130,17 @@ def handle_ci_check(args: Any) -> None:
                 )
     elif command == "run":
         files = [file] if file else None
-        with console.progress("Running checks...") as progress:
-            task = progress.add_task("Running checks...", total=None)
+        if json_output:
+            # No spinner: console.progress writes cursor/ANSI control codes to stdout,
+            # which would corrupt the machine-readable JSON the workflow YAML parses.
             results = runner.run_all_checks(files)
-            progress.update(task, completed=True)
+        else:
+            with console.progress("Running checks...") as progress:
+                task = progress.add_task("Running checks...", total=None)
+                results = runner.run_all_checks(files)
+                progress.update(task, completed=True)
         report = runner.generate_report(results)
+        _attach_contextbench(report, args)
         if json_output:
             print(json.dumps(report, indent=2))
         else:
@@ -177,6 +193,65 @@ def _display_check_report(report: dict[str, Any]) -> None:
                 console.print(f"    [dim]File: {r['file']}:{r.get('line', 'N/A')}[/]")
             if r.get("suggestion"):
                 console.print(f"    [dim]Suggestion: {r['suggestion']}[/]")
+
+
+def _attach_contextbench(report: dict[str, Any], args: Any) -> None:
+    """Fold the honest efficiency benchmark into the CI report (gates on parity).
+
+    D-CI: the contextbench CI path gates on QUALITY-PARITY only — any case whose CON
+    pack misses an expected source or hits a forbidden one counts as a failure and is
+    added to ``summary.failed`` (so the existing ``failed > 0`` workflow gate trips).
+    The measured ``{tokens, tool_calls, latency}`` deltas are reported as
+    informational numbers; there is NO reduction threshold and NO claim field. If the
+    suite or index is unavailable, the section is marked skipped rather than crashing
+    the pipeline.
+    """
+    suite_path = Path(getattr(args, "suite", "examples/evals/contextbench.yaml"))
+    summary = report.setdefault("summary", {})
+    if not suite_path.exists():
+        report["contextbench"] = {"status": "skipped", "reason": f"no suite at {suite_path}"}
+        return
+    try:
+        from opencontext_core.evaluation.efficiency import EfficiencyBenchmark
+        from opencontext_core.evaluation.evaluator import load_context_bench_cases
+        from opencontext_core.runtime import OpenContextRuntime
+
+        config_path = getattr(args, "config", None)
+        resolved = Path(config_path) if config_path else None
+        runtime = OpenContextRuntime(
+            config_path=str(resolved) if resolved and resolved.exists() else None,
+        )
+        cases = load_context_bench_cases(suite_path)
+        refresh = not getattr(args, "no_refresh", False)
+        efficiency = EfficiencyBenchmark(runtime, root=getattr(args, "root", "."))
+        result = efficiency.evaluate_suite(cases, refresh_index=refresh)
+    except Exception as exc:  # CI resilience: surface, do not crash the gate.
+        report["contextbench"] = {"status": "error", "reason": str(exc)}
+        return
+
+    report["contextbench"] = {
+        "status": "ok",
+        "cases": [
+            {
+                "case_id": c.case_id,
+                "con_sufficient": c.con_sufficient,
+                "con": c.con.model_dump(mode="json"),
+                "sin": c.sin.model_dump(mode="json"),
+                "token_delta": c.token_delta,
+                "tool_call_delta": c.tool_call_delta,
+            }
+            for c in result.cases
+        ],
+        "median_token_delta": result.median_token_delta,
+        "median_tool_call_delta": result.median_tool_call_delta,
+        "insufficient_cases": result.insufficient_cases,
+        "all_sufficient": result.all_sufficient,
+    }
+    # Gate: parity-insufficient cases add to the failure count.
+    insufficient = result.insufficient_cases
+    if insufficient:
+        summary["failed"] = int(summary.get("failed", 0)) + insufficient
+        summary["success"] = False
 
 
 def _generate_contextbench_workflow() -> Path:
