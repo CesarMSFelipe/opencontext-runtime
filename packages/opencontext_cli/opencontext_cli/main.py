@@ -960,6 +960,12 @@ def _build_parser() -> argparse.ArgumentParser:
     quality_preflight.add_argument("--query", default="")
     quality_verify = quality_sub.add_parser("verify")
     quality_verify.add_argument("target", nargs="?", default="last")
+    # Architecture & code-quality check/gate (the deterministic, zero-model
+    # evaluator). These attach to the EXISTING group; preflight/verify above are
+    # the unrelated legacy context-quality gates and keep working untouched.
+    from opencontext_cli.commands.quality_cmd import add_quality_subcommands
+
+    add_quality_subcommands(quality_sub)
 
     report_parser = subparsers.add_parser("report", help=argparse.SUPPRESS)
     report_sub = report_parser.add_subparsers(dest="report_command", required=True)
@@ -1257,7 +1263,19 @@ def _dispatch(args: argparse.Namespace) -> None:
         )
         return
     if command == "quality":
-        _quality(args.quality_command, getattr(args, "query", ""), getattr(args, "target", "last"))
+        quality_command = args.quality_command
+        if quality_command in ("check", "gate"):
+            from opencontext_cli.commands.quality_cmd import (
+                handle_quality_check,
+                handle_quality_gate,
+            )
+
+            if quality_command == "check":
+                handle_quality_check(args)
+            else:
+                handle_quality_gate(args)
+            return
+        _quality(quality_command, getattr(args, "query", ""), getattr(args, "target", "last"))
         return
     if command == "report":
         _report(args.report_command)

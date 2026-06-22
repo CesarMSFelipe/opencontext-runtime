@@ -41,6 +41,37 @@ LANGUAGE_EXTENSIONS: dict[str, str] = {
     ".lpr": "pascal",
 }
 
+# Tree-sitter node types that add a decision path for cyclomatic complexity.
+# Python is the MVP target; other languages are mapped where the grammar node
+# names line up. Each function gets a base of 1 (the single entry path) plus one
+# per decision node found in its body.
+_PYTHON_DECISION_TYPES: frozenset[str] = frozenset(
+    {
+        "if_statement",
+        "elif_clause",
+        "for_statement",
+        "while_statement",
+        "except_clause",
+        "boolean_operator",  # 'and' / 'or'
+        "conditional_expression",  # x if c else y
+        "assert_statement",
+        "with_statement",
+    }
+)
+_DEFAULT_DECISION_TYPES: frozenset[str] = _PYTHON_DECISION_TYPES
+_COMPLEXITY_DECISION_TYPES: dict[str, frozenset[str]] = {
+    "python": _PYTHON_DECISION_TYPES,
+}
+
+# Node types that introduce a new function/method scope (a complexity row).
+_PYTHON_FUNCTION_TYPES: frozenset[str] = frozenset(
+    {"function_definition", "async_function_definition"}
+)
+_DEFAULT_FUNCTION_TYPES: frozenset[str] = _PYTHON_FUNCTION_TYPES
+_FUNCTION_NODE_TYPES: dict[str, frozenset[str]] = {
+    "python": _PYTHON_FUNCTION_TYPES,
+}
+
 
 @dataclass
 class ParsedSymbol:
@@ -220,6 +251,66 @@ class TreeSitterParser:
         # No loaded grammar -> degraded regex fallback (symbols only, zero edges).
         symbols, edges = self._parse_with_fallback(file_path, content, language)
         return ParseFileResult(symbols=symbols, edges=edges, mode="regex", language=language)
+
+    def cyclomatic_complexity(self, content: str, language: str) -> list[tuple[str, int, int]]:
+        """Return ``(symbol_name, complexity, start_line)`` per function/method.
+
+        Reuses the same tree-sitter parse path as symbol extraction: parses
+        ``content`` with the loaded grammar, then for each function/method subtree
+        walks its body counting decision points and adds a base of 1 (the single
+        entry path). The Python decision set is enumerated first
+        (``if_statement``, ``elif_clause``, ``for_statement``, ``while_statement``,
+        ``except_clause``, ``boolean_operator`` for ``and``/``or``,
+        ``conditional_expression``); other languages contribute their analogous
+        node types where the grammar names match.
+
+        Degrades honestly: returns ``[]`` when tree-sitter is unavailable or the
+        language grammar is not loaded (the caller records this as a *skipped*
+        rule, never a clean pass). Deterministic for identical input.
+        """
+        if not self.is_available() or language not in self._languages:
+            return []
+
+        try:
+            parser = self._parser_class(self._languages[language])
+            tree = parser.parse(bytes(content, "utf-8"))
+        except Exception:
+            return []
+        root = tree.root_node
+
+        decision_types = _COMPLEXITY_DECISION_TYPES.get(language, _DEFAULT_DECISION_TYPES)
+        func_types = _FUNCTION_NODE_TYPES.get(language, _DEFAULT_FUNCTION_TYPES)
+
+        results: list[tuple[str, int, int]] = []
+
+        def measure(node: Any) -> int:
+            """Cyclomatic complexity of one function subtree (base 1 + decisions)."""
+            count = 1
+            stack = list(node.children)
+            while stack:
+                child = stack.pop()
+                # Do not descend into a *nested* function: its complexity is
+                # reported on its own row, not folded into the enclosing one.
+                if child is not node and child.type in func_types:
+                    continue
+                if child.type in decision_types:
+                    count += 1
+                stack.extend(child.children)
+            return count
+
+        def walk(node: Any) -> None:
+            if node.type in func_types:
+                name_node = node.child_by_field_name("name")
+                if name_node is not None:
+                    name = name_node.text.decode("utf-8", errors="replace")
+                    results.append((name, measure(node), node.start_point[0] + 1))
+            for child in node.children:
+                walk(child)
+
+        walk(root)
+        # Stable order: by start line, then name (handles same-line edge cases).
+        results.sort(key=lambda r: (r[2], r[0]))
+        return results
 
     def _parse_with_tree_sitter(
         self, file_path: str, content: str, language: str

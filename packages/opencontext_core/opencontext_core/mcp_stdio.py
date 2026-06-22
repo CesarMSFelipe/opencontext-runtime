@@ -476,6 +476,24 @@ class MCPServer:
                     },
                 },
             },
+            "opencontext_quality": {
+                "description": (
+                    "Evaluate architecture + code-quality on the changed scope (or whole "
+                    "project); deterministic, zero model calls."
+                ),
+                "parameters": {
+                    "scope": {
+                        "type": "string",
+                        "description": "'diff' (changed files) or 'all' (whole project)",
+                        "default": "diff",
+                    },
+                    "rules": {
+                        "type": "string",
+                        "description": "Optional path to a quality.toml",
+                        "default": None,
+                    },
+                },
+            },
         }
 
     def run(self) -> None:
@@ -662,6 +680,7 @@ class MCPServer:
             "opencontext_memory_search": self._handle_memory_search,
             "opencontext_memory_context": self._handle_memory_context,
             "opencontext_memory_judge": self._handle_memory_judge,
+            "opencontext_quality": self._handle_quality,
         }
 
     def _default_tool_names(self) -> list[str]:
@@ -687,6 +706,7 @@ class MCPServer:
             "opencontext_memory_search",
             "opencontext_memory_context",
             "opencontext_memory_judge",
+            "opencontext_quality",
         ]
 
     def _handle_run(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -1115,6 +1135,73 @@ class MCPServer:
             "edges": stats.get("edges", 0),
             "files": stats.get("files", 0),
         }
+
+    def _handle_quality(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Evaluate architecture + code-quality and return a report dict.
+
+        Runs the SAME deterministic :class:`QualityEvaluator` the harness gate
+        and the CLI use — graph analysis plus the configured language-tool
+        subprocesses, and **never** the model — so the check path stays exactly
+        token-free. ``scope='diff'`` (the default) evaluates the working-tree
+        changed files; ``scope='all'`` evaluates the whole project. The optional
+        ``rules`` path overrides the project's ``quality.toml``.
+
+        Returns the evaluator's ``QualityReport.to_report_dict()`` (JSON-safe
+        primitives: ``summary``/``results``/``health``/``delta``). Any failure
+        degrades to a structured ``{'error': ...}`` (the memory-handler pattern);
+        ``_to_tool_result`` auto-wraps, redacts, and sets ``isError``. All imports
+        are local so importing this server never pulls the quality package (which
+        imports ``harness.models``) — keeping the harness<->quality edge lazy.
+        """
+
+        from opencontext_core.harness.runner import HarnessRunner
+        from opencontext_core.quality.evaluator import QualityEvaluator
+        from opencontext_core.quality.rules import (
+            QualityConfigError,
+            QualityRules,
+            load_rules,
+            parse_rules,
+        )
+
+        scope = str(params.get("scope") or "diff").strip().lower()
+        if scope not in ("diff", "all"):
+            return {"error": f"invalid scope {scope!r}; expected 'diff' or 'all'"}
+
+        # Resolve the project root the same way the write tools do (explicit root,
+        # then runtime config, then cwd) — this is also where the KG DB and the
+        # quality.toml live.
+        root = self.project_root
+
+        # Resolve rules: an explicit ``rules`` path is parsed directly; otherwise
+        # the project's quality.toml is loaded (zero-config falls back to defaults).
+        import tomllib
+
+        rules: QualityRules | None
+        rules_path = params.get("rules")
+        try:
+            if rules_path:
+                config_path = Path(rules_path)
+                if not config_path.exists():
+                    return {"error": f"rules file not found: {rules_path}"}
+                rules = parse_rules(tomllib.loads(config_path.read_text(encoding="utf-8")))
+            else:
+                rules = load_rules(root)
+        except (QualityConfigError, tomllib.TOMLDecodeError, OSError, ValueError) as exc:
+            return {"error": f"invalid quality rules: {exc}"}
+
+        try:
+            evaluator = QualityEvaluator(root, rules=rules)
+            if scope == "diff":
+                changed_files = HarnessRunner._git_changed_files(root)
+            else:
+                # Whole project: the scanned-source relative paths are the full
+                # file set (so both the architecture scope filter and the language
+                # tools see the whole repo). Deterministic and self-contained.
+                changed_files = [s.relative_path for s in evaluator._scanned()]
+            report = evaluator.evaluate(changed_files)
+            return report.to_report_dict()
+        except Exception as exc:
+            return {"error": str(exc)}
 
     def _handle_trace(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle call-path tracing tool."""
