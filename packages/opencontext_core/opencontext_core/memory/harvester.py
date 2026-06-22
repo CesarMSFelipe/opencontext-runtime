@@ -34,7 +34,11 @@ def _normalize_linked_node(node: str) -> str:
     Accepts:
       - bare symbol name (``validate_token``) — wrapped into ``<name>.py:0``
         so it hashes to a unique missing-context entry per symbol
-      - relative source path (``src/auth.py``) — returned as ``<path>:0``
+      - relative source path (``src/auth.py``) — returned AS-IS so the boost path
+        matches it by file path / basename against ``item.source`` (appending a
+        synthetic ``:0`` here would break BOTH the exact and basename match:
+        ``src/auth.py:0`` never equals ``src/auth.py:54`` and ``auth.py:0`` never
+        equals the candidate basename ``auth.py``).
       - already-formatted path[:line] (``src/auth.py:42``) — returned as-is
     Empty / falsy inputs return ``""`` so the caller can filter them out.
     """
@@ -49,7 +53,8 @@ def _normalize_linked_node(node: str) -> str:
     # basename fuzzy match has a unique file identifier to anchor on.
     if "/" not in text:
         return f"{text}.py:0"
-    return f"{text}:0"
+    # Bare relative path: return as-is (a trailing ``:0`` would break the match).
+    return text
 
 
 def _normalize_linked_nodes(nodes: Any) -> list[str]:

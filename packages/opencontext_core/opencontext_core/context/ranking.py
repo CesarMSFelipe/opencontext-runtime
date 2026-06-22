@@ -63,11 +63,13 @@ class ContextRanker:
         modified_at_raw = item.metadata.get("modified_at")
         modified_at = modified_at_raw if isinstance(modified_at_raw, str) else None
         # ``compute_hybrid_score`` is the single source of truth; same call site
-        # used by :class:`RetrievalPlanner.rank`. ``memory_boost_map`` and
-        # ``graph_distance_map`` are empty here because legacy
-        # ``ContextRanker.rank`` callers do not supply them; the missing
-        # signals simply contribute 0 (preserving the previous Conservation
-        # property).
+        # used by :class:`RetrievalPlanner.rank`.
+        # NOTE: known asymmetry (tech debt). ``memory_boost_map`` and
+        # ``graph_distance_map`` are empty here, so the ask()/WorkflowEngine path
+        # does NOT apply the recent_failure boost or graph-distance penalty that the
+        # harness/pack path (RetrievalPlanner) does. Not a regression — the legacy
+        # ContextRanker never had them; closing it means routing ask() through
+        # RetrievalPlanner. Missing signals contribute 0 (Conservation preserved).
         score = compute_hybrid_score(
             candidate_id=item.id,
             candidate_source=item.source,
