@@ -361,6 +361,10 @@ class TestMCPTools:
             "opencontext_insert_after_symbol",
             "opencontext_rename_symbol",
             "opencontext_run",
+            "opencontext_memory_save",
+            "opencontext_memory_search",
+            "opencontext_memory_context",
+            "opencontext_memory_judge",
         }
     )
 
@@ -538,30 +542,13 @@ class TestCompressionStrategies:
 
 
 # ── Benchmark numbers ──────────────────────────────────────────────────────────
-
-
-class TestBenchmarkNumbers:
-    def test_benchmark_avg_reduction_above_75_pct(self):
-        """README: average 88.5% reduction. Floor at 75% to allow variance."""
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                "tests/core/test_comparative_benchmark.py",
-                "-v",
-                "-s",
-            ],
-            capture_output=True,
-            text=True,
-            cwd=ROOT,
-            check=False,
-        )
-        combined = result.stdout + result.stderr
-        # Find "Average token reduction : X%"
-        for line in combined.splitlines():
-            if "Average token reduction" in line:
-                pct = float(line.split(":")[1].strip().rstrip("%"))
-                assert pct >= 75.0, f"Average reduction {pct}% below 75% floor"
-                return
-        pytest.fail(f"Average token reduction not found in benchmark output.\n{combined[-1000:]}")
+#
+# The README makes NO quantified token-reduction percentage claim by design.
+# The old TestBenchmarkNumbers.test_benchmark_avg_reduction_above_75_pct shelled
+# out to a fake comparative benchmark that scored OpenContext as a hand-curated
+# answer key and never actually ran it, then asserted a fabricated "≥75% average
+# reduction". That benchmark was excised (see tests/core/test_comparative_benchmark.py),
+# and the honest replacement (tests/core/test_efficiency_benchmark.py) carries a
+# deny-list test forbidding any `%`/claim string in its report. There is no
+# percentage claim left to verify here, so the marketing assertion was removed
+# rather than rewritten.

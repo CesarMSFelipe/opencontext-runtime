@@ -137,6 +137,119 @@ def _to_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# --------------------------------------------------------------------------- #
+# Memory tools (workstream A) — agent-driven write/read/curate over the
+# existing CompositeMemoryStore reached as ``runtime._v2_memory_store``.
+# --------------------------------------------------------------------------- #
+
+# Curation verbs the memory store actually exposes (composite.py:71/76). The
+# ``opencontext_memory_judge`` tool is a thin dispatcher over exactly these — it
+# does NOT invent judge/supersede verbs (design N2).
+_JUDGE_RELATIONS: tuple[str, ...] = ("reinforce", "contradict")
+
+# Default layer for a save when the caller omits ``layer`` (RD3).
+_DEFAULT_MEMORY_LAYER_VALUE = "episodic"
+
+
+def _make_memory_record(params: dict[str, Any]) -> Any:
+    """Build a ``MemoryRecord`` from ``opencontext_memory_save`` params (A-T2).
+
+    ``layer`` is optional and defaults to EPISODIC (RD3). The default ``key`` is a
+    generated, unique handle (uuid-derived) and ``topic_key`` is left ``None``
+    unless the caller supplies one, so a content-only save never silently upserts
+    over an existing topic (DR3). An invalid ``layer`` raises ``ValueError`` naming
+    the allowed layers; the handler converts that to a structured error result and
+    persists nothing (A-REQ-3).
+    """
+
+    import uuid
+    from datetime import UTC, datetime
+
+    from opencontext_core.models.agent_memory import (
+        DecayPolicy,
+        MemoryLayer,
+        MemoryRecord,
+    )
+
+    layer_value = params.get("layer") or _DEFAULT_MEMORY_LAYER_VALUE
+    try:
+        layer = MemoryLayer(layer_value)
+    except ValueError as exc:
+        allowed = ", ".join(m.value for m in MemoryLayer)
+        raise ValueError(f"invalid layer {layer_value!r}; allowed layers: {allowed}") from exc
+
+    content = str(params.get("content", ""))
+    # Unique-ish default key so two content-only saves never collide / upsert.
+    key = params.get("key") or f"agent:{layer.value}:{uuid.uuid4().hex[:12]}"
+    confidence = params.get("confidence", 1.0)
+    tags = params.get("tags") or []
+    now = datetime.now(UTC)
+
+    return MemoryRecord(
+        id=uuid.uuid4().hex,
+        layer=layer,
+        key=str(key),
+        content=content,
+        confidence=float(confidence),
+        decay_policy=DecayPolicy(enabled=True),
+        tags=list(tags),
+        created_at=now,
+        updated_at=now,
+        # topic_key stays None unless the caller asked for topic-keyed upsert.
+        topic_key=params.get("topic_key"),
+    )
+
+
+def _engram_layer_values() -> set[str]:
+    """The Engram-routed layer values, single-sourced from CompositeMemoryStore.
+
+    Reading ``_ENGRAM_LAYERS`` (composite.py:21) rather than re-hardcoding the
+    split keeps backend reporting honest if the routing rule ever changes
+    (N3 / TR4).
+    """
+
+    from opencontext_core.memory.composite import _ENGRAM_LAYERS
+
+    return {layer.value for layer in _ENGRAM_LAYERS}
+
+
+def _store_has_live_engram(store: Any) -> bool:
+    """True when ``store`` is a composite with a real (non-Null) engram backend.
+
+    Used to decide whether an Engram-owned layer actually persisted to Engram or
+    transparently fell back to local (composite.py:62-68).
+    """
+
+    engram = getattr(store, "_engram", None)
+    if engram is None:
+        return False
+    return type(engram).__name__ != "NullAgentMemoryStore"
+
+
+def _resolve_backend(store: Any, layer_value: str) -> tuple[str, bool]:
+    """Return ``(backend, degraded)`` for a save of ``layer_value`` to ``store``.
+
+    ``backend`` is ``"engram"`` only when the layer is Engram-owned AND the store
+    has a live engram; otherwise ``"local"``. ``degraded`` is True only for the
+    *transparent-fallback* case: a composite store whose Engram-owned layer fell
+    back to local because no live engram is wired (composite.py:62-68 / A-REQ-4b).
+
+    A plain ``LocalMemoryStore`` (a fully-local install with no engram leg at all)
+    is the normal local backend, not a degraded one — it has no ``_engram``
+    attribute, so it is never flagged degraded.
+    """
+
+    engram_owned = layer_value in _engram_layer_values()
+    if not engram_owned:
+        return "local", False
+    if _store_has_live_engram(store):
+        return "engram", False
+    # Engram-owned layer with no live engram. Only a composite store (one that
+    # *has* an engram leg) is "degraded"; a plain local store is simply local.
+    is_composite = hasattr(store, "_engram")
+    return "local", is_composite
+
+
 class MCPServer:
     """MCP server implementing stdio transport.
 
@@ -216,10 +329,19 @@ class MCPServer:
                 },
             },
             "opencontext_node": {
-                "description": "Get details about a specific symbol",
+                "description": (
+                    "Get details about a specific symbol. Pass code=true to also return "
+                    "its exact source (the KG knows the extent) — one call that replaces "
+                    "'search to locate, then Read the file' for a targeted edit."
+                ),
                 "parameters": {
                     "symbol": {"type": "string", "description": "Symbol name"},
                     "file": {"type": "string", "description": "File path (optional)"},
+                    "code": {
+                        "type": "boolean",
+                        "description": "Include the symbol's source code (default false).",
+                        "default": False,
+                    },
                 },
             },
             "opencontext_files": {
@@ -290,6 +412,67 @@ class MCPServer:
                         "type": "string",
                         "description": "Workflow track (sdd/standard/quick/...)",
                         "default": "sdd",
+                    },
+                    "root": {
+                        "type": "string",
+                        "description": (
+                            "Project root to run in (defaults to the server's cwd). "
+                            "Lets the SDD loop run on any indexed repo, not only the "
+                            "one the server was started in."
+                        ),
+                    },
+                },
+            },
+            "opencontext_memory_save": {
+                "description": (
+                    "Persist a memory record to OpenContext's own memory store. "
+                    "Layer defaults to EPISODIC; use FAILURE for failures, SEMANTIC "
+                    "for durable facts, PROCEDURAL for patterns."
+                ),
+                "parameters": {
+                    "content": {"type": "string", "description": "The memory payload (required)"},
+                    "layer": {
+                        "type": "string",
+                        "description": "Memory layer: episodic|semantic|procedural|working|failure (default episodic)",  # noqa: E501
+                    },
+                    "key": {"type": "string", "description": "Optional namespaced key"},
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional free-form tags",
+                    },
+                },
+            },
+            "opencontext_memory_search": {
+                "description": "Search OpenContext's memory store for records matching a query",
+                "parameters": {
+                    "query": {"type": "string", "description": "Search query (required)"},
+                    "scope": {
+                        "type": "string",
+                        "description": "Optional layer scope to restrict the search",
+                    },
+                    "limit": {"type": "integer", "default": 10},
+                },
+            },
+            "opencontext_memory_context": {
+                "description": (
+                    "Return recent/relevant memory as markdown context for a task "
+                    "(read-only; persists nothing)."
+                ),
+                "parameters": {
+                    "query": {"type": "string", "description": "Task / query (required)"},
+                },
+            },
+            "opencontext_memory_judge": {
+                "description": (
+                    "Curate an existing memory record by reinforcing or contradicting it "
+                    "(the only curation verbs the store exposes)."
+                ),
+                "parameters": {
+                    "memory_id": {"type": "string", "description": "ID of the record to curate"},
+                    "relation": {
+                        "type": "string",
+                        "description": "Curation verb: 'reinforce' or 'contradict'",
                     },
                 },
             },
@@ -475,6 +658,10 @@ class MCPServer:
             "opencontext_insert_after_symbol": self._handle_insert_after_symbol,
             "opencontext_rename_symbol": self._handle_rename_symbol,
             "opencontext_run": self._handle_run,
+            "opencontext_memory_save": self._handle_memory_save,
+            "opencontext_memory_search": self._handle_memory_search,
+            "opencontext_memory_context": self._handle_memory_context,
+            "opencontext_memory_judge": self._handle_memory_judge,
         }
 
     def _default_tool_names(self) -> list[str]:
@@ -496,6 +683,10 @@ class MCPServer:
             "opencontext_insert_after_symbol",
             "opencontext_rename_symbol",
             "opencontext_run",
+            "opencontext_memory_save",
+            "opencontext_memory_search",
+            "opencontext_memory_context",
+            "opencontext_memory_judge",
         ]
 
     def _handle_run(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -519,7 +710,8 @@ class MCPServer:
 
         from opencontext_core.llm.sampling_gateway import get_host_sampler
 
-        runner = HarnessRunner(root=Path.cwd())
+        root = Path(params.get("root") or Path.cwd()).resolve()
+        runner = HarnessRunner(root=root)
         result = runner.run(workflow, task)
         return {
             "run_id": result.run_id,
@@ -530,6 +722,136 @@ class MCPServer:
             "gates": len(getattr(result, "gates", [])),
             "warnings": list(getattr(result, "warnings", []))[:10],
         }
+
+    # ----------------------------------------------------------------------- #
+    # Memory tools (workstream A). All four degrade cleanly when no store is
+    # wired (structured error, never raise), mirroring the runtime-optional
+    # guard the read tools use. The store is OpenContext's own
+    # ``CompositeMemoryStore`` (routing to Engram is automatic).
+    # ----------------------------------------------------------------------- #
+
+    def _memory_store(self) -> Any | None:
+        """Resolve the live memory store, or None when unavailable.
+
+        Mirrors the runtime-optional guard elsewhere in this server: only reads
+        ``_v2_memory_store`` when a runtime is actually attached. Returns None so
+        every memory handler can emit a structured error instead of raising
+        (A-REQ-4a).
+        """
+
+        runtime = getattr(self, "runtime", None)
+        if runtime is None:
+            return None
+        return getattr(runtime, "_v2_memory_store", None)
+
+    @staticmethod
+    def _serialize_record(record: Any) -> dict[str, Any]:
+        """Project a ``MemoryRecord`` to a JSON-safe result dict."""
+
+        layer = getattr(record, "layer", None)
+        return {
+            "id": getattr(record, "id", None),
+            "layer": getattr(layer, "value", layer),
+            "key": getattr(record, "key", None),
+            "content": getattr(record, "content", None),
+            "confidence": getattr(record, "confidence", None),
+            "tags": list(getattr(record, "tags", []) or []),
+        }
+
+    def _handle_memory_save(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Persist a memory record to the live store (A-REQ-2/3/4)."""
+
+        store = self._memory_store()
+        if store is None:
+            return {"error": "memory store unavailable", "available": False}
+
+        try:
+            record = _make_memory_record(params)
+        except ValueError as exc:
+            # Invalid layer (or other validation) -> structured error, no write.
+            return {"error": str(exc)}
+
+        record_id = store.write(record)
+        backend, degraded = _resolve_backend(store, record.layer.value)
+        return {
+            "id": record_id or record.id,
+            "layer": record.layer.value,
+            "key": record.key,
+            "backend": backend,
+            "degraded": degraded,
+        }
+
+    def _handle_memory_search(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Search the memory store, optionally scoped to a layer (A-REQ-5)."""
+
+        store = self._memory_store()
+        if store is None:
+            return {"error": "memory store unavailable", "available": False}
+
+        from opencontext_core.models.agent_memory import MemoryLayer
+
+        query = str(params.get("query", ""))
+        scope_value = params.get("scope")
+        scope: MemoryLayer | None = None
+        if scope_value:
+            try:
+                scope = MemoryLayer(scope_value)
+            except ValueError:
+                allowed = ", ".join(m.value for m in MemoryLayer)
+                return {"error": f"invalid scope {scope_value!r}; allowed layers: {allowed}"}
+        limit = params.get("limit") or 10
+
+        records = store.search(query, scope=scope, limit=limit)
+        return {"results": [self._serialize_record(r) for r in records]}
+
+    def _handle_memory_context(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Return recent/relevant memory as markdown context (read-only, A-REQ-5)."""
+
+        store = self._memory_store()
+        if store is None:
+            return {"error": "memory store unavailable", "available": False}
+
+        query = str(params.get("query", ""))
+        records = store.search(query, scope=None, limit=10)
+        lines = [
+            f"- [{self._serialize_record(r)['layer']}] {getattr(r, 'content', '')}" for r in records
+        ]
+        context = "\n".join(lines)
+        return {"context": context, "count": len(records)}
+
+    def _handle_memory_judge(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Curate one record via reinforce/contradict — the only verbs the store
+        exposes (A-REQ-5 / N2). Any other relation is a structured error."""
+
+        store = self._memory_store()
+        if store is None:
+            return {"error": "memory store unavailable", "available": False}
+
+        memory_id = str(params.get("memory_id", ""))
+        relation = str(params.get("relation", ""))
+        if relation not in _JUDGE_RELATIONS:
+            allowed = ", ".join(_JUDGE_RELATIONS)
+            return {
+                "error": f"invalid relation {relation!r}; allowed relations: {allowed}",
+            }
+        if not memory_id:
+            return {"error": "memory_id is required"}
+
+        from opencontext_core.models.evidence import EvidenceRef
+
+        # Synthesize a minimal self-referential evidence ref when none is supplied:
+        # the judgment itself is the evidence (design N2).
+        evidence = EvidenceRef(
+            source=f"judge:{memory_id}",
+            source_type="memory",
+            confidence=1.0,
+            verified=False,
+        )
+        if relation == "reinforce":
+            store.reinforce(memory_id, evidence)
+        else:
+            store.contradict(memory_id, evidence)
+        return {"id": memory_id, "relation": relation, "ok": True}
 
     def _handle_search(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle search tool."""
@@ -679,6 +1001,7 @@ class MCPServer:
 
         symbol = params.get("symbol", "")
         file = params.get("file")
+        include_code = bool(params.get("code", False))
 
         node_id = self._find_node(symbol, file)
         if node_id is None:
@@ -690,7 +1013,7 @@ class MCPServer:
 
         from opencontext_core.indexing.scip_symbol import format_symbol
 
-        return {
+        result = {
             "name": node.name,
             "kind": node.kind,
             # Structured, decodable identity (language/package/file/type/role).
@@ -711,6 +1034,19 @@ class MCPServer:
             "signature": node.signature,
             "is_exported": node.is_exported,
         }
+        # One-call surgical edit support: the KG already knows the symbol's exact extent
+        # (line..end_line), so return JUST its source — a single call that replaces
+        # "search to locate, then Read the whole file region". On a large file this is
+        # far fewer tokens than reading around the hit.
+        if include_code and node.line and node.end_line:
+            try:
+                src = (self.project_root / node.file_path).read_text(
+                    encoding="utf-8", errors="ignore"
+                )
+                result["code"] = "\n".join(src.splitlines()[node.line - 1 : node.end_line])
+            except OSError:
+                pass
+        return result
 
     def _handle_files(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle file structure tool."""
@@ -813,8 +1149,57 @@ class MCPServer:
     # and apply a precise, atomic edit to the source file. Resolution failures
     # return a clean error dict (never an exception) and never touch the file.
 
+    def _write_approval_required(self) -> bool:
+        """Whether disk-writing symbol-edit tools must pass the approval gate.
+
+        Reads ``runtime.config.tools.mcp.require_write_approval`` defensively;
+        defaults to ``False`` when no runtime/config is attached so a vanilla
+        server (and every existing caller) keeps today's behavior exactly
+        (C2-1a / RD4). Mirrors the runtime-optional guard used by the read and
+        memory tools.
+        """
+
+        runtime = getattr(self, "runtime", None)
+        if runtime is None:
+            return False
+        try:
+            return bool(runtime.config.tools.mcp.require_write_approval)
+        except Exception:
+            return False
+
+    def _write_approval_denied(self, params: dict[str, Any]) -> dict[str, Any] | None:
+        """Evaluate the write-approval gate before any disk write.
+
+        Returns a structured "approval required" denial dict when the gate FAILS
+        (approval required by config but not granted via ``approved=true`` in the
+        call params), so the caller writes nothing. Returns ``None`` when the
+        write may proceed (approval not required, or granted). Reuses the
+        harness ``ApprovalRequiredForWritesGate`` unchanged (decision RD4).
+        """
+
+        approval_required = self._write_approval_required()
+        if not approval_required:
+            return None
+        from opencontext_core.harness.gates import ApprovalRequiredForWritesGate
+        from opencontext_core.harness.models import GateStatus
+
+        approved = bool(params.get("approved", False))
+        gate = ApprovalRequiredForWritesGate().evaluate(approval_required, approved)
+        if gate.status is GateStatus.FAILED:
+            return {
+                "error": gate.message,
+                "approval_required": True,
+                "applied": False,
+                "hint": "re-issue the call with approved=true once a human has approved the write",
+            }
+        return None
+
     def _handle_replace_symbol_body(self, params: dict[str, Any]) -> dict[str, Any]:
         """Replace a symbol's definition span with new source text."""
+
+        denied = self._write_approval_denied(params)
+        if denied is not None:
+            return denied
 
         symbol = params.get("symbol", "")
         file = params.get("file")
@@ -824,7 +1209,15 @@ class MCPServer:
 
         node = self._resolve_symbol(symbol, file)
         if node is None:
-            return {"error": f"Symbol not found: {symbol}", "applied": False}
+            return {
+                "error": f"Symbol not found: {symbol}",
+                "applied": False,
+                "hint": (
+                    "These symbol-write tools edit only THIS session's indexed project. "
+                    "To change a different repo, use the native Edit tool on the source "
+                    "from `opencontext_node` (code=true), or index that project first."
+                ),
+            }
 
         try:
             lines, trailing = self._read_file_lines(node.file_path)
@@ -872,6 +1265,10 @@ class MCPServer:
     def _insert_relative_to_symbol(self, params: dict[str, Any], *, after: bool) -> dict[str, Any]:
         """Shared insert logic for the before/after variants."""
 
+        denied = self._write_approval_denied(params)
+        if denied is not None:
+            return denied
+
         symbol = params.get("symbol", "")
         file = params.get("file")
         content = params.get("content")
@@ -881,7 +1278,15 @@ class MCPServer:
 
         node = self._resolve_symbol(symbol, file)
         if node is None:
-            return {"error": f"Symbol not found: {symbol}", "applied": False}
+            return {
+                "error": f"Symbol not found: {symbol}",
+                "applied": False,
+                "hint": (
+                    "These symbol-write tools edit only THIS session's indexed project. "
+                    "To change a different repo, use the native Edit tool on the source "
+                    "from `opencontext_node` (code=true), or index that project first."
+                ),
+            }
 
         try:
             lines, trailing = self._read_file_lines(node.file_path)
@@ -919,6 +1324,10 @@ class MCPServer:
         ``updated`` and re-index if a file has repeated references.
         """
 
+        denied = self._write_approval_denied(params)
+        if denied is not None:
+            return denied
+
         symbol = params.get("symbol", "")
         file = params.get("file")
         new_name = params.get("new_name")
@@ -933,7 +1342,15 @@ class MCPServer:
 
         node = self._resolve_symbol(symbol, file)
         if node is None or node.id is None:
-            return {"error": f"Symbol not found: {symbol}", "applied": False}
+            return {
+                "error": f"Symbol not found: {symbol}",
+                "applied": False,
+                "hint": (
+                    "These symbol-write tools edit only THIS session's indexed project. "
+                    "To change a different repo, use the native Edit tool on the source "
+                    "from `opencontext_node` (code=true), or index that project first."
+                ),
+            }
 
         # Collect rename targets: start with the definition line, then add each call site.
         targets: dict[str, set[int]] = {node.file_path: {node.line}}

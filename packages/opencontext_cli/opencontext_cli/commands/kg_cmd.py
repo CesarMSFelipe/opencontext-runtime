@@ -48,6 +48,22 @@ def add_kg_parser(subparsers: Any) -> None:
     kg_impact.add_argument("--radius", type=int, default=2)
     kg_impact.add_argument("--json", action="store_true")
 
+    kg_node = kg_sub.add_parser(
+        "node",
+        help="Get a symbol's details, and with --code its EXACT source in one call.",
+        description=(
+            "One-call surgical locate: the KG knows the symbol's extent, so `--code` "
+            "returns just its source — replacing 'search to find it, then Read the "
+            "whole file'. On a large file that is far fewer tokens than reading around "
+            "the hit."
+        ),
+    )
+    kg_node.add_argument("symbol", help="Symbol name.")
+    kg_node.add_argument(
+        "--code", action="store_true", help="Include the symbol's exact source code."
+    )
+    kg_node.add_argument("--json", action="store_true")
+
     kg_sub.add_parser("status", help="Check index status.")
 
     kg_trace = kg_sub.add_parser("trace", help="Trace path between two symbols.")
@@ -169,6 +185,50 @@ def handle_kg(args: Any) -> None:
                 console.info("No impact found.")
             else:
                 _print_graph_results(results, show_depth_label=True)
+
+    elif command == "node":
+        include_code = getattr(args, "code", False)
+        conn = kg.db._connect()
+        rows = conn.execute(
+            "SELECT name, kind, file_path, line, end_line, signature, docstring "
+            "FROM nodes WHERE name = ? ORDER BY line LIMIT 1",
+            (symbol,),
+        ).fetchall()
+        if not rows:
+            if json_output:
+                print(json.dumps({"error": f"Symbol not found: {symbol}"}))
+            else:
+                console.error(f"Symbol not found: {symbol}")
+        else:
+            r = rows[0]
+            info: dict[str, Any] = {
+                "name": r["name"],
+                "kind": r["kind"],
+                "file": r["file_path"],
+                "line": r["line"],
+                "end_line": r["end_line"],
+                "signature": r["signature"],
+                "docstring": r["docstring"],
+            }
+            if include_code and r["line"] and r["end_line"]:
+                try:
+                    # KG file paths are relative to the indexed project root; derive it
+                    # from the db location (<root>/.storage/opencontext/context_graph.db)
+                    # so --code reads the real file even when cwd is a subdirectory.
+                    root = kg.db.db_path.resolve().parent.parent.parent
+                    src = (root / r["file_path"]).read_text(encoding="utf-8", errors="ignore")
+                    info["code"] = "\n".join(src.splitlines()[r["line"] - 1 : r["end_line"]])
+                except OSError:
+                    pass
+            if json_output:
+                print(json.dumps(info, indent=2))
+            else:
+                console.header(f"Node: {info['name']} ({info['kind']})")
+                console.print(f"  [dim]{info['file']}:{info['line']}[/]")
+                if info.get("signature"):
+                    console.print(f"  {info['signature']}")
+                if info.get("code"):
+                    console.print(info["code"])
 
     elif command == "status":
         stats = kg.get_stats()

@@ -18,6 +18,11 @@ DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
     ".storage",
     ".venv",
     "venv",
+    # Catch non-standard virtualenv dir names (oc-audit-venv, .ci-venv, ...): a
+    # basename glob, applied via fnmatch in is_ignored. Breadth is intentional —
+    # any '*venv*' dir is treated as a venv; the canonical pyvenv.cfg marker check
+    # in the scanner walk is the robust backstop for arbitrarily-named venvs.
+    "*venv*",
     "*.egg-info",
     "__pycache__",
     "*.pyc",
@@ -183,16 +188,22 @@ class RankingConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     weights: RankingWeightsConfig = Field(description="Ranking formula weights.")
-    # v2 semantic ranking weights
-    semantic_relevance: float = Field(default=0.25, ge=0.0, description="v2: semantic relevance.")
-    graph_centrality: float = Field(default=0.20, ge=0.0, description="v2: graph centrality.")
-    call_distance: float = Field(default=0.15, ge=0.0, description="v2: call distance.")
-    test_affinity: float = Field(default=0.10, ge=0.0, description="v2: test affinity.")
-    memory_confidence: float = Field(default=0.10, ge=0.0, description="v2: memory confidence.")
-    recent_failure: float = Field(default=0.08, ge=0.0, description="v2: recent failure boost.")
-    risk_requirement: float = Field(default=0.07, ge=0.0, description="v2: risk requirement.")
-    freshness: float = Field(default=0.03, ge=0.0, description="v2: freshness.")
-    provenance: float = Field(default=0.02, ge=0.0, description="v2: provenance.")
+    # v2 semantic ranking weights — OPTIONAL per-field overrides of RetrievalWeights
+    # (retrieval/scoring.py), the single source of truth (RD1). Unset (None) means
+    # "defer to the dataclass default", so a config that omits these is byte-identical
+    # to default ranking. The historical 0.25-style numbers ship as the documented
+    # opt-in preset RANKING_PRESET_V2_SEMANTIC in scoring.py, NOT as a default here.
+    # ge=0.0 still validates any value that IS set; Pydantic skips it for None.
+    _V2_OVERRIDE = "v2 override; unset -> RetrievalWeights default."
+    semantic_relevance: float | None = Field(default=None, ge=0.0, description=_V2_OVERRIDE)
+    graph_centrality: float | None = Field(default=None, ge=0.0, description=_V2_OVERRIDE)
+    call_distance: float | None = Field(default=None, ge=0.0, description=_V2_OVERRIDE)
+    test_affinity: float | None = Field(default=None, ge=0.0, description=_V2_OVERRIDE)
+    memory_confidence: float | None = Field(default=None, ge=0.0, description=_V2_OVERRIDE)
+    recent_failure: float | None = Field(default=None, ge=0.0, description=_V2_OVERRIDE)
+    risk_requirement: float | None = Field(default=None, ge=0.0, description=_V2_OVERRIDE)
+    freshness: float | None = Field(default=None, ge=0.0, description=_V2_OVERRIDE)
+    provenance: float | None = Field(default=None, ge=0.0, description=_V2_OVERRIDE)
 
 
 class CacheAlignerConfig(BaseModel):
@@ -589,6 +600,14 @@ class McpToolsConfig(BaseModel):
     require_allowlist: bool = Field(default=True)
     allow_stdio: bool = Field(default=False)
     sandbox: bool = Field(default=True)
+    require_write_approval: bool = Field(
+        default=False,
+        description=(
+            "When True, the symbol-edit write tools (replace/insert/rename) must "
+            "pass the human-approval gate before touching disk. Default False "
+            "preserves current MCP-edit behavior exactly."
+        ),
+    )
 
 
 class ToolsConfig(BaseModel):
@@ -598,6 +617,24 @@ class ToolsConfig(BaseModel):
 
     native: NativeToolsConfig = Field(default_factory=NativeToolsConfig)
     mcp: McpToolsConfig = Field(default_factory=McpToolsConfig)
+
+
+class LearningConfig(BaseModel):
+    """Self-improvement (learning orchestrator) gate.
+
+    ``enabled`` defaults to ``True`` so the runtime behaves exactly as it does
+    today. Setting it ``False`` prevents the ``LearningOrchestrator`` from being
+    constructed/active on the runtime; a no-op stand-in is used instead so the
+    runtime still starts cleanly and the in-loop ``learning.*`` call-sites never
+    raise.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=True,
+        description="Whether the self-improvement learning orchestrator is active.",
+    )
 
 
 class MemoryPolicyConfig(BaseModel):
@@ -1109,6 +1146,7 @@ class OpenContextConfig(BaseModel):
     traces: TraceStorageConfig = Field(default_factory=TraceStorageConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     memory: MemoryPolicyConfig = Field(default_factory=MemoryPolicyConfig)
+    learning: LearningConfig = Field(default_factory=LearningConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     output: OutputPolicyConfig = Field(default_factory=OutputPolicyConfig)
     egress: EgressConfig = Field(default_factory=EgressConfig)
@@ -1428,6 +1466,7 @@ def default_config_data() -> dict[str, Any]:
                 "require_allowlist": True,
                 "allow_stdio": False,
                 "sandbox": True,
+                "require_write_approval": False,
             },
         },
         "memory": {
@@ -1442,6 +1481,7 @@ def default_config_data() -> dict[str, Any]:
             "prune_superseded": True,
             "prune_expired": True,
         },
+        "learning": {"enabled": True},
         "embedding": {
             "enabled": False,
             "provider": "local",
