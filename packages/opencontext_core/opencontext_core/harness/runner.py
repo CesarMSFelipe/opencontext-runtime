@@ -613,6 +613,7 @@ class HarnessRunner:
             trace_ids=list(state.trace_ids),
             warnings=list(state.warnings),
             events=list(events),
+            context_omitted_paths=list(getattr(state, "context_omitted_paths", []) or []),
         )
 
         self.persist_run(state, run_result)

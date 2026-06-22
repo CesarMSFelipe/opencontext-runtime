@@ -616,13 +616,14 @@ class ArchivePhase(HarnessPhase):
                     run_id=state.run_id,
                     workflow=getattr(state, "workflow", "unknown"),
                     task=state.task,
-                    status=GateStatus.PASSED,
+                    status=status,
                     ledgers=state.ledgers,
                     gates=state.gates,
                     artifacts=state.artifacts,
                     decisions=state.decisions,
                     trace_ids=state.trace_ids,
                     warnings=state.warnings,
+                    context_omitted_paths=list(getattr(state, "context_omitted_paths", []) or []),
                 )
                 harvester = MemoryHarvester(self._memory_store)
                 harvester.harvest(run_result)

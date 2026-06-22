@@ -164,10 +164,9 @@ class MemoryHarvester:
         #   1. ``state.context_omitted_paths`` (preferred; populated by explore)
         #   2. legacy ``artifact.metadata.missing_context`` (rare)
         missing = self._extract_missing_context(result)
-        # Normalize to ``path[:line]`` form so the planner's boost path can match.
-        missing = [_normalize_linked_node(node) for node in missing if node]
-        # Strip duplicates while preserving order.
-        missing = list(dict.fromkeys(missing))
+        # Normalize to ``path[:line]`` form (deduped, order-preserving) so the
+        # planner's boost path can match against item.source / file / symbol name.
+        missing = _normalize_linked_nodes(missing)
         if missing:
             failure_key = f"failure:missing_context:{task_hash}"
             if not self._record_exists(failure_key):

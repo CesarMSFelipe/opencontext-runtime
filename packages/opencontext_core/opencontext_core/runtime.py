@@ -412,6 +412,17 @@ class OpenContextRuntime:
             },
         )
 
+        # problem 13: distill accumulated operation metrics into optimized budgets at
+        # index cadence (infrequent, always reached on the live path) so ACON-lite's
+        # learned budgets actually refresh — previously only `opencontext verify` ever
+        # triggered optimize_budgets(), so the feedback loop never closed in normal use.
+        optimizer = getattr(self.learning, "optimizer", None)
+        if optimizer is not None:
+            try:
+                optimizer.optimize_budgets()
+            except Exception:
+                pass  # budget optimization is best-effort, never block indexing
+
         return manifest
 
     def setup_project(

@@ -139,6 +139,14 @@ def handle_ci_check(args: Any) -> None:
                 task = progress.add_task("Running checks...", total=None)
                 results = runner.run_all_checks(files)
                 progress.update(task, completed=True)
+        # Fold the native architecture/code-quality evaluation into the run so
+        # `ci-check run` actually surfaces it (one engine, shared CheckResult schema).
+        from opencontext_core.quality.ci_checks import (
+            ARCHITECTURE_CHECK_NAME,
+            architecture_check_results,
+        )
+
+        results[ARCHITECTURE_CHECK_NAME] = architecture_check_results(runner.project_path, files)
         report = runner.generate_report(results)
         _attach_contextbench(report, args)
         if json_output:

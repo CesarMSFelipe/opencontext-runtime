@@ -1,6 +1,14 @@
 # Architecture & Code-Quality Enforcement — Planning Document
 
-Status: **proposal** (not implemented). Owner: TBD. Target: a new minor release.
+Status: **Phases 1+2 shipped** (commit `8bb314c`). Live surfaces: the `quality/` engine
+(models/rules/architecture[Tarjan SCC + centrality + tree-sitter complexity]/languages/
+baseline/evaluator), the `opencontext quality check|gate` CLI, the `opencontext_quality`
+MCP tool, the harness gate (health snapshot at explore, re-check after apply), and
+`opencontext ci-check run` (folds in the architecture/quality findings). **Phase 3
+remains** (deferred): duplication/depth metrics, a single rolled-up score, per-persona
+wiring (Architect during design, Reviewer during verify), evolution tracking across runs,
+and wiring the currently-unwired learned task-pattern → retrieval boost
+(`PatternLearner.suggest_context_boost`, scaffolding today). Owner: TBD.
 
 ## Goal
 
