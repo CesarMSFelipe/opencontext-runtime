@@ -35,6 +35,21 @@ def test_test_affinity_increases_score():
     assert score_test > score_no_test
 
 
+def test_definition_of_queried_symbol_outranks_its_test():
+    # "add/modify <Symbol>" must surface the file where <Symbol> is DEFINED, not its
+    # test. The defining symbol (is_definition=True) carries a query-name match; the
+    # test merely has the same lexical relevance. The definition must win.
+    defining = compute_hybrid_score(**{**_BASE, "is_definition": True, "is_test": False})
+    test_file = compute_hybrid_score(**{**_BASE, "is_definition": False, "is_test": True})
+    assert defining > test_file
+
+
+def test_definition_boost_increases_score():
+    score_def = compute_hybrid_score(**{**_BASE, "is_definition": True})
+    score_plain = compute_hybrid_score(**{**_BASE, "is_definition": False})
+    assert score_def > score_plain
+
+
 def test_graph_distance_zero_higher_than_five():
     score_close = compute_hybrid_score(**{**_BASE, "graph_distance_map": {"item1": 0}})
     score_far = compute_hybrid_score(**{**_BASE, "graph_distance_map": {"item1": 5}})
@@ -84,8 +99,10 @@ def test_default_weights_positive_sum_less_than_one():
         + w.memory_confidence
         + w.recent_failure
         + w.risk_requirement
+        + w.definition
         + w.freshness
         + w.provenance
     )
-    # Positive weights should sum to <= 1.0 (they sum to exactly 1.0)
-    assert positive_sum <= 1.0
+    # The ten core positive weights should sum to <= 1.0 (they sum to exactly 1.0 in
+    # exact arithmetic; allow float epsilon). ``personalization`` is a 0.01 tie-breaker.
+    assert positive_sum <= 1.0 + 1e-9

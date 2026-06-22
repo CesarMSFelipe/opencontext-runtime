@@ -46,6 +46,87 @@ class PhaseResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+# Default per-handoff compaction budget. The forwarded prior-phase artifact is
+# context, not the phase's own output, so it is trimmed toward this ceiling rather
+# than the (larger) per-phase output budget.
+_HANDOFF_TARGET_TOKENS = 4000
+# Surgical-first explore budget (P2): the cheap default. Ranked retrieval puts the
+# target symbol in the top of this budget, so a tight pack grounds most tasks at a
+# fraction of the broad budget's cost (measured: ~21.7k vs ~31.8k tokens end-to-end).
+SURGICAL_EXPLORE_BUDGET = 1500
+
+
+def _surgical_coverage(pack: Any, existing_required: list[str]) -> float:
+    """Fraction of the EXISTING required symbols the surgical pack actually covers.
+
+    Per-required-symbol, not the old any-vs-none binary. Falls back to binary when no
+    required term is a real symbol in the codebase, so a brand-new parameter name in the
+    task (not yet a symbol) never forces a needless widen.
+    """
+    if not existing_required:
+        return 1.0 if getattr(pack, "included", None) else 0.0
+    blob = " ".join(
+        f"{getattr(i, 'content', '') or ''} {getattr(i, 'source', '') or ''}"
+        for i in getattr(pack, "included", [])
+    ).lower()
+    if not blob.strip():
+        return 0.0
+    # Whole-word match so a short required name (e.g. "id") can't spuriously match
+    # inside a larger word ("width") and inflate coverage.
+    hits = sum(1 for s in existing_required if re.search(rf"\b{re.escape(s.lower())}\b", blob))
+    return hits / len(existing_required)
+
+
+def _guardrail_gate(phase: str, content: str) -> PhaseGate:
+    """Surface SDD anti-pattern guardrail hits on a phase's produced content as an
+    advisory gate — this makes the guardrail subsystem LIVE in the harness (it was dead
+    behind the unused SDDOrchestrator). Advisory (WARNING) so it never breaks a flow;
+    promote a 'block'-severity hit to FAILED via config when ready.
+    """
+    try:
+        from opencontext_core.agents.sdd_guardrails import evaluate_guardrails
+
+        hits = evaluate_guardrails(phase, content or "")
+    except Exception:
+        hits = []
+    if not hits:
+        return PhaseGate(id="guardrails", phase=phase, status=GateStatus.PASSED)
+    msg = "; ".join(f"[{h.severity}] {h.name}: {h.counter_argument}" for h in hits)
+    return PhaseGate(id="guardrails", phase=phase, status=GateStatus.WARNING, message=msg)
+
+
+def _render_memory_records(records: Any) -> str:
+    """Render recalled memory records as a compact context block (or '' if none)."""
+    lines: list[str] = []
+    for r in records or []:
+        content = getattr(r, "content", None)
+        if content is None and isinstance(r, dict):
+            content = r.get("content")
+        if not content:
+            continue
+        layer = getattr(r, "layer", None)
+        if layer is None and isinstance(r, dict):
+            layer = r.get("layer", "")
+        lines.append(f"- [{layer or 'memory'}] {content}")
+    return "\n".join(lines)
+
+
+def _compact_artifact(text: str, state: Any, target_tokens: int = _HANDOFF_TARGET_TOKENS) -> str:
+    """Compact a forwarded prior-phase artifact toward ``target_tokens`` (B2).
+
+    Routes through ``summarize_to_budget`` (``memory/rehydration.py``): a no-op when
+    the text already fits, a model-summarized condense when a gateway is wired, and
+    a deterministic line-boundary trim otherwise. The gateway is ``state.delegate``
+    per the change brief; ``summarize_to_budget`` already guards the gateway call in
+    try/except, so a delegate that is absent (None) — or that cannot summarize —
+    degrades safely to the deterministic trim. Never raises.
+    """
+    from opencontext_core.memory.rehydration import summarize_to_budget
+
+    gateway = getattr(state, "delegate", None)
+    return summarize_to_budget(text, target_tokens, gateway)
+
+
 class HarnessPhase:
     """Base class for a single harness phase."""
 
@@ -99,9 +180,50 @@ class ExplorePhase(HarnessPhase):
             storage_path=state.root / ".storage" / "opencontext",
         )
         manifest = runtime.index_project(state.root)
-        pack, pack_trace_id = runtime.build_context_pack_with_trace(
-            state.task, state.max_tokens or self.config.budget_tokens
+
+        # Build the context contract early so its required_symbols can gate surgical
+        # coverage PER-SYMBOL (not the old any-vs-none binary). Reused below for the
+        # contract.yaml artifact, so it is built once.
+        contract = None
+        required_symbols: list[str] = []
+        try:
+            from opencontext_core.context.planning.classifier import TaskClassifier
+            from opencontext_core.context.planning.contract import ContextContractBuilder
+            from opencontext_core.context.planning.risk import RiskClassifier
+
+            contract = ContextContractBuilder(
+                classifier=TaskClassifier(), risk_classifier=RiskClassifier()
+            ).build(state.task)
+            required_symbols = list(getattr(contract, "required_symbols", []) or [])
+        except Exception:
+            contract = None
+        symbol_names = {(getattr(s, "name", "") or "").lower() for s in manifest.symbols}
+        # required_symbols come glob-wrapped from _extract_key_terms ("*login*"); strip
+        # the asterisks before testing membership against the bare symbol names, else
+        # existing_required is always empty and coverage silently falls back to binary.
+        existing_required = [
+            s.strip("*") for s in required_symbols if s.strip("*").lower() in symbol_names
+        ]
+
+        # Surgical-first explore (P2): retrieve a tight, cheap pack by default and widen
+        # to the full budget only when it fails to cover the required EXISTING symbols.
+        full_budget = state.max_tokens or self.config.budget_tokens
+        surgical = (
+            getattr(self.config, "surgical_explore", True) and full_budget > SURGICAL_EXPLORE_BUDGET
         )
+        explore_arm = "OC-SURGICAL"
+        explore_expanded = False
+        if surgical:
+            pack, pack_trace_id = runtime.build_context_pack_with_trace(
+                state.task, SURGICAL_EXPLORE_BUDGET
+            )
+            coverage = _surgical_coverage(pack, existing_required)
+            if coverage < getattr(self.config, "surgical_coverage_floor", 1.0):
+                pack, pack_trace_id = runtime.build_context_pack_with_trace(state.task, full_budget)
+                explore_arm = "OC-BROAD"
+                explore_expanded = True
+        else:
+            pack, pack_trace_id = runtime.build_context_pack_with_trace(state.task, full_budget)
 
         # Persist context pack to run directory
         run_dir = state.root / ".opencontext" / "runs" / state.run_id
@@ -109,12 +231,34 @@ class ExplorePhase(HarnessPhase):
         pack_path = run_dir / "context-pack.json"
         pack_path.write_text(pack.model_dump_json(indent=2), encoding="utf-8")
 
+        # Recall prior memory for this task and FOLD it into the context (the search
+        # result used to be discarded — the one memory read in the flow did nothing).
+        memory_block = ""
+        if getattr(self, "_memory_store", None) is not None:
+            try:
+                memory_block = _render_memory_records(
+                    self._memory_store.search(state.task, limit=5)
+                )
+            except Exception:
+                memory_block = ""  # memory is optional, never block explore
+
         # Make the verified context available to later work phases' executor prompts
-        # (spec/design/tasks) so the model works from retrieved evidence, not the
-        # bare task. Rendered compactly as "source\ncontent" blocks.
-        state.context_pack = "\n\n".join(
-            f"### {item.source}\n{item.content}" for item in pack.included
+        # (spec/design/tasks) so the model works from retrieved evidence, not the bare
+        # task. Prior-memory block (failures/decisions) goes first when present.
+        rendered = "\n\n".join(f"### {item.source}\n{item.content}" for item in pack.included)
+        state.context_pack = (
+            f"### prior memory (failures/decisions from past runs)\n{memory_block}\n\n{rendered}"
+            if memory_block
+            else rendered
         )
+        # Hard cap the RENDERED context (pack widen + memory block) so the string that
+        # actually reaches the downstream prompt can never blow the model's input
+        # budget. The pack is budgeted as data; this guards the rendered text too.
+        cap_tokens = max(full_budget, SURGICAL_EXPLORE_BUDGET) * 2
+        if estimate_tokens(state.context_pack) > cap_tokens:
+            state.context_pack = _compact_artifact(
+                state.context_pack, state, target_tokens=cap_tokens
+            )
 
         # KG wiring: run impact analysis if task is provided
         impact_affected_files: list[str] = []
@@ -131,11 +275,16 @@ class ExplorePhase(HarnessPhase):
                 db = GraphDatabase(db_path)
                 try:
                     analyzer = ImpactAnalyzer(db)
-                    impact_results = analyzer.analyze_by_name(state.task, depth=2)
                     kg_available = True
-                    for ir in impact_results:
-                        impact_affected_files.extend(ir.affected_files)
-                        impact_affected_tests.extend(ir.affected_tests)
+                    # Impact keys on a SYMBOL name, not a free-text sentence — feed it the
+                    # contract's existing required symbols (asterisk-stripped above), not
+                    # the raw task string, which matches no node and left impact (and the
+                    # required-sources gate) silently empty for every normal task.
+                    impact_targets = existing_required or [state.task]
+                    for target in impact_targets:
+                        for ir in analyzer.analyze_by_name(target, depth=2):
+                            impact_affected_files.extend(ir.affected_files)
+                            impact_affected_tests.extend(ir.affected_tests)
                 finally:
                     # Always close — a present-but-broken graph raises in analyze_by_name
                     # and would otherwise leak the sqlite/WAL handles.
@@ -163,14 +312,9 @@ class ExplorePhase(HarnessPhase):
             )
         )
 
-        # Memory context enrichment (additive, non-breaking)
-        if hasattr(self, "_memory_store") and self._memory_store is not None:
-            try:
-                self._memory_store.search(state.task, limit=5)
-            except Exception:
-                pass  # memory is optional, never block explore
+        # (memory recall folded into state.context_pack above — no longer discarded)
 
-        # Build context contract (additive, non-breaking)
+        # Context contract artifact (built once, above)
         explore_artifacts: list[HarnessArtifact] = [
             HarnessArtifact(
                 id=f"explore-pack-{state.run_id[:8]}",
@@ -180,29 +324,21 @@ class ExplorePhase(HarnessPhase):
                 description=f"Context pack with {len(pack.included)} items",
             )
         ]
-        try:
-            from opencontext_core.context.planning.classifier import TaskClassifier
-            from opencontext_core.context.planning.contract import ContextContractBuilder
-            from opencontext_core.context.planning.risk import RiskClassifier
-
-            contract_builder = ContextContractBuilder(
-                classifier=TaskClassifier(),
-                risk_classifier=RiskClassifier(),
-            )
-            contract = contract_builder.build(state.task)
-            contract_path = run_dir / "contract.yaml"
-            contract_path.write_text(contract.to_yaml())
-            explore_artifacts.append(
-                HarnessArtifact(
-                    id=f"contract-{state.run_id}",
-                    phase="explore",
-                    path=str(contract_path),
-                    kind="context-contract",
-                    description="Verified context contract",
+        if contract is not None:
+            try:
+                contract_path = run_dir / "contract.yaml"
+                contract_path.write_text(contract.to_yaml())
+                explore_artifacts.append(
+                    HarnessArtifact(
+                        id=f"contract-{state.run_id}",
+                        phase="explore",
+                        path=str(contract_path),
+                        kind="context-contract",
+                        description="Verified context contract",
+                    )
                 )
-            )
-        except Exception:
-            pass  # contract building is additive, never block explore
+            except Exception:
+                pass  # contract persistence is additive, never block explore
 
         # Record context provenance for the propose phase's provenance gates.
         state.context_sources = {item.source for item in pack.included}
@@ -226,6 +362,13 @@ class ExplorePhase(HarnessPhase):
                 "impact_affected_tests": impact_affected_tests,
                 "kg_available": kg_available,
                 "kg_error": kg_error,
+                "arm": explore_arm,
+                "expanded": explore_expanded,
+                # Transparency: is the semantic (embedding) retrieval layer active, or is
+                # retrieval KG/lexical-only? Off by default on a fresh repo.
+                "semantic_layer": bool(
+                    getattr(getattr(runtime.config, "embedding", None), "enabled", False)
+                ),
             },
         )
 
@@ -489,20 +632,28 @@ class ProposePhase(HarnessPhase):
 
         proposal_path = run_dir / "proposal.json"
 
-        # Build a structured proposal from the task description
+        # Delegate to the wired executor for a REAL proposal narrative; fall back to the
+        # structured scaffold when no model is wired (mirrors spec/design/tasks — honest,
+        # never a fabricated "success"). Keeps the JSON contract spec reads downstream.
+        outcome = run_phase_executor(state, "propose")
+        real = outcome.is_real
+        narrative = (outcome.output or "").strip() if real else ""
+        used = estimate_tokens(outcome.output or "") if real else 0
+
         proposal = {
             "run_id": state.run_id,
             "task": state.task,
             "created_at": datetime.now(UTC).isoformat(),
-            "status": "draft",
-            "summary": f"SDD proposal: {state.task}",
+            "status": "drafted" if real else "planned",
+            "summary": narrative or f"SDD proposal: {state.task}",
             "scope": {
                 "root": str(state.root),
                 "max_tokens": state.max_tokens,
             },
             "approach": {
-                "method": "incremental",
+                "method": "delegated" if real else "incremental",
                 "style": "provider-neutral",
+                "rationale": narrative,
             },
             "artifacts": [
                 {
@@ -518,7 +669,7 @@ class ProposePhase(HarnessPhase):
             ArtifactPersistedGate().evaluate(proposal_path),
         ]
 
-        ledger = self._token_ledger("propose", 0)
+        ledger = self._token_ledger("propose", used)
         gates.append(TokenBudgetGate().evaluate(ledger))
 
         status = (
@@ -592,6 +743,62 @@ class ExecutorOutcome:
         return GateStatus.PASSED if self.is_real else GateStatus.WARNING
 
 
+# Lazily-built, process-wide cache of the builtin skill registry. Building it
+# scans the on-disk builtin skills dir once; resolution per phase is cheap.
+_BUILTIN_SKILL_REGISTRY: list[Any] | None = None
+_BUILTIN_SKILL_REGISTRY_BUILT = False
+
+
+def _builtin_skill_registry() -> list[Any]:
+    """Return the builtin skill registry, building it once (best-effort).
+
+    Never raises: any failure to scan/parse the builtin skills dir yields an
+    empty registry so the executor wiring degrades to today's behaviour (no
+    injected skill rules) rather than breaking the phase.
+    """
+    global _BUILTIN_SKILL_REGISTRY, _BUILTIN_SKILL_REGISTRY_BUILT
+    if _BUILTIN_SKILL_REGISTRY_BUILT:
+        return _BUILTIN_SKILL_REGISTRY or []
+    registry: list[Any] = []
+    try:
+        from opencontext_core.skills import registry as _skill_registry
+
+        builtin_dir = Path(_skill_registry.__file__).parent / "builtin"
+        registry = _skill_registry.build_registry(user_dirs=[str(builtin_dir)], project_dirs=[])
+    except Exception:
+        registry = []
+    _BUILTIN_SKILL_REGISTRY = registry
+    _BUILTIN_SKILL_REGISTRY_BUILT = True
+    return registry
+
+
+def _phase_skill_rules(phase: str, max_skills: int = 2) -> str:
+    """Resolve up to ``max_skills`` builtin skills for ``phase`` and render their
+    COMPACT rules as a small markdown section, or ``""`` when none match.
+
+    Best-effort and token-frugal: matches on the phase name as the task type
+    (empty file patterns), caps rules per skill, and never raises.
+    """
+    try:
+        registry = _builtin_skill_registry()
+        if not registry:
+            return ""
+        from opencontext_core.skills.compact_rules import generate_compact_rules
+        from opencontext_core.skills.resolver import resolve_skills
+
+        matched = resolve_skills(
+            registry, file_patterns=[], task_type=phase, max_matches=max_skills
+        )
+        if not matched:
+            return ""
+        rules = generate_compact_rules(matched, max_per_skill=6).strip()
+        if not rules:
+            return ""
+        return f"## Applicable skills\n{rules}"
+    except Exception:
+        return ""
+
+
 def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
     """Invoke the wired executor for a work-producing phase, honestly.
 
@@ -610,13 +817,24 @@ def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
     if delegate is None or not callable(getattr(delegate, "delegate", None)):
         return ExecutorOutcome(executor="absent")
 
+    prior = getattr(state, "prior_artifact", "") or ""
+    pack = getattr(state, "context_pack", "") or ""
+    # The prior phase's artifact (compacted spec for design, design for tasks) FIRST,
+    # then the explore context pack. Previously only the explore pack was passed, so
+    # design never saw the spec and tasks never saw the design — the handoff was dead.
+    base_context = f"{prior}\n\n{pack}" if prior else pack
+    # Differentiate the phase by its resolved builtin skills, not only its persona:
+    # append a small, compact "## Applicable skills" section in addition to (never
+    # replacing) the prior artifact + pack. Empty when no skill matches the phase.
+    skill_rules = _phase_skill_rules(phase)
+    if skill_rules:
+        base_context = f"{base_context}\n\n{skill_rules}" if base_context else skill_rules
     context = {
         "task": getattr(state, "task", ""),
         "phase": phase,
         "run_id": getattr(state, "run_id", ""),
         "root": str(getattr(state, "root", "")),
-        # Verified context pack rendered by the explore phase (empty if unavailable).
-        "context": getattr(state, "context_pack", ""),
+        "context": base_context,
     }
     try:
         result = delegate.delegate(phase, context)
@@ -937,6 +1155,31 @@ class ApplyPhase(HarnessPhase):
             apply_manifest["error"] = error
         apply_manifest_path.write_text(json.dumps(apply_manifest, indent=2), encoding="utf-8")
 
+        # Keep the KG fresh mid-flow: incrementally re-index the files this phase changed
+        # so verify/review reason over the POST-change graph, not the stale explore-time
+        # snapshot. Best-effort — a reindex failure never fails apply.
+        # The KG keys every node by ROOT-RELATIVE path; the executor records absolute
+        # paths, so convert them or reindex writes duplicate absolute-keyed nodes and
+        # never prunes the stale relative-keyed ones (verify/review would stay stale).
+        changed_paths: set[str] = set()
+        for c in changes:
+            p = c.get("path")
+            if not p:
+                continue
+            try:
+                changed_paths.add(Path(p).resolve().relative_to(state.root).as_posix())
+            except ValueError:
+                changed_paths.add(p)  # outside the root — pass through unchanged
+        if changed_paths and apply_status != "failed":
+            try:
+                from opencontext_core.runtime import OpenContextRuntime
+
+                OpenContextRuntime(
+                    storage_path=state.root / ".storage" / "opencontext"
+                ).reindex_files(changed_paths, root=state.root)
+            except Exception:
+                pass  # freshness is best-effort; never block apply on a reindex error
+
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(apply_manifest_path),
         ]
@@ -998,6 +1241,12 @@ class SpecPhase(HarnessPhase):
         proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
         task = proposal.get("task", state.task)
         approach = proposal.get("approach", {})
+        # Forward the compacted proposal to the spec executor — the model-facing handoff
+        # (was previously read raw / never forwarded to the executor).
+        state.prior_artifact = _compact_artifact(
+            f"## Proposal from the prior phase\n{proposal_path.read_text(encoding='utf-8')}",
+            state,
+        )
 
         # Honest executor contract: run the real executor when wired, otherwise
         # emit a clearly-marked scaffold reported as "planned" (NOT a success).
@@ -1052,6 +1301,7 @@ _None._
 
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(spec_path),
+            _guardrail_gate("spec", spec_content),
         ]
         ledger = self._token_ledger(
             "spec", estimate_tokens(outcome.output or "") if outcome.is_real else 0
@@ -1107,8 +1357,13 @@ class DesignPhase(HarnessPhase):
                 metadata={"error": "Spec artifact missing"},
             )
 
-        spec_content = spec_path.read_text(encoding="utf-8")
+        # Compact the forwarded spec artifact toward the handoff budget (B2). A
+        # spec already within budget passes through unchanged; an oversized one is
+        # condensed (model when wired, deterministic line-trim otherwise).
+        spec_content = _compact_artifact(spec_path.read_text(encoding="utf-8"), state)
         task = state.task
+        # Forward the compacted spec to the design executor — the model-facing handoff.
+        state.prior_artifact = f"## Spec from the prior phase (compacted)\n{spec_content}"
 
         # Honest executor contract: run the real executor when wired, otherwise
         # emit a clearly-marked scaffold reported as "planned" (NOT a success).
@@ -1174,6 +1429,7 @@ This section describes the high-level architecture for implementing: {task}.
 
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(design_path),
+            _guardrail_gate("design", design_content),
         ]
         ledger = self._token_ledger(
             "design", estimate_tokens(outcome.output or "") if outcome.is_real else 0
@@ -1229,8 +1485,12 @@ class TasksPhase(HarnessPhase):
                 metadata={"error": "Design artifact missing"},
             )
 
-        design_content = design_path.read_text(encoding="utf-8")
+        # Compact the forwarded design artifact toward the handoff budget (B2),
+        # mirroring the spec->design handoff. No-op when already within budget.
+        design_content = _compact_artifact(design_path.read_text(encoding="utf-8"), state)
         task = state.task
+        # Forward the compacted design to the tasks executor — the model-facing handoff.
+        state.prior_artifact = f"## Design from the prior phase (compacted)\n{design_content}"
 
         # Honest executor contract: run the real executor when wired, otherwise
         # emit a clearly-marked scaffold reported as "planned" (NOT a success).

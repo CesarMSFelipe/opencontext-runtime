@@ -17,20 +17,46 @@ from datetime import datetime
 
 @dataclass(frozen=True)
 class RetrievalWeights:
-    semantic_relevance: float = 0.40
-    graph_centrality: float = 0.16
-    call_distance: float = 0.10
+    semantic_relevance: float = 0.34
+    graph_centrality: float = 0.13
+    call_distance: float = 0.08
     test_affinity: float = 0.05
-    memory_confidence: float = 0.08
-    recent_failure: float = 0.07
-    risk_requirement: float = 0.06
+    memory_confidence: float = 0.07
+    recent_failure: float = 0.06
+    risk_requirement: float = 0.05
+    # Definition affinity: a candidate that DEFINES a symbol named in the query
+    # (``class BridgeDetector`` for "add count_by_type() to BridgeDetector"). High,
+    # because "add/modify <Symbol>" must surface the file where <Symbol> lives — not
+    # its tests or incidental mentions, which a bare BM25/lexical match floats up. The
+    # ten core positive weights sum to 1.0; ``personalization`` is a 0.01 tie-breaker.
+    definition: float = 0.18
     personalization: float = 0.01
-    freshness: float = 0.04
-    provenance: float = 0.03
+    freshness: float = 0.02
+    provenance: float = 0.02
     # Penalties
     stale_memory_penalty: float = 0.05
     token_cost_penalty: float = 0.03
     uncertainty_penalty: float = 0.02
+
+
+# Documented OPT-IN preset carrying the historical v2 ``context.ranking`` numbers.
+# RetrievalWeights above is the single source of truth (RD1); these older values are
+# NOT an effective default. They are exposed here only so a user can deliberately
+# opt in (paste the same numbers into ``context.ranking``) and so the historical
+# weighting stays discoverable for the later measurement the spec mentions. Nothing
+# in the runtime references this as a default — see config.py RankingConfig.
+RANKING_PRESET_V2_SEMANTIC = RetrievalWeights(
+    semantic_relevance=0.25,
+    graph_centrality=0.20,
+    call_distance=0.15,
+    test_affinity=0.10,
+    memory_confidence=0.10,
+    recent_failure=0.08,
+    risk_requirement=0.07,
+    definition=0.0,
+    freshness=0.03,
+    provenance=0.02,
+)
 
 
 def compute_hybrid_score(
@@ -50,12 +76,19 @@ def compute_hybrid_score(
     is_stale: bool = False,
     is_uncertain: bool = False,
     personalization_map: dict[str, float] | None = None,
+    is_definition: bool = False,
 ) -> float:
     """Pure function. No side effects. Deterministic.
 
     ``personalization_map`` is an optional per-candidate signal (typically a
     query-seeded personalized PageRank over the candidate call graph). Omitting
     it leaves the score identical to the prior contract.
+
+    ``is_definition`` marks a candidate that DEFINES a symbol named in the query
+    (e.g. ``class BridgeDetector`` for "add count_by_type() to BridgeDetector"). It
+    adds the ``definition`` weight so the defining file outranks tests/callers/
+    incidental mentions that a bare lexical match would otherwise float up. Defaults
+    to ``False`` => identical to the prior contract.
     """
     w = weights or RetrievalWeights()
 
@@ -76,6 +109,7 @@ def compute_hybrid_score(
         personal = max(0.0, min(1.0, personalization_map.get(candidate_id, 0.0)))
     fresh = _compute_freshness(candidate_modified_at)
     prov = max(0.0, min(1.0, candidate_source_trust))
+    defn = 1.0 if is_definition else 0.0
 
     positive = (
         sem_rel * w.semantic_relevance
@@ -85,6 +119,7 @@ def compute_hybrid_score(
         + mem_conf * w.memory_confidence
         + fail_boost * w.recent_failure
         + risk_req * w.risk_requirement
+        + defn * w.definition
         + personal * w.personalization
         + fresh * w.freshness
         + prov * w.provenance

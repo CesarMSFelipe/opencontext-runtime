@@ -50,7 +50,9 @@ class TestProposePhase:
         assert artifact_path.exists()
         proposal_data = json.loads(artifact_path.read_text(encoding="utf-8"))
         assert proposal_data["task"] == "persist test"
-        assert proposal_data["status"] == "draft"
+        # No model wired here, so propose honestly reports a planned scaffold (not a
+        # fabricated "draft"); it delegates to a real proposal when an executor exists.
+        assert proposal_data["status"] == "planned"
 
 
 class TestApplyPhase:

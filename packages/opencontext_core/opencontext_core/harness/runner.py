@@ -149,7 +149,7 @@ class HarnessRunner:
             run_id=run_id,
             root=self.root,
             task=task,
-            max_tokens=6000,
+            max_tokens=self.config.max_context_tokens,
         )
         delegate = self._build_executor()
         if delegate is not None:
@@ -1012,7 +1012,7 @@ class HarnessRunner:
         try:
             from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 
-            kg = KnowledgeGraph()
+            kg = KnowledgeGraph(db_path=self.root / ".storage" / "opencontext" / "context_graph.db")
             stats = kg.get_stats()
             kg.close()
             if stats.get("nodes", 0) == 0:

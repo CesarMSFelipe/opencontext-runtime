@@ -59,6 +59,16 @@ class HarnessConfig:
     strict_tdd: bool = False
     # When True, ApplyPhase requires an approved human-approval gate before edits.
     approval_required_for_writes: bool = False
+    # Surgical-first explore (P2): start narrow (search/locate) and widen to a full
+    # context pack only when required-symbol coverage falls below the floor. Makes
+    # the cheap retrieval path the harness default instead of always packing broad.
+    surgical_explore: bool = True
+    surgical_coverage_floor: float = 1.0
+    # Cap auto-indexing of an unknown repo so a huge tree never stalls a run.
+    auto_index_max_files: int = 5000
+    # Overall retrieval/context envelope for a run (the explore widen budget). Was a
+    # hardcoded 6000 in create_run; now configurable via workflow_defaults.
+    max_context_tokens: int = 6000
     phases: dict[str, PhaseConfig] = field(
         default_factory=lambda: {
             "explore": PhaseConfig(
@@ -181,6 +191,16 @@ class HarnessConfig:
             config.strict_tdd = wf_defaults.get("strict_tdd", config.strict_tdd)
             config.approval_required_for_writes = wf_defaults.get(
                 "approval_required_for_writes", config.approval_required_for_writes
+            )
+            config.surgical_explore = wf_defaults.get("surgical_explore", config.surgical_explore)
+            config.surgical_coverage_floor = wf_defaults.get(
+                "surgical_coverage_floor", config.surgical_coverage_floor
+            )
+            config.auto_index_max_files = wf_defaults.get(
+                "auto_index_max_files", config.auto_index_max_files
+            )
+            config.max_context_tokens = wf_defaults.get(
+                "max_context_tokens", config.max_context_tokens
             )
 
         phases_data = data.get("phases", {})
