@@ -45,8 +45,19 @@ class LearningOrchestrator:
         )
 
     def _try_load_db(self, db_path: Path | str) -> Any | None:
-        """Attempt to load GraphDatabase for unified storage."""
+        """Attempt to load GraphDatabase for unified storage.
 
+        Returns ``None`` immediately when the DB file is missing (the common
+        case on a fresh project). Without this guard, :class:`GraphDatabase`'s
+        constructor created an EMPTY ``context_graph.db`` file on disk as a
+        side effect of opening a missing path, which then made every other
+        subsystem (e.g. :class:`ImpactAnalyzer`) think an indexed graph existed
+        and crash on empty-table reads. Only open projects that have already
+        been indexed (``opencontext index``).
+        """
+
+        if not Path(db_path).exists():
+            return None
         try:
             from opencontext_core.indexing.graph_db import GraphDatabase
 

@@ -460,17 +460,41 @@ class RetrievalPlanner:
             records = store.search(query, scope=MemoryLayer.FAILURE, limit=25)
         except Exception:
             return {}
+        # linked_nodes from the harvester carry path[:line] entries so they are
+        # directly comparable against ``item.source``. A FAILURE record saves the
+        # bare symbol name when ``pack.omitted`` was only a count (legacy) and a
+        # path[:line] when the harvester could read the omission list (current
+        # behavior). Match exact first, then fall back to a substring *basename*
+        # match so the bare symbol name still gives a useful (if weaker) boost.
         flagged: dict[str, float] = {}
         for record in records:
             for node in getattr(record, "linked_nodes", []) or []:
                 flagged[node] = max(flagged.get(node, 0.0), record.confidence)
         if not flagged:
             return {}
+        # Pre-index so the per-item scan stays O(items * linked_nodes) without
+        # iterating ``flagged`` for every item.
+        flagged_basenames = {Path(node).name: conf for node, conf in flagged.items()}
         boost: dict[str, float] = {}
         for item in items:
-            signal = max(flagged.get(item.id, 0.0), flagged.get(item.source, 0.0))
-            if signal > 0.0:
-                boost[item.id] = signal
+            # Exact lookup against THIS candidate only: id or source. The earlier
+            # spread ``*flagged`` made every candidate match if ANY flag key
+            # existed, lifting all candidates equally and breaking rank order.
+            if item.id in flagged:
+                best = flagged[item.id]
+            elif item.source in flagged:
+                best = flagged[item.source]
+            else:
+                best = 0.0
+            # Substring basename fuzzy match: a bare symbol name (``save``) maps
+            # to the file that contains it (``src/auth.py``). Conf weaker than
+            # an exact hit (0.7x) so exact matches dominate when both are present.
+            if best == 0.0 and flagged_basenames:
+                src_basename = Path(item.source.split(":", 1)[0]).name
+                if src_basename and src_basename in flagged_basenames:
+                    best = flagged_basenames[src_basename] * 0.7
+            if best > 0.0:
+                boost[item.id] = best
         return boost
 
     def plan(self, request: EvidenceRequest, top_k: int) -> EvidencePlan:
@@ -913,12 +937,53 @@ def _graph_rationale(node: ContextNode) -> list[str]:
 
 
 def _deduplicate(items: list[ContextItem]) -> list[ContextItem]:
+    """Collapse duplicates, including cross-source near-identical entries.
+
+    Two collapse passes:
+
+    * Primary: by ``item.id`` (covers FTS vs. graph sources that share a stable
+      id, e.g. when an expansion neighbor re-landed with the same id).
+    * Secondary: by ``(normalized_file, symbol_line)``, so the same logical
+      symbol arriving from FTS (snippet) and the graph (full body) — different
+      ids, different prefixes (``fts:`` vs ``graph:``) — is collapsed. The
+      higher-content (typically the graph body) entry wins so the agent gets the
+      fuller evidence instead of a snippet repeated under a different key.
+
+    ``_key_for_dedup`` is null-safe: a manifest file whose id has no symbol line
+    falls back to its full id so ``srcauth.py`` (file-level) doesn't collapse
+    onto a single function within it.
+    """
+
+    def _key_for_dedup(item: ContextItem) -> tuple[str, str | int]:
+        # (file, line|symbol) — line when parseable, else the bare source snippet
+        source = (item.source or "").split(":", 1)[0]
+        line_or_symbol = ""
+        if item.metadata.get("symbol_kind"):
+            line_or_symbol = str(item.metadata.get("symbol") or "")
+        else:
+            # path:line form
+            tail = (item.source or "").split(":", 1)
+            line_or_symbol = tail[1] if len(tail) > 1 else ""
+        return (source, line_or_symbol)
+
     by_id: dict[str, ContextItem] = {}
     for item in items:
         current = by_id.get(item.id)
         if current is None or item.score > current.score:
             by_id[item.id] = item
-    return list(by_id.values())
+    # Secondary pass: collapse cross-source near-identical entries. Keep the
+    # entry with the longest content (graph body > fts snippet) on collisions.
+    by_secondary: dict[tuple[str, str | int], ContextItem] = {}
+    for item in by_id.values():
+        key = _key_for_dedup(item)
+        if not key[0] or not key[1]:
+            # File-level (no symbol line) or empty source: skip secondary dedup.
+            by_secondary[(item.id, "")] = item
+            continue
+        current = by_secondary.get(key)
+        if current is None or len(item.content) > len(current.content):
+            by_secondary[key] = item
+    return list(by_secondary.values())
 
 
 # Relevance weight in MMR selection: high so the most relevant item still leads,

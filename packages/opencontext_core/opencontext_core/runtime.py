@@ -396,11 +396,16 @@ class OpenContextRuntime:
                 self.embedding_worker.enqueue_sync(items)
 
         kg_stats = manifest.metadata.get("knowledge_graph", {})
+        # problem 3: index succeeds when manifest was written. ACON-lite uses the
+        # ``success`` boolean to widen budget on ops that failed while context was
+        # dropped; indexing never drops items, but never passing success left it NULL
+        # in SQLite and disabled the learning subsystem's feedback path entirely.
         self.learning.finish_operation(
             op_id,
             tokens_used=sum(f.tokens for f in manifest.files),
             files_consulted=len(manifest.files),
             symbols_consulted=len(manifest.symbols),
+            success=True,
             metadata={
                 "kg_files_indexed": kg_stats.get("files_indexed", 0),
                 "kg_nodes": kg_stats.get("nodes", 0),
@@ -572,11 +577,21 @@ class OpenContextRuntime:
         op_id = self.learning.start_operation("context_pack", query, tokens_budgeted=budget)
         pack, trace, _plan = self._build_context_pack_with_trace(query, max_tokens, surface=surface)
         total_tokens = sum(trace.token_estimates.values()) if trace.token_estimates else 0
+        # problem 3 + 11: record the *real* context_items_omitted count AND a
+        # computed success flag. ACON-lite's TokenOptimizer widens the budget for
+        # op types that fail while dropping context (``success is False AND
+        # context_items_omitted > 0``). A context_pack "fails" — in the sense of
+        # needing a wider budget — exactly when it could not fit everything, so
+        # success must be FALSE on any omission/overflow. Passing a constant
+        # success=True (the earlier fix) left the feedback path dead because the
+        # ``success is False`` branch never fired.
+        pack_fit = pack.used_tokens <= budget and len(pack.omitted) == 0
         self.learning.finish_operation(
             op_id,
             tokens_used=total_tokens,
             context_items_selected=len(pack.included),
             context_items_omitted=len(pack.omitted),
+            success=pack_fit,
             metadata={"max_tokens": budget, "pack_tokens": pack.used_tokens},
         )
         return pack, trace.run_id
