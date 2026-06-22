@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,7 @@ class LocalVectorStore(VectorStore):
         if not self.index_path.exists():
             return
 
+        raw_lines = 0
         with self.index_path.open("r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -57,11 +59,18 @@ class LocalVectorStore(VectorStore):
                     item_id = data.get("id")
                     vector = data.get("vector")
                     if item_id and vector:
+                        raw_lines += 1
                         self._vectors[item_id] = vector
                         # Reconstruct EmbeddedItem for metadata
                         self._metadata[item_id] = EmbeddedItem.model_validate(data)
                 except Exception:
                     continue  # Skip malformed lines
+
+        # store() appends, so re-indexing leaves duplicate lines for the same
+        # (now stable) id that the dict above collapsed in memory. Rewrite once to
+        # collapse them on disk too — self-healing, so the file can't grow unbounded.
+        if raw_lines > len(self._metadata):
+            self._rewrite_file()
 
     def _persist_batch(self, items: list[EmbeddedItem]) -> None:
         """Append a batch of embeddings to disk."""
@@ -177,8 +186,10 @@ class LocalVectorStore(VectorStore):
         a restart and compacts any duplicate lines accumulated by re-indexing."""
         self.embeddings_dir.mkdir(parents=True, exist_ok=True)
         tmp = self.index_path.with_suffix(".jsonl.tmp")
+        # Snapshot first: a background worker may ``store`` concurrently, which would
+        # otherwise raise "dictionary changed size during iteration" mid-write.
         with tmp.open("w", encoding="utf-8") as handle:
-            for item in self._metadata.values():
+            for item in list(self._metadata.values()):
                 if item.vector is not None:
                     handle.write(item.model_dump_json() + "\n")
         os.replace(tmp, self.index_path)
@@ -203,6 +214,34 @@ class LocalVectorStore(VectorStore):
             self._vectors.pop(item_id, None)
             self._metadata.pop(item_id, None)
         self._rewrite_file()
+
+    def prune_absent_sources(self, keep_paths: Iterable[str], project_name: str) -> int:
+        """Drop vectors of ``project_name`` whose ``source_path`` is not in ``keep_paths``.
+
+        Reconciles the store to a freshly-scanned file set so vectors for files that
+        are no longer scanned (a since-deleted file, or a vendored tree now excluded by
+        ignore rules, e.g. a venv) stop surfacing as semantic retrieval evidence. Other
+        projects' vectors are never touched. Persisted so the prune survives a restart.
+        Returns the number of vectors removed.
+        """
+        keep = set(keep_paths)
+        # Snapshot the items first: the async embedding worker may concurrently
+        # ``store`` new vectors into ``self._metadata`` from a background thread, so
+        # iterating it live would raise "dictionary changed size during iteration".
+        to_remove = [
+            item_id
+            for item_id, meta in list(self._metadata.items())
+            if meta.project_name == project_name
+            and meta.metadata.get("source_path", "") not in keep
+        ]
+        if not to_remove:
+            return 0
+        for item_id in to_remove:
+            self._vectors.pop(item_id, None)
+            self._metadata.pop(item_id, None)
+            self._dirty.discard(item_id)
+        self._rewrite_file()
+        return len(to_remove)
 
     def stats(self) -> EmbeddingStats:
         """Get storage statistics."""
@@ -251,6 +290,9 @@ class NullVectorStore(VectorStore):
 
     def clear_project(self, project_name: str) -> None:
         pass
+
+    def prune_absent_sources(self, keep_paths: Iterable[str], project_name: str) -> int:
+        return 0
 
     def stats(self) -> EmbeddingStats:
         return EmbeddingStats(

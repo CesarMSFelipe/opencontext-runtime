@@ -162,7 +162,12 @@ class CompressionEngine:
                     original_tokens=result.original_tokens,
                     compressed_tokens=candidate.tokens,
                     strategy=result.strategy,
-                    lossiness="lossy_budget_clamp",
+                    # Mirror the item's own lossiness so a consumer reading
+                    # result.lossiness learns when a protected span was dropped
+                    # (was hardcoded "lossy_budget_clamp", hiding the protected case).
+                    lossiness=candidate.metadata.get("compression", {}).get(
+                        "lossiness", "lossy_budget_clamp"
+                    ),
                 )
             results.append(result)
             if budget_tokens is None or used_tokens + candidate.tokens <= budget_tokens:
@@ -424,5 +429,21 @@ def _clamp_to_budget(item: ContextItem, remaining_tokens: int) -> ContextItem:
     compression_metadata["budget_clamped"] = True
     compression_metadata["compressed_token_estimate"] = tokens
     compression_metadata["lossiness"] = "lossy_budget_clamp"
+    # Lossiness guard: a budget clamp keeps only the head, so any protected span that
+    # falls past the cut point is being dropped. Record it instead of silently losing it.
+    omitted = _omitted_protected_spans(item.content, kept_chars=len(content))
+    if omitted:
+        compression_metadata["omitted_protected_spans"] = omitted
+        compression_metadata["lossiness"] = "lossy_budget_clamp_protected"
     metadata["compression"] = compression_metadata
     return item.model_copy(update={"content": content, "tokens": tokens, "metadata": metadata})
+
+
+def _omitted_protected_spans(content: str, kept_chars: int) -> list[dict[str, Any]]:
+    """Return protected spans the head clamp dropped OR truncated. Uses ``end >
+    kept_chars`` (not ``start >=``) so a span that STRADDLES the cut is recorded too —
+    a clamp that turns "must not" into "must" silently inverts the constraint, so the
+    half-cut case must surface, not just the fully-dropped one."""
+
+    spans = ProtectedSpanManager().detect(content)
+    return [span.model_dump() for span in spans if span.end > kept_chars]

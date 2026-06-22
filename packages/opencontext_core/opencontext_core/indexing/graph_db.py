@@ -10,6 +10,7 @@ import json
 import logging
 import re
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from dataclasses import replace as dc_replace
 from pathlib import Path
@@ -646,6 +647,59 @@ class GraphDatabase:
             for row in rows
         ]
 
+    def search_symbols_by_name(self, names: Iterable[str], limit: int = 20) -> list[dict[str, Any]]:
+        """Return nodes whose ``name`` exactly matches one of ``names`` (case-insensitive).
+
+        Name-anchored recall to complement BM25: a natural-language query like
+        "add count_by_type() to BridgeDetector" is dominated by generic filler tokens
+        (count/dict/to/of), so plain FTS floats incidental mentions above the symbol the
+        query actually names and the DEFINITION may fall outside the top-k entirely. This
+        guarantees that any symbol the query names by identifier enters the candidate set.
+        Definitions (class/function/method/…) are returned before references, then
+        non-private before private, so the defining symbol leads. Empty ``names`` => [].
+        """
+
+        wanted = sorted({n.strip().lower() for n in names if n and n.strip()})
+        if not wanted:
+            return []
+        conn = self._connect()
+        placeholders = ",".join("?" for _ in wanted)
+        # Order: definition kinds first, then public-before-private, then shorter
+        # qualified container (top-level over nested) — deterministic and stable.
+        rows = conn.execute(
+            f"""
+            SELECT * FROM nodes
+            WHERE LOWER(name) IN ({placeholders})
+            ORDER BY
+                CASE kind
+                    WHEN 'class' THEN 0 WHEN 'interface' THEN 0 WHEN 'trait' THEN 0
+                    WHEN 'struct' THEN 0 WHEN 'enum' THEN 0
+                    WHEN 'function' THEN 1 WHEN 'method' THEN 1
+                    ELSE 2
+                END,
+                CASE WHEN name LIKE '\\_%' ESCAPE '\\' THEN 1 ELSE 0 END,
+                LENGTH(COALESCE(container, '')),
+                file_path
+            LIMIT ?
+            """,
+            (*wanted, limit),
+        ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "kind": row["kind"],
+                "file_path": row["file_path"],
+                "line": row["line"],
+                "language": row["language"],
+                "container": row["container"],
+                "docstring": row["docstring"],
+                "signature": row["signature"],
+                "rank": None,
+            }
+            for row in rows
+        ]
+
     # Statistics
 
     def get_stats(self) -> dict[str, int]:
@@ -675,6 +729,52 @@ class GraphDatabase:
         conn.execute("DELETE FROM nodes WHERE file_path = ?", (file_path,))
         conn.execute("DELETE FROM files WHERE path = ?", (file_path,))
         conn.commit()
+
+    def prune_files_absent_from(self, keep_paths: Iterable[str]) -> int:
+        """Delete every indexed file (and its nodes/edges) NOT in ``keep_paths``.
+
+        Reconciles the graph to a freshly-scanned file set so paths that were
+        indexed once but are no longer scanned (a since-deleted file, or a vendored
+        tree that is now ignored, e.g. a venv) stop surfacing as retrieval evidence.
+        Without this, ``index_file`` only ever unioned new files in and orphaned
+        nodes accumulated without bound. Returns the number of files pruned.
+
+        The keep-set is loaded into a temp table so a repo-sized set is matched with
+        a single ``NOT IN`` join instead of thousands of bound parameters; the whole
+        reconciliation runs in one transaction.
+        """
+
+        conn = self._connect()
+        conn.execute("CREATE TEMP TABLE IF NOT EXISTS _kg_keep_paths (path TEXT PRIMARY KEY)")
+        conn.execute("DELETE FROM _kg_keep_paths")
+        conn.executemany(
+            "INSERT OR IGNORE INTO _kg_keep_paths (path) VALUES (?)",
+            ((path,) for path in keep_paths),
+        )
+        stale_paths = [
+            row[0]
+            for row in conn.execute(
+                "SELECT path FROM files WHERE path NOT IN (SELECT path FROM _kg_keep_paths)"
+            ).fetchall()
+        ]
+        if not stale_paths:
+            conn.execute("DELETE FROM _kg_keep_paths")
+            return 0
+        # Inbound edges first (their subquery must see the nodes), then call-site
+        # edges, then the nodes, then the file records — all keyed off the stale set.
+        conn.execute(
+            "DELETE FROM edges WHERE target_node_id IN "
+            "(SELECT id FROM nodes WHERE file_path NOT IN (SELECT path FROM _kg_keep_paths))"
+        )
+        conn.execute(
+            "DELETE FROM edges WHERE call_site_file NOT IN (SELECT path FROM _kg_keep_paths) "
+            "AND call_site_file IS NOT NULL AND call_site_file != ''"
+        )
+        conn.execute("DELETE FROM nodes WHERE file_path NOT IN (SELECT path FROM _kg_keep_paths)")
+        conn.execute("DELETE FROM files WHERE path NOT IN (SELECT path FROM _kg_keep_paths)")
+        conn.execute("DELETE FROM _kg_keep_paths")
+        conn.commit()
+        return len(stale_paths)
 
     # ---- Learning system CRUD ----
 

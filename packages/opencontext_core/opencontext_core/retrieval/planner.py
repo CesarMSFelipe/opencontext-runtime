@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 import re
 from collections import defaultdict
@@ -38,6 +39,42 @@ from opencontext_core.retrieval.scoring import (
 from opencontext_core.safety.redaction import SinkGuard
 
 _log = logging.getLogger(__name__)
+
+# The 9 v2 ``RankingConfig`` weight fields map 1:1 onto identically-named
+# ``RetrievalWeights`` fields (B1-REQ-3). The four non-mapped ``RetrievalWeights``
+# fields (personalization + the three penalties) are deliberately absent and keep
+# their dataclass defaults.
+_RANKING_OVERRIDE_FIELDS = (
+    "semantic_relevance",
+    "graph_centrality",
+    "call_distance",
+    "test_affinity",
+    "memory_confidence",
+    "recent_failure",
+    "risk_requirement",
+    "freshness",
+    "provenance",
+)
+
+
+def _weights_from_ranking_config(rc: Any | None) -> RetrievalWeights:
+    """Build ``RetrievalWeights`` overriding ONLY the non-None v2 ranking fields.
+
+    ``RetrievalWeights`` is the single source of truth (RD1): start from its
+    defaults and, for each v2 ``RankingConfig`` field the user actually set (not
+    ``None``), override the identically-named weight. An unset config (or ``None``)
+    yields ``RetrievalWeights()`` exactly — zero behavior change. Fields with no
+    ``RankingConfig`` counterpart are never touched.
+    """
+    base = RetrievalWeights()
+    if rc is None:
+        return base
+    overrides = {
+        field: value
+        for field in _RANKING_OVERRIDE_FIELDS
+        if (value := getattr(rc, field, None)) is not None
+    }
+    return dataclasses.replace(base, **overrides) if overrides else base
 
 
 class RetrievalSource(Protocol):
@@ -100,40 +137,59 @@ class FTSRetrievalSource:
         from opencontext_core.indexing.graph_db import GraphDatabase
 
         db = GraphDatabase(self.db_path)
-        rows = db.search_fts(query, limit=limit)
+        # Name-anchored pass FIRST: any symbol the query names by identifier
+        # (BridgeDetector, count_by_type) enters the candidate set even when generic
+        # filler tokens (add/dict/count) push it past the BM25 top-k. These lead so the
+        # named definition gets the top positional scores; the broad BM25 pass fills in
+        # the rest. ``_deduplicate`` (by id) collapses any overlap, keeping the higher
+        # score. The combined cap is ``limit`` so this never inflates the candidate set.
+        identifiers = _query_identifiers(query)
+        name_rows = db.search_symbols_by_name(identifiers, limit=limit) if identifiers else []
+        fts_rows = db.search_fts(query, limit=limit)
         db.close()
+
+        seen_ids: set[str] = set()
         items: list[ContextItem] = []
-        for rank_idx, row in enumerate(rows):
-            # search_fts returns rows best-first (ORDER BY bm25 rank). Score by
-            # position so the best lexical hit gets the highest score. The raw bm25
-            # value is unnormalized across queries and the previous 1/(1-rank) formula
-            # was monotonic in the WRONG direction (least-relevant scored highest).
-            score = 1.0 / (1.0 + rank_idx)
-            raw_rank = row.get("rank")  # kept for provenance only, not for scoring
-            file_path = row.get("file_path", "")
-            symbol_path = f"{file_path}:{row.get('line', 0)}"
-            snippet = f"{row.get('kind', '')} {row['name']} in {symbol_path}"
-            if row.get("docstring"):
-                snippet += f"\n{row['docstring'][:200]}"
-            items.append(
-                ContextItem(
-                    id=f"fts:{row['id']}",
-                    content=snippet,
-                    source=symbol_path,
-                    source_type="symbol",
-                    priority=ContextPriority.P1,
-                    tokens=estimate_tokens(snippet),
-                    score=score,
-                    metadata={
-                        "retrieval": {"fts_rank": raw_rank},
-                        "retrieval_rationale": [f"fts_bm25:rank_{rank_idx + 1}"],
-                        "symbol_kind": row.get("kind", ""),
-                        "language": row.get("language", ""),
-                        "container": row.get("container", ""),
-                    },
-                )
-            )
-        return items
+        for rank_idx, row in enumerate(name_rows):
+            item = self._row_to_item(row, rank_idx, rationale="name_match")
+            if item.id not in seen_ids:
+                seen_ids.add(item.id)
+                items.append(item)
+        for rank_idx, row in enumerate(fts_rows):
+            item = self._row_to_item(row, rank_idx, rationale="fts_bm25")
+            if item.id not in seen_ids:
+                seen_ids.add(item.id)
+                items.append(item)
+        return items[:limit]
+
+    @staticmethod
+    def _row_to_item(row: dict[str, Any], rank_idx: int, *, rationale: str) -> ContextItem:
+        # Score by position so the best hit gets the highest score. The raw bm25 value
+        # is unnormalized across queries and a value-based formula was monotonic in the
+        # WRONG direction (least-relevant scored highest).
+        score = 1.0 / (1.0 + rank_idx)
+        raw_rank = row.get("rank")  # kept for provenance only, not for scoring
+        file_path = row.get("file_path", "")
+        symbol_path = f"{file_path}:{row.get('line', 0)}"
+        snippet = f"{row.get('kind', '')} {row['name']} in {symbol_path}"
+        if row.get("docstring"):
+            snippet += f"\n{row['docstring'][:200]}"
+        return ContextItem(
+            id=f"fts:{row['id']}",
+            content=snippet,
+            source=symbol_path,
+            source_type="symbol",
+            priority=ContextPriority.P1,
+            tokens=estimate_tokens(snippet),
+            score=score,
+            metadata={
+                "retrieval": {"fts_rank": raw_rank},
+                "retrieval_rationale": [f"{rationale}:rank_{rank_idx + 1}"],
+                "symbol_kind": row.get("kind", ""),
+                "language": row.get("language", ""),
+                "container": row.get("container", ""),
+            },
+        )
 
 
 class GraphRetrievalSource:
@@ -230,6 +286,7 @@ class RetrievalPlanner:
         *,
         graph_db_path: str | Path | None = None,
         memory_store: Any | None = None,
+        weights: RetrievalWeights | None = None,
     ) -> None:
         if isinstance(manifest_or_sources, ProjectManifest):
             sources: list[RetrievalSource] = [ManifestRetrievalSource(manifest_or_sources)]
@@ -242,6 +299,9 @@ class RetrievalPlanner:
         # means expansion is a strict no-op (manifest/graph fallback unchanged).
         self.graph_db_path = Path(graph_db_path) if graph_db_path is not None else None
         self._memory_store = memory_store
+        # Config-derived ranking weights (B1). None => rank() falls back to
+        # RetrievalWeights() defaults, so the default path is byte-identical.
+        self._weights = weights
         self.omissions: list[str] = []
 
     @classmethod
@@ -274,7 +334,13 @@ class RetrievalPlanner:
             if vector_source is not None:
                 sources.append(vector_source)
 
-        planner = cls(sources, memory_store=memory_store)
+        # B1: resolve ranking weights from config.context.ranking as optional
+        # overrides of RetrievalWeights. Unset fields defer to the dataclass
+        # default, so an unconfigured project ranks exactly as before.
+        ranking_cfg = getattr(getattr(config, "context", None), "ranking", None)
+        weights = _weights_from_ranking_config(ranking_cfg)
+
+        planner = cls(sources, memory_store=memory_store, weights=weights)
         planner.graph_db_path = graph_db_path if graph_db_path.exists() else None
         return planner
 
@@ -335,12 +401,17 @@ class RetrievalPlanner:
 
         mb = memory_boost_map or {}
         gd = graph_distance_map or {}
-        weights = RetrievalWeights()
+        # B1: use config-derived weights when present; otherwise fall back to the
+        # RetrievalWeights() default — identical to the previous hardcoded value.
+        weights = self._weights or RetrievalWeights()
         personalization = (
             _personalization_map(items, query or "", focus_files)
             if (query or focus_files)
             else None
         )
+        # Query identifiers (used for the definition-affinity signal). Empty when no
+        # query is supplied => is_definition is always False => prior behavior.
+        query_terms = _query_terms(query) if query else set()
 
         def _score(item: ContextItem) -> float:
             modified = item.metadata.get("modified_at")
@@ -358,6 +429,7 @@ class RetrievalPlanner:
                 is_test=_looks_like_test(item.source),
                 weights=weights,
                 personalization_map=personalization,
+                is_definition=_is_definition_of_query(item, query_terms),
             )
 
         # Persist the hybrid score onto each item so it survives into evidence
@@ -531,6 +603,33 @@ def _looks_like_test(source: str) -> bool:
     return base.startswith("test_") or base.endswith("_test.py") or "/tests/" in source.lower()
 
 
+# Symbol kinds that constitute a DEFINITION a developer would open to "add/modify X".
+_DEFINITION_KINDS = frozenset(
+    {"class", "function", "method", "interface", "trait", "struct", "enum", "constant"}
+)
+
+
+def _is_definition_of_query(item: ContextItem, query_terms: set[str]) -> bool:
+    """Whether ``item`` DEFINES a symbol whose name a query term names.
+
+    True when the candidate is a code definition (class/function/method/…) and its
+    symbol name shares a token with the query — e.g. ``class BridgeDetector`` for
+    "add count_by_type() to BridgeDetector". This anchors "add/modify <Symbol>"
+    retrieval on the file where <Symbol> lives, not its tests or incidental mentions.
+    A test file is never treated as the definition even if its name matches, so the
+    defining impl still outranks ``test_<symbol>.py``.
+    """
+    if not query_terms:
+        return False
+    kind = str(item.metadata.get("symbol_kind", "")).lower()
+    if kind not in _DEFINITION_KINDS:
+        return False
+    if _looks_like_test(item.source):
+        return False
+    name_tokens = _query_terms(_candidate_name(item))
+    return bool(name_tokens & query_terms)
+
+
 # ---- personalized graph ranking ---------------------------------------------
 
 
@@ -548,6 +647,39 @@ def _query_terms(query: str) -> set[str]:
     if len(word) >= 2:
         tokens.add(word.lower())
     return tokens
+
+
+# An identifier-shaped token in a query: CamelCase (``BridgeDetector``), snake_case
+# (``count_by_type``), or a single capitalized rare word. These name the symbol the
+# task is about; generic lowercase filler (add/dict/count/to/of) does not and only
+# dilutes BM25. We keep the ORIGINAL casing/underscores so a name-anchored DB lookup
+# can match ``nodes.name`` exactly.
+_IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_CAMEL_RE = re.compile(r"[a-z][A-Z]|[A-Z]{2}[a-z]")
+
+
+def _query_identifiers(query: str) -> list[str]:
+    """Identifier-shaped tokens of ``query`` (CamelCase / snake_case / capitalized).
+
+    Returns names the query is *about* (``BridgeDetector``, ``count_by_type``) for
+    name-anchored candidate recall, excluding generic lowercase prose words so the
+    lookup targets the symbol, not filler. Order-preserving and de-duplicated.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for token in _IDENTIFIER_RE.findall(query):
+        if len(token) < 3:
+            continue
+        is_snake = "_" in token
+        is_camel = bool(_CAMEL_RE.search(token))
+        is_capitalized = token[0].isupper()
+        if not (is_snake or is_camel or is_capitalized):
+            continue
+        key = token.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(token)
+    return out
 
 
 def _candidate_name(item: ContextItem) -> str:

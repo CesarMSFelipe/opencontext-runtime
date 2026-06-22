@@ -143,6 +143,125 @@ def test_graph_source_emits_provenance_and_freshness_metadata(tmp_path: Path) ->
     assert item.metadata["graph_provenance"]["db_path"] == str(db_path)
 
 
+def _seed_symbol_and_tests_db(tmp_path: Path) -> Path:
+    """A DB with a ``BridgeDetector`` class plus many test functions that, under bare
+    BM25, match more of a natural-language query's filler tokens than the class does.
+    """
+    db_path = tmp_path / "context_graph.db"
+    db = GraphDatabase(db_path=db_path)
+    db.init_schema()
+    for path in ("src/bridge_detector.py", "tests/test_bridge_detector.py"):
+        db.upsert_file(
+            FileRecord(id=None, path=path, language="python", last_modified=1, hash=path, size=10)
+        )
+    db.upsert_nodes(
+        [
+            Node(
+                id=None,
+                name="BridgeDetector",
+                kind="class",
+                file_path="src/bridge_detector.py",
+                line=52,
+                column=0,
+                end_line=120,
+                language="python",
+                container=None,
+                docstring="Detects bridges in a project.",
+                signature="class BridgeDetector",
+                is_exported=True,
+            )
+        ]
+    )
+    # Several test functions whose bodies/docstrings carry the generic query words
+    # (count, dict, type, returning) so bare BM25 floats them above the class.
+    test_nodes = [
+        Node(
+            id=None,
+            name=f"test_detect_case_{i}",
+            kind="function",
+            file_path="tests/test_bridge_detector.py",
+            line=10 + i,
+            column=0,
+            end_line=12 + i,
+            language="python",
+            container=None,
+            docstring="returns a dict mapping type to count; returning count by type",
+            signature=f"def test_detect_case_{i}()",
+            is_exported=False,
+        )
+        for i in range(8)
+    ]
+    db.upsert_nodes(test_nodes)
+    # Enough unrelated noise nodes that each match the query's generic filler tokens to
+    # push ``class BridgeDetector`` well past any reasonable BM25 top-k — modeling the
+    # real repo, where the class lands at BM25 rank ~169. Without name-anchored recall
+    # the definition is simply not a candidate.
+    # Upsert per file: upsert_nodes prunes stale nodes of nodes[0].file_path, so a
+    # single mixed-file batch would drop most. One file per noise node keeps all 300.
+    for i in range(300):
+        db.upsert_file(
+            FileRecord(
+                id=None,
+                path=f"src/noise_{i}.py",
+                language="python",
+                last_modified=1,
+                hash=f"n{i}",
+                size=10,
+            )
+        )
+        db.upsert_nodes(
+            [
+                Node(
+                    id=None,
+                    name=f"helper_count_dict_{i}",
+                    kind="function",
+                    file_path=f"src/noise_{i}.py",
+                    line=1,
+                    column=0,
+                    end_line=2,
+                    language="python",
+                    container=None,
+                    docstring="count dict type returning of to add by mapping value count dict",
+                    signature=f"def helper_count_dict_{i}()",
+                    is_exported=False,
+                )
+            ]
+        )
+    db.rebuild_fts()
+    db.close()
+    return db_path
+
+
+def test_definition_query_surfaces_impl_not_only_its_tests(tmp_path: Path) -> None:
+    """An "add X to <Symbol>" query must surface the file that DEFINES <Symbol>.
+
+    Regression: bare BM25 over the natural-language query ranked many test functions
+    (which match generic filler tokens count/dict/type) above ``class BridgeDetector``
+    — whose only matching token is its name — so the defining impl was never even a
+    candidate. Name-anchored candidate generation must include the definition, and the
+    definition-affinity score must rank it at/near the top.
+    """
+    from opencontext_core.retrieval.planner import FTSRetrievalSource, RetrievalPlanner
+
+    db_path = _seed_symbol_and_tests_db(tmp_path)
+    planner = RetrievalPlanner([FTSRetrievalSource(db_path, tmp_path)])
+    items = planner.retrieve(
+        "Add count_by_type() to BridgeDetector returning a dict of bridge_type to count",
+        top_k=5,
+    )
+
+    sources = [it.source for it in items]
+    assert any("src/bridge_detector.py" in s for s in sources), (
+        f"defining impl not retrieved as a candidate; got {sources}"
+    )
+    # The definition should outrank the tests (be the first impl-or-test hit).
+    impl_rank = next(i for i, s in enumerate(sources) if "src/bridge_detector.py" in s)
+    test_ranks = [i for i, s in enumerate(sources) if "tests/" in s]
+    assert not test_ranks or impl_rank < min(test_ranks), (
+        f"defining impl did not outrank its tests; order={sources}"
+    )
+
+
 def test_runtime_context_pack_uses_retrieval_planner(tmp_path: Path, monkeypatch) -> None:
     """Runtime candidate generation goes through RetrievalPlanner plans."""
 
