@@ -955,13 +955,16 @@ def _deduplicate(items: list[ContextItem]) -> list[ContextItem]:
     """
 
     def _key_for_dedup(item: ContextItem) -> tuple[str, str | int]:
-        # (file, line|symbol) — line when parseable, else the bare source snippet
+        # (file, symbol|line) — prefer the symbol name; fall back to the line parsed
+        # from ``source`` so same-symbol items still collapse when symbol_kind is set
+        # but the symbol name is blank. Previously that case yielded (file, "") and
+        # the empty-key guard below skipped secondary dedup (under-dedup, not a
+        # crash) — the fallback recovers the per-line collapse.
         source = (item.source or "").split(":", 1)[0]
         line_or_symbol = ""
         if item.metadata.get("symbol_kind"):
             line_or_symbol = str(item.metadata.get("symbol") or "")
-        else:
-            # path:line form
+        if not line_or_symbol:
             tail = (item.source or "").split(":", 1)
             line_or_symbol = tail[1] if len(tail) > 1 else ""
         return (source, line_or_symbol)

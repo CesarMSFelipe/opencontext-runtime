@@ -117,3 +117,48 @@ def test_quality_check_records_evolution(tmp_path) -> None:
     assert evo.exists(), "quality check must append to the evolution log across runs"
     rows = json.loads(evo.read_text())
     assert rows and "score" in rows[0]
+
+
+def test_dedup_collapses_same_symbol_when_symbol_name_blank() -> None:
+    """P7: symbol_kind set but symbol name blank must still collapse by source line.
+
+    Previously _key_for_dedup returned (file, "") and the empty-key guard skipped
+    secondary dedup (under-dedup), so the same symbol from two sources survived.
+    """
+    from opencontext_core.models.context import (
+        ContextItem,
+        ContextPriority,
+        DataClassification,
+    )
+    from opencontext_core.retrieval.planner import _deduplicate
+
+    def _item(item_id: str, source_type: str, content: str) -> ContextItem:
+        return ContextItem(
+            id=item_id,
+            content=content,
+            source="src/auth.py:54",
+            source_type=source_type,
+            priority=ContextPriority.P2,
+            tokens=5,
+            score=0.7,
+            metadata={"symbol_kind": "function", "symbol": ""},
+            classification=DataClassification.INTERNAL,
+            source_trust=0.8,
+        )
+
+    items = [
+        _item("fts:x", "fts", "short"),
+        _item("graph:y", "graph", "the full longer body"),
+    ]
+    out = _deduplicate(items)
+    assert len(out) == 1, "same symbol/line from two sources must collapse to one"
+    assert out[0].content == "the full longer body", "richest-body copy must win"
+
+
+def test_normalize_linked_node_keeps_bare_path_matchable() -> None:
+    """P14: a bare relative path must NOT get a ``:0`` suffix (it breaks the boost match)."""
+    from opencontext_core.memory.harvester import _normalize_linked_node
+
+    assert _normalize_linked_node("src/auth.py") == "src/auth.py"  # not "src/auth.py:0"
+    assert _normalize_linked_node("src/auth.py:54") == "src/auth.py:54"  # path:line as-is
+    assert _normalize_linked_node("validate_token") == "validate_token.py:0"  # bare symbol
