@@ -2,22 +2,17 @@
 
 from __future__ import annotations
 
-import base64
 import re
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from opencontext_core.safety.prompt_injection import PromptInjectionScanner
 from opencontext_core.safety.redaction import SinkGuard
 from opencontext_core.safety.secrets import SecretScanner
 
 SOURCE_MAP_RE = re.compile(r"sourceMappingURL=|\.map(?:\s|$)", re.IGNORECASE)
 EXTERNAL_URL_RE = re.compile(r"https?://[^\s)>\"]+")
-BASE64ISH_RE = re.compile(r"\b[A-Za-z0-9+/]{40,}={0,2}\b")
-CONTROL_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2066-\u2069]")
 AI_CONFIG_DIRS = {".claude", ".cursor", ".opencontext", ".codex"}
 RELEASE_RISK_NAMES = {".env", ".env.local", ".env.production", "opencontext.trace.json"}
 
@@ -83,22 +78,6 @@ class PromptSecretLinter:
                 )
             )
         return findings
-
-
-class PromptConfigSanitizer:
-    """Sanitizes prompt/config structures before export or trace persistence."""
-
-    def sanitize(self, value: Any) -> Any:
-        """Return a redacted copy of nested prompt/config data."""
-
-        guard = SinkGuard()
-        if isinstance(value, Mapping):
-            return {str(key): self.sanitize(child) for key, child in sorted(value.items())}
-        if isinstance(value, list | tuple):
-            return [self.sanitize(child) for child in value]
-        if isinstance(value, str):
-            return guard.redact(value)[0]
-        return value
 
 
 class PublicSafePromptExporter:
@@ -196,55 +175,6 @@ class PackageArtifactAuditor:
         return ReleaseLeakScanner().scan(dist)
 
 
-class UnicodeObfuscationScanner:
-    """Detects control characters commonly used for prompt obfuscation."""
-
-    def scan(self, text: str) -> list[LeakFinding]:
-        """Return unicode obfuscation findings."""
-
-        if CONTROL_RE.search(text):
-            return [LeakFinding(kind="unicode_obfuscation", detail="zero-width/bidi control")]
-        return []
-
-
-class EncodedPayloadDetector:
-    """Detects suspicious encoded payload-like spans in untrusted text."""
-
-    def scan(self, text: str) -> list[LeakFinding]:
-        """Return encoded payload findings."""
-
-        findings: list[LeakFinding] = []
-        for match in BASE64ISH_RE.finditer(text):
-            value = match.group(0)
-            try:
-                decoded = base64.b64decode(value + "==", validate=False)
-            except Exception:
-                continue
-            if len(decoded) >= 24:
-                findings.append(
-                    LeakFinding(kind="encoded_payload", detail="[REDACTED:encoded_payload]")
-                )
-        return findings
-
-
-class IndirectPromptInjectionFirewall:
-    """Keeps untrusted source content from becoming instructions."""
-
-    def scan(self, text: str, *, trusted: bool = False) -> list[LeakFinding]:
-        """Scan untrusted data for prompt-injection instructions."""
-
-        findings: list[LeakFinding] = []
-        if trusted:
-            return findings
-        findings.extend(
-            LeakFinding(kind=finding.kind, detail=finding.value, severity=finding.severity)
-            for finding in PromptInjectionScanner().scan(text)
-        )
-        findings.extend(UnicodeObfuscationScanner().scan(text))
-        findings.extend(EncodedPayloadDetector().scan(text))
-        return findings
-
-
 class OutputExfiltrationScanner:
     """Scans outbound output before CLI/API/trace/file/clipboard sinks."""
 
@@ -302,64 +232,6 @@ class EgressPolicyEngine:
         if raw in {"allow", "ask", "deny"}:
             return EgressDecision(channel=channel, decision=raw, reason=f"policy:{raw}")
         return EgressDecision(channel=channel, decision="deny", reason="unknown_policy_value")
-
-
-class SourceTrustBoundary(BaseModel):
-    """Trust metadata for a source entering context."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    source_type: str = Field(description="Source type.")
-    trust_level: str = Field(description="trusted, internal, or untrusted.")
-    tainted: bool = Field(description="Whether source is tainted.")
-    allowed_actions: list[str] = Field(description="Actions this source may influence.")
-
-
-class SourceTrustBoundaryMapper:
-    """Maps source types to trust boundaries."""
-
-    def map_source(self, source_type: str) -> SourceTrustBoundary:
-        """Return conservative trust metadata for a source type."""
-
-        trusted = source_type in {"policy", "system", "workflow_contract"}
-        internal = source_type in {"repo_map", "memory", "file"}
-        return SourceTrustBoundary(
-            source_type=source_type,
-            trust_level="trusted" if trusted else "internal" if internal else "untrusted",
-            tainted=not trusted,
-            allowed_actions=[] if not trusted else ["policy_summary"],
-        )
-
-
-class TaintedContext(BaseModel):
-    """Taint metadata for one context payload."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    source_id: str = Field(description="Source identifier.")
-    content: str = Field(description="Redacted content.")
-    tainted: bool = Field(description="Whether content is untrusted.")
-    trust_level: str = Field(description="Trust boundary label.")
-
-
-class ContextTaintTracker:
-    """Tracks whether context may be treated as instructions."""
-
-    def mark(self, source_id: str, content: str, *, source_type: str) -> TaintedContext:
-        """Mark context with trust metadata."""
-
-        boundary = SourceTrustBoundaryMapper().map_source(source_type)
-        return TaintedContext(
-            source_id=source_id,
-            content=SinkGuard().redact(content)[0],
-            tainted=boundary.tainted,
-            trust_level=boundary.trust_level,
-        )
-
-    def can_promote_to_instruction(self, context: TaintedContext) -> bool:
-        """Return whether content can be promoted to trusted instructions."""
-
-        return not context.tainted and context.trust_level == "trusted"
 
 
 def _iter_files(root: Path) -> list[Path]:

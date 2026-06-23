@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Memory `topic_key` upsert preserves history**: a new version under an existing `topic_key` no longer overwrites in place — the prior record is marked superseded (kept and queryable, `invalid_at` set) and the new version is inserted linked via `supersedes` with `revision_count` carried forward, aligning the dedup path with consolidation so prior state stays recoverable.
 
+### Deprecated
+
+- **Standalone agent SDK** (`AgentOrchestrator` and the five built-in agents under `opencontext_core.agents`): deprecated, slated for removal in 2.0. It is a parallel framework the live SDD flow does not use — the real flow runs through the harness (`opencontext_core.harness`). Instantiating it now emits a `DeprecationWarning`.
+- **Adapter layer** (`opencontext_core.adapters`: `AgentAdapter`, `AiderAdapter`, `LocalAdapter`, `PythonAdapter`, `BoundaryService`): deprecated, slated for removal in 2.0; the harness drives agents through the sampling gateway. Package-level imports emit a `DeprecationWarning` (direct submodule imports are untouched so health checks stay quiet).
+
+### Removed
+
+- Internal-only dead modules with no public consumer: `context/observability.py` (unused OpenTelemetry/dashboard scaffolding; live metrics remain in `context/metrics.py`), `safety/proxy.py` (a dead second firewall — the live one is `safety/firewall.py`), and the orphaned `opencontext_providers` package (it duplicated the live `providers/adapters.py`).
+
 ## [1.4.0] - 2026-06-21
 
 ### Added
