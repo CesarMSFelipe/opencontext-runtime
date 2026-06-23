@@ -457,3 +457,81 @@ Review this code for type safety:
 - Complex types use aliases
 - Type hints are consistent
 """
+
+
+# --------------------------------------------------------------------------- #
+# Architecture & code-quality registration shim.
+#
+# This folds the architecture/quality evaluation (cycles, god-files, coupling,
+# complexity, language tools) into the SAME report schema ``ci-check run``
+# already emits, so ``opencontext ci-check run`` surfaces it alongside the
+# markdown pattern checks. One rules source feeds both this CI entry point and
+# the harness gate — the evaluation lives in ``quality.evaluator`` and is reused
+# here, never re-implemented.
+#
+# NOTE: the import of ``QualityEvaluator`` is intentionally LAZY (inside the
+# function body) to avoid an import cycle: ``quality.evaluator`` and
+# ``quality.models`` import this module's ``CheckResult``/enums at module load,
+# so importing the evaluator at the top of ``ci_checks`` would form a cycle.
+# --------------------------------------------------------------------------- #
+
+# Stable group name under which the architecture/quality findings are folded into
+# the ``run_all_checks`` -> ``generate_report`` ``{name: [CheckResult]}`` mapping.
+ARCHITECTURE_CHECK_NAME = "Architecture & Quality"
+
+
+def architecture_check_results(
+    root: str | Path,
+    changed_files: list[str] | None = None,
+) -> list[CheckResult]:
+    """Run the architecture/quality evaluation and return ``CheckResult`` rows.
+
+    Builds a :class:`~opencontext_core.quality.evaluator.QualityEvaluator` for
+    ``root``, evaluates the ``changed_files`` scope (or the whole repo when
+    ``None``), and maps each resulting ``Finding`` into a :class:`CheckResult`
+    via the canonical :func:`~opencontext_core.quality.models.to_check_result`
+    helper. The rows fold directly into :meth:`CheckRunner.generate_report`
+    (one schema, two entry points: ``ci-check run`` and the harness gate).
+
+    When the evaluation produces no findings (a clean change, a skipped/off
+    mode, or an empty scope), a single PASSED ``CheckResult`` is returned so the
+    check is represented in the report and counts as passed — mirroring
+    :meth:`CheckRunner.run_check` (which emits a PASSED row when nothing fails).
+
+    Deterministic and model-free: the evaluator's check path makes zero model
+    calls, and identical inputs yield identical rows. Any unexpected failure is
+    surfaced as a single ERROR ``CheckResult`` rather than raising, so a broken
+    evaluation never crashes ``ci-check run``.
+    """
+    # Lazy import to avoid the quality.evaluator <-> quality.ci_checks cycle.
+    from opencontext_core.quality.evaluator import QualityEvaluator
+    from opencontext_core.quality.models import to_check_result
+
+    try:
+        evaluator = QualityEvaluator(Path(root))
+        report = evaluator.evaluate(changed_files if changed_files is not None else [])
+    except Exception as exc:  # degrade honestly: never crash ci-check run
+        return [
+            CheckResult(
+                check_name=ARCHITECTURE_CHECK_NAME,
+                status=CheckStatus.ERROR,
+                severity=CheckSeverity.ERROR,
+                message=f"architecture/quality evaluation failed: {exc}",
+            )
+        ]
+
+    results = [to_check_result(finding) for finding in report.findings]
+    if results:
+        return results
+
+    # No findings: emit a single PASSED row so the check is represented and the
+    # generate_report summary counts it as passed (mirrors run_check's success
+    # row). Carry the one-line health summary for visibility.
+    return [
+        CheckResult(
+            check_name=ARCHITECTURE_CHECK_NAME,
+            status=CheckStatus.PASSED,
+            severity=CheckSeverity.INFO,
+            message=report.summary or "no architecture/quality findings",
+        )
+    ]

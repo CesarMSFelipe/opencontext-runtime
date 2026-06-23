@@ -204,4 +204,8 @@ class HarnessRunResult:
     trace_ids: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     events: list[RunEvent] = field(default_factory=list)
+    # Source paths the explore pack dropped (state.context_omitted_paths). Carried
+    # so the memory harvester can record them as FAILURE linked_nodes, feeding the
+    # retrieval recent_failure boost on the next run.
+    context_omitted_paths: list[str] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())

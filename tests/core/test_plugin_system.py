@@ -33,10 +33,9 @@ def _make_plugin(
     pdir = tmp_path / name
     pdir.mkdir()
     body = "class OpenContextPlugin:\n    name = 'p'\n"
-    # write_bytes (not write_text) so the on-disk bytes equal what the declared
-    # checksum hashes — text mode would translate \n->\r\n on Windows and the
-    # byte-exact integrity check (read_bytes) would then mismatch.
-    (pdir / "plugin.py").write_bytes(body.encode("utf-8"))
+    # newline="" disables Windows \n->\r\n translation so the bytes on disk match
+    # the LF-based entry_checksum below (otherwise the checksum mismatches on Windows).
+    (pdir / "plugin.py").write_text(body, encoding="utf-8", newline="")
     info: dict = {"name": name, "enabled": True, "entry_point": "plugin.py"}
     if checksum == "valid":
         info["entry_checksum"] = "sha256:" + hashlib.sha256(body.encode()).hexdigest()

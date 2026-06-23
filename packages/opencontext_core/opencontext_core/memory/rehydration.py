@@ -13,15 +13,74 @@ from typing import Any
 
 
 def _trim_to_budget(text: str, target_tokens: int) -> str:
-    """Keep whole lines (already ranked best-first) up to the token budget."""
+    """Trim a markdown block to ``target_tokens``, preserving the most semantically
+    important sections FIRST.
+
+    Prior behavior trimmed from the END of the (already best-first) line list,
+    which silently removed the spec scenarios and GIVEN/WHEN/THEN sections --
+    exactly the parts most useful to the downstream phase (design / tasks).
+    This implementation scores every line by importance (headers > RFC-2119
+    keywords > GIVEN/WHEN/THEN > spec bullets > prose), keeps the highest-scoring
+    lines first, then re-assembles in the ORIGINAL positions so prose still reads
+    naturally.
+
+    Importance bands (higher = keep first):
+      - '#' / '##' / '###' headers                       : 100
+      - '### Requirement:' / '### Scenario:'               : 90
+      - MUST / SHALL / SHOULD / MUST NOT                  : 80
+      - 'GIVEN ... WHEN ... THEN ...'                       : 70
+      - bulleted lines ('- ...')                          : 50
+      - prose / other                                     : 10
+    """
     from opencontext_core.context.budgeting import estimate_tokens
 
+    if not text:
+        return text
+
+    lines = text.split("\n")
+
+    def _importance(line: str) -> int:
+        stripped = line.lstrip()
+        if stripped.startswith("## ") or stripped.startswith("# "):
+            return 100
+        if "### Requirement:" in stripped or "### Scenario:" in stripped:
+            return 90
+        if (
+            "MUST" in stripped
+            or "SHALL" in stripped
+            or "SHOULD" in stripped
+            or "MUST NOT" in stripped
+        ):
+            return 80
+        if "GIVEN" in stripped and "WHEN" in stripped and "THEN" in stripped:
+            return 70
+        if stripped.startswith("- "):
+            return 50
+        return 10
+
+    # Importance desc, then position asc (keep original ordering within a band).
+    ranked = sorted(range(len(lines)), key=lambda i: (-_importance(lines[i]), i))
+    chosen: set[int] = set()
     kept: list[str] = []
-    for line in text.split("\n"):
-        if kept and estimate_tokens("\n".join([*kept, line])) > target_tokens:
-            break
+    for i in ranked:
+        line = lines[i]
+        if not line.strip():
+            # Always keep blank lines so markdown paragraphs stay readable.
+            chosen.add(i)
+            kept.append(line)
+            continue
+        candidate_tokens = estimate_tokens("\n".join([*kept, line]))
+        if candidate_tokens > target_tokens:
+            # Don't break the budget -- but DO ensure the top header is kept.
+            if not kept and i == 0:
+                chosen.add(i)
+                kept.append(line)
+            continue
+        chosen.add(i)
         kept.append(line)
-    return "\n".join(kept)
+    # Re-assemble in ORIGINAL order so prose reads naturally after the kept
+    # high-importance sections.
+    return "\n".join(line for i, line in enumerate(lines) if i in chosen)
 
 
 def summarize_to_budget(text: str, target_tokens: int, gateway: Any | None = None) -> str:

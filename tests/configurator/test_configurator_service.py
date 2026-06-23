@@ -26,6 +26,44 @@ def test_configure_claude_writes_mcp_servers_and_claude_md(home: Path) -> None:
     assert "<!-- opencontext:instructions:start -->" in claude_md
 
 
+def test_configure_claude_writes_project_mcp_json(home: Path, tmp_path: Path) -> None:
+    """Claude Code reads per-repo MCP servers from a project-root ``.mcp.json``;
+    configuring must emit it so a repo gets the OC tools without global config."""
+    project = tmp_path / "proj"
+    report = Configurator(project_root=project).configure(["claude-code"], scope="local")
+    assert report["agents_configured"] == 1
+
+    project_mcp = project / ".mcp.json"
+    assert project_mcp.exists(), "project-level .mcp.json was not written"
+    data = json.loads(project_mcp.read_text(encoding="utf-8"))
+    entry = data["mcpServers"]["opencontext"]
+    assert entry == {"type": "stdio", "command": "opencontext", "args": ["mcp"]}
+
+
+def test_project_mcp_json_merges_and_reverses(home: Path, tmp_path: Path) -> None:
+    """The project ``.mcp.json`` merges into a user's existing file and is removed
+    cleanly by uninstall, leaving the developer's own servers intact."""
+    project = tmp_path / "proj"
+    project.mkdir()
+    project_mcp = project / ".mcp.json"
+    project_mcp.write_text(
+        json.dumps({"mcpServers": {"mine": {"command": "x"}}, "userKey": 1}),
+        encoding="utf-8",
+    )
+
+    cfg = Configurator(project_root=project)
+    cfg.configure(["claude-code"], scope="local")
+    merged = json.loads(project_mcp.read_text(encoding="utf-8"))
+    assert "opencontext" in merged["mcpServers"]
+    assert merged["mcpServers"]["mine"] == {"command": "x"}  # user server preserved
+    assert merged["userKey"] == 1
+
+    cfg.deconfigure(["claude-code"], scope="local")
+    after = json.loads(project_mcp.read_text(encoding="utf-8"))
+    assert "opencontext" not in after.get("mcpServers", {})  # ours removed
+    assert after["mcpServers"]["mine"] == {"command": "x"}  # user server survives
+
+
 def test_configure_vscode_uses_servers_root_key(home: Path) -> None:
     Configurator(project_root=home).configure(["vscode-copilot"], scope="global")
     mcp_path = home / ".vscode" / "mcp.json"

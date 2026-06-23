@@ -477,23 +477,6 @@ def _is_local_context(node: Any, function_def: Any) -> bool:
     return True
 
 
-def _tokenize_line(line: str) -> list[str]:
-    """Simple whitespace + punctuation tokenizer for applying renames."""
-    tokens: list[str] = []
-    current: list[str] = []
-    for ch in line:
-        if ch.isalnum() or ch == "_":
-            current.append(ch)
-        else:
-            if current:
-                tokens.append("".join(current))
-                current = []
-            tokens.append(ch)
-    if current:
-        tokens.append("".join(current))
-    return tokens
-
-
 def _ext_for_lang(language: str) -> str:
     _MAP = {
         "python": ".py",

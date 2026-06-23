@@ -226,3 +226,36 @@ def test_opencontext_config_accepts_new_fields() -> None:
     assert config.testing.mutation.enabled is False
     assert config.context_planning.enabled is True
     assert config.context_storage.semantic_search is False
+
+
+def test_project_profile_renders_domain_block() -> None:
+    from opencontext_core.config import ProjectConfig, ProjectProfile
+
+    # Default profile is empty and renders nothing (section omitted entirely).
+    assert ProjectConfig(name="x").profile.is_empty()
+    assert ProjectProfile().to_context_block() == ""
+
+    profile = ProjectProfile(
+        purpose="Indexes code into a knowledge graph.",
+        audience="AI coding agents.",
+        problem="Agents relearn the project every session.",
+        key_decisions=["MCP-first surface", "deterministic gates"],
+    )
+    block = profile.to_context_block()
+    assert block.startswith("## Project Profile")
+    assert "**Purpose:** Indexes code into a knowledge graph." in block
+    assert "**Audience:** AI coding agents." in block
+    assert "**Problem:** Agents relearn the project every session." in block
+    assert "  - MCP-first surface" in block
+    assert "  - deterministic gates" in block
+
+
+def test_project_config_accepts_profile_via_validate() -> None:
+    from opencontext_core.config import ProjectConfig
+
+    cfg = ProjectConfig.model_validate(
+        {"name": "demo", "profile": {"purpose": "p", "key_decisions": ["d1"]}}
+    )
+    assert cfg.profile.purpose == "p"
+    assert cfg.profile.key_decisions == ["d1"]
+    assert not cfg.profile.is_empty()

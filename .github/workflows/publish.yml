@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [opencontext-core, opencontext-cli, opencontext-api, opencontext-profiles, opencontext-providers]
+        package: [opencontext-core, opencontext-cli, opencontext-api, opencontext-profiles]
         include:
           - package: opencontext-core
             path: packages/opencontext_core
@@ -36,8 +36,6 @@ jobs:
             path: packages/opencontext_api
           - package: opencontext-profiles
             path: packages/opencontext_profiles
-          - package: opencontext-providers
-            path: packages/opencontext_providers
 
     steps:
       - uses: actions/checkout@v4

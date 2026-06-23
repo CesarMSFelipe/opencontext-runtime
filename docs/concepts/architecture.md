@@ -21,4 +21,4 @@ opencontext doctor deep
 ## Implemented Code
 - `packages/opencontext_core/opencontext_core/` (domain logic and deterministic local runtime)
 - `packages/opencontext_core/opencontext_core/adapters/` (provider-neutral interfaces)
-- `packages/{opencontext_api,opencontext_cli,opencontext_providers,opencontext_profiles}/` (adapters above core)
+- `packages/{opencontext_api,opencontext_cli,opencontext_profiles}/` (adapters above core)

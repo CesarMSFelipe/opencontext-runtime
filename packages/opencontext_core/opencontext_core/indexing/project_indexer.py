@@ -117,6 +117,25 @@ class ProjectIndexer:
                     kg_stats["edges"] += cross
                 except Exception as exc:
                     _log.warning("cross-file edge finalization failed: %s", exc)
+            # Reconcile the graph to the freshly-scanned set: drop files (and their
+            # nodes/edges) that were indexed on a prior run but are no longer scanned
+            # — a since-deleted file, or a vendored tree now excluded by ignore rules
+            # (e.g. a venv). Without this, index_file only ever unioned new files in,
+            # so orphaned nodes accumulated and surfaced as retrieval evidence. Guarded
+            # to a COMPLETE pass: a run that failed every file (files_failed but nothing
+            # indexed) must not wipe the existing graph. ``indexed_files`` is the
+            # authoritative current set (newly-indexed + checkpoint-resumed), so a
+            # resumed/partial run still keeps the files it already has.
+            if indexed_files:
+                try:
+                    pruned = self.knowledge_graph.db.prune_files_absent_from(
+                        path for path, _content in indexed_files
+                    )
+                    if pruned:
+                        kg_stats["files_pruned"] = pruned
+                        _log.info("knowledge graph: pruned %d stale file(s)", pruned)
+                except Exception as exc:
+                    _log.warning("knowledge graph reconciliation failed: %s", exc)
             # Authoritative totals: the incremental counters miss the nodes/edges of
             # files skipped on a resumed run (already in the checkpoint), so read the
             # real counts from the graph instead of under-reporting them.

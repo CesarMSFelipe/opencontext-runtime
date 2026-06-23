@@ -26,6 +26,19 @@ from typing import Any, ClassVar
 from opencontext_core.agent_installer import AgentInstaller, AgentTarget
 from opencontext_core.backup import BackupManager
 
+# Installed-skill dir names left behind by the pre-rename SDD skill set. A project
+# installed before the ``sdd-*`` -> ``oc-*`` migration keeps these on disk; the
+# skill re-sync prunes exactly (and only) this known set so the installed skills
+# match the shipped ``oc-*`` templates. This is deliberately an explicit allowlist,
+# NOT a blanket "delete anything not in required_skills", so unrelated user-authored
+# skills are never clobbered (R7 / TR3).
+_STALE_SKILL_DIRS: tuple[str, ...] = (
+    "sdd-apply",
+    "sdd-archive",
+    "sdd-new",
+    "sdd-verify",
+)
+
 
 class InstallProfile(StrEnum):
     """Installation profile."""
@@ -527,6 +540,16 @@ class InstallationManager:
         dest_root = project_root / ".opencontext" / "skills"
         dest_root.mkdir(parents=True, exist_ok=True)
 
+        # Prune the migrated-away ``sdd-*`` skill dirs left by a pre-rename install.
+        # Only the explicit known-stale set is removed; unrelated user skills and the
+        # ``oc-*``/``opencontext-agent`` set are untouched (R7 — no blanket overwrite).
+        pruned: list[str] = []
+        for stale_name in _STALE_SKILL_DIRS:
+            stale_dir = dest_root / stale_name
+            if stale_dir.is_dir():
+                shutil.rmtree(stale_dir)
+                pruned.append(stale_name)
+
         # Skills the developer drives (one per SDD phase), plus the agent skill.
         required_skills = (
             "oc-new",
@@ -558,6 +581,7 @@ class InstallationManager:
             "component": "skills",
             "status": "installed" if written and not missing else "partial",
             "files": written,
+            "pruned": pruned,
         }
         if missing:
             result["missing"] = missing

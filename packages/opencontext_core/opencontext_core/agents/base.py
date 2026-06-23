@@ -1,5 +1,6 @@
 """Base agent class for OpenContext agents."""
 
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -42,7 +43,14 @@ class AgentMetadata:
 
 
 class BaseAgent(ABC):
-    """Base class for all OpenContext agents."""
+    """Base class for all OpenContext agents.
+
+    .. deprecated:: 1.5.0
+        The standalone agent SDK (``BaseAgent`` and its subclasses,
+        ``AgentOrchestrator``) is deprecated and will be removed in 2.0. The live
+        SDD flow runs through the harness (``opencontext_core.harness``), not
+        these agents.
+    """
 
     def __init__(self, config: AgentConfig, project_root: Path):
         """Initialize agent.
@@ -51,6 +59,12 @@ class BaseAgent(ABC):
             config: Agent configuration
             project_root: Root directory of project being analyzed
         """
+        warnings.warn(
+            "The OpenContext agent SDK (BaseAgent/AgentOrchestrator) is deprecated "
+            "and will be removed in 2.0; the live SDD flow uses opencontext_core.harness.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.config = config
         self.project_root = Path(project_root)
         self.metadata = AgentMetadata(

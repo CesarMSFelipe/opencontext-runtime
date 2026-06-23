@@ -73,7 +73,6 @@ ci:
 	$(CI_VENV)/bin/python -m pip install -q \
 		-e packages/opencontext_core \
 		-e packages/opencontext_profiles \
-		-e packages/opencontext_providers \
 		-e packages/opencontext_cli \
 		-e packages/opencontext_api
 	$(CI_VENV)/bin/ruff check .
@@ -82,7 +81,6 @@ ci:
 	$(CI_VENV)/bin/python -m pytest
 	$(CI_VENV)/bin/python -m build packages/opencontext_core
 	$(CI_VENV)/bin/python -m build packages/opencontext_profiles
-	$(CI_VENV)/bin/python -m build packages/opencontext_providers
 	$(CI_VENV)/bin/python -m build packages/opencontext_cli
 	$(CI_VENV)/bin/python -m build packages/opencontext_api
 	@echo ""
