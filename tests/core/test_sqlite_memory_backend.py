@@ -114,3 +114,36 @@ def test_search_with_only_punctuation_returns_empty(backend: SQLiteMemoryBackend
     """No usable tokens -> no match, never an FTS5 syntax error."""
     backend.store(make_record(content="anything"))
     assert backend.search("?? -- !!") == []
+
+
+def test_store_by_topic_key_supersedes_instead_of_destroying(
+    backend: SQLiteMemoryBackend,
+) -> None:
+    """Re-storing under the same topic_key preserves the prior version.
+
+    The old row is superseded (kept, invalid_at set, linked both ways) rather
+    than overwritten in place, so prior content stays recoverable — consistent
+    with how consolidation handles history.
+    """
+    first = make_record(record_id="m1", content="v1 original fact")
+    first.topic_key = "architecture/auth-model"
+    backend.store_by_topic_key(first)
+
+    second = make_record(record_id="m2", content="v2 revised fact")
+    second.topic_key = "architecture/auth-model"
+    returned = backend.store_by_topic_key(second)
+
+    # The new version is active and the only active row for the topic.
+    assert returned.id == "m2"
+    assert returned.revision_count == 1
+    assert "m1" in returned.supersedes
+    active = [r for r in backend.list_records() if r.topic_key == "architecture/auth-model"]
+    assert [r.id for r in active] == ["m2"]
+    assert active[0].content == "v2 revised fact"
+
+    # Prior version survives, marked superseded, content intact (not destroyed).
+    prior = backend.get("m1")
+    assert prior is not None
+    assert prior.content == "v1 original fact"
+    assert prior.invalid_at is not None
+    assert prior.superseded_by == "m2"
