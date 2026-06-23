@@ -4,7 +4,7 @@
 # format rules or adding checks can no longer break CI out of nowhere; bump these
 # deliberately (and re-run `make ci`) instead.
 ruff==0.15.18
-mypy==1.20.2
+mypy==2.1.0
 pytest==9.1.1
 # Surfaces pytest failures as GitHub annotations (readable via the public API),
 # so a failure on a runner we can't reproduce locally (e.g. Windows) is
