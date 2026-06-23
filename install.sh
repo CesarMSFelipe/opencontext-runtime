@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-OPENCONTEXT_VERSION="1.2.0"
+OPENCONTEXT_VERSION="1.5.0"
 REPO_URL="https://github.com/CesarMSFelipe/OpenContext-Runtime"
 VENV_DIR="${HOME}/.opencontext/venv"
 BIN_DIR="${HOME}/.local/bin"

@@ -4,7 +4,20 @@
 Install OpenContext Runtime for local development, testing, or production use.
 
 ## Current Status
-All packages can be installed from source. PyPI publishing is configured but packages are not yet published.
+Install from PyPI (recommended) or from source.
+
+## Install methods
+
+| Method | Command |
+|--------|---------|
+| pipx (recommended) | `pipx install opencontext-cli` |
+| pip | `pip install opencontext-cli` |
+| uv | `uv tool install opencontext-cli` |
+| Ubuntu / Debian / macOS | `curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh \| bash` |
+| Windows (PowerShell) | `irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 \| iex` |
+| Portable binary | `make binary` → `dist/opencontext.pyz` (Python 3.12+) |
+
+pipx is recommended — it installs the `opencontext` CLI in an isolated environment and puts it on your PATH.
 
 ## From Source (Development)
 ```bash
