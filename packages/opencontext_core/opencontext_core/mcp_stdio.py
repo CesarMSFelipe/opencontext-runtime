@@ -479,7 +479,9 @@ class MCPServer:
             "opencontext_quality": {
                 "description": (
                     "Evaluate architecture + code-quality on the changed scope (or whole "
-                    "project); deterministic, zero model calls."
+                    "project); deterministic, zero model calls. The response also carries a "
+                    "'trend' (latest/previous/delta/count) showing how the rolled-up health "
+                    "score is moving across runs; a 'all'-scope scan advances the trend."
                 ),
                 "parameters": {
                     "scope": {
@@ -909,6 +911,35 @@ class MCPServer:
             "estimated_tokens": result.token_usage.get("final_context_pack", 0),
         }
 
+    def _project_profile_block(self) -> str:
+        """Durable project DOMAIN context as a markdown block (cached, best-effort).
+
+        Reads ``<root>/opencontext.yaml`` once and renders ``project.profile``
+        (purpose/audience/problem/key_decisions) — the product context the
+        knowledge graph cannot derive from code. Returns "" when there is no
+        profile or the config can't be read, so it never breaks context building.
+        """
+        cached = getattr(self, "_profile_block_cache", None)
+        if cached is not None:
+            return cast("str", cached)
+
+        block = ""
+        try:
+            import yaml
+
+            from opencontext_core.config import ProjectProfile
+
+            cfg_path = self.project_root / "opencontext.yaml"
+            if cfg_path.is_file():
+                raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+                profile_data = (raw.get("project") or {}).get("profile")
+                if isinstance(profile_data, dict):
+                    block = ProjectProfile.model_validate(profile_data).to_context_block()
+        except Exception:
+            block = ""  # best-effort: a missing/invalid profile never blocks context
+        self._profile_block_cache = block
+        return block
+
     def _handle_context(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle context building tool."""
 
@@ -935,6 +966,13 @@ class MCPServer:
             format=format,
         )
         rendered = self.context_builder.render(context)
+
+        # Ground the task in the project's DURABLE domain context (purpose/audience/
+        # problem/decisions) — what the code graph can't tell the agent. Prepended
+        # so it leads the pack; omitted entirely when no profile is authored.
+        profile_block = self._project_profile_block()
+        if profile_block:
+            rendered = f"{profile_block}\n\n{rendered}" if rendered else profile_block
 
         return {
             "context": rendered,
@@ -1199,7 +1237,28 @@ class MCPServer:
                 # tools see the whole repo). Deterministic and self-contained.
                 changed_files = [s.relative_path for s in evaluator._scanned()]
             report = evaluator.evaluate(changed_files)
-            return report.to_report_dict()
+            result = report.to_report_dict()
+            # Surface the cross-run evolution trend so an agent can see how the
+            # rolled-up health score is MOVING, not just this run's snapshot. This
+            # is READ-ONLY by design: the tool never writes (the CLI `quality
+            # check` and the harness are the recorders), so the check path stays
+            # side-effect-free and byte-deterministic. Missing log -> count 0.
+            try:
+                from opencontext_core.quality.evolution import (
+                    EVOLUTION_FILENAME,
+                    EvolutionStore,
+                )
+
+                trend = EvolutionStore(root / EVOLUTION_FILENAME).trend()
+                result["trend"] = {
+                    "latest": trend.latest,
+                    "previous": trend.previous,
+                    "delta": trend.delta,
+                    "count": trend.count,
+                }
+            except Exception:
+                result["trend"] = None  # best-effort; never fail the check
+            return result
         except Exception as exc:
             return {"error": str(exc)}
 

@@ -46,12 +46,63 @@ DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
 )
 
 
+class ProjectProfile(BaseModel):
+    """Durable, human-authored DOMAIN context for the project.
+
+    Captures what the knowledge graph cannot derive from parsing code — what the
+    project is FOR, who it serves, the problem it solves, and the load-bearing
+    decisions behind it — so an agent is grounded in the PRODUCT, not just the
+    code, on every task. Every field is optional; an unset profile renders to "".
+    Distinct from ``project_index.profile``, which is a technology hint.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    purpose: str = Field(default="", description="What this project is and what it is for.")
+    audience: str = Field(default="", description="Who uses it / who it is for.")
+    problem: str = Field(default="", description="The problem it solves / pain points addressed.")
+    key_decisions: list[str] = Field(
+        default_factory=list,
+        description="Load-bearing design/product decisions and the why behind them.",
+    )
+
+    def is_empty(self) -> bool:
+        """True when nothing was authored (so callers can skip rendering)."""
+        return not (self.purpose or self.audience or self.problem or self.key_decisions)
+
+    def to_context_block(self) -> str:
+        """Render a compact markdown block for injection into agent context.
+
+        Returns "" when empty so the caller can omit the section entirely.
+        """
+        if self.is_empty():
+            return ""
+        lines = ["## Project Profile"]
+        if self.purpose:
+            lines.append(f"- **Purpose:** {self.purpose}")
+        if self.audience:
+            lines.append(f"- **Audience:** {self.audience}")
+        if self.problem:
+            lines.append(f"- **Problem:** {self.problem}")
+        if self.key_decisions:
+            lines.append("- **Key decisions:**")
+            lines.extend(f"  - {decision}" for decision in self.key_decisions)
+        return "\n".join(lines)
+
+
 class ProjectConfig(BaseModel):
     """Project-level runtime configuration."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(description="Human-readable project name.")
+    profile: ProjectProfile = Field(
+        default_factory=ProjectProfile,
+        description=(
+            "Optional durable domain context (purpose/audience/problem/key_decisions) "
+            "injected into task context. Distinct from project_index.profile (a tech hint)."
+        ),
+    )
 
 
 class ModelProviderConfig(BaseModel):

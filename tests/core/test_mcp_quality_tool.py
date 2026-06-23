@@ -401,3 +401,41 @@ class TestQualityTmpIsolation:
             assert path.exists() is was_present, f"{path} presence changed"
             if was_present:
                 assert path.read_bytes() == content, f"{path} content changed"
+
+
+class TestQualityEvolutionTrend:
+    """The tool surfaces the cross-run evolution trend, READ-ONLY."""
+
+    def test_trend_reflects_recorded_history(self, tmp_path: Path) -> None:
+        """A pre-recorded evolution log shows up as latest/previous/delta/count."""
+        from opencontext_core.quality.evolution import EVOLUTION_FILENAME, EvolutionStore
+
+        store = EvolutionStore(tmp_path / EVOLUTION_FILENAME)
+        store.append(timestamp="2026-06-22T00:00:00+00:00", score=9000, sub_scores={})
+        store.append(timestamp="2026-06-22T01:00:00+00:00", score=9600, sub_scores={})
+        before = (tmp_path / EVOLUTION_FILENAME).read_bytes()
+
+        _make_project(tmp_path)
+        server = _server(tmp_path)
+        result = server._call_tool(_TOOL, {"scope": "all"})
+        server.close()
+
+        assert "error" not in result, result
+        assert result["trend"] == {
+            "latest": 9600,
+            "previous": 9000,
+            "delta": 600,
+            "count": 2,
+        }
+        # Read-only: surfacing the trend never appends to or rewrites the log.
+        assert (tmp_path / EVOLUTION_FILENAME).read_bytes() == before
+
+    def test_trend_is_zeroed_when_no_history(self, tmp_path: Path) -> None:
+        """No evolution log -> a flat zero trend, and still no .opencontext dir."""
+        _make_project(tmp_path)
+        server = _server(tmp_path)
+        result = server._call_tool(_TOOL, {"scope": "all"})
+        server.close()
+
+        assert result["trend"] == {"latest": 0, "previous": 0, "delta": 0, "count": 0}
+        assert not (tmp_path / ".opencontext").exists()

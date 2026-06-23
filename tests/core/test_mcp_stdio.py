@@ -316,3 +316,44 @@ class TestMCPPolicyEnforcement:
         assert len(denied) == len(server.tools) - 1
         assert set(denied) == set(server.tools) - {"opencontext_status"}
         server.close()
+
+
+def test_context_tool_injects_project_profile(tmp_path: Path) -> None:
+    """opencontext_context prepends the durable project domain profile, when set."""
+    import yaml
+
+    (tmp_path / "opencontext.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "project": {
+                    "name": "demo",
+                    "profile": {
+                        "purpose": "Serve a knowledge graph to agents.",
+                        "audience": "AI coding agents.",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    server = MCPServer(db_path=tmp_path / "test.db", project_root=tmp_path)
+    try:
+        result = server._call_tool("opencontext_context", {"task": "anything"})
+    finally:
+        server.close()
+
+    assert "error" not in result, result
+    assert result["context"].startswith("## Project Profile")
+    assert "Serve a knowledge graph to agents." in result["context"]
+
+
+def test_context_tool_has_no_profile_section_when_absent(tmp_path: Path) -> None:
+    """No opencontext.yaml -> no profile section; context is still returned."""
+    server = MCPServer(db_path=tmp_path / "test.db", project_root=tmp_path)
+    try:
+        result = server._call_tool("opencontext_context", {"task": "anything"})
+    finally:
+        server.close()
+
+    assert "error" not in result, result
+    assert "## Project Profile" not in result["context"]
