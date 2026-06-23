@@ -365,6 +365,36 @@ class TestFindTestGaps:
     def test_empty_graph_has_no_gaps(self, db: GraphDatabase) -> None:
         assert db.find_test_gaps() == []
 
+    def test_changed_files_scope_limits_gaps(self, db: GraphDatabase) -> None:
+        """changed_files scopes gaps to those files (the verify-gate form)."""
+        db.insert_node(_fn("bar", "src/b.py"))  # gap, in scope
+        db.insert_node(_fn("baz", "src/c.py"))  # gap, out of scope
+        names = {g["name"] for g in db.find_test_gaps(changed_files={"src/b.py"})}
+        assert names == {"bar"}
+        # An empty changed-scope reports nothing.
+        assert db.find_test_gaps(changed_files=set()) == []
+
+    def test_find_unused_symbols_orphans_only(self, db: GraphDatabase) -> None:
+        """A symbol with NO inbound edge (orphan) is unused; a called one is not."""
+        used = db.insert_node(_fn("used", "src/a.py"))
+        db.insert_node(_fn("orphan", "src/b.py"))  # nothing references it
+        caller = db.insert_node(_fn("caller", "src/c.py"))
+        db.insert_edge(
+            Edge(
+                id=None,
+                source_node_id=caller,
+                target_node_id=used,
+                kind="calls",
+                call_site_file="src/c.py",
+                call_site_line=2,
+            )
+        )
+        names = {u["name"] for u in db.find_unused_symbols()}
+        assert "orphan" in names  # no inbound edge at all
+        assert "used" not in names  # has an inbound caller
+        scoped = {u["name"] for u in db.find_unused_symbols(changed_files={"src/b.py"})}
+        assert scoped == {"orphan"}
+
 
 @pytest.mark.parametrize(
     "path,expected",

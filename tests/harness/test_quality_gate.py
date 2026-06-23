@@ -285,16 +285,17 @@ def test_quality_standards_gate_skipped_on_stale_graph(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Regression: WARN by default, FAIL under STRICT
+# Regression: BLOCK by default, WARN under gate_policy="warn", FAIL under STRICT
 # --------------------------------------------------------------------------- #
 
 
-def test_architecture_regression_warns_by_default(tmp_path: Path) -> None:
-    """A health drop is a WARNING under the default (ratchet) posture.
+def test_architecture_regression_blocks_by_default(tmp_path: Path) -> None:
+    """A health drop is a FAILED gate under the default (block) posture.
 
     Baseline is a perfect 10000 (captured on a clean tree); the post-change graph
-    is the degraded repo (cycle + complexity) so ``current.score < baseline`` and
-    the gate WARNs with the compact delta + new findings in metadata.
+    is the degraded repo (cycle + complexity) so ``current.score < baseline``. With
+    ``gate_policy="block"`` (the default) the regression is fatal — the gate FAILs
+    with the compact delta + new findings in metadata.
     """
     _degraded_repo(tmp_path)
     runner = HarnessRunner(root=tmp_path)
@@ -302,13 +303,181 @@ def test_architecture_regression_warns_by_default(tmp_path: Path) -> None:
     state.architecture_baseline = HealthScore(score=10000, metrics=QualityMetrics(), components={})
     gate = runner._eval_architecture_gate(state, _verify_result())
 
-    assert gate.status == GateStatus.WARNING
+    assert gate.status == GateStatus.FAILED
     assert gate.metadata["current"] < gate.metadata["baseline"]
     assert gate.metadata["delta"] < 0
     assert gate.message.startswith("architecture 10000 -> ")
     # The Builder/trace payload is compact file/line/rule rows, not raw dumps.
     new = gate.metadata["new_findings"]
     assert new and all({"rule", "severity", "message"} <= set(row) for row in new)
+
+
+def test_architecture_regression_warns_under_warn_policy(tmp_path: Path) -> None:
+    """Under ``gate_policy="warn"`` a health drop stays an advisory WARNING."""
+    _degraded_repo(tmp_path)
+    runner = HarnessRunner(root=tmp_path)
+    runner.config.gate_policy = "warn"
+    state = _state(tmp_path, delegate=_ExplodingDelegate())
+    state.architecture_baseline = HealthScore(score=10000, metrics=QualityMetrics(), components={})
+    gate = runner._eval_architecture_gate(state, _verify_result())
+
+    assert gate.status == GateStatus.WARNING
+    assert gate.metadata["delta"] < 0
+
+
+def test_test_gaps_gate_skips_without_changes_or_graph(tmp_path: Path) -> None:
+    """tests_covered SKIPs (never false-passes) with no changed files / no graph."""
+    runner = HarnessRunner(root=tmp_path)
+    state = _state(tmp_path, delegate=_ExplodingDelegate())
+    gate = runner._eval_test_gaps_gate(state, _verify_result())
+    assert gate.status == GateStatus.SKIPPED
+    assert gate.metadata.get("reason") in {"no-changed-files", "no-graph", "stale-graph"}
+
+
+def test_code_economy_gate_skips_without_changes_or_graph(tmp_path: Path) -> None:
+    """code_economy SKIPs (never false-passes) with no changed files / no graph."""
+    runner = HarnessRunner(root=tmp_path)
+    state = _state(tmp_path, delegate=_ExplodingDelegate())
+    gate = runner._eval_code_economy_gate(state, _verify_result())
+    assert gate.status == GateStatus.SKIPPED
+    assert gate.metadata.get("reason") in {"no-changed-files", "no-graph", "stale-graph"}
+
+
+# --------------------------------------------------------------------------- #
+# Fix loop: revives quality rules.max_fix_loops (apply -> verify -> fix)
+# --------------------------------------------------------------------------- #
+
+
+def test_fix_loop_skips_without_delegate(tmp_path: Path) -> None:
+    """No real executor -> the fix loop is a no-op (FAILED stays FAILED)."""
+    runner = HarnessRunner(root=tmp_path)
+    state = _state(tmp_path, delegate=None)
+    state.gates = [
+        PhaseGate(id="architecture_clean", phase="verify", status=GateStatus.FAILED, message="x")
+    ]
+    out = runner._run_fix_loops(state, GateStatus.FAILED, [], BudgetMode.WARN)
+    assert out == GateStatus.FAILED
+
+
+def test_fix_loop_recovers_after_reapply(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fix attempt that makes verify pass flips the run to PASSED."""
+    runner = HarnessRunner(root=tmp_path)
+    state = _state(tmp_path, delegate=_ExplodingDelegate())
+    state.gates = [
+        PhaseGate(id="architecture_clean", phase="verify", status=GateStatus.FAILED, message="x")
+    ]
+    monkeypatch.setattr(runner, "_reapply_with_findings", lambda *a, **k: None)
+    monkeypatch.setattr(
+        runner,
+        "_reverify",
+        lambda st: [
+            PhaseGate(
+                id="architecture_clean", phase="verify", status=GateStatus.PASSED, message="ok"
+            )
+        ],
+    )
+    events: list[Any] = []
+    out = runner._run_fix_loops(state, GateStatus.FAILED, events, BudgetMode.WARN)
+    assert out == GateStatus.PASSED
+    assert events and events[-1].action == "fix_attempt"
+
+
+def test_fix_loop_exhausts_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify never recovers -> the loop tries max_fix_loops times, stays FAILED."""
+    runner = HarnessRunner(root=tmp_path)
+    state = _state(tmp_path, delegate=_ExplodingDelegate())
+    state.gates = [
+        PhaseGate(id="architecture_clean", phase="verify", status=GateStatus.FAILED, message="x")
+    ]
+    calls = {"n": 0}
+
+    def _always_failing(st: Any) -> list[Any]:
+        calls["n"] += 1
+        return [
+            PhaseGate(
+                id="architecture_clean", phase="verify", status=GateStatus.FAILED, message="still"
+            )
+        ]
+
+    monkeypatch.setattr(runner, "_reapply_with_findings", lambda *a, **k: None)
+    monkeypatch.setattr(runner, "_reverify", _always_failing)
+    out = runner._run_fix_loops(state, GateStatus.FAILED, [], BudgetMode.WARN)
+    assert out == GateStatus.FAILED
+    assert calls["n"] == 2  # quality DEFAULT_RULES.max_fix_loops
+
+
+# --------------------------------------------------------------------------- #
+# Risk-gated adversarial review (judgment auto-runs on high blast radius)
+# --------------------------------------------------------------------------- #
+
+
+def test_judgment_skips_when_already_scheduled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If the workflow already runs judgment, the risk gate does not re-run it."""
+    runner = HarnessRunner(root=tmp_path)
+    state = _state(tmp_path)
+    monkeypatch.setattr(runner, "_blast_radius_high", lambda st: True)
+    before = len(state.gates)
+    runner._maybe_run_judgment(
+        state, ["explore", "apply", "verify", "judgment"], [], BudgetMode.WARN
+    )
+    assert len(state.gates) == before
+
+
+def test_judgment_skips_low_blast_radius(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A low blast-radius change does not trigger the adversarial review."""
+    runner = HarnessRunner(root=tmp_path)
+    state = _state(tmp_path)
+    monkeypatch.setattr(runner, "_blast_radius_high", lambda st: False)
+    runner._maybe_run_judgment(state, ["explore", "apply", "verify"], [], BudgetMode.WARN)
+    assert not any(g.id == "judgment" for g in state.gates)
+
+
+def test_judgment_runs_on_high_blast_radius(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A high blast-radius change runs judgment and records the review (advisory)."""
+    runner = HarnessRunner(root=tmp_path)
+    state = _state(tmp_path)
+    monkeypatch.setattr(runner, "_blast_radius_high", lambda st: True)
+
+    class _StubJudgment:
+        def run(self, st: Any) -> PhaseResult:
+            return PhaseResult(
+                phase="judgment",
+                status=GateStatus.WARNING,
+                gates=[
+                    PhaseGate(
+                        id="judgment",
+                        phase="judgment",
+                        status=GateStatus.WARNING,
+                        message="findings",
+                    )
+                ],
+            )
+
+    monkeypatch.setattr(runner, "_build_phase", lambda *a, **k: _StubJudgment())
+    events: list[Any] = []
+    runner._maybe_run_judgment(state, ["explore", "apply", "verify"], events, BudgetMode.WARN)
+    assert any(g.id == "judgment" for g in state.gates)
+    assert events and events[-1].action == "risk_gated_review"
+
+
+def test_blast_radius_high_on_security_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Touching a security/safety boundary is always high blast radius."""
+    runner = HarnessRunner(root=tmp_path)
+    state = _state(tmp_path)
+    monkeypatch.setattr(
+        runner, "_git_changed_files", lambda root: ["packages/x/security/auth.py"]
+    )
+    assert runner._blast_radius_high(state) is True
 
 
 def test_architecture_regression_fails_under_strict(tmp_path: Path) -> None:

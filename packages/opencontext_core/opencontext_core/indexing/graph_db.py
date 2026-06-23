@@ -739,7 +739,10 @@ class GraphDatabase:
         }
 
     def find_test_gaps(
-        self, *, kinds: tuple[str, ...] = ("function", "method")
+        self,
+        *,
+        kinds: tuple[str, ...] = ("function", "method"),
+        changed_files: set[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Definitions with no inbound reference from any test file (test-gaps).
 
@@ -748,7 +751,14 @@ class GraphDatabase:
         test path targets it. This is a STRUCTURAL proxy (does any test mention
         the symbol at all), not execution coverage, computed purely from the
         persisted graph. Deterministic; ordered by ``file_path`` then ``line``.
+
+        When ``changed_files`` is given (project-relative POSIX paths), only gaps
+        in those files are returned — the scoped form the verify gate uses so a
+        run is judged on the code it touched, not the whole legacy repo.
         """
+        scope = (
+            {p.replace("\\", "/") for p in changed_files} if changed_files is not None else None
+        )
         conn = self._connect()
 
         # "Covered" = referenced from a test file. Collect the test-file call
@@ -787,6 +797,8 @@ class GraphDatabase:
                 continue  # a test's own helpers are not untested production code
             if row["id"] in covered:
                 continue
+            if scope is not None and row["file_path"].replace("\\", "/") not in scope:
+                continue  # scoped to the changed files only
             gaps.append(
                 {
                     "id": row["id"],
@@ -798,6 +810,58 @@ class GraphDatabase:
                 }
             )
         return gaps
+
+    def find_unused_symbols(
+        self,
+        *,
+        kinds: tuple[str, ...] = ("function", "method"),
+        changed_files: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Defined symbols with NO inbound edge — no caller, importer, or reference.
+
+        An orphan of one of ``kinds`` in a NON-test file that nothing in the graph
+        targets: the clearest structural signal of dead or speculative code. A
+        re-exported public symbol keeps an inbound import edge, so it is NOT
+        flagged. Scoped to ``changed_files`` when given (the verify-gate form).
+        STRUCTURAL + advisory — a string-dispatched entry point can look orphan in
+        the graph, so a hit is a prompt to check, not proof. Deterministic; from
+        the persisted graph only; ordered by ``file_path`` then ``line``.
+        """
+        scope = (
+            {p.replace("\\", "/") for p in changed_files} if changed_files is not None else None
+        )
+        conn = self._connect()
+        referenced = {
+            row["target_node_id"]
+            for row in conn.execute(
+                "SELECT DISTINCT target_node_id FROM edges WHERE target_node_id IS NOT NULL"
+            ).fetchall()
+        }
+        kind_placeholders = ",".join("?" for _ in kinds)
+        rows = conn.execute(
+            "SELECT id, name, kind, file_path, line, container FROM nodes "
+            f"WHERE kind IN ({kind_placeholders}) ORDER BY file_path, line",
+            tuple(kinds),
+        ).fetchall()
+        unused: list[dict[str, Any]] = []
+        for row in rows:
+            if is_test_path(row["file_path"]):
+                continue
+            if row["id"] in referenced:
+                continue
+            if scope is not None and row["file_path"].replace("\\", "/") not in scope:
+                continue
+            unused.append(
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "kind": row["kind"],
+                    "file_path": row["file_path"],
+                    "line": row["line"],
+                    "container": row["container"],
+                }
+            )
+        return unused
 
     def delete_file_and_nodes(self, file_path: str) -> None:
         """Delete all nodes and edges for a file."""

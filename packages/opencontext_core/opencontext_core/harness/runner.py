@@ -567,7 +567,10 @@ class HarnessRunner:
             dispatched = self._dispatch_declared_gates(state, phase_id, phase_config, result)
             state.gates.extend(dispatched)
             if any(g.status == GateStatus.FAILED for g in dispatched):
-                if budget_mode is BudgetMode.STRICT:
+                # Block-by-default: a FAILED verify-phase gate is fatal regardless
+                # of budget_mode when gate_policy is "block" (the default). "warn"
+                # keeps the historical posture (FAILED blocks only under STRICT).
+                if budget_mode is BudgetMode.STRICT or self.config.gate_policy == "block":
                     final_status = GateStatus.FAILED
                 elif not hard_failed:
                     final_status = GateStatus.WARNING
@@ -580,6 +583,17 @@ class HarnessRunner:
             if result.status == GateStatus.FAILED and budget_mode is BudgetMode.STRICT:
                 final_status = GateStatus.FAILED
                 break
+
+        # Bounded apply->gate->fix loop: feed failing verify findings back to the
+        # Builder for a re-attempt (revives quality rules' max_fix_loops). No-op
+        # without a delegate / block policy / verify failure, so mock runs are
+        # unaffected.
+        final_status = self._run_fix_loops(state, final_status, events, budget_mode)
+
+        # Risk-gated adversarial review: run the (deterministic) judgment phase for
+        # high blast-radius changes that did not already schedule it. Advisory —
+        # surfaces a judgment report without changing the run status.
+        self._maybe_run_judgment(state, phase_ids, events, budget_mode)
 
         # ACON-lite feedback: record this run's retrieval omissions against its
         # outcome so the token optimizer can widen the "context_pack" budget when
@@ -888,6 +902,10 @@ class HarnessRunner:
             return self._eval_architecture_gate(state, result)
         if gate_id == "quality_standards":
             return self._eval_quality_standards_gate(state, result)
+        if gate_id == "tests_covered":
+            return self._eval_test_gaps_gate(state, result)
+        if gate_id == "code_economy":
+            return self._eval_code_economy_gate(state, result)
         # Unknown / unbound declared gate: do not fabricate a result.
         return None
 
@@ -1053,9 +1071,12 @@ class HarnessRunner:
             # The evaluator already encodes STRICT->error / else->warning in the
             # verdict severity; the run-level gate status surfaces WARNING and the
             # dispatch loop escalates to FAILED under BudgetMode.STRICT.
+            # Under block policy (default) a health regression is fatal; under
+            # warn it stays an advisory WARNING (the historical posture).
             status = (
                 GateStatus.FAILED
                 if verdict.severity.value in ("error", "critical")
+                or self.config.gate_policy == "block"
                 else GateStatus.WARNING
             )
         return PhaseGate(
@@ -1148,6 +1169,362 @@ class HarnessRunner:
                 "skipped": list(report.skipped),
             },
         )
+
+    def _eval_test_gaps_gate(self, state: HarnessState, result: PhaseResult) -> PhaseGate:
+        """tests_covered — warn when a changed symbol has no referencing test.
+
+        Structural proxy (does any test file reference the symbol at all), scoped
+        to the files this run changed so the change is judged on the code it
+        touched, not the legacy repo. Deterministic graph read; never the model.
+        SKIPs (never a false pass) when there is no changed scope, no graph, or the
+        graph is stale. ADVISORY (WARNING) even under gate_policy="block": a
+        structural gap is a softer signal than a regression or a leak — a symbol
+        may be covered indirectly — so it surfaces the gap in-flow (scoped to the
+        change) without blocking the run.
+        """
+        changed = self._git_changed_files(state.root)
+        if not changed:
+            return PhaseGate(
+                id="tests_covered",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message="tests: no changed files (non-git, empty tree, or no diff)",
+                metadata={"reason": "no-changed-files"},
+            )
+        db_path = self._quality_db_path(state.root)
+        if not db_path.exists():
+            return PhaseGate(
+                id="tests_covered",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message="tests: no knowledge graph (run `opencontext index .` first)",
+                metadata={"reason": "no-graph"},
+            )
+        if self._graph_is_stale(state.root, changed):
+            return PhaseGate(
+                id="tests_covered",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message="tests: graph stale vs changed files (reindex incomplete)",
+                metadata={"reason": "stale-graph"},
+            )
+        try:
+            from opencontext_core.indexing.graph_db import GraphDatabase
+
+            scope = {c.replace("\\", "/") for c in changed}
+            db = GraphDatabase(db_path)
+            try:
+                gaps = db.find_test_gaps(changed_files=scope)
+            finally:
+                db.close()
+        except Exception as exc:  # pragma: no cover - best-effort, degrade honestly
+            return PhaseGate(
+                id="tests_covered",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message=f"tests: evaluation unavailable ({exc})",
+                metadata={"reason": "error"},
+            )
+
+        if not gaps:
+            return PhaseGate(
+                id="tests_covered",
+                phase="verify",
+                status=GateStatus.PASSED,
+                message="tests: every changed function/method is referenced by a test",
+            )
+        return PhaseGate(
+            id="tests_covered",
+            phase="verify",
+            status=GateStatus.WARNING,
+            message=f"tests: {len(gaps)} changed symbol(s) with no referencing test",
+            metadata={
+                "reason": "test-gaps",
+                "count": len(gaps),
+                "gaps": [
+                    {
+                        "name": g["name"],
+                        "kind": g["kind"],
+                        "file": g["file_path"],
+                        "line": g["line"],
+                    }
+                    for g in gaps[:50]
+                ],
+            },
+        )
+
+    def _eval_code_economy_gate(self, state: HarnessState, result: PhaseResult) -> PhaseGate:
+        """code_economy — warn on symbols added with no caller/importer/reference.
+
+        Advisory (WARNING): an orphan symbol in the changed files is a strong hint
+        of dead or speculative code (the category this review hunts), but a
+        string-dispatched entry point can look orphan in the graph, so it surfaces
+        the hit rather than blocking. SKIPs (never a false pass) without a changed
+        scope / graph / fresh graph — mirrors tests_covered.
+        """
+        changed = self._git_changed_files(state.root)
+        if not changed:
+            return PhaseGate(
+                id="code_economy",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message="economy: no changed files (non-git, empty tree, or no diff)",
+                metadata={"reason": "no-changed-files"},
+            )
+        db_path = self._quality_db_path(state.root)
+        if not db_path.exists():
+            return PhaseGate(
+                id="code_economy",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message="economy: no knowledge graph (run `opencontext index .` first)",
+                metadata={"reason": "no-graph"},
+            )
+        if self._graph_is_stale(state.root, changed):
+            return PhaseGate(
+                id="code_economy",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message="economy: graph stale vs changed files (reindex incomplete)",
+                metadata={"reason": "stale-graph"},
+            )
+        try:
+            from opencontext_core.indexing.graph_db import GraphDatabase
+
+            scope = {c.replace("\\", "/") for c in changed}
+            db = GraphDatabase(db_path)
+            try:
+                unused = db.find_unused_symbols(changed_files=scope)
+            finally:
+                db.close()
+        except Exception as exc:  # pragma: no cover - best-effort, degrade honestly
+            return PhaseGate(
+                id="code_economy",
+                phase="verify",
+                status=GateStatus.SKIPPED,
+                message=f"economy: evaluation unavailable ({exc})",
+                metadata={"reason": "error"},
+            )
+
+        if not unused:
+            return PhaseGate(
+                id="code_economy",
+                phase="verify",
+                status=GateStatus.PASSED,
+                message="economy: no orphan symbols in the changed files",
+            )
+        return PhaseGate(
+            id="code_economy",
+            phase="verify",
+            status=GateStatus.WARNING,
+            message=f"economy: {len(unused)} changed symbol(s) with no caller/importer",
+            metadata={
+                "reason": "unused-symbols",
+                "count": len(unused),
+                "symbols": [
+                    {
+                        "name": u["name"],
+                        "kind": u["kind"],
+                        "file": u["file_path"],
+                        "line": u["line"],
+                    }
+                    for u in unused[:50]
+                ],
+            },
+        )
+
+    # -- bounded apply->verify->fix loop (revives quality rules.max_fix_loops) --
+
+    def _run_fix_loops(
+        self,
+        state: HarnessState,
+        final_status: GateStatus,
+        events: list[Any],
+        budget_mode: BudgetMode,
+    ) -> GateStatus:
+        """Feed failing verify findings back to the Builder and re-attempt.
+
+        Runs only when the run FAILED on verify-phase gates under block policy and
+        a real executor is wired; otherwise returns ``final_status`` unchanged (so
+        mock / no-model runs are untouched). Bounded by quality rules'
+        ``max_fix_loops``: each attempt re-applies with the findings, reindexes,
+        and re-verifies via the same gate dispatch. Returns the resolved status
+        (PASSED/WARNING when verify recovers, else the original FAILED).
+        """
+        if final_status is not GateStatus.FAILED or self.config.gate_policy != "block":
+            return final_status
+        if getattr(state, "delegate", None) is None:
+            return final_status
+        failing = [
+            g for g in state.gates if g.phase == "verify" and g.status == GateStatus.FAILED
+        ]
+        if not failing:
+            return final_status
+        try:
+            from opencontext_core.quality.evaluator import QualityEvaluator
+
+            max_loops = int(QualityEvaluator(state.root).rules.max_fix_loops)
+        except Exception:
+            max_loops = 0
+
+        for attempt in range(1, max_loops + 1):
+            findings = self._collect_fix_findings(failing)
+            self._reapply_with_findings(state, findings, budget_mode)
+            new_verify_gates = self._reverify(state)
+            still_failing = [g for g in new_verify_gates if g.status == GateStatus.FAILED]
+            # Replace the stale verify gates with this attempt's fresh ones.
+            state.gates = [g for g in state.gates if g.phase != "verify"] + new_verify_gates
+            events.append(self._fix_loop_event(len(events), attempt, max_loops, still_failing))
+            if not still_failing:
+                state.warnings.append(
+                    f"fix-loop: verify recovered after {attempt} fix attempt(s)"
+                )
+                return (
+                    GateStatus.WARNING
+                    if any(g.status == GateStatus.WARNING for g in new_verify_gates)
+                    else GateStatus.PASSED
+                )
+            failing = still_failing
+        state.warnings.append(f"fix-loop: still failing after {max_loops} fix attempt(s)")
+        return final_status
+
+    @staticmethod
+    def _collect_fix_findings(gates: list[PhaseGate]) -> str:
+        """Render failing verify-gate findings as a compact fix-instruction block."""
+        lines: list[str] = []
+        for g in gates:
+            lines.append(f"- {g.id}: {g.message}")
+            meta = g.metadata or {}
+            rows = meta.get("new_findings") or meta.get("findings") or meta.get("symbols") or []
+            for row in rows:
+                loc = f"{row.get('file', '?')}:{row.get('line', '?')}"
+                detail = row.get("message") or row.get("rule") or row.get("name") or ""
+                lines.append(f"    {loc} {detail}".rstrip())
+        return "\n".join(lines)
+
+    def _reapply_with_findings(
+        self, state: HarnessState, findings: str, budget_mode: BudgetMode
+    ) -> None:
+        """Re-generate apply edits with the findings appended, apply, and reindex.
+
+        Overridable seam (tests stub it). Best-effort: a codegen/apply failure
+        leaves prior state so the loop simply re-verifies and may exhaust.
+        """
+        original = state.context_pack
+        try:
+            state.context_pack = f"{original}\n\n## Gate findings to fix\n{findings}".strip()
+            edits = self._generate_apply_edits(state)
+        finally:
+            state.context_pack = original
+        if not edits:
+            return
+        state.apply_edits = edits
+        apply_phase = self._build_phase("apply", budget_mode)
+        if apply_phase is not None:
+            try:
+                apply_phase.run(state)
+            except Exception as exc:  # pragma: no cover - degrade honestly
+                state.warnings.append(f"fix-loop: re-apply failed: {exc}")
+        self._post_run_update(state)
+
+    def _reverify(self, state: HarnessState) -> list[PhaseGate]:
+        """Re-dispatch the verify phase's declared gates against the fresh graph.
+
+        Overridable seam (tests stub it). Returns the freshly-evaluated verify
+        gates (architecture_clean / quality_standards / tests_covered / ...).
+        """
+        verify_config = self.config.phases.get("verify")
+        if verify_config is None:
+            return []
+        synthetic = PhaseResult(phase="verify", status=GateStatus.PASSED)
+        return list(self._dispatch_declared_gates(state, "verify", verify_config, synthetic))
+
+    @staticmethod
+    def _fix_loop_event(
+        index: int, attempt: int, max_loops: int, still_failing: list[PhaseGate]
+    ) -> Any:
+        """A typed RunEvent for one fix-loop attempt."""
+        return RunEvent(
+            index=index,
+            phase="verify",
+            action="fix_attempt",
+            inputs_summary=f"fix attempt {attempt}/{max_loops}",
+            status=(GateStatus.FAILED.value if still_failing else GateStatus.PASSED.value),
+            observation=(
+                f"fix attempt {attempt}/{max_loops}: "
+                + (
+                    f"{len(still_failing)} gate(s) still failing"
+                    if still_failing
+                    else "verify recovered"
+                )
+            ),
+            metadata={"attempt": attempt, "max_loops": max_loops},
+        )
+
+    # -- risk-gated adversarial review (auto-run judgment for high blast radius) --
+
+    def _blast_radius_high(self, state: HarnessState) -> bool:
+        """True when this change is high-risk enough to warrant adversarial review.
+
+        Deterministic heuristic: touching a ``security/`` or ``safety/`` boundary is
+        always high-risk; otherwise a broad change (many source files) is. No graph
+        dependency, so it works even before/without an index.
+        """
+        changed = self._git_changed_files(state.root)
+        if not changed:
+            return False
+        for rel in changed:
+            norm = f"/{rel.replace(chr(92), '/')}"
+            if "/security/" in norm or "/safety/" in norm:
+                return True
+        source = [
+            c
+            for c in changed
+            if not c.replace("\\", "/").startswith(self._STALE_IGNORE_PREFIXES)
+        ]
+        return len(source) >= 8
+
+    def _maybe_run_judgment(
+        self,
+        state: HarnessState,
+        phase_ids: list[str],
+        events: list[Any],
+        budget_mode: BudgetMode,
+    ) -> None:
+        """Run the judgment phase for high blast-radius changes (advisory).
+
+        No-op when the workflow already scheduled ``judgment`` or the blast radius
+        is low. The judgment phase is deterministic (no LLM); its findings are
+        appended as gates + a report, surfaced but NOT used to flip the run status.
+        Best-effort: any failure is recorded as a warning, never raised.
+        """
+        if "judgment" in phase_ids:
+            return
+        if not self._blast_radius_high(state):
+            return
+        try:
+            phase = self._build_phase("judgment", budget_mode)
+            if phase is None:
+                return
+            result = phase.run(state)
+        except Exception as exc:  # pragma: no cover - best-effort, degrade honestly
+            state.warnings.append(f"risk-gated judgment skipped: {exc}")
+            return
+        state.gates.extend(result.gates)
+        state.artifacts.extend(result.artifacts)
+        events.append(
+            RunEvent(
+                index=len(events),
+                phase="judgment",
+                action="risk_gated_review",
+                inputs_summary=self._inputs_summary(state),
+                status=result.status.value,
+                observation="high blast radius: ran adversarial judgment review",
+                metadata={"trigger": "blast-radius"},
+            )
+        )
+        if result.status in (GateStatus.FAILED, GateStatus.WARNING):
+            state.warnings.append("risk-gated judgment surfaced findings (advisory)")
 
     def _build_phase(self, phase_id: str, budget_mode: BudgetMode) -> HarnessPhase | None:
         """Build a phase instance by ID."""

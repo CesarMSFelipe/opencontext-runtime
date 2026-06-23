@@ -61,6 +61,11 @@ class HarnessConfig:
 
     version: str = "0.1"
     budget_mode: str = "warn"
+    # Gate enforcement posture. "block" (default) makes a FAILED verify-phase gate
+    # — and an architecture-health regression — fatal to the run regardless of
+    # budget_mode; "warn" keeps the advisory posture (a gate blocks only under
+    # BudgetMode.STRICT). Set via workflow_defaults.gate_policy.
+    gate_policy: str = "block"
     privacy_profile: PrivacyProfile = PrivacyProfile.OFF
     artifact_root: str = ".opencontext/runs"
     # TDD / approval pre-gate governance (decoupled from budget_mode).
@@ -142,6 +147,14 @@ class HarnessConfig:
                     # only FAIL the run under BudgetMode.STRICT (WARN otherwise).
                     "architecture_clean",
                     "quality_standards",
+                    # tests_covered: surfaces (advisory WARNING) any changed
+                    # function/method with no referencing test — structural proxy
+                    # scoped to the changed files; SKIPs without a git diff / graph.
+                    "tests_covered",
+                    # code_economy: surfaces (advisory WARNING) any changed symbol
+                    # with no caller/importer/reference — an orphan = likely dead or
+                    # speculative code. Scoped to the change; SKIPs without graph.
+                    "code_economy",
                 ],
             ),
             "review": PhaseConfig(
@@ -201,6 +214,7 @@ class HarnessConfig:
         wf_defaults = data.get("workflow_defaults", {})
         if isinstance(wf_defaults, dict):
             config.budget_mode = wf_defaults.get("budget_mode", config.budget_mode)
+            config.gate_policy = wf_defaults.get("gate_policy", config.gate_policy)
             privacy_str = wf_defaults.get("privacy_profile", "off")
             config.privacy_profile = PrivacyProfile(privacy_str)
             config.artifact_root = wf_defaults.get("artifact_root", config.artifact_root)
