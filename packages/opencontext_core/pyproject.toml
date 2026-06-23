@@ -27,7 +27,9 @@ dependencies = [
   "tree-sitter-python>=0.25",
   "watchdog>=6.0",
   "rich>=13.0",
-  "prompt-toolkit>=3.0",
+  # prompts.py drives every interactive selector through InquirerPy; it pulls
+  # prompt-toolkit transitively, so core degrades to arrow keys, not just Rich.
+  "InquirerPy>=0.3.4",
 ]
 
 [project.urls]

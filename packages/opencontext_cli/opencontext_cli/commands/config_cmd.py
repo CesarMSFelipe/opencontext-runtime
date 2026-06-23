@@ -71,11 +71,12 @@ def handle_config(args: Any) -> None:
     command = getattr(args, "config_command", None)
 
     if command is None:
-        # No subcommand — run the interactive wizard by default
-        from opencontext_core.wizard import run_wizard, run_wizard_menu
+        # No subcommand — open the single configuration menu by default.
+        from opencontext_cli.commands.menu_cmd import run_config_menu
+        from opencontext_core.wizard import run_wizard
 
         try:
-            run_wizard_menu()
+            run_config_menu()
         except Exception:
             run_wizard(non_interactive=True)
         return
@@ -83,9 +84,9 @@ def handle_config(args: Any) -> None:
     if command == "wizard":
         use_tui = not getattr(args, "non_interactive", False)
         if use_tui:
-            from opencontext_core.wizard import run_wizard_menu
+            from opencontext_cli.commands.menu_cmd import run_config_menu
 
-            run_wizard_menu()
+            run_config_menu()
         else:
             from opencontext_core.wizard import run_wizard
 
