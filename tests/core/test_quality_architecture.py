@@ -403,25 +403,6 @@ def test_complexity_skipped_when_tree_sitter_unavailable(
 
 
 # --------------------------------------------------------------------------- #
-# Coupling grade
-# --------------------------------------------------------------------------- #
-
-
-def test_coupling_grade_clean_graph_is_a(tmp_path: Path) -> None:
-    db_path = _init_db(tmp_path)  # empty graph -> worst fan-in 0 -> grade A
-    analyzer = ArchitectureAnalyzer(db_path)
-    assert analyzer.coupling_grade() == "A"
-
-
-def test_coupling_grade_worsens_with_fan_in(tmp_path: Path) -> None:
-    # core called by 10 distinct symbols -> worst in-degree 10 -> band 'C'.
-    calls = [(f"c{i}", f"src/c{i}.py", "core", "src/core.py") for i in range(10)]
-    db_path = _build_call_graph(tmp_path, calls)
-    analyzer = ArchitectureAnalyzer(db_path)
-    assert analyzer.coupling_grade() == "C"
-
-
-# --------------------------------------------------------------------------- #
 # Full analyze() orchestration + metrics + Finding normalization
 # --------------------------------------------------------------------------- #
 

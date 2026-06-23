@@ -41,17 +41,6 @@ from opencontext_core.quality.ci_checks import CheckSeverity
 from opencontext_core.quality.models import Finding, QualityMetrics
 from opencontext_core.quality.rules import ArchitectureRules, BoundaryRule, LayerRule
 
-# Coupling letter-grade bands keyed off worst fan-in. Lower coupling == better
-# grade. Bands are inclusive lower bounds; anything at/above the highest is 'F'.
-_COUPLING_BANDS: tuple[tuple[int, str], ...] = (
-    (0, "A"),
-    (5, "B"),
-    (9, "C"),
-    (13, "D"),
-    (20, "E"),
-    (30, "F"),
-)
-
 # Near-duplicate (clone) detection knobs. Deterministic, in-process only.
 # A function body is tokenized (split on non-alphanumeric), windowed into
 # fixed-width K-token shingles, and each shingle hashed. Two functions are a
@@ -424,12 +413,6 @@ class ArchitectureAnalyzer:
         scope = set(self._normalize_scope(files) or [])
         findings, _ = self._compute_complexity(rules, scope=scope if files is not None else None)
         return findings
-
-    def coupling_grade(self) -> str:
-        """Map the worst fan-in across all nodes to an A..F coupling grade."""
-        centrality = self._centrality()
-        worst_in = max((c.in_degree for c in centrality.values()), default=0)
-        return self._grade_for_degree(worst_in)
 
     # -- internals --------------------------------------------------------- #
 
@@ -926,12 +909,3 @@ class ArchitectureAnalyzer:
                 if fnmatch.fnmatch(normalized, pattern):
                     return layer.name
         return None
-
-    @staticmethod
-    def _grade_for_degree(degree: int) -> str:
-        """Letter grade A..F for a fan-in ``degree`` via :data:`_COUPLING_BANDS`."""
-        grade = "A"
-        for threshold, letter in _COUPLING_BANDS:
-            if degree >= threshold:
-                grade = letter
-        return grade
