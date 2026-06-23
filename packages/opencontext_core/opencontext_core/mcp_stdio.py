@@ -533,9 +533,9 @@ class MCPServer:
                 try:
                     ready, _, _ = select.select([fd], [], [], timeout)
                 except OSError:
-                    # Windows: select() rejects non-socket fds (pipes/files →
-                    # WinError 10038). Fall back to a blocking read — batched data
-                    # already in the pipe makes os.read return immediately.
+                    # Windows: select() rejects non-socket fds (pipes/stdin) with
+                    # WinError 10038. Fall back to a blocking read — the deadline is
+                    # best-effort there; the host's sampling reply still arrives.
                     ready = [fd]
                 if not ready:
                     return None
