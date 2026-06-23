@@ -432,3 +432,13 @@ def test_isolation_does_not_touch_real_home(tmp_path: Path, monkeypatch) -> None
         tmp_path, rules=QualityRules(mode=QualityMode.RATCHET), scanned_files=[sf]
     )
     ev.evaluate(["ok.py"], architecture_only=True)
+
+
+def test_loc_gini_is_report_only_and_does_not_move_score() -> None:
+    """The distribution metric is surfaced for explainability but never penalized."""
+    clean = QualityEvaluator.compute_health(QualityMetrics(), DEFAULT_RULES)
+    skewed = QualityEvaluator.compute_health(QualityMetrics(loc_gini_bp=10000), DEFAULT_RULES)
+    assert clean.score == skewed.score == 10000
+    assert "loc_gini" not in clean.components and "loc_gini_bp" not in clean.components
+    # ...but the raw signal IS carried through for the report/metrics surface.
+    assert skewed.metrics.loc_gini_bp == 10000

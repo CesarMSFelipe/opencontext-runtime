@@ -78,6 +78,10 @@ class QualityMetrics:
     max_nesting: int = 0  # deepest CODE block-nesting among in-scope functions
     node_count: int = 0  # graph size (for normalization context)
     edge_count: int = 0
+    # Distribution/balance signal ("equality"): Gini of per-file LOC in basis
+    # points, 0 = perfectly even, 10000 = maximally concentrated. REPORT-ONLY —
+    # surfaced for explainability but NOT wired into the health penalty formula.
+    loc_gini_bp: int = 0
 
     def as_dict(self) -> dict[str, int]:
         """Serialize to a plain ``{name: int}`` dict (stable key order)."""
@@ -93,6 +97,7 @@ class QualityMetrics:
             "max_nesting": self.max_nesting,
             "node_count": self.node_count,
             "edge_count": self.edge_count,
+            "loc_gini_bp": self.loc_gini_bp,
         }
 
     @classmethod
@@ -114,6 +119,7 @@ class QualityMetrics:
             max_nesting=int(d.get("max_nesting", 0)),
             node_count=int(d.get("node_count", 0)),
             edge_count=int(d.get("edge_count", 0)),
+            loc_gini_bp=int(d.get("loc_gini_bp", 0)),
         )
 
 

@@ -61,6 +61,24 @@ _DUP_SHINGLE = 5  # shingle window width (tokens per shingle)
 _DUP_OVERLAP = 0.85  # Jaccard-style overlap ratio required to flag a pair
 
 
+def _gini_bp(values: list[int]) -> int:
+    """Gini coefficient of a non-negative distribution, in basis points (0..10000).
+
+    0 = perfectly even (every file the same size); 10000 = maximally concentrated
+    (one file holds it all). Standard mean-absolute-difference Gini over the
+    ascending-sorted positive values. Returns 0 for fewer than two non-empty
+    files or a zero total — there is no distribution signal to report.
+    """
+    xs = sorted(v for v in values if v > 0)
+    n = len(xs)
+    total = sum(xs)
+    if n < 2 or total == 0:
+        return 0
+    weighted = sum(i * x for i, x in enumerate(xs, start=1))  # i is 1-based
+    gini = (2 * weighted) / (n * total) - (n + 1) / n
+    return max(0, min(10000, round(gini * 10000)))
+
+
 @dataclass(frozen=True)
 class GodFile:
     """A file flagged as a god-file (excessive fan-in or size)."""
@@ -773,6 +791,8 @@ class ArchitectureAnalyzer:
 
         max_cc = max((h.complexity for h in complexity), default=0)
         max_depth = self._max_depth(scope)
+        # Report-only distribution signal: how evenly LOC is spread across files.
+        loc_gini_bp = _gini_bp(list(self._loc_by_file().values()))
 
         return QualityMetrics(
             cycles=len(cycles),
@@ -786,6 +806,7 @@ class ArchitectureAnalyzer:
             max_nesting=max((n.depth for n in nesting), default=0),
             node_count=node_count,
             edge_count=edge_count,
+            loc_gini_bp=loc_gini_bp,
         )
 
     def _dep_graph_built(self) -> Any:
