@@ -359,9 +359,7 @@ def test_fix_loop_skips_without_delegate(tmp_path: Path) -> None:
     assert out == GateStatus.FAILED
 
 
-def test_fix_loop_recovers_after_reapply(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_fix_loop_recovers_after_reapply(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A fix attempt that makes verify pass flips the run to PASSED."""
     runner = HarnessRunner(root=tmp_path)
     state = _state(tmp_path, delegate=_ExplodingDelegate())
@@ -427,9 +425,7 @@ def test_judgment_skips_when_already_scheduled(
     assert len(state.gates) == before
 
 
-def test_judgment_skips_low_blast_radius(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_judgment_skips_low_blast_radius(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A low blast-radius change does not trigger the adversarial review."""
     runner = HarnessRunner(root=tmp_path)
     state = _state(tmp_path)
@@ -474,9 +470,7 @@ def test_blast_radius_high_on_security_path(
     """Touching a security/safety boundary is always high blast radius."""
     runner = HarnessRunner(root=tmp_path)
     state = _state(tmp_path)
-    monkeypatch.setattr(
-        runner, "_git_changed_files", lambda root: ["packages/x/security/auth.py"]
-    )
+    monkeypatch.setattr(runner, "_git_changed_files", lambda root: ["packages/x/security/auth.py"])
     assert runner._blast_radius_high(state) is True
 
 
