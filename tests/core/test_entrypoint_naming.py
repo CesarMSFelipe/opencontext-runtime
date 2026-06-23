@@ -102,7 +102,7 @@ def test_shipped_persona_ids_are_oc_prefixed() -> None:
 # future regression reintroduces a bare ``sdd-*`` (or any non-oc-) name, without
 # mutating the real on-disk template dir.
 
-_PLANTED_BARE_NAMES = ["sdd-foo", "sdd-new", "gentle-apply", "graphify-run"]
+_PLANTED_BARE_NAMES = ["sdd-foo", "sdd-new", "acme-apply", "foo-run"]
 
 
 @pytest.mark.parametrize("planted", _PLANTED_BARE_NAMES)
