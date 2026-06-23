@@ -19,7 +19,6 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   build-and-publish:
@@ -59,6 +58,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: ${{ matrix.path }}/dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
           print-hash: true
           # Idempotent: if a release partially published (some packages up, some
           # failed) and is re-run, don't fail on versions already on PyPI.
