@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any, Protocol
 
 from opencontext_core.embeddings.models import (
@@ -42,6 +43,10 @@ class VectorStore(Protocol):
 
     def clear_project(self, project_name: str) -> None:
         """Clear all embeddings for a project."""
+        ...
+
+    def prune_absent_sources(self, keep_paths: Iterable[str], project_name: str) -> int:
+        """Drop a project's vectors whose ``source_path`` is not in ``keep_paths``."""
         ...
 
     def stats(self) -> EmbeddingStats:

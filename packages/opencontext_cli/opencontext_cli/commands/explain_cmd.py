@@ -31,6 +31,17 @@ def add_explain_parser(subparsers: Any) -> None:
     parser.add_argument("query", help="The task or question to build context for.")
     parser.add_argument("--root", default=".", help="Project root (default: .).")
     parser.add_argument("--max-tokens", type=int, default=None, help="Context token budget.")
+    parser.add_argument(
+        "--breakdown",
+        action="store_true",
+        help="Show the per-signal score components for each included file.",
+    )
+    parser.add_argument(
+        "--why",
+        metavar="FILE",
+        default=None,
+        help="Explain why a single FILE is (or isn't) in the context.",
+    )
 
 
 def _why(item: Any) -> str:
@@ -54,6 +65,35 @@ def _why(item: Any) -> str:
     return " · ".join(parts) or "ranked candidate"
 
 
+def _breakdown(item: Any) -> str:
+    """The per-signal decision components for an item, from data already on it.
+
+    Surfaces the score inputs the ranker recorded (priority, source trust,
+    freshness, and the retrieval kind/node) — no pipeline call, just a readable
+    view of the metadata the planner already attached to ``pack.included``.
+    """
+    md = getattr(item, "metadata", None) or {}
+    parts: list[str] = []
+    priority = getattr(item, "priority", None)
+    priority_value = getattr(priority, "value", priority)
+    if priority_value is not None:
+        parts.append(f"priority={priority_value}")
+    trust = getattr(item, "source_trust", None)
+    if trust is not None:
+        parts.append(f"trust={float(trust):.2f}")
+    freshness = md.get("freshness")
+    if freshness:
+        parts.append(f"freshness={freshness}")
+    retrieval = md.get("retrieval") or {}
+    node, kind = retrieval.get("node"), retrieval.get("kind")
+    if node and kind:
+        parts.append(f"{kind}:{node}")
+    fts_rank = retrieval.get("fts_rank")
+    if fts_rank is not None:
+        parts.append(f"fts_rank={fts_rank}")
+    return " · ".join(parts) or "—"
+
+
 def handle_explain(runtime: Any, args: Any) -> int:
     """Render the why-this-context view. Returns a process exit code."""
     root = Path(args.root)
@@ -65,6 +105,14 @@ def handle_explain(runtime: Any, args: Any) -> int:
     omitted = list(pack.omitted)
     reasons = {o.item_id: o.reason for o in pack.omissions}
 
+    # --why FILE: a focused single-file rationale, not the full table.
+    why_file = getattr(args, "why", None)
+    if why_file:
+        _render_why_file(why_file, included)
+        freshness_nudge(runtime, root)
+        return 0
+
+    breakdown = bool(getattr(args, "breakdown", False))
     console.print(f"\n[bold]Why this context[/] — [italic]{args.query}[/]")
     redacted = sum(1 for it in included if getattr(it, "redacted", False))
     summary = f"{len(included)} files · {pack.used_tokens:,} tokens"
@@ -77,9 +125,15 @@ def handle_explain(runtime: Any, args: Any) -> int:
         table.add_column("file", style="cyan", no_wrap=False)
         table.add_column("score", justify="right", style="green")
         table.add_column("tok", justify="right", style="dim")
+        if breakdown:
+            table.add_column("signals", style="dim")
         table.add_column("why")
         for item in included:
-            table.add_row(item.source, f"{item.score:.2f}", f"{item.tokens:,}", _why(item))
+            row = [item.source, f"{item.score:.2f}", f"{item.tokens:,}"]
+            if breakdown:
+                row.append(_breakdown(item))
+            row.append(_why(item))
+            table.add_row(*row)
         console.print(table)
     else:
         console.print("[yellow]No files selected for this task.[/]")
@@ -92,6 +146,31 @@ def handle_explain(runtime: Any, args: Any) -> int:
 
     freshness_nudge(runtime, root)
     return 0
+
+
+def _render_why_file(why_file: str, included: list[Any]) -> None:
+    """Print the inclusion rationale for one file, or a clean 'not included'.
+
+    Matches a file by exact source or basename so both ``src/auth.py`` and
+    ``auth.py`` resolve. Reads only data already on ``pack.included`` (B3-REQ-2).
+    """
+    needle = why_file.strip()
+    matches = [
+        it for it in included if it.source == needle or Path(it.source).name == Path(needle).name
+    ]
+    console.print(f"\n[bold]Why this file[/] — [italic]{needle}[/]\n")
+    if not matches:
+        console.print(
+            f"[yellow]✗ {needle} is not included[/] in the context for this task "
+            "(below the budget/diversity cut, or not retrieved)."
+        )
+        return
+    for item in matches:
+        console.print(f"[cyan]{item.source}[/]")
+        console.print(
+            f"  [green]score[/] {item.score:.2f} · [dim]{item.tokens:,} tok[/] · {_why(item)}"
+        )
+        console.print(f"  [dim]signals:[/] {_breakdown(item)}")
 
 
 def freshness_nudge(runtime: Any, root: Path) -> None:

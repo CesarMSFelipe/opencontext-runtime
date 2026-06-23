@@ -44,7 +44,6 @@ Drupal is an important first-party profile, not a core dependency.
 - `packages/opencontext_api`: thin FastAPI adapter over core runtime APIs.
 - `packages/opencontext_cli`: command-line adapter over core runtime APIs.
 - `packages/opencontext_profiles`: first-party technology profile hints above core.
-- `packages/opencontext_providers`: optional provider adapter boundary outside core.
 
 ## Implemented Runtime Flow
 

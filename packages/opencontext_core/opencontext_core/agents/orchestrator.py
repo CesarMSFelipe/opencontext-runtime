@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import warnings
 from pathlib import Path
 from typing import Any, cast
 
@@ -33,7 +34,9 @@ class AgentResult(BaseModel):
 class AgentOrchestrator:
     """Orchestrates agent execution with automatic token and memory management.
 
-    This is the primary interface for using OpenContext without CLI.
+    .. deprecated:: 1.5.0
+        Deprecated; will be removed in 2.0. The live SDD flow runs through the
+        harness (``opencontext_core.harness``), not this standalone orchestrator.
 
     Example:
         orchestrator = AgentOrchestrator(project_root=".")
@@ -54,6 +57,12 @@ class AgentOrchestrator:
             agents_dir: Directory containing agent profiles (default: .agents/)
             cache_dir: Directory for caching results (default: .agents/cache/)
         """
+        warnings.warn(
+            "AgentOrchestrator is deprecated and will be removed in 2.0; the live SDD "
+            "flow runs through opencontext_core.harness, not this orchestrator.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.project_root = Path(project_root).resolve()
         self.agents_dir = Path(agents_dir) if agents_dir else self.project_root / ".agents"
         self.cache_dir = Path(cache_dir) if cache_dir else self.agents_dir / "cache"

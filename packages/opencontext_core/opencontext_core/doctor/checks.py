@@ -51,7 +51,48 @@ def run_doctor(config: OpenContextConfig) -> list[DoctorCheck]:
             details="Semantic cache disabled by default.",
         ),
         _check_provider(config),
+        _check_learning(config),
     ]
+
+
+def _check_learning(config: OpenContextConfig) -> DoctorCheck:
+    """Surface the learning orchestrator's state and statistics.
+
+    When ``learning.enabled`` is True, reports a summary of
+    ``LearningOrchestrator.get_statistics()`` (tracked operations / learned
+    patterns / optimized budgets). When disabled, reports a clear disabled
+    state. Never raises — a stats failure degrades to a best-effort message.
+    """
+
+    if not config.learning.enabled:
+        return DoctorCheck(
+            name="learning.enabled",
+            ok=True,
+            details="learning: disabled (config.learning.enabled = false).",
+        )
+    try:
+        from opencontext_core.learning.learning_orchestrator import LearningOrchestrator
+
+        stats = LearningOrchestrator().get_statistics()
+        feedback = stats.get("feedback", {}) if isinstance(stats, dict) else {}
+        ops = feedback.get("total_operations", feedback.get("operations", "?"))
+        patterns = len(stats.get("patterns", {})) if isinstance(stats, dict) else 0
+        budgets = len(stats.get("budgets", {})) if isinstance(stats, dict) else 0
+        return DoctorCheck(
+            name="learning.enabled",
+            ok=True,
+            details=(
+                f"learning: enabled — operations={ops}, "
+                f"patterns={patterns}, optimized_budgets={budgets}."
+            ),
+        )
+    except Exception as exc:
+        # Learning stats are best-effort; enabled state is still reported.
+        return DoctorCheck(
+            name="learning.enabled",
+            ok=True,
+            details=f"learning: enabled (statistics unavailable: {exc}).",
+        )
 
 
 def _check_provider(config: OpenContextConfig) -> DoctorCheck:

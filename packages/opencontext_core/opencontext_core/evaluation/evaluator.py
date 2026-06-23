@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Protocol
 
@@ -12,9 +13,12 @@ from opencontext_core.evaluation.models import (
     ContextBenchCase,
     ContextBenchCaseResult,
     ContextBenchSuiteResult,
+    CostTriple,
+    EfficiencyCaseResult,
     EvalCase,
     EvalResult,
 )
+from opencontext_core.evaluation.naive_agent import run_naive_case
 from opencontext_core.runtime import OpenContextRuntime
 
 
@@ -158,6 +162,82 @@ class ContextBenchEvaluator:
             missing_sources=missing_sources,
             forbidden_hits=forbidden_hits,
             reasons=reasons or ["context coverage and token gates passed"],
+        )
+
+    def evaluate_efficiency_case(
+        self,
+        case: ContextBenchCase,
+        *,
+        refresh_index: bool = False,
+        include_ceiling: bool = True,
+    ) -> EfficiencyCaseResult:
+        """Measure the honest cost of building this case's context, CON vs SIN.
+
+        CON is a SINGLE real ``prepare_context`` call (KG + compression + memory):
+        its cost is the pack's tokens, exactly one tool call, and the wall-clock to
+        build it. The mandatory quality-parity gate (coverage / forbidden) is reused
+        verbatim from :meth:`evaluate_case`; a CON pack that misses an expected source
+        or hits a forbidden one is ``con_sufficient=False`` and is NOT a win. SIN is
+        the realistic OpenContext-free grep+Read control. The whole-repo baseline is
+        attached only as a labeled ``ceiling_tokens`` — never the headline.
+        """
+
+        t0 = time.monotonic()
+        prepared = self.runtime.prepare_context(
+            case.query,
+            root=self.root,
+            max_tokens=self.max_tokens,
+            refresh_index=refresh_index,
+        )
+        con_latency_ms = (time.monotonic() - t0) * 1000
+
+        included_sources = prepared.included_sources
+        missing_sources = [
+            expected
+            for expected in case.expected_sources
+            if not _source_fragment_present(expected, included_sources)
+        ]
+        forbidden_hits = [
+            forbidden
+            for forbidden in case.forbidden_sources
+            if _source_fragment_present(forbidden, included_sources)
+        ]
+        expected_count = len(case.expected_sources)
+        source_coverage = (
+            (expected_count - len(missing_sources)) / expected_count if expected_count > 0 else 1.0
+        )
+        context_tokens = prepared.token_usage.get(
+            "final_context_pack",
+            prepared.token_usage.get("prompt", 0),
+        )
+
+        # Mandatory quality-parity verdict (R4/EB-4): correct context or it is no win.
+        con_sufficient = source_coverage >= case.min_source_coverage and not forbidden_hits
+        reasons: list[str] = []
+        if source_coverage < case.min_source_coverage:
+            reasons.append(
+                f"source coverage {source_coverage:.2f} below required "
+                f"{case.min_source_coverage:.2f}"
+            )
+        if forbidden_hits:
+            reasons.append(f"forbidden sources included: {', '.join(forbidden_hits)}")
+        if not reasons:
+            reasons.append("quality parity met (coverage and forbidden gates passed)")
+
+        con = CostTriple(tokens=context_tokens, tool_calls=1, latency_ms=con_latency_ms)
+        sin = run_naive_case(case, self.root)
+        ceiling = _manifest_token_baseline(self.runtime) if include_ceiling else None
+
+        return EfficiencyCaseResult(
+            case_id=case.id,
+            difficulty=case.difficulty,
+            con=con,
+            sin=sin,
+            ceiling_tokens=ceiling,
+            con_sufficient=con_sufficient,
+            source_coverage=source_coverage,
+            forbidden_hits=forbidden_hits,
+            reasons=reasons,
         )
 
 

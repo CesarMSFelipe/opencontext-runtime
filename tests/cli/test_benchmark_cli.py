@@ -1,90 +1,95 @@
-"""CLI tests for the benchmark command."""
+"""CLI tests for the honest efficiency benchmark command.
+
+The fake benchmark CLI (fabricated cases, "OpenContext Benchmark Results" header)
+was rewired to the real CON-vs-SIN efficiency benchmark. These tests assert the
+honest surface: list shows real contextbench cases with difficulty/target, and a run
+emits per-case CON vs SIN cost with NO "%"/claim string. Runs are scoped to a single
+simple case with ``--no-refresh`` to keep them fast (the project is already indexed
+in the test environment).
+"""
 
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+_CLAIM = re.compile(r"%|reduction_pct|\bbadge\b|fewer tokens", re.IGNORECASE)
 
-def _run_cli(*args: str, cwd: Path | None = None, timeout: int = 60) -> subprocess.CompletedProcess:
-    """Run the opencontext CLI as a subprocess."""
+
+def _run_cli(*args: str, timeout: int = 180) -> subprocess.CompletedProcess:
+    """Run the opencontext CLI as a subprocess from the project root."""
     return subprocess.run(
         [sys.executable, "-m", "opencontext_cli", *args],
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",
-        cwd=str(cwd) if cwd else None,
+        cwd=str(PROJECT_ROOT),
         timeout=timeout,
     )
 
 
-class TestBenchmarkCli:
-    """Benchmark CLI integration tests."""
-
+class TestBenchmarkCliSurface:
     def test_benchmark_help(self) -> None:
         result = _run_cli("benchmark", "--help")
         assert result.returncode == 0
-        assert "{list,run,compare}" in result.stdout or "list" in result.stdout
+        assert "list" in result.stdout and "run" in result.stdout
 
-    def test_benchmark_list(self) -> None:
+    def test_benchmark_list_shows_real_cases(self) -> None:
         result = _run_cli("benchmark", "list")
         assert result.returncode == 0
-        assert "completeness/minimal" in result.stdout
-        assert "Benchmark Cases" in result.stdout
-
-    def test_benchmark_list_category(self) -> None:
-        result = _run_cli("benchmark", "list", "--category", "efficiency")
-        assert result.returncode == 0
-        assert "efficiency/large_project" in result.stdout
+        # Real efficiency cases (converted from BUILTIN_SCENARIOS), not fake categories.
+        assert "Efficiency Benchmark Cases" in result.stdout
+        assert "simple/bridge-count-method" in result.stdout
+        # The fabricated cases must be gone.
         assert "completeness/minimal" not in result.stdout
 
-    def test_benchmark_run(self) -> None:
-        result = _run_cli("benchmark", "run")
+    def test_benchmark_list_category_filters_by_difficulty(self) -> None:
+        result = _run_cli("benchmark", "list", "--category", "hard")
         assert result.returncode == 0
-        assert "OpenContext Benchmark Results" in result.stdout
-        assert "Summary:" in result.stdout
-
-    def test_benchmark_run_json(self) -> None:
-        result = _run_cli("benchmark", "run", "--format", "json")
-        assert result.returncode == 0
-        data = json.loads(result.stdout)
-        assert "summary" in data
-        assert data["summary"]["total"] > 0
-
-    def test_benchmark_run_single_case(self) -> None:
-        result = _run_cli("benchmark", "run", "--case", "completeness/minimal")
-        assert result.returncode == 0
-        assert "completeness/minimal" in result.stdout
-        assert "Summary:" in result.stdout
-
-    def test_benchmark_run_category_filter(self) -> None:
-        result = _run_cli("benchmark", "run", "--category", "freshness")
-        assert result.returncode == 0
-        assert "freshness/recent" in result.stdout
-        assert "freshness/stale" in result.stdout
-        assert "Summary:" in result.stdout
-
-    def test_benchmark_run_save_and_compare(self, tmp_path: Path) -> None:
-        """Full round-trip: run --save, then compare."""
-        # Run with save
-        save_result = _run_cli("benchmark", "run", "--save")
-        assert save_result.returncode == 0
-
-        # Verify .opencontext/benchmarks was created
-        # (CI runs from tmp so it will be in cwd, but --save is relative)
-
-    def test_benchmark_run_markdown_output(self, tmp_path: Path) -> None:
-        report = tmp_path / "report.md"
-        result = _run_cli("benchmark", "run", "--format", "markdown", "--output", str(report))
-        assert result.returncode == 0
-        assert report.exists()
-        content = report.read_text(encoding="utf-8")
-        assert "# OpenContext Benchmark Report" in content
+        assert "hard/workflow-async-tracing" in result.stdout
+        assert "simple/bridge-count-method" not in result.stdout
 
     def test_benchmark_list_empty_category(self) -> None:
         result = _run_cli("benchmark", "list", "--category", "nonexistent")
         assert result.returncode == 0
         assert "No benchmark cases found" in result.stdout
+
+
+class TestBenchmarkCliRun:
+    def test_run_single_case_json_reports_con_and_sin(self) -> None:
+        result = _run_cli(
+            "benchmark",
+            "run",
+            "--case",
+            "simple/bridge-count-method",
+            "--format",
+            "json",
+            "--no-refresh",
+        )
+        # Exit code reflects quality parity; on a real index this case should be
+        # sufficient, but we assert the SHAPE regardless of pass/fail.
+        data = json.loads(result.stdout)
+        assert "cases" in data and len(data["cases"]) == 1
+        case = data["cases"][0]
+        assert case["case_id"] == "simple/bridge-count-method"
+        assert case["con"]["tool_calls"] == 1  # honest single context call
+        assert "tokens" in case["con"] and "tokens" in case["sin"]
+        assert "token_delta" in case
+        # No marketing claim anywhere in the JSON.
+        assert not _CLAIM.search(result.stdout)
+
+    def test_run_text_has_no_claim_string(self) -> None:
+        result = _run_cli(
+            "benchmark",
+            "run",
+            "--case",
+            "simple/bridge-count-method",
+            "--no-refresh",
+        )
+        assert "efficiency benchmark" in result.stdout.lower()
+        assert not _CLAIM.search(result.stdout), result.stdout

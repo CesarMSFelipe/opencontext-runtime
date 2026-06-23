@@ -30,7 +30,6 @@ jobs:
           python -m pip install \
             -e packages/opencontext_core \
             -e packages/opencontext_profiles \
-            -e packages/opencontext_providers \
             -e packages/opencontext_cli \
             -e packages/opencontext_api
       - name: Audit installed dependencies

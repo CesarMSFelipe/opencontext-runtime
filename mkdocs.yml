@@ -97,6 +97,8 @@ nav:
     - configuration/templates.md
     - configuration/reference.md
     - configuration/user-config.md
+    - configuration/tui-menu.md
+    - configuration/walkthrough.md
     - configuration/workflow-config.md
     - configuration/output-policy.md
     - configuration/cache-policy.md
@@ -225,7 +227,6 @@ nav:
     - architecture/context-pack-builder.md
     - architecture/technology-profiles.md
     - architecture/implementation-matrix.md
-    - architecture/openclaw-boundary.md
   - Guides:
     - guides/index.md
     - guides/five-minute-setup.md

@@ -1,7 +1,7 @@
 """SDD Orchestrator for managing the full SDD lifecycle.
 
-Coordinates the 7 phases of Spec-Driven Development:
-propose -> spec -> design -> tasks -> apply -> verify -> archive
+Coordinates the nine phases of Spec-Driven Development:
+explore -> propose -> spec -> design -> tasks -> apply -> verify -> review -> archive
 """
 
 from __future__ import annotations

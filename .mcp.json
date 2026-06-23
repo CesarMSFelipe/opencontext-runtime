@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "opencontext": {
+      "type": "stdio",
+      "command": "opencontext",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

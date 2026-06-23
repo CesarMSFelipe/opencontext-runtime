@@ -117,7 +117,7 @@ def test_reference_count_is_dampened_by_sqrt() -> None:
     many = identifier_quality_score("helper", set(), reference_count=100)
     assert many < few
     mid = identifier_quality_score("helper", set(), reference_count=4)
-    # sqrt dampening: the 1->4 drop is gentler than a linear 4x would imply.
+    # sqrt dampening: the 1->4 drop is milder than a linear 4x would imply.
     assert (few - mid) < (few - many)
 
 

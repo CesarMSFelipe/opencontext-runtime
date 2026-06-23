@@ -15,6 +15,7 @@ from opencontext_core.adapters.agent_manifest import AgentTarget
 from opencontext_core.agent_installer import AgentInstaller
 from opencontext_core.agent_installer import AgentTarget as GlobalAgentTarget
 from opencontext_core.configurator import KNOWN_AGENTS, Configurator
+from opencontext_core.dx.console_styles import show_logo
 from opencontext_core.runtime import OpenContextRuntime
 from opencontext_core.sdd_runtime import write_sdd_context
 from opencontext_core.setup.plan import InstallAction, build_plan
@@ -40,6 +41,7 @@ def _wizard_clear(
     except Exception:
         pass
 
+    show_logo(compact=True)
     dots = "  ".join(
         "[bold #00C9A7]●[/]" if i <= step else "[dim]○[/]" for i in range(1, total + 1)
     )

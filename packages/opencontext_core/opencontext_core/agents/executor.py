@@ -144,6 +144,14 @@ def generate_apply_edits(
     pack = (context.get("context") or "").strip()
     if pack:
         parts.append(f"\n## Verified context\n{pack}")
+    # Reinforce the apply-phase economy rules (oc-apply-rules) alongside the
+    # builder persona. Lazy import avoids a phases<->executor import cycle; the
+    # lookup is best-effort and returns "" when nothing matches.
+    from opencontext_core.harness.phases import _phase_skill_rules
+
+    apply_rules = _phase_skill_rules("apply")
+    if apply_rules:
+        parts.append(f"\n{apply_rules}")
     request = LLMRequest(
         prompt="\n".join(parts),
         system_prompt=persona.system_prompt if persona else "",

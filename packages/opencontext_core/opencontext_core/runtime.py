@@ -30,7 +30,10 @@ from opencontext_core.indexing.graph_tunnel import GraphTunnelStore
 from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 from opencontext_core.indexing.project_indexer import ProjectIndexer
 from opencontext_core.indexing.repo_map import RepoMapEngine
-from opencontext_core.learning.learning_orchestrator import LearningOrchestrator
+from opencontext_core.learning.learning_orchestrator import (
+    LearningOrchestrator,
+    NullLearningOrchestrator,
+)
 from opencontext_core.llm.gateway import LLMGateway
 from opencontext_core.llm.mock import MockLLMGateway
 from opencontext_core.memory.stores import LocalProjectMemoryStore, ProjectMemoryStore
@@ -188,16 +191,32 @@ class OpenContextRuntime:
         self.config = config or self._load_config_or_defaults(self.config_path)
         self.storage_path = Path(storage_path)
         self.memory_store = memory_store or LocalProjectMemoryStore(self.storage_path)
+        # Parsed-manifest cache (stat-signature keyed). Parsing the whole-repo
+        # manifest JSON through Pydantic is query-independent and was repeated on
+        # every prepare_context / verify_context call (and 3x per benchmark case),
+        # which dominated warm retrieval latency. The cache is invalidated
+        # automatically whenever index_project rewrites the manifest, because the
+        # file's (mtime_ns, size) signature changes — so correctness is unchanged.
+        self._manifest_cache: ProjectManifest | None = None
+        self._manifest_cache_sig: tuple[int, int] | None = None
         self.trace_logger = LocalTraceLogger(self.storage_path / "traces")
         self.llm_gateway = llm_gateway or self._gateway_from_config()
         self.technology_profiles = technology_profiles
         self.tunnel_store = GraphTunnelStore(self.storage_path)
         self.knowledge_graph = KnowledgeGraph(db_path=self.storage_path / "context_graph.db")
-        self.learning = LearningOrchestrator(
-            storage_path=self.storage_path / "learning",
-            kg_db_path=self.storage_path / "context_graph.db",
-            default_token_budget=self.config.context.max_input_tokens,
-        )
+        # Self-improvement gate (config.learning.enabled, default True). When
+        # disabled we install a no-op stand-in so every in-loop ``self.learning.*``
+        # call-site keeps working without a per-call guard (DR2). Default True
+        # preserves today's behavior byte-for-byte.
+        self.learning: LearningOrchestrator | NullLearningOrchestrator
+        if self.config.learning.enabled:
+            self.learning = LearningOrchestrator(
+                storage_path=self.storage_path / "learning",
+                kg_db_path=self.storage_path / "context_graph.db",
+                default_token_budget=self.config.context.max_input_tokens,
+            )
+        else:
+            self.learning = NullLearningOrchestrator()
         self.compression_engine = CompressionEngine(self.config.context.compression)
         vector_store = (
             LocalVectorStore(self.storage_path)
@@ -327,6 +346,12 @@ class OpenContextRuntime:
         )
         manifest = indexer.build_manifest(Path(root) if root is not None else None)
         self.memory_store.save_manifest(manifest)
+        # Invalidate the parsed-manifest cache so the next load_manifest re-reads the
+        # PERSISTED (redacted) manifest from disk — never the un-redacted in-memory
+        # object, which would leak sensitive summaries past redaction. (The disk-read
+        # cache in load_manifest, keyed by the file signature, stays safe.)
+        self._manifest_cache = None
+        self._manifest_cache_sig = None
 
         # Index non-code context artifacts (schemas, specs, ADRs) defined in config
         artifacts = self.config.project_index.context_artifacts
@@ -341,20 +366,62 @@ class OpenContextRuntime:
         # Async enqueue embeddings if worker enabled
         if self.config.embedding.enabled and self.embedding_worker:
             items = items_from_manifest(manifest)
+            # Reconcile the vector store to the freshly-scanned file set BEFORE
+            # enqueueing the new generation: drop vectors for files no longer scanned
+            # (since-deleted, or a vendored tree now ignored such as a venv) so they
+            # stop surfacing as semantic retrieval evidence. Same orphaning bug as the
+            # KG — enqueue only ever added; it never removed. Pruning first means the
+            # prune touches only the prior generation and the async worker appends the
+            # fresh one without racing the rewrite. Best-effort: never fails indexing.
+            store = getattr(self.embedding_worker, "vector_store", None)
+            if store is not None and items:
+                try:
+                    kept_paths = {file.path for file in manifest.files}
+                    pruned_vectors = store.prune_absent_sources(
+                        kept_paths, self.config.project.name
+                    )
+                    if pruned_vectors:
+                        import logging as _logging
+
+                        _logging.getLogger("opencontext").info(
+                            "vector store: pruned %d stale embedding(s)", pruned_vectors
+                        )
+                except Exception as exc:
+                    import logging as _logging
+
+                    _logging.getLogger("opencontext").warning(
+                        "vector store reconciliation failed: %s", exc
+                    )
             if items:
                 self.embedding_worker.enqueue_sync(items)
 
         kg_stats = manifest.metadata.get("knowledge_graph", {})
+        # problem 3: index succeeds when manifest was written. ACON-lite uses the
+        # ``success`` boolean to widen budget on ops that failed while context was
+        # dropped; indexing never drops items, but never passing success left it NULL
+        # in SQLite and disabled the learning subsystem's feedback path entirely.
         self.learning.finish_operation(
             op_id,
             tokens_used=sum(f.tokens for f in manifest.files),
             files_consulted=len(manifest.files),
             symbols_consulted=len(manifest.symbols),
+            success=True,
             metadata={
                 "kg_files_indexed": kg_stats.get("files_indexed", 0),
                 "kg_nodes": kg_stats.get("nodes", 0),
             },
         )
+
+        # problem 13: distill accumulated operation metrics into optimized budgets at
+        # index cadence (infrequent, always reached on the live path) so ACON-lite's
+        # learned budgets actually refresh — previously only `opencontext verify` ever
+        # triggered optimize_budgets(), so the feedback loop never closed in normal use.
+        optimizer = getattr(self.learning, "optimizer", None)
+        if optimizer is not None:
+            try:
+                optimizer.optimize_budgets()
+            except Exception:
+                pass  # budget optimization is best-effort, never block indexing
 
         return manifest
 
@@ -429,9 +496,56 @@ class OpenContextRuntime:
         )
 
     def load_manifest(self) -> ProjectManifest:
-        """Load the persisted project manifest."""
+        """Load the persisted project manifest, caching the parse across calls.
 
-        return self.memory_store.load_manifest()
+        Parsing the whole-repo manifest JSON through Pydantic is the dominant
+        per-query cost on large repos and is entirely query-independent, so it is
+        memoized on the runtime keyed by the manifest file's ``(mtime_ns, size)``
+        signature. The cache is transparent: any write (``index_project`` ->
+        ``save_manifest``) changes the signature and forces a re-parse, so callers
+        always observe the on-disk manifest exactly as before — only the redundant
+        re-parses are elided. Stores without a stat-able ``manifest_path``
+        (in-memory/custom) bypass the cache and load as before.
+        """
+
+        manifest_path = getattr(self.memory_store, "manifest_path", None)
+        if manifest_path is None:
+            return self.memory_store.load_manifest()
+        try:
+            stat = Path(manifest_path).stat()
+            signature = (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            # The file is missing/unreadable: defer to the store so it raises the
+            # canonical MemoryStoreError (e.g. "run `opencontext index .` first").
+            self._manifest_cache = None
+            self._manifest_cache_sig = None
+            return self.memory_store.load_manifest()
+        if self._manifest_cache is not None and self._manifest_cache_sig == signature:
+            return self._manifest_cache
+        manifest = self.memory_store.load_manifest()
+        self._manifest_cache = manifest
+        self._manifest_cache_sig = signature
+        return manifest
+
+    def _seed_manifest_cache(self, manifest: ProjectManifest) -> None:
+        """Cache a just-written manifest keyed to its on-disk stat signature.
+
+        Best-effort: if the store has no stat-able ``manifest_path`` (in-memory /
+        custom), the cache is simply left empty and ``load_manifest`` falls back to
+        the store. A stat failure here never blocks indexing.
+        """
+
+        manifest_path = getattr(self.memory_store, "manifest_path", None)
+        if manifest_path is None:
+            return
+        try:
+            stat = Path(manifest_path).stat()
+        except OSError:
+            self._manifest_cache = None
+            self._manifest_cache_sig = None
+            return
+        self._manifest_cache = manifest
+        self._manifest_cache_sig = (stat.st_mtime_ns, stat.st_size)
 
     def render_repo_map(self, query: str | None = None, max_tokens: int | None = None) -> str:
         """Render a compact repository map from the persisted manifest."""
@@ -474,11 +588,21 @@ class OpenContextRuntime:
         op_id = self.learning.start_operation("context_pack", query, tokens_budgeted=budget)
         pack, trace, _plan = self._build_context_pack_with_trace(query, max_tokens, surface=surface)
         total_tokens = sum(trace.token_estimates.values()) if trace.token_estimates else 0
+        # problem 3 + 11: record the *real* context_items_omitted count AND a
+        # computed success flag. ACON-lite's TokenOptimizer widens the budget for
+        # op types that fail while dropping context (``success is False AND
+        # context_items_omitted > 0``). A context_pack "fails" — in the sense of
+        # needing a wider budget — exactly when it could not fit everything, so
+        # success must be FALSE on any omission/overflow. Passing a constant
+        # success=True (the earlier fix) left the feedback path dead because the
+        # ``success is False`` branch never fired.
+        pack_fit = pack.used_tokens <= budget and len(pack.omitted) == 0
         self.learning.finish_operation(
             op_id,
             tokens_used=total_tokens,
             context_items_selected=len(pack.included),
             context_items_omitted=len(pack.omitted),
+            success=pack_fit,
             metadata={"max_tokens": budget, "pack_tokens": pack.used_tokens},
         )
         return pack, trace.run_id

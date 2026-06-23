@@ -10,6 +10,7 @@ import json
 import logging
 import re
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from dataclasses import replace as dc_replace
 from pathlib import Path
@@ -41,6 +42,28 @@ def _fts_rowid(stable_id: str) -> int:
     except (ValueError, TypeError):
         # Legacy integer ids (e.g. test fixtures inserting raw ints) pass through.
         return int(stable_id)
+
+
+# Multi-language test-file conventions: a path is a test file if it lives under a
+# tests/test/spec/__tests__ directory, or its file name is test_* / *_test /
+# *.test.* / *.spec.* . Used to separate test code from the code it exercises.
+_TEST_PATH_RE = re.compile(
+    r"(?:^|/)(?:tests?|spec|__tests__)/"
+    r"|(?:^|/)test_[^/]+$"
+    r"|_test\.[^/]+$"
+    r"|\.(?:test|spec)\.[^/]+$",
+    re.IGNORECASE,
+)
+
+
+def is_test_path(path: str) -> bool:
+    """True if ``path`` looks like a test file (multi-language conventions).
+
+    Recognises a ``tests/`` / ``test/`` / ``spec/`` / ``__tests__/`` directory
+    anywhere in the path, and ``test_*`` / ``*_test`` / ``*.test.*`` / ``*.spec.*``
+    file names — enough to tell test code from the production code it exercises.
+    """
+    return bool(_TEST_PATH_RE.search(path.replace("\\", "/")))
 
 
 @dataclass
@@ -646,6 +669,59 @@ class GraphDatabase:
             for row in rows
         ]
 
+    def search_symbols_by_name(self, names: Iterable[str], limit: int = 20) -> list[dict[str, Any]]:
+        """Return nodes whose ``name`` exactly matches one of ``names`` (case-insensitive).
+
+        Name-anchored recall to complement BM25: a natural-language query like
+        "add count_by_type() to BridgeDetector" is dominated by generic filler tokens
+        (count/dict/to/of), so plain FTS floats incidental mentions above the symbol the
+        query actually names and the DEFINITION may fall outside the top-k entirely. This
+        guarantees that any symbol the query names by identifier enters the candidate set.
+        Definitions (class/function/method/…) are returned before references, then
+        non-private before private, so the defining symbol leads. Empty ``names`` => [].
+        """
+
+        wanted = sorted({n.strip().lower() for n in names if n and n.strip()})
+        if not wanted:
+            return []
+        conn = self._connect()
+        placeholders = ",".join("?" for _ in wanted)
+        # Order: definition kinds first, then public-before-private, then shorter
+        # qualified container (top-level over nested) — deterministic and stable.
+        rows = conn.execute(
+            f"""
+            SELECT * FROM nodes
+            WHERE LOWER(name) IN ({placeholders})
+            ORDER BY
+                CASE kind
+                    WHEN 'class' THEN 0 WHEN 'interface' THEN 0 WHEN 'trait' THEN 0
+                    WHEN 'struct' THEN 0 WHEN 'enum' THEN 0
+                    WHEN 'function' THEN 1 WHEN 'method' THEN 1
+                    ELSE 2
+                END,
+                CASE WHEN name LIKE '\\_%' ESCAPE '\\' THEN 1 ELSE 0 END,
+                LENGTH(COALESCE(container, '')),
+                file_path
+            LIMIT ?
+            """,
+            (*wanted, limit),
+        ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "kind": row["kind"],
+                "file_path": row["file_path"],
+                "line": row["line"],
+                "language": row["language"],
+                "container": row["container"],
+                "docstring": row["docstring"],
+                "signature": row["signature"],
+                "rank": None,
+            }
+            for row in rows
+        ]
+
     # Statistics
 
     def get_stats(self) -> dict[str, int]:
@@ -662,6 +738,127 @@ class GraphDatabase:
             "files": file_count,
         }
 
+    def find_test_gaps(
+        self,
+        *,
+        kinds: tuple[str, ...] = ("function", "method"),
+        changed_files: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Definitions with no inbound reference from any test file (test-gaps).
+
+        A *gap* is a node of one of ``kinds`` defined in a NON-test source file
+        that no test file references — i.e. no edge whose ``call_site_file`` is a
+        test path targets it. This is a STRUCTURAL proxy (does any test mention
+        the symbol at all), not execution coverage, computed purely from the
+        persisted graph. Deterministic; ordered by ``file_path`` then ``line``.
+
+        When ``changed_files`` is given (project-relative POSIX paths), only gaps
+        in those files are returned — the scoped form the verify gate uses so a
+        run is judged on the code it touched, not the whole legacy repo.
+        """
+        scope = {p.replace("\\", "/") for p in changed_files} if changed_files is not None else None
+        conn = self._connect()
+
+        # "Covered" = referenced from a test file. Collect the test-file call
+        # sites first (regex in Python), then resolve their targets in one
+        # IN-query (the join stays in SQL).
+        test_files = [
+            row["call_site_file"]
+            for row in conn.execute(
+                "SELECT DISTINCT call_site_file FROM edges "
+                "WHERE call_site_file IS NOT NULL AND call_site_file != ''"
+            ).fetchall()
+            if is_test_path(row["call_site_file"])
+        ]
+        covered: set[str] = set()
+        if test_files:
+            placeholders = ",".join("?" for _ in test_files)
+            covered = {
+                row["target_node_id"]
+                for row in conn.execute(
+                    "SELECT DISTINCT target_node_id FROM edges "
+                    f"WHERE target_node_id IS NOT NULL AND call_site_file IN ({placeholders})",
+                    tuple(test_files),
+                ).fetchall()
+            }
+
+        kind_placeholders = ",".join("?" for _ in kinds)
+        rows = conn.execute(
+            "SELECT id, name, kind, file_path, line, container FROM nodes "
+            f"WHERE kind IN ({kind_placeholders}) ORDER BY file_path, line",
+            tuple(kinds),
+        ).fetchall()
+
+        gaps: list[dict[str, Any]] = []
+        for row in rows:
+            if is_test_path(row["file_path"]):
+                continue  # a test's own helpers are not untested production code
+            if row["id"] in covered:
+                continue
+            if scope is not None and row["file_path"].replace("\\", "/") not in scope:
+                continue  # scoped to the changed files only
+            gaps.append(
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "kind": row["kind"],
+                    "file_path": row["file_path"],
+                    "line": row["line"],
+                    "container": row["container"],
+                }
+            )
+        return gaps
+
+    def find_unused_symbols(
+        self,
+        *,
+        kinds: tuple[str, ...] = ("function", "method"),
+        changed_files: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Defined symbols with NO inbound edge — no caller, importer, or reference.
+
+        An orphan of one of ``kinds`` in a NON-test file that nothing in the graph
+        targets: the clearest structural signal of dead or speculative code. A
+        re-exported public symbol keeps an inbound import edge, so it is NOT
+        flagged. Scoped to ``changed_files`` when given (the verify-gate form).
+        STRUCTURAL + advisory — a string-dispatched entry point can look orphan in
+        the graph, so a hit is a prompt to check, not proof. Deterministic; from
+        the persisted graph only; ordered by ``file_path`` then ``line``.
+        """
+        scope = {p.replace("\\", "/") for p in changed_files} if changed_files is not None else None
+        conn = self._connect()
+        referenced = {
+            row["target_node_id"]
+            for row in conn.execute(
+                "SELECT DISTINCT target_node_id FROM edges WHERE target_node_id IS NOT NULL"
+            ).fetchall()
+        }
+        kind_placeholders = ",".join("?" for _ in kinds)
+        rows = conn.execute(
+            "SELECT id, name, kind, file_path, line, container FROM nodes "
+            f"WHERE kind IN ({kind_placeholders}) ORDER BY file_path, line",
+            tuple(kinds),
+        ).fetchall()
+        unused: list[dict[str, Any]] = []
+        for row in rows:
+            if is_test_path(row["file_path"]):
+                continue
+            if row["id"] in referenced:
+                continue
+            if scope is not None and row["file_path"].replace("\\", "/") not in scope:
+                continue
+            unused.append(
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "kind": row["kind"],
+                    "file_path": row["file_path"],
+                    "line": row["line"],
+                    "container": row["container"],
+                }
+            )
+        return unused
+
     def delete_file_and_nodes(self, file_path: str) -> None:
         """Delete all nodes and edges for a file."""
 
@@ -675,6 +872,52 @@ class GraphDatabase:
         conn.execute("DELETE FROM nodes WHERE file_path = ?", (file_path,))
         conn.execute("DELETE FROM files WHERE path = ?", (file_path,))
         conn.commit()
+
+    def prune_files_absent_from(self, keep_paths: Iterable[str]) -> int:
+        """Delete every indexed file (and its nodes/edges) NOT in ``keep_paths``.
+
+        Reconciles the graph to a freshly-scanned file set so paths that were
+        indexed once but are no longer scanned (a since-deleted file, or a vendored
+        tree that is now ignored, e.g. a venv) stop surfacing as retrieval evidence.
+        Without this, ``index_file`` only ever unioned new files in and orphaned
+        nodes accumulated without bound. Returns the number of files pruned.
+
+        The keep-set is loaded into a temp table so a repo-sized set is matched with
+        a single ``NOT IN`` join instead of thousands of bound parameters; the whole
+        reconciliation runs in one transaction.
+        """
+
+        conn = self._connect()
+        conn.execute("CREATE TEMP TABLE IF NOT EXISTS _kg_keep_paths (path TEXT PRIMARY KEY)")
+        conn.execute("DELETE FROM _kg_keep_paths")
+        conn.executemany(
+            "INSERT OR IGNORE INTO _kg_keep_paths (path) VALUES (?)",
+            ((path,) for path in keep_paths),
+        )
+        stale_paths = [
+            row[0]
+            for row in conn.execute(
+                "SELECT path FROM files WHERE path NOT IN (SELECT path FROM _kg_keep_paths)"
+            ).fetchall()
+        ]
+        if not stale_paths:
+            conn.execute("DELETE FROM _kg_keep_paths")
+            return 0
+        # Inbound edges first (their subquery must see the nodes), then call-site
+        # edges, then the nodes, then the file records — all keyed off the stale set.
+        conn.execute(
+            "DELETE FROM edges WHERE target_node_id IN "
+            "(SELECT id FROM nodes WHERE file_path NOT IN (SELECT path FROM _kg_keep_paths))"
+        )
+        conn.execute(
+            "DELETE FROM edges WHERE call_site_file NOT IN (SELECT path FROM _kg_keep_paths) "
+            "AND call_site_file IS NOT NULL AND call_site_file != ''"
+        )
+        conn.execute("DELETE FROM nodes WHERE file_path NOT IN (SELECT path FROM _kg_keep_paths)")
+        conn.execute("DELETE FROM files WHERE path NOT IN (SELECT path FROM _kg_keep_paths)")
+        conn.execute("DELETE FROM _kg_keep_paths")
+        conn.commit()
+        return len(stale_paths)
 
     # ---- Learning system CRUD ----
 

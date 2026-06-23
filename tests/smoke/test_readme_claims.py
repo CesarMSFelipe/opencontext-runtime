@@ -123,7 +123,12 @@ class TestContractBuild:
 
 class TestLoopDryRun:
     def test_full_flow_has_8_phases(self):
-        """README: 'All 8 phases' for --flow full."""
+        """`opencontext loop --flow full` runs the core SDD phases.
+
+        The CLI loop displays eight phases (explore→…→archive); the review summary
+        is folded into the run, whereas the harness SDD workflow lists nine
+        (…→verify→review→archive). This guards the loop CLI flow, not the harness.
+        """
         result = cli("loop", "--task", "fix auth bug", "--flow", "full", "--dry-run")
         assert result.returncode == 0, f"loop --dry-run failed:\n{result.stderr}"
         phases = [
@@ -267,75 +272,12 @@ class TestPythonSDK:
         assert contract.risk_tier in ("cheap", "precise", "critical")
         assert contract.token_budget in (8000, 16000, 28000)
 
-    def test_agent_registry_has_5_agents(self):
-        """README: 5 specialized agents in the loop."""
-        from opencontext_core.agents import AGENT_REGISTRY
+    def test_agent_clients_supported(self):
+        """README: 'ships adapters for 20+ agent clients'."""
+        from opencontext_core.configurator.adapter import iter_adapters
 
-        expected = {
-            "context-planner",
-            "tdd-enforcer",
-            "mutation-analyst",
-            "security-audit",
-            "code-review",
-        }
-        assert expected.issubset(set(AGENT_REGISTRY.keys())), (
-            f"Missing agents: {expected - set(AGENT_REGISTRY.keys())}"
-        )
-
-    def test_all_agents_instantiable(self, tmp_path):
-        """All 5 agents can be instantiated without errors."""
-        from opencontext_core.agents import AGENT_REGISTRY
-        from opencontext_core.agents.base import AgentConfig
-
-        for agent_type, AgentClass in AGENT_REGISTRY.items():
-            cfg = AgentConfig(name=agent_type, type=agent_type, objectives=["test"])
-            agent = AgentClass(cfg, tmp_path)
-            assert agent is not None
-
-    def test_security_agent_runs(self, tmp_path):
-        """README SDK example: security-audit agent runs and returns findings."""
-        import asyncio
-
-        from opencontext_core.agents import AGENT_REGISTRY
-        from opencontext_core.agents.base import AgentConfig
-
-        cfg = AgentConfig(
-            name="security-audit",
-            type="security-audit",
-            objectives=["scan for leaked credentials"],
-            scope={"paths": ["."]},
-        )
-        agent = AGENT_REGISTRY["security-audit"](cfg, tmp_path)
-        result = asyncio.run(agent.execute())
-        assert "finding_count" in result
-        assert "clean" in result
-        assert isinstance(result["finding_count"], int)
-
-    def test_tdd_enforcer_returns_cycle_status(self, tmp_path):
-        """README SDK example: tdd-enforcer returns cycle_status."""
-        import asyncio
-
-        from opencontext_core.agents import AGENT_REGISTRY
-        from opencontext_core.agents.base import AgentConfig
-
-        cfg = AgentConfig(
-            name="tdd-enforcer",
-            type="tdd-enforcer",
-            objectives=["verify test suite passes"],
-        )
-        agent = AGENT_REGISTRY["tdd-enforcer"](cfg, tmp_path)
-        result = asyncio.run(agent.execute())
-        assert "cycle_status" in result
-        assert result["cycle_status"] in ("green", "red")
-
-    def test_14_agent_integrations_registered(self):
-        """README badge: '14+ agents'."""
-        from opencontext_core.user_prefs import UserPreferences
-
-        prefs = UserPreferences()
-        assert len(prefs.agent_integrations) >= 14, (
-            f"Expected ≥14 agent integrations, got {len(prefs.agent_integrations)}"
-        )
+        count = len(list(iter_adapters()))
+        assert count >= 20, f"Expected ≥20 known agent clients, got {count}"
 
 
 # ── MCP tools ──────────────────────────────────────────────────────────────────
@@ -361,6 +303,11 @@ class TestMCPTools:
             "opencontext_insert_after_symbol",
             "opencontext_rename_symbol",
             "opencontext_run",
+            "opencontext_memory_save",
+            "opencontext_memory_search",
+            "opencontext_memory_context",
+            "opencontext_memory_judge",
+            "opencontext_quality",
         }
     )
 
@@ -538,30 +485,13 @@ class TestCompressionStrategies:
 
 
 # ── Benchmark numbers ──────────────────────────────────────────────────────────
-
-
-class TestBenchmarkNumbers:
-    def test_benchmark_avg_reduction_above_75_pct(self):
-        """README: average 88.5% reduction. Floor at 75% to allow variance."""
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                "tests/core/test_comparative_benchmark.py",
-                "-v",
-                "-s",
-            ],
-            capture_output=True,
-            text=True,
-            cwd=ROOT,
-            check=False,
-        )
-        combined = result.stdout + result.stderr
-        # Find "Average token reduction : X%"
-        for line in combined.splitlines():
-            if "Average token reduction" in line:
-                pct = float(line.split(":")[1].strip().rstrip("%"))
-                assert pct >= 75.0, f"Average reduction {pct}% below 75% floor"
-                return
-        pytest.fail(f"Average token reduction not found in benchmark output.\n{combined[-1000:]}")
+#
+# The README makes NO quantified token-reduction percentage claim by design.
+# The old TestBenchmarkNumbers.test_benchmark_avg_reduction_above_75_pct shelled
+# out to a fake comparative benchmark that scored OpenContext as a hand-curated
+# answer key and never actually ran it, then asserted a fabricated "≥75% average
+# reduction". That benchmark was excised (see tests/core/test_comparative_benchmark.py),
+# and the honest replacement (tests/core/test_efficiency_benchmark.py) carries a
+# deny-list test forbidding any `%`/claim string in its report. There is no
+# percentage claim left to verify here, so the marketing assertion was removed
+# rather than rewritten.

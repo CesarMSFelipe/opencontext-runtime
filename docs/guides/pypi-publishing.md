@@ -2,7 +2,7 @@
 
 ## Package Architecture
 
-OpenContext Runtime is split into **5 packages** on PyPI:
+OpenContext Runtime is split into **4 packages** on PyPI:
 
 | Package | PyPI Name | Dependencies | Description |
 |---------|-----------|--------------|-------------|
@@ -10,7 +10,6 @@ OpenContext Runtime is split into **5 packages** on PyPI:
 | `opencontext-cli` | `opencontext-cli` | `opencontext-core`, `opencontext-profiles` | CLI entry point (`opencontext` command) |
 | `opencontext-api` | `opencontext-api` | `opencontext-core`, `opencontext-profiles`, `fastapi` | FastAPI adapter for HTTP access |
 | `opencontext-profiles` | `opencontext-profiles` | `opencontext-core` | Technology profiles (Python, Node, Drupal, etc.) |
-| `opencontext-providers` | `opencontext-providers` | `opencontext-core` | Provider adapters (OpenAI, Anthropic, etc.) |
 
 ## Release Order
 
@@ -19,9 +18,8 @@ Packages must be published in dependency order:
 ```
 1. opencontext-core     (no deps → publish first)
 2. opencontext-profiles (depends on core)
-3. opencontext-providers (depends on core)
-4. opencontext-cli      (depends on core + profiles)
-5. opencontext-api      (depends on core + profiles)
+3. opencontext-cli      (depends on core + profiles)
+4. opencontext-api      (depends on core + profiles)
 ```
 
 ## Release Checklist
@@ -64,7 +62,6 @@ set -euo pipefail
 PACKAGES=(
   "packages/opencontext_core"
   "packages/opencontext_profiles"
-  "packages/opencontext_providers"
   "packages/opencontext_cli"
   "packages/opencontext_api"
 )
@@ -119,11 +116,6 @@ httpx>=0.27
 ```
 
 ### opencontext-profiles
-```
-opencontext-core>=0.1.0
-```
-
-### opencontext-providers
 ```
 opencontext-core>=0.1.0
 ```
@@ -190,7 +182,7 @@ potential issues with older packaging tools or alternative build backends.
 - [ ] Install from .whl: `opencontext config show` displays preferences
 - [ ] Install from .whl: `opencontext plugin list` lists plugins
 - [ ] Install from .whl: `opencontext` commands work outside any project directory
-- [ ] Version numbers consistent across all 5 `pyproject.toml` files
+- [ ] Version numbers consistent across all 4 `pyproject.toml` files
 - [ ] All tests pass: `python -m pytest tests`
 
 ## Verification After Installation

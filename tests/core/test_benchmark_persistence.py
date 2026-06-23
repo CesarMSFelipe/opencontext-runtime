@@ -1,63 +1,75 @@
-"""Tests for benchmark persistence helpers."""
+"""Round-trip persistence tests for the honest efficiency report.
+
+The fake ``BenchmarkSuite`` persistence (typed to fabricated results) was EXCISED.
+These tests now save/load real :class:`EfficiencyReport` objects.
+"""
 
 from __future__ import annotations
 
-import json
+import time
 from pathlib import Path
 
-from opencontext_core.evaluation.benchmark_suite import (
-    BenchmarkSuite,
-    load_last_result,
-    save_result,
+from opencontext_core.evaluation.efficiency import (
+    load_last_efficiency_result,
+    save_efficiency_result,
+)
+from opencontext_core.evaluation.models import (
+    CostTriple,
+    EfficiencyCaseResult,
+    EfficiencyReport,
 )
 
 
-class TestBenchmarkPersistence:
-    """Benchmark save/load round-trip tests."""
+def _report(case_id: str, con_tokens: int, sin_tokens: int) -> EfficiencyReport:
+    return EfficiencyReport(
+        cases=[
+            EfficiencyCaseResult(
+                case_id=case_id,
+                difficulty="simple",
+                con=CostTriple(tokens=con_tokens, tool_calls=1, latency_ms=5.0),
+                sin=CostTriple(tokens=sin_tokens, tool_calls=7, latency_ms=30.0),
+                ceiling_tokens=99999,
+                con_sufficient=True,
+                source_coverage=1.0,
+                forbidden_hits=[],
+                reasons=["quality parity met"],
+            )
+        ]
+    )
 
-    def test_save_result_creates_file(self, tmp_path: str | Path) -> None:
-        suite = BenchmarkSuite()
-        result = suite.run_all()
-        path = save_result(result, directory=tmp_path)
+
+class TestEfficiencyPersistence:
+    def test_save_creates_file(self, tmp_path: Path) -> None:
+        path = save_efficiency_result(_report("c1", 300, 1200), directory=tmp_path)
         assert path.exists()
         assert path.suffix == ".json"
-        data = json.loads(path.read_text(encoding="utf-8"))
-        assert "summary" in data
-        assert data["summary"]["total"] == result.total_cases
 
-    def test_save_result_creates_directory(self, tmp_path: str | Path) -> None:
-        nested = Path(tmp_path) / "benchmarks" / "runs"
-        suite = BenchmarkSuite()
-        result = suite.run(case_ids=["completeness/minimal"])
-        path = save_result(result, directory=nested)
+    def test_save_creates_nested_directory(self, tmp_path: Path) -> None:
+        nested = tmp_path / "benchmarks" / "runs"
+        path = save_efficiency_result(_report("c1", 300, 1200), directory=nested)
         assert path.exists()
         assert nested.exists()
 
-    def test_load_last_result_returns_result(self, tmp_path: str | Path) -> None:
-        suite = BenchmarkSuite()
-        result = suite.run_all()
-        save_result(result, directory=tmp_path)
-        loaded = load_last_result(directory=tmp_path)
+    def test_round_trip_preserves_cost(self, tmp_path: Path) -> None:
+        report = _report("c1", 300, 1200)
+        save_efficiency_result(report, directory=tmp_path)
+        loaded = load_last_efficiency_result(directory=tmp_path)
         assert loaded is not None
-        assert loaded.total_cases == result.total_cases
-        assert loaded.passed == result.passed
-        assert abs(loaded.average_score - result.average_score) < 0.1
+        assert len(loaded.cases) == 1
+        case = loaded.cases[0]
+        assert case.con.tokens == 300
+        assert case.con.tool_calls == 1
+        assert case.sin.tokens == 1200
+        assert case.token_delta == 900  # derived property reconstructed cleanly
+        assert case.con_sufficient is True
 
-    def test_load_last_result_none_when_empty(self, tmp_path: str | Path) -> None:
-        loaded = load_last_result(directory=tmp_path)
-        assert loaded is None
+    def test_load_none_when_empty(self, tmp_path: Path) -> None:
+        assert load_last_efficiency_result(directory=tmp_path) is None
 
-    def test_load_last_result_picks_latest(self, tmp_path: str | Path) -> None:
-        suite = BenchmarkSuite()
-        r1 = suite.run(case_ids=["completeness/minimal"])
-        r2 = suite.run(case_ids=["completeness/minimal", "safety/clean_context"])
-
-        save_result(r1, directory=tmp_path)
-        import time
-
-        time.sleep(0.01)  # Ensure different timestamps
-        save_result(r2, directory=tmp_path)
-
-        loaded = load_last_result(directory=tmp_path)
+    def test_load_picks_latest(self, tmp_path: Path) -> None:
+        save_efficiency_result(_report("first", 300, 1200), directory=tmp_path)
+        time.sleep(1.05)  # filenames are second-resolution; ensure a distinct stamp
+        save_efficiency_result(_report("second", 100, 900), directory=tmp_path)
+        loaded = load_last_efficiency_result(directory=tmp_path)
         assert loaded is not None
-        assert loaded.total_cases == 2  # The latest has 2 cases
+        assert loaded.cases[0].case_id == "second"

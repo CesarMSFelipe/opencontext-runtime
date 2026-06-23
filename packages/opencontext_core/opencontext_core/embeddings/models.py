@@ -49,7 +49,11 @@ class EmbeddedItem(BaseModel):
     ) -> EmbeddedItem:
         """Create a new embedding record."""
         return cls(
-            id=f"emb_{item_id}_{datetime.now(tz=UTC).timestamp()}",
+            # Deterministic id (one record per source item): re-indexing the same
+            # file/symbol reuses this id so the store overwrites in place instead of
+            # accumulating a fresh copy each pass. A timestamp here defeated dedup and
+            # grew index.jsonl unbounded; created_at below records the time instead.
+            id=f"emb_{item_id}",
             item_id=item_id,
             item_type=item_type,
             project_name=project_name,

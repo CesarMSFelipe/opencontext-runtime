@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 import re
 from collections import defaultdict
@@ -38,6 +39,42 @@ from opencontext_core.retrieval.scoring import (
 from opencontext_core.safety.redaction import SinkGuard
 
 _log = logging.getLogger(__name__)
+
+# The 9 v2 ``RankingConfig`` weight fields map 1:1 onto identically-named
+# ``RetrievalWeights`` fields (B1-REQ-3). The four non-mapped ``RetrievalWeights``
+# fields (personalization + the three penalties) are deliberately absent and keep
+# their dataclass defaults.
+_RANKING_OVERRIDE_FIELDS = (
+    "semantic_relevance",
+    "graph_centrality",
+    "call_distance",
+    "test_affinity",
+    "memory_confidence",
+    "recent_failure",
+    "risk_requirement",
+    "freshness",
+    "provenance",
+)
+
+
+def _weights_from_ranking_config(rc: Any | None) -> RetrievalWeights:
+    """Build ``RetrievalWeights`` overriding ONLY the non-None v2 ranking fields.
+
+    ``RetrievalWeights`` is the single source of truth (RD1): start from its
+    defaults and, for each v2 ``RankingConfig`` field the user actually set (not
+    ``None``), override the identically-named weight. An unset config (or ``None``)
+    yields ``RetrievalWeights()`` exactly — zero behavior change. Fields with no
+    ``RankingConfig`` counterpart are never touched.
+    """
+    base = RetrievalWeights()
+    if rc is None:
+        return base
+    overrides = {
+        field: value
+        for field in _RANKING_OVERRIDE_FIELDS
+        if (value := getattr(rc, field, None)) is not None
+    }
+    return dataclasses.replace(base, **overrides) if overrides else base
 
 
 class RetrievalSource(Protocol):
@@ -100,40 +137,59 @@ class FTSRetrievalSource:
         from opencontext_core.indexing.graph_db import GraphDatabase
 
         db = GraphDatabase(self.db_path)
-        rows = db.search_fts(query, limit=limit)
+        # Name-anchored pass FIRST: any symbol the query names by identifier
+        # (BridgeDetector, count_by_type) enters the candidate set even when generic
+        # filler tokens (add/dict/count) push it past the BM25 top-k. These lead so the
+        # named definition gets the top positional scores; the broad BM25 pass fills in
+        # the rest. ``_deduplicate`` (by id) collapses any overlap, keeping the higher
+        # score. The combined cap is ``limit`` so this never inflates the candidate set.
+        identifiers = _query_identifiers(query)
+        name_rows = db.search_symbols_by_name(identifiers, limit=limit) if identifiers else []
+        fts_rows = db.search_fts(query, limit=limit)
         db.close()
+
+        seen_ids: set[str] = set()
         items: list[ContextItem] = []
-        for rank_idx, row in enumerate(rows):
-            # search_fts returns rows best-first (ORDER BY bm25 rank). Score by
-            # position so the best lexical hit gets the highest score. The raw bm25
-            # value is unnormalized across queries and the previous 1/(1-rank) formula
-            # was monotonic in the WRONG direction (least-relevant scored highest).
-            score = 1.0 / (1.0 + rank_idx)
-            raw_rank = row.get("rank")  # kept for provenance only, not for scoring
-            file_path = row.get("file_path", "")
-            symbol_path = f"{file_path}:{row.get('line', 0)}"
-            snippet = f"{row.get('kind', '')} {row['name']} in {symbol_path}"
-            if row.get("docstring"):
-                snippet += f"\n{row['docstring'][:200]}"
-            items.append(
-                ContextItem(
-                    id=f"fts:{row['id']}",
-                    content=snippet,
-                    source=symbol_path,
-                    source_type="symbol",
-                    priority=ContextPriority.P1,
-                    tokens=estimate_tokens(snippet),
-                    score=score,
-                    metadata={
-                        "retrieval": {"fts_rank": raw_rank},
-                        "retrieval_rationale": [f"fts_bm25:rank_{rank_idx + 1}"],
-                        "symbol_kind": row.get("kind", ""),
-                        "language": row.get("language", ""),
-                        "container": row.get("container", ""),
-                    },
-                )
-            )
-        return items
+        for rank_idx, row in enumerate(name_rows):
+            item = self._row_to_item(row, rank_idx, rationale="name_match")
+            if item.id not in seen_ids:
+                seen_ids.add(item.id)
+                items.append(item)
+        for rank_idx, row in enumerate(fts_rows):
+            item = self._row_to_item(row, rank_idx, rationale="fts_bm25")
+            if item.id not in seen_ids:
+                seen_ids.add(item.id)
+                items.append(item)
+        return items[:limit]
+
+    @staticmethod
+    def _row_to_item(row: dict[str, Any], rank_idx: int, *, rationale: str) -> ContextItem:
+        # Score by position so the best hit gets the highest score. The raw bm25 value
+        # is unnormalized across queries and a value-based formula was monotonic in the
+        # WRONG direction (least-relevant scored highest).
+        score = 1.0 / (1.0 + rank_idx)
+        raw_rank = row.get("rank")  # kept for provenance only, not for scoring
+        file_path = row.get("file_path", "")
+        symbol_path = f"{file_path}:{row.get('line', 0)}"
+        snippet = f"{row.get('kind', '')} {row['name']} in {symbol_path}"
+        if row.get("docstring"):
+            snippet += f"\n{row['docstring'][:200]}"
+        return ContextItem(
+            id=f"fts:{row['id']}",
+            content=snippet,
+            source=symbol_path,
+            source_type="symbol",
+            priority=ContextPriority.P1,
+            tokens=estimate_tokens(snippet),
+            score=score,
+            metadata={
+                "retrieval": {"fts_rank": raw_rank},
+                "retrieval_rationale": [f"{rationale}:rank_{rank_idx + 1}"],
+                "symbol_kind": row.get("kind", ""),
+                "language": row.get("language", ""),
+                "container": row.get("container", ""),
+            },
+        )
 
 
 class GraphRetrievalSource:
@@ -230,6 +286,7 @@ class RetrievalPlanner:
         *,
         graph_db_path: str | Path | None = None,
         memory_store: Any | None = None,
+        weights: RetrievalWeights | None = None,
     ) -> None:
         if isinstance(manifest_or_sources, ProjectManifest):
             sources: list[RetrievalSource] = [ManifestRetrievalSource(manifest_or_sources)]
@@ -242,6 +299,9 @@ class RetrievalPlanner:
         # means expansion is a strict no-op (manifest/graph fallback unchanged).
         self.graph_db_path = Path(graph_db_path) if graph_db_path is not None else None
         self._memory_store = memory_store
+        # Config-derived ranking weights (B1). None => rank() falls back to
+        # RetrievalWeights() defaults, so the default path is byte-identical.
+        self._weights = weights
         self.omissions: list[str] = []
 
     @classmethod
@@ -274,7 +334,13 @@ class RetrievalPlanner:
             if vector_source is not None:
                 sources.append(vector_source)
 
-        planner = cls(sources, memory_store=memory_store)
+        # B1: resolve ranking weights from config.context.ranking as optional
+        # overrides of RetrievalWeights. Unset fields defer to the dataclass
+        # default, so an unconfigured project ranks exactly as before.
+        ranking_cfg = getattr(getattr(config, "context", None), "ranking", None)
+        weights = _weights_from_ranking_config(ranking_cfg)
+
+        planner = cls(sources, memory_store=memory_store, weights=weights)
         planner.graph_db_path = graph_db_path if graph_db_path.exists() else None
         return planner
 
@@ -335,12 +401,17 @@ class RetrievalPlanner:
 
         mb = memory_boost_map or {}
         gd = graph_distance_map or {}
-        weights = RetrievalWeights()
+        # B1: use config-derived weights when present; otherwise fall back to the
+        # RetrievalWeights() default — identical to the previous hardcoded value.
+        weights = self._weights or RetrievalWeights()
         personalization = (
             _personalization_map(items, query or "", focus_files)
             if (query or focus_files)
             else None
         )
+        # Query identifiers (used for the definition-affinity signal). Empty when no
+        # query is supplied => is_definition is always False => prior behavior.
+        query_terms = _query_terms(query) if query else set()
 
         def _score(item: ContextItem) -> float:
             modified = item.metadata.get("modified_at")
@@ -358,6 +429,7 @@ class RetrievalPlanner:
                 is_test=_looks_like_test(item.source),
                 weights=weights,
                 personalization_map=personalization,
+                is_definition=_is_definition_of_query(item, query_terms),
             )
 
         # Persist the hybrid score onto each item so it survives into evidence
@@ -388,17 +460,41 @@ class RetrievalPlanner:
             records = store.search(query, scope=MemoryLayer.FAILURE, limit=25)
         except Exception:
             return {}
+        # linked_nodes from the harvester carry path[:line] entries so they are
+        # directly comparable against ``item.source``. A FAILURE record saves the
+        # bare symbol name when ``pack.omitted`` was only a count (legacy) and a
+        # path[:line] when the harvester could read the omission list (current
+        # behavior). Match exact first, then fall back to a substring *basename*
+        # match so the bare symbol name still gives a useful (if weaker) boost.
         flagged: dict[str, float] = {}
         for record in records:
             for node in getattr(record, "linked_nodes", []) or []:
                 flagged[node] = max(flagged.get(node, 0.0), record.confidence)
         if not flagged:
             return {}
+        # Pre-index so the per-item scan stays O(items * linked_nodes) without
+        # iterating ``flagged`` for every item.
+        flagged_basenames = {Path(node).name: conf for node, conf in flagged.items()}
         boost: dict[str, float] = {}
         for item in items:
-            signal = max(flagged.get(item.id, 0.0), flagged.get(item.source, 0.0))
-            if signal > 0.0:
-                boost[item.id] = signal
+            # Exact lookup against THIS candidate only: id or source. The earlier
+            # spread ``*flagged`` made every candidate match if ANY flag key
+            # existed, lifting all candidates equally and breaking rank order.
+            if item.id in flagged:
+                best = flagged[item.id]
+            elif item.source in flagged:
+                best = flagged[item.source]
+            else:
+                best = 0.0
+            # Substring basename fuzzy match: a bare symbol name (``save``) maps
+            # to the file that contains it (``src/auth.py``). Conf weaker than
+            # an exact hit (0.7x) so exact matches dominate when both are present.
+            if best == 0.0 and flagged_basenames:
+                src_basename = Path(item.source.split(":", 1)[0]).name
+                if src_basename and src_basename in flagged_basenames:
+                    best = flagged_basenames[src_basename] * 0.7
+            if best > 0.0:
+                boost[item.id] = best
         return boost
 
     def plan(self, request: EvidenceRequest, top_k: int) -> EvidencePlan:
@@ -531,6 +627,33 @@ def _looks_like_test(source: str) -> bool:
     return base.startswith("test_") or base.endswith("_test.py") or "/tests/" in source.lower()
 
 
+# Symbol kinds that constitute a DEFINITION a developer would open to "add/modify X".
+_DEFINITION_KINDS = frozenset(
+    {"class", "function", "method", "interface", "trait", "struct", "enum", "constant"}
+)
+
+
+def _is_definition_of_query(item: ContextItem, query_terms: set[str]) -> bool:
+    """Whether ``item`` DEFINES a symbol whose name a query term names.
+
+    True when the candidate is a code definition (class/function/method/…) and its
+    symbol name shares a token with the query — e.g. ``class BridgeDetector`` for
+    "add count_by_type() to BridgeDetector". This anchors "add/modify <Symbol>"
+    retrieval on the file where <Symbol> lives, not its tests or incidental mentions.
+    A test file is never treated as the definition even if its name matches, so the
+    defining impl still outranks ``test_<symbol>.py``.
+    """
+    if not query_terms:
+        return False
+    kind = str(item.metadata.get("symbol_kind", "")).lower()
+    if kind not in _DEFINITION_KINDS:
+        return False
+    if _looks_like_test(item.source):
+        return False
+    name_tokens = _query_terms(_candidate_name(item))
+    return bool(name_tokens & query_terms)
+
+
 # ---- personalized graph ranking ---------------------------------------------
 
 
@@ -548,6 +671,39 @@ def _query_terms(query: str) -> set[str]:
     if len(word) >= 2:
         tokens.add(word.lower())
     return tokens
+
+
+# An identifier-shaped token in a query: CamelCase (``BridgeDetector``), snake_case
+# (``count_by_type``), or a single capitalized rare word. These name the symbol the
+# task is about; generic lowercase filler (add/dict/count/to/of) does not and only
+# dilutes BM25. We keep the ORIGINAL casing/underscores so a name-anchored DB lookup
+# can match ``nodes.name`` exactly.
+_IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_CAMEL_RE = re.compile(r"[a-z][A-Z]|[A-Z]{2}[a-z]")
+
+
+def _query_identifiers(query: str) -> list[str]:
+    """Identifier-shaped tokens of ``query`` (CamelCase / snake_case / capitalized).
+
+    Returns names the query is *about* (``BridgeDetector``, ``count_by_type``) for
+    name-anchored candidate recall, excluding generic lowercase prose words so the
+    lookup targets the symbol, not filler. Order-preserving and de-duplicated.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for token in _IDENTIFIER_RE.findall(query):
+        if len(token) < 3:
+            continue
+        is_snake = "_" in token
+        is_camel = bool(_CAMEL_RE.search(token))
+        is_capitalized = token[0].isupper()
+        if not (is_snake or is_camel or is_capitalized):
+            continue
+        key = token.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(token)
+    return out
 
 
 def _candidate_name(item: ContextItem) -> str:
@@ -781,12 +937,56 @@ def _graph_rationale(node: ContextNode) -> list[str]:
 
 
 def _deduplicate(items: list[ContextItem]) -> list[ContextItem]:
+    """Collapse duplicates, including cross-source near-identical entries.
+
+    Two collapse passes:
+
+    * Primary: by ``item.id`` (covers FTS vs. graph sources that share a stable
+      id, e.g. when an expansion neighbor re-landed with the same id).
+    * Secondary: by ``(normalized_file, symbol_line)``, so the same logical
+      symbol arriving from FTS (snippet) and the graph (full body) — different
+      ids, different prefixes (``fts:`` vs ``graph:``) — is collapsed. The
+      higher-content (typically the graph body) entry wins so the agent gets the
+      fuller evidence instead of a snippet repeated under a different key.
+
+    ``_key_for_dedup`` is null-safe: a manifest file whose id has no symbol line
+    falls back to its full id so ``srcauth.py`` (file-level) doesn't collapse
+    onto a single function within it.
+    """
+
+    def _key_for_dedup(item: ContextItem) -> tuple[str, str | int]:
+        # (file, symbol|line) — prefer the symbol name; fall back to the line parsed
+        # from ``source`` so same-symbol items still collapse when symbol_kind is set
+        # but the symbol name is blank. Previously that case yielded (file, "") and
+        # the empty-key guard below skipped secondary dedup (under-dedup, not a
+        # crash) — the fallback recovers the per-line collapse.
+        source = (item.source or "").split(":", 1)[0]
+        line_or_symbol = ""
+        if item.metadata.get("symbol_kind"):
+            line_or_symbol = str(item.metadata.get("symbol") or "")
+        if not line_or_symbol:
+            tail = (item.source or "").split(":", 1)
+            line_or_symbol = tail[1] if len(tail) > 1 else ""
+        return (source, line_or_symbol)
+
     by_id: dict[str, ContextItem] = {}
     for item in items:
         current = by_id.get(item.id)
         if current is None or item.score > current.score:
             by_id[item.id] = item
-    return list(by_id.values())
+    # Secondary pass: collapse cross-source near-identical entries. Keep the
+    # entry with the longest content (graph body > fts snippet) on collisions.
+    by_secondary: dict[tuple[str, str | int], ContextItem] = {}
+    for item in by_id.values():
+        key = _key_for_dedup(item)
+        if not key[0] or not key[1]:
+            # File-level (no symbol line) or empty source: skip secondary dedup.
+            by_secondary[(item.id, "")] = item
+            continue
+        current = by_secondary.get(key)
+        if current is None or len(item.content) > len(current.content):
+            by_secondary[key] = item
+    return list(by_secondary.values())
 
 
 # Relevance weight in MMR selection: high so the most relevant item still leads,

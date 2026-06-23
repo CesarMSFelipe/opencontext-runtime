@@ -85,7 +85,7 @@ Most-used: `index .` and `pack . --query "<task>"` (context), `verify` (health),
 This project supports Spec-Driven Development.
 
 - Run `opencontext init` to initialize SDD if not done
-- Use `/sdd-new <change>` to start a new change
+- Use `/oc-new <change>` to start a new change
 - The orchestrator runs: explore -> propose -> spec -> design -> tasks -> apply -> verify -> archive
 ## Security
 

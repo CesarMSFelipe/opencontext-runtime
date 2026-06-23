@@ -26,24 +26,18 @@ RUNTIME_PREF_TO_YAML: dict[str, str] = {
 }
 
 
-def sync_pref_to_yaml(
-    pref_key: str, value: object, *, root: str | Path = ".", overwrite: bool = True
+def set_yaml_key(
+    yaml_path: str, value: object, *, root: str | Path = ".", overwrite: bool = True
 ) -> bool:
-    """Patch the yaml path mapped to ``pref_key`` with ``value``. Return True if applied.
+    """Safely patch a dotted key in the project ``opencontext.yaml``.
 
-    No-ops for unmapped keys or when no project config exists. Validates the
-    result loads and reverts on failure (never corrupts the file).
-
-    With ``overwrite=False`` (fill-only), a path already present in the project
-    config is left untouched — the explicit project value wins over the global
-    pref. Install uses this so a hand-written ``models.default`` (e.g. ollama) is
-    never stomped by the global mock default; ``config set``/wizard keep
-    ``overwrite=True`` so an explicit toggle still updates the file.
+    Validates that the patched config still loads and reverts the original text
+    on any failure, so a bad value can never corrupt the file. Returns True if
+    applied. No-ops (returns False) when no project config exists, or — with
+    ``overwrite=False`` — when the path is already present (the explicit project
+    value wins). This is the single safe writer used by both the pref bridge and
+    the interactive config menu (memory backend, language, …).
     """
-    yaml_path = RUNTIME_PREF_TO_YAML.get(pref_key)
-    if yaml_path is None:
-        return False
-
     from opencontext_core.config import find_config, load_config
 
     config_file = find_config(str(root))
@@ -72,6 +66,26 @@ def sync_pref_to_yaml(
     except Exception:
         config_file.write_text(original, encoding="utf-8")  # revert
         return False
+
+
+def sync_pref_to_yaml(
+    pref_key: str, value: object, *, root: str | Path = ".", overwrite: bool = True
+) -> bool:
+    """Patch the yaml path mapped to ``pref_key`` with ``value``. Return True if applied.
+
+    No-ops for unmapped keys or when no project config exists. Validates the
+    result loads and reverts on failure (never corrupts the file).
+
+    With ``overwrite=False`` (fill-only), a path already present in the project
+    config is left untouched — the explicit project value wins over the global
+    pref. Install uses this so a hand-written ``models.default`` (e.g. ollama) is
+    never stomped by the global mock default; ``config set``/wizard keep
+    ``overwrite=True`` so an explicit toggle still updates the file.
+    """
+    yaml_path = RUNTIME_PREF_TO_YAML.get(pref_key)
+    if yaml_path is None:
+        return False
+    return set_yaml_key(yaml_path, value, root=root, overwrite=overwrite)
 
 
 def _resolve_pref(prefs: Any, dotted: str) -> tuple[bool, object]:

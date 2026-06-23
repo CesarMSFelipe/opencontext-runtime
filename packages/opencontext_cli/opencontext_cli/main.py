@@ -107,7 +107,6 @@ from opencontext_core.safety.prompt_injection import render_untrusted_context
 from opencontext_core.safety.provider_policy import ProviderPolicyEnforcer
 from opencontext_core.safety.redaction import SinkGuard
 from opencontext_core.update import EcosystemUpdateChecker, UpdateChecker
-from opencontext_core.workflow_packs.signing import WorkflowPackSigner, WorkflowPackVerifier
 from opencontext_core.workspace.layout import ensure_workspace
 
 try:
@@ -661,6 +660,11 @@ def _build_parser() -> argparse.ArgumentParser:
     contextbench_parser.add_argument("--root", default=".", help="Project root to benchmark.")
     contextbench_parser.add_argument("--max-tokens", type=int, default=6000)
     contextbench_parser.add_argument("--min-token-reduction", type=float, default=0.5)
+    contextbench_parser.add_argument(
+        "--efficiency",
+        action="store_true",
+        help="Emit the CON-vs-grep+Read efficiency report (tokens/tool_calls/latency).",
+    )
     recall_parser = eval_subparsers.add_parser(
         "recall",
         help="Run the real retriever on labeled tasks; measure recall/tokens/latency.",
@@ -956,6 +960,12 @@ def _build_parser() -> argparse.ArgumentParser:
     quality_preflight.add_argument("--query", default="")
     quality_verify = quality_sub.add_parser("verify")
     quality_verify.add_argument("target", nargs="?", default="last")
+    # Architecture & code-quality check/gate (the deterministic, zero-model
+    # evaluator). These attach to the EXISTING group; preflight/verify above are
+    # the unrelated legacy context-quality gates and keep working untouched.
+    from opencontext_cli.commands.quality_cmd import add_quality_subcommands
+
+    add_quality_subcommands(quality_sub)
 
     report_parser = subparsers.add_parser("report", help=argparse.SUPPRESS)
     report_sub = report_parser.add_subparsers(dest="report_command", required=True)
@@ -1253,7 +1263,22 @@ def _dispatch(args: argparse.Namespace) -> None:
         )
         return
     if command == "quality":
-        _quality(args.quality_command, getattr(args, "query", ""), getattr(args, "target", "last"))
+        quality_command = args.quality_command
+        if quality_command in ("check", "gate", "test-gaps"):
+            from opencontext_cli.commands.quality_cmd import (
+                handle_quality_check,
+                handle_quality_gate,
+                handle_quality_test_gaps,
+            )
+
+            if quality_command == "check":
+                handle_quality_check(args)
+            elif quality_command == "test-gaps":
+                handle_quality_test_gaps(args)
+            else:
+                handle_quality_gate(args)
+            return
+        _quality(quality_command, getattr(args, "query", ""), getattr(args, "target", "last"))
         return
     if command == "report":
         _report(args.report_command)
@@ -1425,6 +1450,7 @@ def _dispatch(args: argparse.Namespace) -> None:
                 getattr(args, "root", "."),
                 getattr(args, "max_tokens", 6000),
                 getattr(args, "min_token_reduction", 0.5),
+                efficiency=getattr(args, "efficiency", False),
             )
     elif command == "doctor":
         _doctor(
@@ -1784,7 +1810,11 @@ def _install(args: argparse.Namespace) -> None:
     # once-per-machine global integration, and a verify pass on top.
     from opencontext_core.agent_installer import AgentInstaller as _AgentInstaller
     from opencontext_core.install_manager import InstallationManager, InstallState
-    from opencontext_core.onboarding.service import OnboardingOptions, OnboardingService
+    from opencontext_core.onboarding.service import (
+        OnboardingOptions,
+        OnboardingService,
+        default_active_clients,
+    )
 
     # Honor the editor the wizard asked about. Previously hard-coded to "opencode",
     # so a claude-code/codex dev got opencode files and no wiring for their own agent.
@@ -1794,13 +1824,9 @@ def _install(args: argparse.Namespace) -> None:
         active_clients = [_chosen_editor]
     else:
         # Non-interactive (--yes / non-TTY): wire the agents actually installed on
-        # this machine instead of a blanket 'opencode'. Fall back to opencode only
-        # when none are detected.
-        try:
-            _detected = _AgentInstaller(project_root=root).detect_installed_agents()
-            active_clients = [t.value for t in _detected if t.value != "generic"] or ["opencode"]
-        except Exception:
-            active_clients = ["opencode"]
+        # this machine instead of a blanket 'opencode'. Same detector the rest of
+        # onboarding uses; falls back to opencode only when none are detected.
+        active_clients = default_active_clients()
 
     summary: list[str] = []
     # Default to the client's model everywhere ('default' profile); the wizard's
@@ -2037,14 +2063,23 @@ def _onboard(
     force_agent_files: bool = False,
 ) -> None:
     from opencontext_core.dx.console_styles import console
-    from opencontext_core.onboarding.service import OnboardingOptions, OnboardingService
+    from opencontext_core.onboarding.service import (
+        OnboardingOptions,
+        OnboardingService,
+        default_active_clients,
+    )
 
     project_root = Path(root)
+    # An explicit --agent wins; otherwise configure the agent CLIs actually installed
+    # on this host (Claude Code, OpenCode, ...) instead of a hard-coded 'opencode'.
+    active_clients = (
+        [c.strip() for c in agent.split(",") if c.strip()] if agent else default_active_clients()
+    )
     options = OnboardingOptions(
         root=project_root,
         template=template,
         security_mode=mode,
-        active_clients=[c.strip() for c in (agent or "opencode").split(",") if c.strip()],
+        active_clients=active_clients,
         tdd_mode=tdd,
         sdd_model_profile=sdd_profile,
         orchestrator_profile=orchestrator_profile,
@@ -2210,34 +2245,6 @@ def _workflows(action: str, name: str | None) -> None:
         return
     if action == "inspect":
         print(json.dumps(_workflow_pack_metadata(name), indent=2))
-        return
-    _unreachable(action)
-
-
-def _packs(action: str, name: str | None = None, key: str | None = None) -> None:
-    if action == "list":
-        print(json.dumps(_workflow_pack_names(), indent=2))
-        return
-    if action == "inspect":
-        print(json.dumps(_workflow_pack_metadata(name), indent=2))
-        return
-    if action in {"sign", "verify"}:
-        if not name:
-            raise OpenContextError("workflow pack name is required")
-        if not key:
-            raise OpenContextError("workflow pack signing key is required")
-        pack_root = Path("workflow-packs") / name
-        if action == "sign":
-            path = WorkflowPackSigner().write_signature(pack_root, key=key)
-            print(json.dumps({"status": "signed", "path": str(path)}, indent=2))
-            return
-        verified = WorkflowPackVerifier().verify(pack_root, key=key)
-        print(
-            json.dumps(
-                {"status": "verified" if verified else "failed", "valid": verified},
-                indent=2,
-            )
-        )
         return
     _unreachable(action)
 
@@ -3811,11 +3818,25 @@ def _eval(
     root: str,
     max_tokens: int,
     min_token_reduction: float,
+    *,
+    efficiency: bool = False,
 ) -> None:
     if eval_command == "contextbench":
         if path is None:
             raise OpenContextError("ContextBench requires a YAML or JSON suite path.")
         root_path = Path(root)
+        if efficiency:
+            from opencontext_core.evaluation.efficiency import (
+                EfficiencyBenchmark,
+                format_efficiency_report_json,
+            )
+
+            bench = EfficiencyBenchmark(runtime, root=root_path, max_tokens=max_tokens)
+            report = bench.evaluate_suite(load_context_bench_cases(path), refresh_index=True)
+            print(format_efficiency_report_json(report))
+            if not report.all_sufficient:
+                raise SystemExit(1)
+            return
         runtime.index_project(root_path)
         evaluator = ContextBenchEvaluator(
             runtime,

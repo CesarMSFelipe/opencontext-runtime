@@ -11,7 +11,17 @@ JSON_SCHEMA_RE = re.compile(r"\{[^{}]*(?:\"\$schema\"|\"type\"\s*:\s*\"object\")
 FILE_PATH_RE = re.compile(r"\b(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+\b")
 NUMBER_RE = re.compile(r"\b\d+(?:\.\d+)?(?:%|ms|s|MB|GB|tokens?)?\b")
 CITATION_RE = re.compile(r"(?:\[[0-9A-Za-z_.:-]+\]|\([A-Z][A-Za-z]+,\s*\d{4}\))")
-WARNING_RE = re.compile(r"(?im)^(?:legal|medical|security|warning|caution|do not|never)\b.*$")
+# Constraint/warning triggers are matched INLINE (anywhere in the text), whole-word, so
+# that a load-bearing constraint embedded mid-paragraph ("the API must never be called
+# twice") is protected -- not only ones at the start of a line. Multi-word phrases allow
+# flexible inter-word whitespace; \b boundaries avoid false positives (e.g. "nevertheless").
+WARNING_RE = re.compile(
+    r"\b(?:"
+    r"must\s+not|must\s+never|do\s+not|shall\s+not|"
+    r"never|required|forbidden|caution|warning|security|legal|medical"
+    r")\b",
+    re.IGNORECASE,
+)
 
 
 class ProtectedSpanManager:

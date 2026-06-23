@@ -23,7 +23,6 @@ ruff format --check .
 mypy packages/opencontext_core
 python -m build packages/opencontext_core
 python -m build packages/opencontext_profiles
-python -m build packages/opencontext_providers
 python -m build packages/opencontext_cli
 python -m build packages/opencontext_api
 ```

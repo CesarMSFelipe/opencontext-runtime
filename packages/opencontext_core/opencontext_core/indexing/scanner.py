@@ -80,6 +80,19 @@ def is_ignored(path: Path, root: Path, ignore_patterns: list[str]) -> bool:
     return False
 
 
+def _is_virtualenv_dir(path: Path) -> bool:
+    """Return whether a directory is a Python virtualenv (has a pyvenv.cfg marker).
+
+    Robust to arbitrary venv names (oc-audit-venv, .ci-venv, ...): ``pyvenv.cfg``
+    is the canonical marker PEP 405 / the ``venv`` module writes at a venv root, so
+    its presence is a reliable signal to prune the whole tree from indexing.
+    """
+    try:
+        return (path / "pyvenv.cfg").is_file()
+    except OSError:
+        return False
+
+
 class ProjectScanner:
     """Scans a project tree into deterministic file metadata."""
 
@@ -100,6 +113,7 @@ class ProjectScanner:
                 name
                 for name in directory_names
                 if not is_ignored(current_path / name, resolved_root, effective_ignores)
+                and not _is_virtualenv_dir(current_path / name)
             )
             for file_name in sorted(file_names):
                 file_path = current_path / file_name

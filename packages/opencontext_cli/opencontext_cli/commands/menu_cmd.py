@@ -16,59 +16,19 @@ from opencontext_cli.commands.verified_context_view import (
     render_verified_context,
 )
 from opencontext_core import prompts
-from opencontext_core.dx.console_styles import console
+from opencontext_core.dx.console_styles import console, show_logo
 from opencontext_core.update import EcosystemUpdateChecker, UpdateChecker
-
-# ── Console logo — knowledge graph motif, brand colors ──────────────────
-#
-# Visual layout (terminal rendering, markup stripped):
-#
-#   ◉──◉──◉    OpenContext Runtime           node cols: left=2 mid=5 right=8
-#   │     │    Context Engineering...         ── edges are 2 chars each
-#   ◉──◉  ◉
-#   │  │       * 87% token reduction  * SDD   both bottom nodes are connected
-#   ◉──◉       * MCP server  * 13+ agents     up via │ at cols 2 and 5
-#
-# Graph edges:  A──B──C / │     │ / D──E  F / │  │ / G──H
-# (F is a leaf — only connected upward to C)
-
-LOGO = [
-    "",
-    "  [bold #00C9A7]◉[/][dim]──[/][bold #00A8E8]◉[/][dim]──[/][bold #845EC2]◉[/]    [bold white]OpenContext Runtime[/]",  # noqa: E501
-    "  [#00C9A7]│[/]     [#845EC2]│[/]    [dim]Context Engineering for AI Agents[/]",
-    "  [#00C9A7]◉[/][dim]──[/][#00A8E8]◉[/]  [#845EC2]◉[/]",
-    "  [#00C9A7]│[/]  [#00A8E8]│[/]       [bold #00C9A7]*[/] [bold]87% token reduction[/]  [#00A8E8]*[/] SDD workflow",  # noqa: E501
-    "  [#00C9A7]◉[/][dim]──[/][#00A8E8]◉[/]       [#845EC2]*[/] MCP server  [#00C9A7]*[/] 13+ agents  [#00A8E8]*[/] Zero secrets",  # noqa: E501
-    "",
-]
-
-COMPACT_LOGO = [
-    "  [bold #00C9A7]◉──◉[/]  [bold white]OpenContext Runtime[/]",
-    "  [#00C9A7]│  │[/]  [dim]Context Engineering · 87% token reduction[/]",
-    "  [#00C9A7]◉──◉[/]  [dim]SDD · MCP · 13+ agents · Zero secrets[/]",
-]
-
-
-def _show_logo() -> None:
-    """Print the OpenContext logo, falling back to compact if terminal is small."""
-    try:
-        width = __import__("shutil").get_terminal_size().columns
-        height = __import__("shutil").get_terminal_size().lines
-        use_full = width >= 64 and height >= len(LOGO) + 14
-    except Exception:
-        use_full = False
-
-    for line in LOGO if use_full else COMPACT_LOGO:
-        console.print(line)
 
 
 def _action_header(title: str) -> None:
-    """Clear terminal and show a consistent action screen header."""
+    """Clear the terminal and show the OpenContext logo + a screen title, so
+    every action screen carries the same icon as the home menu."""
     try:
         console.clear()
     except Exception:
         pass
-    console.print(f"\n  [bold white]OpenContext[/bold white]   [dim]>[/dim]   [bold]{title}[/bold]")
+    show_logo(compact=True)
+    console.print(f"  [dim]>[/dim] [bold]{title}[/bold]")
     console.print()
 
 
@@ -88,7 +48,7 @@ def run_main_menu() -> None:
         except Exception:
             pass
 
-        _show_logo()
+        show_logo()
         console.print()
         _print_kg_header()
         console.print()
@@ -104,13 +64,10 @@ def run_main_menu() -> None:
                 ("upgrade", "Upgrade all packages"),
                 ("sync", "Re-sync environment"),
                 (None, "Configure"),
-                ("models", "Providers & models"),
-                ("agents", "Agent integrations"),
-                ("plugins", "Plugins"),
-                ("sdd", "SDD & TDD settings"),
-                ("memory", "Context memory"),
+                ("configure", "Settings (providers, agents, plugins, SDD, features…)"),
                 (None, "Tools"),
                 ("verified", "Verified context for a task"),
+                ("memory", "Context memory"),
                 ("doctor", "Doctor"),
                 ("backups", "Backups"),
                 ("uninstall", "Uninstall"),
@@ -127,10 +84,7 @@ def run_main_menu() -> None:
             "install": _run_install,
             "upgrade": _run_upgrade,
             "sync": _run_sync,
-            "models": _run_configure_models,
-            "agents": _run_agent_integrations,
-            "plugins": _run_plugins,
-            "sdd": _run_sdd_profiles,
+            "configure": run_config_menu,
             "memory": _run_memory_tools,
             "doctor": _run_doctor,
             "backups": _run_backups,
@@ -142,6 +96,85 @@ def run_main_menu() -> None:
             action()
 
         prompts.pause("Press Enter to return to menu")
+
+
+def run_config_menu() -> None:
+    """Single configuration surface — every setting lives here, one path each.
+
+    Both ``opencontext`` (home menu → Configure) and ``opencontext config`` open
+    this same menu, so settings are never split across two places. Section
+    actions are reused from the home menu (models/agents/sdd) and from the core
+    wizard (security/features/tokens/plugins/show/reset), composed here because
+    the CLI may import core but not vice versa.
+    """
+    from opencontext_core import wizard
+
+    # The loop ends only on "back"; without a terminal the selector returns its
+    # default forever, so guard against a non-interactive hang.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        console.print(
+            "[yellow]The configuration menu needs a terminal.[/] "
+            "Run [cyan]opencontext config wizard --non-interactive[/] instead."
+        )
+        return
+
+    def _wrap(title: str, fn: Any) -> Any:
+        # Core-wizard actions carry no header of their own; wrap them so every
+        # config sub-screen shows the OpenContext logo + title, like the CLI ones.
+        def run() -> None:
+            _action_header(title)
+            fn()
+
+        return run
+
+    actions = {
+        "wizard": _wrap("Full setup wizard", wizard.run_wizard),
+        "security": _wrap("Security & privacy", lambda: wizard.reconfigure("security")),
+        "features": _wrap("Features", lambda: wizard.reconfigure("features")),
+        "tokens": _wrap("Token budgets", lambda: wizard.reconfigure("tokens")),
+        "models": _run_configure_models,
+        "agents": _run_agent_integrations,
+        "plugins": _wrap("Plugins", lambda: wizard.reconfigure("plugins")),
+        "memory": _run_memory_backend,
+        "language": _run_language,
+        "sdd": _run_sdd_profiles,
+        "show": _wrap("Current configuration", wizard.show_config),
+        "reset": _wrap("Reset to defaults", wizard.reset_config),
+    }
+
+    while True:
+        _action_header("Configuration")
+        choice = prompts.select(
+            "Configuration",
+            [
+                (None, "Setup"),
+                ("wizard", "Full setup wizard"),
+                (None, "Settings"),
+                ("security", "Security & privacy"),
+                ("features", "Features"),
+                ("tokens", "Token budgets"),
+                ("models", "Providers & models"),
+                ("agents", "Agent integrations"),
+                ("plugins", "Plugins"),
+                ("memory", "Memory backend"),
+                ("language", "Language"),
+                ("sdd", "SDD & TDD settings"),
+                (None, "Config file"),
+                ("show", "Show current config"),
+                ("reset", "Reset to defaults"),
+                ("back", "Back"),
+            ],
+            default="wizard",
+        )
+
+        if choice == "back":
+            break
+
+        action = actions.get(choice)
+        if action is not None:
+            action()
+
+        prompts.pause("Press Enter to return to configuration")
 
 
 def _print_update_banner() -> None:
@@ -266,6 +299,62 @@ def _run_configure_models() -> None:
     sync_runtime_prefs_to_yaml(prefs)
     console.print("[green]✓ Model configuration saved[/]")
 
+    # Per-persona SDD routing: pick the model for each phase (sent to the agent
+    # as an MCP sampling hint). Opt-in so the default flow stays one step.
+    if prompts.confirm("Also set a model per SDD persona?", default=False):
+        _configure_persona_models()
+
+
+def _configure_persona_models() -> None:
+    """Navigable per-persona model routing for SDD phases. Reuses models_cmd."""
+    import yaml
+
+    from opencontext_cli.commands import models_cmd
+    from opencontext_core.config import find_config
+
+    cfg_path = find_config(".")
+    if cfg_path is None:
+        console.print(
+            "[yellow]No opencontext.yaml found.[/] Run [cyan]opencontext install[/] first."
+        )
+        return
+
+    model_hints = [
+        ("claude-opus-4-8", "opus — strongest"),
+        ("claude-sonnet-4-6", "sonnet — balanced"),
+        ("claude-haiku-4-5-20251001", "haiku — cheap & fast"),
+        ("__default__", "Use the default model"),
+        ("__custom__", "Custom model id…"),
+    ]
+
+    while True:
+        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+        persona_models = (data.get("sdd", {}) or {}).get("persona_models", {}) or {}
+        choices: list[Any] = [
+            (name, f"{name:12} {phases:18} → {persona_models.get(pid, 'default')}")
+            for name, (pid, phases) in models_cmd.PERSONAS.items()
+        ]
+        choices += [prompts.SEPARATOR, ("__done__", "Done")]
+
+        pick = prompts.select("Model per SDD persona", choices, default="__done__")
+        if pick == "__done__":
+            break
+
+        hint = prompts.select(f"Model for {pick}", model_hints, default="__default__")
+        if hint == "__custom__":
+            hint = prompts.text(f"Custom model id for {pick}").strip()
+            if not hint:
+                continue
+        if hint == "__default__":
+            # Drop the override so this persona falls back to the default model.
+            persona_id = models_cmd.PERSONAS[pick][0]
+            sdd = data.setdefault("sdd", {})
+            sdd.setdefault("persona_models", {}).pop(persona_id, None)
+            cfg_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+            console.print(f"[green]✓ {pick} → default[/]")
+        else:
+            models_cmd._set_persona(cfg_path, pick, hint)
+
 
 def _run_agent_integrations() -> None:
     """Configure agent integrations — show current state, offer regeneration."""
@@ -290,67 +379,30 @@ def _run_agent_integrations() -> None:
     console.print()
 
     supported = list(KNOWN_AGENTS)
-    target = prompts.select(
-        "Configure which agent?",
+    enabled_now = [a for a in supported if configured.get(a)]
+    targets = prompts.checkbox(
+        "Select agents to configure",
         supported,
-        default="opencode",
+        defaults=enabled_now,
     )
-
-    if not target:
+    if not targets:
+        console.print("[dim]No agents selected.[/]")
         return
 
-    try:
-        # Single engine: merges a managed block into existing files and writes the
-        # MCP entry, reversible by `opencontext uninstall`.
-        report = Configurator(Path(".")).configure_one(target, "local")
-        files = report.get("files", [])
-        console.print(f"[green]✓ Configured {len(files)} file(s) for {target}[/]")
-        for f in files:
-            console.print(f"  [dim]{f}[/]")
-
-        prefs.agent_integrations[target] = True
-        store.save(prefs)
-    except Exception as exc:
-        console.print(f"[red]Failed: {exc}[/]")
-
-
-def _run_plugins() -> None:
-    """Browse and manage plugins."""
-    _action_header("Plugins")
-    try:
-        from opencontext_core.plugin_system import PluginRegistry
-
-        registry = PluginRegistry()
-        installed = registry.discover()
-        if installed:
-            console.print(f"[bold]Installed plugins ({len(installed)}):[/]")
-            for p in installed:
-                enabled = "[green]●[/]" if p.enabled else "[dim]○[/]"
-                console.print(
-                    f"  {enabled}  [bold]{p.name}[/] v{p.version}  [dim]{p.description}[/]"
-                )
-            console.print()
-        else:
-            console.print("[dim]No plugins installed.[/]\n")
-
-        from opencontext_cli.commands.plugin_cmd import handle_plugin
-
-        with console.status("[cyan]Fetching plugin registry...[/]", spinner="dots"):
-            handle_plugin(
-                type(
-                    "Args",
-                    (),
-                    {
-                        "plugin_command": "search",
-                        "registry": None,
-                        "query": "",
-                        "refresh": False,
-                        "json": False,
-                    },
-                )
-            )
-    except Exception as exc:
-        console.print(f"[red]Plugin search failed: {exc}[/]")
+    # Single engine: merges a managed block into existing files and writes the
+    # MCP entry per agent, reversible by `opencontext uninstall`.
+    configurator = Configurator(Path("."))
+    for target in targets:
+        try:
+            report = configurator.configure_one(target, "local")
+            files = report.get("files", [])
+            console.print(f"[green]✓ Configured {len(files)} file(s) for {target}[/]")
+            for f in files:
+                console.print(f"  [dim]{f}[/]")
+            prefs.agent_integrations[target] = True
+        except Exception as exc:
+            console.print(f"[red]Failed to configure {target}: {exc}[/]")
+    store.save(prefs)
 
 
 def _run_sdd_profiles() -> None:
@@ -385,6 +437,68 @@ def _run_sdd_profiles() -> None:
         console.print("[green]✓ SDD & TDD settings saved[/]")
     except Exception as exc:
         console.print(f"[red]Failed: {exc}[/]")
+
+
+def _run_memory_backend() -> None:
+    """Choose the memory backend (local / engram / auto) — writes memory.provider."""
+    _action_header("Memory backend")
+
+    from opencontext_core.config import find_config, load_config
+    from opencontext_core.config_sync import set_yaml_key
+
+    current = "local"
+    cf = find_config(".")
+    if cf is not None and cf.exists():
+        try:
+            current = load_config(cf).memory.provider
+        except Exception:
+            pass
+
+    console.print(f"[bold]Current backend:[/] [cyan]{current}[/]\n")
+    choice = prompts.select(
+        "Memory backend",
+        [
+            ("local", "Local — OpenContext's own engine (layers, decay, recall)"),
+            ("engram", "Engram — episodic & semantic → Engram, the rest → OpenContext"),
+            ("auto", "Auto — couple with Engram if present, else local"),
+        ],
+        default=current if current in ("local", "engram", "auto") else "local",
+    )
+    if set_yaml_key("memory.provider", choice):
+        console.print(f"[green]✓ Memory backend set to {choice}[/]")
+    else:
+        console.print(
+            "[yellow]No opencontext.yaml found.[/] Run [cyan]opencontext install[/] first."
+        )
+
+
+def _run_language() -> None:
+    """Choose the interface language (en / es) — writes ui_language."""
+    _action_header("Language")
+
+    from opencontext_core.config import find_config, load_config
+    from opencontext_core.config_sync import set_yaml_key
+
+    current = "en"
+    cf = find_config(".")
+    if cf is not None and cf.exists():
+        try:
+            current = getattr(load_config(cf), "ui_language", "en")
+        except Exception:
+            pass
+
+    console.print(f"[bold]Current language:[/] [cyan]{current}[/]\n")
+    choice = prompts.select(
+        "Interface language",
+        [("en", "English"), ("es", "Español")],
+        default=current if current in ("en", "es") else "en",
+    )
+    if set_yaml_key("ui_language", choice):
+        console.print(f"[green]✓ Language set to {choice}[/]")
+    else:
+        console.print(
+            "[yellow]No opencontext.yaml found.[/] Run [cyan]opencontext install[/] first."
+        )
 
 
 def _run_memory_tools() -> None:

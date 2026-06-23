@@ -87,7 +87,7 @@ class TestMCPServer:
         """Server initializes with correct tools."""
 
         server = MCPServer(db_path=tmp_path / "test.db")
-        assert len(server.tools) == 14
+        assert len(server.tools) == 19
         assert "opencontext_search" in server.tools
         assert "opencontext_context" in server.tools
         assert "opencontext_callers" in server.tools
@@ -101,6 +101,13 @@ class TestMCPServer:
         assert "opencontext_insert_before_symbol" in server.tools
         assert "opencontext_insert_after_symbol" in server.tools
         assert "opencontext_rename_symbol" in server.tools
+        # workstream A — the four agent-driven memory tools
+        assert "opencontext_memory_save" in server.tools
+        assert "opencontext_memory_search" in server.tools
+        assert "opencontext_memory_context" in server.tools
+        assert "opencontext_memory_judge" in server.tools
+        # architecture & code-quality gate tool
+        assert "opencontext_quality" in server.tools
         server.close()
 
     def test_handle_initialize(self, tmp_path: Path) -> None:
@@ -125,7 +132,7 @@ class TestMCPServer:
             server._handle_request(request)
             mock_send.assert_called_once()
             result = mock_send.call_args[0][1]
-            assert len(result["tools"]) == 14
+            assert len(result["tools"]) == 19
             assert all("name" in t for t in result["tools"])
             assert all("description" in t for t in result["tools"])
         server.close()
@@ -309,3 +316,44 @@ class TestMCPPolicyEnforcement:
         assert len(denied) == len(server.tools) - 1
         assert set(denied) == set(server.tools) - {"opencontext_status"}
         server.close()
+
+
+def test_context_tool_injects_project_profile(tmp_path: Path) -> None:
+    """opencontext_context prepends the durable project domain profile, when set."""
+    import yaml
+
+    (tmp_path / "opencontext.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "project": {
+                    "name": "demo",
+                    "profile": {
+                        "purpose": "Serve a knowledge graph to agents.",
+                        "audience": "AI coding agents.",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    server = MCPServer(db_path=tmp_path / "test.db", project_root=tmp_path)
+    try:
+        result = server._call_tool("opencontext_context", {"task": "anything"})
+    finally:
+        server.close()
+
+    assert "error" not in result, result
+    assert result["context"].startswith("## Project Profile")
+    assert "Serve a knowledge graph to agents." in result["context"]
+
+
+def test_context_tool_has_no_profile_section_when_absent(tmp_path: Path) -> None:
+    """No opencontext.yaml -> no profile section; context is still returned."""
+    server = MCPServer(db_path=tmp_path / "test.db", project_root=tmp_path)
+    try:
+        result = server._call_tool("opencontext_context", {"task": "anything"})
+    finally:
+        server.close()
+
+    assert "error" not in result, result
+    assert "## Project Profile" not in result["context"]

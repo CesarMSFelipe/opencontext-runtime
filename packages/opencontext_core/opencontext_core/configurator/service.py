@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from opencontext_core.configurator import constants
 from opencontext_core.configurator.adapter import Adapter, get_adapter, iter_adapters
@@ -28,6 +28,9 @@ from opencontext_core.configurator.mcp_strategy import (
     plan_mcp_servers,
     remove_mcp_server,
 )
+
+if TYPE_CHECKING:
+    from opencontext_core.personas import Persona
 
 InstructionsBuilder = Callable[[str], str]
 
@@ -148,6 +151,10 @@ class Configurator:
         adapter = get_adapter(agent_id)
         instructions_path = adapter.instructions_path(self.project_root)
         candidates = [adapter.mcp_config_path, instructions_path]
+        project_mcp_name = constants.project_mcp_filename(adapter.agent_id)
+        project_mcp_path = self.project_root / project_mcp_name if project_mcp_name else None
+        if project_mcp_path is not None:
+            candidates.append(project_mcp_path)
         ignore_name = constants.ignore_filename(adapter.agent_id)
         if ignore_name:
             candidates.append(self.project_root / ignore_name)
@@ -174,6 +181,11 @@ class Configurator:
                 adapter.mcp_config_path, constants.MCP_LABEL, shape=adapter.mcp_shape
             ):
                 changed.append(str(adapter.mcp_config_path))
+            # 2b. Remove the project-scoped MCP entry (e.g. repo-root .mcp.json).
+            if project_mcp_path is not None and remove_mcp_server(
+                project_mcp_path, constants.MCP_LABEL, shape=adapter.mcp_shape
+            ):
+                changed.append(str(project_mcp_path))
             # 3. Reverse agent-specific extras.
             changed.extend(self._remove_extras(adapter))
         except Exception:
@@ -263,16 +275,24 @@ class Configurator:
 
         plan: list[PlanEntry] = []
         plan.append(self._plan_mcp(adapter))
+        project_mcp = self._plan_project_mcp(adapter)
+        if project_mcp is not None:
+            plan.append(project_mcp)
         plan.append(self._plan_instructions(adapter))
         plan.extend(self._plan_extras(adapter))
         return plan
 
     def _write_mcp(self, adapter: Adapter) -> list[str]:
-        path, content = self._plan_mcp(adapter)
-        if content is not None:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            write_text_atomic(path, content)
-        return [str(path)]
+        files: list[str] = []
+        for entry in (self._plan_mcp(adapter), self._plan_project_mcp(adapter)):
+            if entry is None:
+                continue
+            path, content = entry
+            if content is not None:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                write_text_atomic(path, content)
+            files.append(str(path))
+        return files
 
     def _write_instructions(self, adapter: Adapter) -> str:
         path, content = self._plan_instructions(adapter)
@@ -293,6 +313,19 @@ class Configurator:
     def _plan_mcp(self, adapter: Adapter) -> PlanEntry:
         servers = {constants.MCP_LABEL: dict(constants.MCP_SERVER_ENTRY)}
         return plan_mcp_servers(adapter.mcp_config_path, servers, shape=adapter.mcp_shape)
+
+    def _plan_project_mcp(self, adapter: Adapter) -> PlanEntry | None:
+        """Plan a repo-root ``.mcp.json`` for agents that read one (e.g. Claude Code).
+
+        Returns ``None`` for agents without a project-scoped MCP file. The home
+        MCP entry alone does not enable the server per-repo, so this is what lets a
+        single checkout pick up the OpenContext tools.
+        """
+        filename = constants.project_mcp_filename(adapter.agent_id)
+        if filename is None:
+            return None
+        servers = {constants.MCP_LABEL: dict(constants.MCP_SERVER_ENTRY)}
+        return plan_mcp_servers(self.project_root / filename, servers, shape=adapter.mcp_shape)
 
     def _plan_instructions(self, adapter: Adapter) -> PlanEntry:
         path = adapter.instructions_path(self.project_root)
@@ -325,10 +358,7 @@ class Configurator:
         entries: list[PlanEntry] = []
         for persona in PERSONAS:
             path = persona_dir / f"{persona.id}.md"
-            content = (
-                f"---\nname: {persona.name}\ndescription: {persona.description}\n---\n\n"
-                f"{persona.system_prompt}\n"
-            )
+            content = _render_persona(persona)
             entries.append((path, _content_if_changed(path, content)))
         return entries
 
@@ -374,10 +404,7 @@ class Configurator:
         entries: list[PlanEntry] = []
         for persona in PERSONAS:
             path = agents_dir / f"{persona.id}.md"
-            content = (
-                f"---\nname: {persona.name}\ndescription: {persona.description}\n---\n\n"
-                f"{persona.system_prompt}\n"
-            )
+            content = _render_persona(persona)
             entries.append((path, _content_if_changed(path, content)))
         return entries
 
@@ -403,6 +430,22 @@ def _content_if_changed(path: Path, content: str) -> str | None:
         except OSError:
             pass
     return content
+
+
+def _render_persona(persona: Persona) -> str:
+    """Render a persona to its native subagent file.
+
+    Emits a ``tools:`` frontmatter line from the persona's allow-list so the KG
+    preference is enforced by the host (KG/memory MCP tools + Read/Edit/Write per
+    phase, never native Grep/Glob), not just stated in prose.
+    """
+
+    lines = [f"name: {persona.name}", f"description: {persona.description}"]
+    if persona.tools:
+        lines.append("tools:")
+        lines.extend(f"  {tool}: true" for tool in persona.tools)
+    frontmatter = "\n".join(lines)
+    return f"---\n{frontmatter}\n---\n\n{persona.system_prompt}\n"
 
 
 # ----------------------------------------------------------------------
@@ -465,6 +508,27 @@ _SECURITY_SECTION = """## Security
 - Context redaction is applied automatically
 """
 
+_MEMORY_PROTOCOL_SECTION = """## Persistent Memory (proactive save)
+
+OpenContext gives you first-class access to its own memory store via four MCP
+tools. Use them WITHOUT being asked, the moment something is worth remembering.
+
+| Tool | Use for |
+|------|---------|
+| `opencontext_memory_save` | Save a decision, bug, convention, or discovery |
+| `opencontext_memory_search` | Recall past records matching a query |
+| `opencontext_memory_context` | Pull recent/relevant memory as task context |
+| `opencontext_memory_judge` | Reinforce or contradict an existing record |
+
+Save proactively — after any decision, bug fix, convention, or discovery, call
+`opencontext_memory_save` instead of waiting to be asked. Pick the layer:
+
+- **FAILURE** — for failures, bugs, and what went wrong.
+- **SEMANTIC** — for durable facts and stable knowledge.
+- **PROCEDURAL** — for repeatable patterns and how-to procedures.
+- **EPISODIC** — the default for everything else (omit `layer` to use it).
+"""
+
 _PREFIX = """# OpenContext Integration
 
 OpenContext provides a semantic knowledge graph, health checks, plugin ecosystem,
@@ -483,6 +547,7 @@ def _default_instructions(agent_id: str) -> str:
         + "\n"
         + _HEALTH_SECTION
         + _SDD_SECTION
+        + _MEMORY_PROTOCOL_SECTION
         + _SECURITY_SECTION
     )
 

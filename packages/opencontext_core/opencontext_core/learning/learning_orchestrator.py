@@ -45,8 +45,19 @@ class LearningOrchestrator:
         )
 
     def _try_load_db(self, db_path: Path | str) -> Any | None:
-        """Attempt to load GraphDatabase for unified storage."""
+        """Attempt to load GraphDatabase for unified storage.
 
+        Returns ``None`` immediately when the DB file is missing (the common
+        case on a fresh project). Without this guard, :class:`GraphDatabase`'s
+        constructor created an EMPTY ``context_graph.db`` file on disk as a
+        side effect of opening a missing path, which then made every other
+        subsystem (e.g. :class:`ImpactAnalyzer`) think an indexed graph existed
+        and crash on empty-table reads. Only open projects that have already
+        been indexed (``opencontext index``).
+        """
+
+        if not Path(db_path).exists():
+            return None
         try:
             from opencontext_core.indexing.graph_db import GraphDatabase
 
@@ -169,3 +180,77 @@ class LearningOrchestrator:
             },
             "governance": self.governance.verify_integrity(),
         }
+
+
+class NullLearningOrchestrator:
+    """No-op stand-in for :class:`LearningOrchestrator`.
+
+    Used when ``config.learning.enabled`` is ``False``. It mirrors the full
+    public surface of :class:`LearningOrchestrator` so every in-loop
+    ``self.learning.*`` call-site (start/finish operation, optimized-budget
+    lookup, the ``record_outcome`` feed) continues to work without a per-call
+    ``enabled`` guard. Every method is a no-op: nothing is tracked, learned, or
+    persisted, and budget lookups simply echo the caller's fallback.
+
+    Mirrors the ``NullAgentMemoryStore`` Null-Object pattern in
+    ``memory/agent.py``.
+    """
+
+    # ---- Feedback Collection ----
+
+    def start_operation(
+        self,
+        operation_type: str,
+        query: str,
+        task_type: str | None = None,
+        tokens_budgeted: int = 0,
+    ) -> str:
+        return "noop"
+
+    def finish_operation(self, operation_id: str, **kwargs: Any) -> None:
+        return
+
+    # ---- Governance ----
+
+    def check_policy(
+        self,
+        action: str,
+        tokens_estimate: int = 0,
+        file_count: int = 0,
+        data_classification: str = "internal",
+    ) -> dict[str, Any]:
+        return {"allowed": True}
+
+    def audit(
+        self,
+        action: str,
+        actor: str,
+        query: str,
+        tokens_used: int,
+        data_classification: str,
+        result: str,
+    ) -> None:
+        return
+
+    # ---- Learning ----
+
+    def learn(self) -> dict[str, Any]:
+        return {"patterns_learned": 0, "budgets_optimized": 0, "savings_report": {}}
+
+    def get_optimized_budget(self, operation_type: str, fallback: int | None = None) -> int:
+        return fallback or 0
+
+    def get_pattern(self, task_type: str) -> Any | None:
+        return None
+
+    def suggest_context_boost(
+        self,
+        task_type: str,
+        available_symbols: list[str],
+    ) -> list[tuple[str, float]]:
+        return []
+
+    # ---- Reporting ----
+
+    def get_statistics(self) -> dict[str, Any]:
+        return {"enabled": False}
