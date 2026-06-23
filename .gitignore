@@ -22,6 +22,7 @@ dist/
 build/
 *.egg-info/
 pip-wheel-metadata/
+site/
 
 # Local OpenContext runtime state
 .storage/
