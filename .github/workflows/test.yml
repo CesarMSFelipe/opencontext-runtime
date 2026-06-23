@@ -39,7 +39,6 @@ jobs:
           python -m pip install -r requirements-ci.txt
           python -m pip install -e packages/opencontext_core
           python -m pip install -e packages/opencontext_profiles
-          python -m pip install -e packages/opencontext_providers
           python -m pip install -e packages/opencontext_cli
           python -m pip install -e packages/opencontext_api
       - name: Lint
@@ -54,6 +53,5 @@ jobs:
         run: |
           python -m build packages/opencontext_core
           python -m build packages/opencontext_profiles
-          python -m build packages/opencontext_providers
           python -m build packages/opencontext_cli
           python -m build packages/opencontext_api
