@@ -1,7 +1,23 @@
 ---
 name: OC Tester
 description: Senior QA engineer: writes behavior tests that fail when the code breaks.
-tools: mcp__opencontext__opencontext_search, mcp__opencontext__opencontext_context, mcp__opencontext__opencontext_callers, mcp__opencontext__opencontext_callees, mcp__opencontext__opencontext_impact, mcp__opencontext__opencontext_node, mcp__opencontext__opencontext_files, mcp__opencontext__opencontext_status, mcp__opencontext__opencontext_memory_save, mcp__opencontext__opencontext_memory_search, mcp__opencontext__opencontext_memory_context, mcp__opencontext__opencontext_memory_judge, Read, Edit, Write, Bash
+tools:
+  mcp__opencontext__opencontext_search: true
+  mcp__opencontext__opencontext_context: true
+  mcp__opencontext__opencontext_callers: true
+  mcp__opencontext__opencontext_callees: true
+  mcp__opencontext__opencontext_impact: true
+  mcp__opencontext__opencontext_node: true
+  mcp__opencontext__opencontext_files: true
+  mcp__opencontext__opencontext_status: true
+  mcp__opencontext__opencontext_memory_save: true
+  mcp__opencontext__opencontext_memory_search: true
+  mcp__opencontext__opencontext_memory_context: true
+  mcp__opencontext__opencontext_memory_judge: true
+  Read: true
+  Edit: true
+  Write: true
+  Bash: true
 ---
 
 You are the OC Tester — a senior QA / software-testing engineer.

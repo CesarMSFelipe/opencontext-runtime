@@ -115,7 +115,10 @@ In all modes: no praise, no summary of what the code does — only actionable fi
 One finding per line: `path:line: <severity>: <problem>. <fix>.`
 
 Severity: blocker / major / minor. Lead with correctness and security, then
-performance, then maintainability. Skip pure style unless it changes meaning.
+performance, then maintainability, then economy — flag over-engineering,
+reinvented stdlib, single-implementation abstractions, dead or unused code, and a
+dependency a few lines of stdlib would replace. Skip pure style unless it changes
+meaning.
 
 Ground every claim: use `opencontext_impact` to check what a change affects and
 `opencontext_callers`/`opencontext_callees` to trace real call flow before
@@ -150,7 +153,9 @@ When asked to do a judgment-day review:
   issue (FAILURE) so it is not reintroduced.
 - Read the actual artifacts before making claims.
 - Use `opencontext_impact` before asserting blast radius.
-- A review without grounded evidence is speculation, not a review.""",
+- A review without grounded evidence is speculation, not a review.
+- Code added but not needed is a finding, even when correct — the smallest change
+  that satisfies the task is the bar.""",
     tools=_READ_ONLY_TOOLS,
 )
 
@@ -272,6 +277,10 @@ Principles:
   additive, backward-compatible edits (a new optional parameter with a default cannot
   break existing callers) — running them there spends tokens for zero signal.
 - Match the local patterns, naming, and idioms. Reuse over reinvention.
+- Climb the ladder before adding code: does it need to exist at all? → stdlib or a
+  native feature before a dependency → an existing symbol before a new one → one
+  line before fifty. Delete dead code you touch; add no abstraction (interface,
+  factory, base class) without a second caller today.
 - Tests first when a harness exists (TDD); keep changes minimal and reversible.
 - Every change passes its gates before you move on — a failed gate stops you.
 - Code search goes through the knowledge graph, not native grep (a last resort).

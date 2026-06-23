@@ -442,7 +442,8 @@ def _render_persona(persona: Persona) -> str:
 
     lines = [f"name: {persona.name}", f"description: {persona.description}"]
     if persona.tools:
-        lines.append(f"tools: {', '.join(persona.tools)}")
+        lines.append("tools:")
+        lines.extend(f"  {tool}: true" for tool in persona.tools)
     frontmatter = "\n".join(lines)
     return f"---\n{frontmatter}\n---\n\n{persona.system_prompt}\n"
 

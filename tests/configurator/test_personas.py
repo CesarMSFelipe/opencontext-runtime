@@ -107,7 +107,7 @@ def test_rendered_persona_has_tools_frontmatter(
 
     body = (project / ".claude" / "agents" / "oc-explorer.md").read_text(encoding="utf-8")
     frontmatter = body.split("---", 2)[1]
-    tools_line = next(ln for ln in frontmatter.splitlines() if ln.startswith("tools:"))
-    assert "opencontext_" in tools_line
-    assert "Grep" not in tools_line
-    assert "Glob" not in tools_line
+    assert "tools:" in frontmatter
+    assert "opencontext_" in frontmatter
+    assert "Grep:" not in frontmatter
+    assert "Glob:" not in frontmatter
