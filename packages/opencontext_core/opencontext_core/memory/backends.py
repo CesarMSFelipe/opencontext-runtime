@@ -94,6 +94,8 @@ def _row_to_record(row: sqlite3.Row) -> MemoryRecord:
         valid_from=_parse_dt(row["valid_from"]) if "valid_from" in columns else None,
         invalid_at=_parse_dt(row["invalid_at"]) if "invalid_at" in columns else None,
         superseded_by=row["superseded_by"] if "superseded_by" in columns else None,
+        topic_key=row["topic_key"] if "topic_key" in columns else None,
+        revision_count=row["revision_count"] if "revision_count" in columns else 0,
     )
 
 
@@ -218,11 +220,15 @@ class SQLiteMemoryBackend:
         return contradicted_ids
 
     def store_by_topic_key(self, record: MemoryRecord) -> MemoryRecord:
-        """Upsert using topic_key as dedup handle.
+        """Upsert using topic_key as dedup handle, preserving prior versions.
 
-        If a record with the same topic_key already exists: update content,
-        confidence, and tags in-place, increment revision_count. Returns the
-        stored record (same id if existing, record.id if new).
+        When a record with the same topic_key already exists, the new content
+        does NOT overwrite it in place. The prior row is marked superseded (kept,
+        queryable, ``invalid_at`` set) and the new version is inserted, linked
+        back via ``supersedes`` with ``revision_count`` carried forward. This
+        keeps the dedup path consistent with consolidation — prior state stays
+        recoverable instead of being destroyed by an in-place UPDATE. Returns the
+        active record (``record`` when a new version was written).
         """
         if not record.topic_key:
             self.store(record)
@@ -234,9 +240,16 @@ class SQLiteMemoryBackend:
                 (record.topic_key,),
             ).fetchone()
 
-        if row is not None:
-            existing = _row_to_record(row)
-            now = datetime.now(tz=UTC)
+        if row is None:
+            self.store(record)
+            return record
+
+        existing = _row_to_record(row)
+        now = datetime.now(tz=UTC)
+
+        if existing.id == record.id:
+            # Same row re-stored under its own id: nothing to supersede, refresh
+            # in place (no history is lost — it is the same record).
             with self._connect() as conn:
                 conn.execute(
                     """UPDATE memory_records
@@ -258,6 +271,13 @@ class SQLiteMemoryBackend:
             existing.revision_count += 1
             return existing
 
+        # Distinct id, same topic: supersede the prior version, insert the new
+        # one as the active revision. Prior content survives, linked both ways.
+        if existing.id not in record.supersedes:
+            record.supersedes = [*record.supersedes, existing.id]
+        record.revision_count = existing.revision_count + 1
+        record.updated_at = now
+        self.mark_superseded(existing.id, superseded_by=record.id, invalid_at=now)
         self.store(record)
         return record
 
