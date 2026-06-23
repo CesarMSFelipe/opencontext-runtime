@@ -308,3 +308,80 @@ class TestDelete:
 
         assert db.get_nodes_by_file("src/old.py") == []
         assert db.get_file_by_path("src/old.py") is None
+
+
+def _fn(name: str, file_path: str) -> Node:
+    """A minimal exported python function node for test-gap tests."""
+    return Node(
+        id=None,
+        name=name,
+        kind="function",
+        file_path=file_path,
+        line=1,
+        column=0,
+        end_line=3,
+        language="python",
+        container=None,
+        docstring=None,
+        signature=f"def {name}()",
+        is_exported=True,
+    )
+
+
+class TestFindTestGaps:
+    def test_reports_only_untested_production_symbols(self, db: GraphDatabase) -> None:
+        """A symbol is a gap unless a TEST file references it; test code is excluded."""
+        foo = db.insert_node(_fn("foo", "src/a.py"))  # referenced by a test -> covered
+        db.insert_node(_fn("bar", "src/b.py"))  # referenced by nothing -> gap
+        baz = db.insert_node(_fn("baz", "src/c.py"))  # referenced only from prod -> gap
+        helper = db.insert_node(_fn("helper", "tests/test_a.py"))  # test's own code
+
+        # A test references foo; a production caller references baz.
+        db.insert_edge(
+            Edge(
+                id=None,
+                source_node_id=helper,
+                target_node_id=foo,
+                kind="calls",
+                call_site_file="tests/test_a.py",
+                call_site_line=5,
+            )
+        )
+        db.insert_edge(
+            Edge(
+                id=None,
+                source_node_id=foo,
+                target_node_id=baz,
+                kind="calls",
+                call_site_file="src/a.py",
+                call_site_line=2,
+            )
+        )
+
+        names = {g["name"] for g in db.find_test_gaps()}
+        # foo is test-covered; helper lives in a test file; bar+baz are untested.
+        assert names == {"bar", "baz"}
+
+    def test_empty_graph_has_no_gaps(self, db: GraphDatabase) -> None:
+        assert db.find_test_gaps() == []
+
+
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("tests/test_foo.py", True),
+        ("a/b/test_foo.py", True),
+        ("pkg/foo_test.go", True),
+        ("ui/button.test.ts", True),
+        ("ui/button.spec.js", True),
+        ("spec/models/user_spec.rb", True),
+        ("src/__tests__/x.js", True),
+        ("src/foo.py", False),
+        ("src/contest.py", False),
+        ("src/latest_news.py", False),
+    ],
+)
+def test_is_test_path(path: str, expected: bool) -> None:
+    from opencontext_core.indexing.graph_db import is_test_path
+
+    assert is_test_path(path) is expected

@@ -65,6 +65,22 @@ def add_quality_subcommands(quality_sub: Any) -> None:
         help="Capture the current findings/metrics/score as the ratchet baseline.",
     )
 
+    gaps_parser = quality_sub.add_parser(
+        "test-gaps",
+        help="List code symbols no test references (structural test-gap, from the KG).",
+    )
+    gaps_parser.add_argument(
+        "path",
+        nargs="?",
+        default=".",
+        help="Project root to scan (default: current directory).",
+    )
+    gaps_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit the machine-readable list instead of a console table.",
+    )
+
 
 def _changed_files(root: Path) -> list[str]:
     """Working-tree changes for ``--diff`` scope (reuses the harness helper).
@@ -81,11 +97,13 @@ def _changed_files(root: Path) -> list[str]:
         return []
 
 
-def _record_evolution(root: Path, report: Any) -> None:
+def _record_evolution(root: Path, report: Any) -> Any:
     """Append this evaluation to ``.opencontext/quality-evolution.json`` (best-effort).
 
     Phase 3 evolution tracking: records the health score + sub-scores per run so the
-    trend is queryable across runs. A write failure never fails the check.
+    trend is queryable across runs. Returns the recomputed ``EvolutionTrend`` so the
+    caller can surface latest/previous/delta/count; returns ``None`` on any failure
+    (a write failure never fails the check).
     """
     try:
         from datetime import UTC, datetime
@@ -96,11 +114,11 @@ def _record_evolution(root: Path, report: Any) -> None:
             entry_from_health,
         )
 
-        EvolutionStore(root / EVOLUTION_FILENAME).append(
+        return EvolutionStore(root / EVOLUTION_FILENAME).append(
             **entry_from_health(report.health, timestamp=datetime.now(UTC).isoformat())
         )
     except Exception:
-        pass  # evolution logging is best-effort; never block the check
+        return None  # evolution logging is best-effort; never block the check
 
 
 def handle_quality_check(args: Any) -> None:
@@ -117,8 +135,15 @@ def handle_quality_check(args: Any) -> None:
     evaluator = QualityEvaluator(root)
     changed = _changed_files(root) if diff_only else []
     report = evaluator.evaluate(changed)
-    _record_evolution(root, report)
+    trend = _record_evolution(root, report)
     report_dict = report.to_report_dict()
+    if trend is not None:
+        report_dict["trend"] = {
+            "latest": trend.latest,
+            "previous": trend.previous,
+            "delta": trend.delta,
+            "count": trend.count,
+        }
 
     if json_output:
         print(json.dumps(report_dict, indent=2))
@@ -151,6 +176,46 @@ def handle_quality_gate(args: Any) -> None:
     raise SystemExit(0)
 
 
+def handle_quality_test_gaps(args: Any) -> None:
+    """List symbols with no test reference (structural test-gap) and exit 0.
+
+    Reads the persisted knowledge graph at ``<root>/.storage/opencontext/
+    context_graph.db`` and reports functions/methods in non-test files that no
+    test file references. Informational (never blocks): exits 0 even when gaps
+    exist, so it slots into CI as a report rather than a hard gate.
+    """
+    from opencontext_core.indexing.graph_db import GraphDatabase
+
+    root = Path(getattr(args, "path", ".") or ".").resolve()
+    json_output = bool(getattr(args, "json", False))
+
+    db_path = root / ".storage" / "opencontext" / "context_graph.db"
+    if not db_path.exists():
+        console.warning(f"No knowledge graph at {db_path}. Run `opencontext index .` first.")
+        raise SystemExit(0)
+
+    db = GraphDatabase(db_path)
+    try:
+        gaps = db.find_test_gaps()
+    finally:
+        db.close()
+
+    if json_output:
+        print(json.dumps({"count": len(gaps), "gaps": gaps}, indent=2))
+        raise SystemExit(0)
+
+    console.header("Test Gaps")
+    if not gaps:
+        console.success("No test gaps: every function/method is referenced by a test.")
+        raise SystemExit(0)
+
+    console.error(f"{len(gaps)} symbol(s) referenced by no test:")
+    for g in gaps:
+        qualified = f"{g['container']}.{g['name']}" if g.get("container") else g["name"]
+        console.print(f"  [bold]{qualified}[/] [dim]({g['kind']})[/]  {g['file_path']}:{g['line']}")
+    raise SystemExit(0)
+
+
 def _display_quality_report(
     report: dict[str, Any],
     summary_line: str,
@@ -165,6 +230,7 @@ def _display_quality_report(
     errors = int(summary.get("errors", 0))
     success = bool(summary.get("success", False))
     health = report.get("health", {})
+    trend = report.get("trend") or {}
 
     console.header("Quality Report")
 
@@ -173,12 +239,21 @@ def _display_quality_report(
     else:
         console.error(summary_line or f"{failed}/{total} quality checks failed")
 
+    # Cross-run trend (latest vs previous over N recorded runs), distinct from the
+    # per-run "Delta" against the ratchet baseline. Shown only once there's history.
+    trend_row = (
+        [[f"Trend (over {trend['count']} runs)", f"{trend['delta']:+d}"]]
+        if trend.get("count")
+        else []
+    )
+
     console.table(
         "Summary",
         ["Metric", "Count"],
         [
             ["Health", str(health.get("score", "N/A"))],
             ["Delta", str(report.get("delta", 0))],
+            *trend_row,
             ["Total", str(total)],
             ["Passed", str(passed)],
             ["Failed", str(failed)],
