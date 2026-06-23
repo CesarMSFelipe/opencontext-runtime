@@ -10,7 +10,7 @@
 
 <p align="center">
   One call. Call-graph-traced symbols. Verified context packs.<br>
-  No grep loops. No full-file reads. No opaque vector guesses.
+  No grep loops. No whole-file read loops. No opaque vector guesses.
 </p>
 
 <p align="center">
@@ -55,9 +55,37 @@ OpenContext is the layer **between your coding agent and your codebase** — it 
 | **Context packs + code graph** | Call-graph-traced, token-budgeted context in one deterministic call — no grep loops, no full-file reads. |
 | **Controlled SDD loop** | `explore → … → archive`, seven personas, gates and strict TDD — bounded and human-in-the-loop, not "go do everything". |
 | **Your model, per persona** | Pick the model for each SDD phase in `opencontext.yaml`; it is sent to your agent as an MCP sampling hint. |
-| **Persistent memory** | Local store plus co-resident Engram coexistence, with progressive, token-aware recall. |
+| **Persistent memory** | Local store by default (five layers); co-resident Engram coexistence is opt-in. Progressive, token-aware recall. |
 | **Security by default** | Redaction, secret scanning, fail-closed posture, offline-first. |
 | **19 MCP tools** | Search, context, call graph, impact, symbol edits, memory, quality — inside Claude Code, OpenCode, Codex. |
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
+
+<!-- ─────────────── OFFLINE VS MODEL ─────────────── -->
+
+<div id="offline-vs-model" align="center">
+
+<table>
+<tr>
+<td width="760">
+
+<h3>What runs offline — and what needs a model</h3>
+
+OpenContext separates **local context operations** (always offline, deterministic — no LLM in the retrieval path) from **generative phases** (which need a model).
+
+| Capability | Needs a model? | How it runs |
+|---|---|---|
+| Index, code graph, context packs, `explain`, `pack`, search, impact, routes, AICX bytecode | **No** | Fully offline, deterministic — same result every run |
+| MCP tools, including `opencontext_run` | **Host agent's model** | Via MCP sampling — your agent runs it on its own model; zero provider or API-key config on the OpenContext side |
+| Standalone `opencontext loop` / `harness run` generative phases (spec, design, apply, …) | **Yes** | A configured provider or local model (e.g. ollama). Without one the harness stays **honest planned-only** — it emits a structured plan for your agent to complete; it never fakes a result |
 
 </td>
 </tr>
@@ -402,7 +430,7 @@ opencontext bridges scan . --type HTTP --json
 
 <h3>Agent Interface</h3>
 
-19 MCP tools. Compatible with Claude Code, Cursor, Copilot, Windsurf, OpenCode, and any MCP-compatible editor.
+19 MCP tools. OpenContext ships adapters for 20+ agent clients (Claude Code, OpenCode, Cursor, Copilot, Windsurf, Codex, Gemini CLI, Zed, Aider, Cline, and more). Support level varies by client — some get MCP + instruction files, others get documented setup patterns.
 
 `opencontext install` writes seven OC personas to your editor's agents directory. In OpenCode, press **Tab** to switch to one. In Claude Code, they appear as subagents. Each SDD phase runs as the persona suited to it.
 
@@ -416,7 +444,7 @@ opencontext bridges scan . --type HTTP --json
 | **OC Reviewer** | verify · review | Rigorous reviewer: code review (one finding per line), quality gates, adversarial review. |
 | **OC Professor** | — | Teaching mentor: explains the why and the concept before the code, grounded in your real code. |
 
-**Multi-agent execution:** the OC Orchestrator is a thin coordinator — it never does all the work itself. Reading, writing, and verifying are always delegated to specialized sub-agents. When you run the harness (`opencontext loop`), each phase runs in its own context: explore → propose → spec → design → tasks → apply → verify → archive. Phases that can run in parallel do.
+**Multi-agent execution:** the OC Orchestrator is a thin coordinator — it never does all the work itself. Reading, writing, and verifying are always delegated to specialized sub-agents. When you run the harness, each phase runs in its own context: explore → propose → spec → design → tasks → apply → verify → review → archive. Phases that can run in parallel do.
 
 <h3>Runs on top of your agent — you choose the model per persona</h3>
 
@@ -703,54 +731,69 @@ opencontext skill-registry refresh
 <tr>
 <td width="760">
 
-<h3>Runtime Commands</h3>
+<h3>Core commands</h3>
+
+The everyday commands, grouped by layer. The full surface (40+ commands) lives in the [CLI reference](docs/reference/cli.md).
+
+| Layer | Main commands | When |
+|-------|---------------|------|
+| Setup | `install` · `setup` · `verify` · `doctor` | First run + agent integration |
+| Context | `explain` · `pack` · `verified-context` · `contract` | Before coding |
+| Code graph | `index` · `knowledge-graph` · `routes` · `bridges` | Understand impact |
+| Agent loop | `clarify` · `loop` · `harness run` | Structured SDD/TDD workflows |
+| MCP | `mcp` · `agent-context` | Agent integrations |
+| Governance | `security` · `privacy` · `prompt` · `release` · `ci-check` | Safe usage + CI |
+| Memory | `memory` | Reuse project knowledge |
+| Optimization | `benchmark` · `tokens` · `bytecode` | Measure + reduce context cost |
+
+Run `opencontext` with no arguments for the navigable menu — settings and tools in one place, no flags.
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/divider.svg" alt="" width="720">
+</p>
+
+<!-- ─────────────── STATUS, LIMITS & CLAIMS ─────────────── -->
+
+<div id="maturity" align="center">
+
+<table>
+<tr>
+<td width="760">
+
+<h3>Maturity &amp; status</h3>
+
+Production-oriented local runtime. The context, code-graph, MCP, and memory paths are implemented and exercised by the test suite. Some capabilities are scaffolded or fail-closed by design and must be explicitly enabled by policy. Certification-grade enterprise posture is not claimed.
+
+| Status | Examples |
+|--------|----------|
+| **Stable** | Index, code graph, context packs, MCP read tools, local memory |
+| **Opt-in** | Engram memory coexistence, external LLM providers, MCP symbol-edit tools, semantic/vector search |
+| **Host-agent dependent** | `opencontext_run` and standalone generative phases — need the host model (MCP sampling) or a configured provider |
+| **Scaffolded / fail-closed** | Network egress, tool forwarding, raw-trace storage — denied unless policy enables them |
+
+<h3>Known limitations</h3>
+
+- Best on repos above ~50 files; tiny repos see little benefit.
+- Full symbol extraction needs the language's tree-sitter grammar (Python works out of the box; others after `pip install tree-sitter-<lang>`). Files in any language are still indexed and searchable.
+- Standalone generative phases need a provider or local model; without one they run planned-only.
+- No semantic/embedding search by default — deterministic graph + FTS only. A deliberate choice, not an oversight.
+- Windows is exercised in CI but is not the primary development target.
+
+<h3>README claims are tested</h3>
+
+The quantified claims here are guarded by end-to-end smoke tests that drive the real CLI/SDK — no mocks:
 
 ```bash
-# Setup
-opencontext install
-opencontext demo
-opencontext verify  &&  opencontext doctor
-
-# Context
-opencontext explain "task"
-opencontext pack . --query "task" --copy
-opencontext verified-context "task"
-opencontext contract build --query "task"
-opencontext index .
-
-# AICX bytecode
-opencontext bytecode compile --query "task"
-opencontext bytecode inspect
-opencontext bytecode decode <path.aicx>
-
-# Agentic loop & harness
-opencontext clarify "idea"
-opencontext loop --task "..." --flow full
-opencontext loop --task "..." --flow quality --dry-run
-opencontext harness run --workflow sdd --task "..."
-opencontext harness list
-
-# Code graph
-opencontext knowledge-graph search "symbol"
-opencontext knowledge-graph callers "func"
-opencontext knowledge-graph impact "Class" --radius 2
-opencontext routes scan . --framework fastapi
-opencontext bridges scan . --type HTTP --json
-
-# Memory
-opencontext memory search "query"
-opencontext memory collect
-opencontext memory gc --dry-run
-
-# Config & plugins  (or just run `opencontext` for the navigable menu)
-opencontext config          # one navigable settings menu — arrow keys, no y/n
-opencontext config wizard
-opencontext preset apply <name>
-opencontext plugin install <name> --github owner/repo
-opencontext update && opencontext upgrade
-opencontext security scan .
-opencontext benchmark run
+pytest tests/smoke/test_readme_claims.py -v
 ```
+
+They check the contract risk tiers and token budgets, the AICX bytecode round-trip, the loop dry-run phases, the SDK contract, and that the README's MCP-tool count matches the running server. Benchmarks are reproducible with `opencontext benchmark run`; the README makes no fixed percentage claim.
 
 </td>
 </tr>
@@ -775,6 +818,7 @@ opencontext benchmark run
 | Area | Links |
 |------|-------|
 | Getting Started | [Quickstart](docs/getting-started/quickstart.md) · [Installation](docs/getting-started/installation.md) · [Troubleshooting](docs/getting-started/troubleshooting.md) |
+| Reference | [CLI commands](docs/reference/cli.md) |
 | Configuration | [TUI Menu](docs/configuration/tui-menu.md) · [Walkthrough](docs/configuration/walkthrough.md) · [Reference](docs/configuration/reference.md) · [User Config](docs/configuration/user-config.md) |
 | Architecture | [Overview](docs/architecture/overview.md) · [Context Pack Builder](docs/architecture/context-pack-builder.md) · [Safety Layer](docs/architecture/safety-layer.md) |
 | Workflows | [Flow Modes](docs/workflows/modes.md) · [SDD Guide](docs/workflows/sdd-workflow.md) · [Custom Workflows](docs/workflows/custom-workflows.md) |
