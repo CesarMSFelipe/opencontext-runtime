@@ -1355,9 +1355,7 @@ class HarnessRunner:
             return final_status
         if getattr(state, "delegate", None) is None:
             return final_status
-        failing = [
-            g for g in state.gates if g.phase == "verify" and g.status == GateStatus.FAILED
-        ]
+        failing = [g for g in state.gates if g.phase == "verify" and g.status == GateStatus.FAILED]
         if not failing:
             return final_status
         try:
@@ -1376,9 +1374,7 @@ class HarnessRunner:
             state.gates = [g for g in state.gates if g.phase != "verify"] + new_verify_gates
             events.append(self._fix_loop_event(len(events), attempt, max_loops, still_failing))
             if not still_failing:
-                state.warnings.append(
-                    f"fix-loop: verify recovered after {attempt} fix attempt(s)"
-                )
+                state.warnings.append(f"fix-loop: verify recovered after {attempt} fix attempt(s)")
                 return (
                     GateStatus.WARNING
                     if any(g.status == GateStatus.WARNING for g in new_verify_gates)
@@ -1478,9 +1474,7 @@ class HarnessRunner:
             if "/security/" in norm or "/safety/" in norm:
                 return True
         source = [
-            c
-            for c in changed
-            if not c.replace("\\", "/").startswith(self._STALE_IGNORE_PREFIXES)
+            c for c in changed if not c.replace("\\", "/").startswith(self._STALE_IGNORE_PREFIXES)
         ]
         return len(source) >= 8
 

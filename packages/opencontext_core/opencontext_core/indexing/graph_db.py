@@ -756,9 +756,7 @@ class GraphDatabase:
         in those files are returned — the scoped form the verify gate uses so a
         run is judged on the code it touched, not the whole legacy repo.
         """
-        scope = (
-            {p.replace("\\", "/") for p in changed_files} if changed_files is not None else None
-        )
+        scope = {p.replace("\\", "/") for p in changed_files} if changed_files is not None else None
         conn = self._connect()
 
         # "Covered" = referenced from a test file. Collect the test-file call
@@ -827,9 +825,7 @@ class GraphDatabase:
         the graph, so a hit is a prompt to check, not proof. Deterministic; from
         the persisted graph only; ordered by ``file_path`` then ``line``.
         """
-        scope = (
-            {p.replace("\\", "/") for p in changed_files} if changed_files is not None else None
-        )
+        scope = {p.replace("\\", "/") for p in changed_files} if changed_files is not None else None
         conn = self._connect()
         referenced = {
             row["target_node_id"]
