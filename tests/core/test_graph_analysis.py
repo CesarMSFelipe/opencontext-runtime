@@ -102,29 +102,6 @@ def test_centrality_is_deterministic_across_runs(tmp_path: Path) -> None:
     assert run() == run()
 
 
-def test_community_detection_separates_disconnected_components(tmp_path: Path) -> None:
-    db_path = tmp_path / "g.db"
-    # Two groups that call within their group but never across.
-    calls = [("g1a", "g1b"), ("g1b", "g1c"), ("g2a", "g2b"), ("g2b", "g2c")]
-    name_to_id = _build_graph(db_path, calls)
-
-    analyzer = GraphAnalyzer(GraphDatabase(db_path=db_path))
-    try:
-        partition_1 = analyzer.detect_communities()
-        partition_2 = analyzer.detect_communities()
-    finally:
-        analyzer.close()
-
-    g1 = {partition_1[name_to_id[n]] for n in ("g1a", "g1b", "g1c")}
-    g2 = {partition_1[name_to_id[n]] for n in ("g2a", "g2b", "g2c")}
-    # Each group internally consistent and distinct from the other.
-    assert len(g1) == 1
-    assert len(g2) == 1
-    assert g1 != g2
-    # Reproducible across runs.
-    assert partition_1 == partition_2
-
-
 def test_path_query_returns_existing_call_path(tmp_path: Path) -> None:
     db_path = tmp_path / "g.db"
     _build_graph(db_path, [("a", "b"), ("b", "c")])

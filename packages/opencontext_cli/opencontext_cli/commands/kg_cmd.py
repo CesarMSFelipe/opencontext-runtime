@@ -899,10 +899,12 @@ def _build_tree(files: list[str]) -> dict[str, Any]:
     return tree
 
 
-def _generate_ascii_tree(kg: KnowledgeGraph) -> str:
-    """Generate an ASCII-only directory tree (no Unicode, no Rich).
+def _render_tree(kg: KnowledgeGraph, *, last: str, mid: str, vert: str) -> str:
+    """Render the project directory tree with the given branch connectors.
 
-    Uses ``|-- `` and ```-- `` connectors — safe for any terminal or log file.
+    ``last``/``mid`` are the leaf / non-leaf connectors and ``vert`` the vertical
+    extension — pass ASCII (```-- ``/``|-- ``/``|   ``) or Unicode box-drawing
+    (``└── ``/``├── ``/``│   ``). The traversal and summary are otherwise identical.
     """
     conn = kg.db._connect()
     files = conn.execute("SELECT path FROM files ORDER BY path").fetchall()
@@ -910,19 +912,17 @@ def _generate_ascii_tree(kg: KnowledgeGraph) -> str:
     stats = _build_file_stats(conn)
     tree = _build_tree(file_list)
 
-    lines: list[str] = []
-    lines.append("# Project Structure")
-    lines.append("")
+    lines: list[str] = ["# Project Structure", ""]
 
     def _render(subtree: dict[str, Any], prefix: str = "", path_so_far: str = "") -> None:
         items = list(subtree.items())
         for i, (name, sub) in enumerate(items):
-            connector = "`-- " if i == len(items) - 1 else "|-- "
+            connector = last if i == len(items) - 1 else mid
             child_path = f"{path_so_far}/{name}" if path_so_far else name
 
             if sub:
                 lines.append(f"{prefix}{connector}{name}/")
-                extension = "    " if i == len(items) - 1 else "|   "
+                extension = "    " if i == len(items) - 1 else vert
                 _render(sub, prefix + extension, child_path)
             else:
                 info = stats.get(child_path, {})
@@ -950,57 +950,16 @@ def _generate_ascii_tree(kg: KnowledgeGraph) -> str:
     )
 
     return "\n".join(lines)
+
+
+def _generate_ascii_tree(kg: KnowledgeGraph) -> str:
+    """ASCII-only directory tree (no Unicode/Rich) — safe for any terminal/log."""
+    return _render_tree(kg, last="`-- ", mid="|-- ", vert="|   ")
 
 
 def _generate_tree_text(kg: KnowledgeGraph) -> str:
-    """Generate a plain-text directory tree (for --output file)."""
-    conn = kg.db._connect()
-    files = conn.execute("SELECT path FROM files ORDER BY path").fetchall()
-    file_list = [r[0] for r in files]
-    stats = _build_file_stats(conn)
-    tree = _build_tree(file_list)
-
-    lines: list[str] = []
-    lines.append("# Project Structure")
-    lines.append("")
-
-    def _render(subtree: dict[str, Any], prefix: str = "", path_so_far: str = "") -> None:
-        items = list(subtree.items())
-        for i, (name, sub) in enumerate(items):
-            connector = "└── " if i == len(items) - 1 else "├── "
-            child_path = f"{path_so_far}/{name}" if path_so_far else name
-
-            if sub:
-                lines.append(f"{prefix}{connector}{name}/")
-                extension = "    " if i == len(items) - 1 else "│   "
-                _render(sub, prefix + extension, child_path)
-            else:
-                info = stats.get(child_path, {})
-                parts = []
-                if info.get("classes"):
-                    parts.append(f"{info['classes']} classes")
-                if info.get("funcs"):
-                    parts.append(f"{info['funcs']} functions")
-                if info.get("methods"):
-                    parts.append(f"{info['methods']} methods")
-                suffix = f"  ({', '.join(parts)})" if parts else ""
-                lines.append(f"{prefix}{connector}{name}{suffix}")
-
-    _render(tree)
-
-    # Summary
-    total_classes = sum(s["classes"] for s in stats.values())
-    total_funcs = sum(s["funcs"] for s in stats.values())
-    total_methods = sum(s["methods"] for s in stats.values())
-    total_loc = sum(s["loc"] for s in stats.values())
-    lines.append("")
-    lines.append(
-        f"Total: {len(file_list)} files  |  "
-        f"{total_classes} classes  {total_funcs} functions  "
-        f"{total_methods} methods  |  ~{total_loc} LOC"
-    )
-
-    return "\n".join(lines)
+    """Plain-text directory tree (Unicode box-drawing) for the ``--output`` file."""
+    return _render_tree(kg, last="└── ", mid="├── ", vert="│   ")
 
 
 def _display_rich_tree(kg: KnowledgeGraph) -> None:

@@ -11,15 +11,6 @@ from opencontext_core.config import (
     SkillsConfig,
     load_config,
 )
-from opencontext_core.context.observability import (
-    ContextDashboard,
-    MetricPoint,
-    MetricsCollector,
-    OtelExporter,
-    format_cost,
-    format_duration,
-    format_tokens,
-)
 from opencontext_core.doctor.deep import (
     DeepDiagnostic,
     DeepReport,
@@ -46,16 +37,6 @@ from opencontext_core.runtime import (
     PreparedContext,
     ProjectSetupResult,
     RuntimeResult,
-)
-from opencontext_core.safety.proxy import (
-    AuditEntry,
-    ProxyAction,
-    ProxyDecision,
-    ProxyPolicy,
-    SimpleProxyServer,
-)
-from opencontext_core.safety.proxy import (
-    ContextFirewall as ContextFirewallProxy,
 )
 from opencontext_core.setup.plan import (
     FileChange,
@@ -107,16 +88,11 @@ __all__ = [
     "PROFILE_CATALOG",
     "ArtifactStoreConfig",
     "ArtifactStoreMode",
-    # Firewall
-    "AuditEntry",
     # Benchmark
     "ChainStrategy",
     "CheckResult",
     "ComponentDef",
     "ComponentState",
-    # Observability
-    "ContextDashboard",
-    "ContextFirewallProxy",
     "ContextScore",
     "ContextScorer",
     "DeepDiagnostic",
@@ -128,11 +104,8 @@ __all__ = [
     "InstallResult",
     "InstallationState",
     "KnowledgeGraphConfig",
-    "MetricPoint",
-    "MetricsCollector",
     "OpenContextConfig",
     "OpenContextRuntime",
-    "OtelExporter",
     "Plugin",
     "PluginInfo",
     "PluginInstaller",
@@ -142,16 +115,12 @@ __all__ = [
     "PresetDef",
     "ProfileDef",
     "ProjectSetupResult",
-    "ProxyAction",
-    "ProxyDecision",
-    "ProxyPolicy",
     "QualityDimension",
     "RegistryFetcher",
     "RegistryPlugin",
     "RegistryVersion",
     "RuntimeResult",
     "SDDConfig",
-    "SimpleProxyServer",
     "SkillsConfig",
     "StateStore",
     "UpdateCheck",
@@ -161,9 +130,6 @@ __all__ = [
     "UserPreferences",
     "VerificationReport",
     "build_plan",
-    "format_cost",
-    "format_duration",
-    "format_tokens",
     "get_available_components",
     "get_available_presets",
     "get_available_profiles",

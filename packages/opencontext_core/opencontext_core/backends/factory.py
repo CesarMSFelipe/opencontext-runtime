@@ -8,9 +8,7 @@ from typing import Any
 from opencontext_core.backends.compression.compact import CompactCompressionBackend
 from opencontext_core.backends.compression.null import NullCompressionBackend
 from opencontext_core.backends.compression.terse import TerseCompressionBackend
-from opencontext_core.backends.protocols import CompressionBackend, VectorBackend
-from opencontext_core.backends.vector.local import LocalVectorBackend
-from opencontext_core.backends.vector.null import NullVectorBackend
+from opencontext_core.backends.protocols import CompressionBackend
 from opencontext_core.exceptions import BackendUnavailableError
 
 
@@ -40,21 +38,6 @@ class BackendFactory:
         elif strategy == "none":
             return NullCompressionBackend()
         return TerseCompressionBackend()  # safe default
-
-    @classmethod
-    def create_vector_backend(cls, config: Any) -> VectorBackend:
-        if not getattr(config, "semantic_search", False):
-            return NullVectorBackend()
-        try:
-            from opencontext_core.backends.vector.semantic import SemanticVectorBackend
-
-            host = getattr(config, "semantic_search_host", "localhost")
-            port = getattr(config, "semantic_search_port", 6333)
-            collection = getattr(config, "semantic_search_collection", "opencontext")
-            return SemanticVectorBackend(host=host, port=port, collection=collection)
-        except BackendUnavailableError:
-            storage = Path(getattr(config, "storage_path", ".storage"))
-            return LocalVectorBackend(storage)
 
     @classmethod
     def create_memory_store(
