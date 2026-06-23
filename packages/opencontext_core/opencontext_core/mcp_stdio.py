@@ -530,7 +530,13 @@ class MCPServer:
                 self._inbuf += chunk
                 continue
             if timeout is not None:
-                ready, _, _ = select.select([fd], [], [], timeout)
+                try:
+                    ready, _, _ = select.select([fd], [], [], timeout)
+                except OSError:
+                    # Windows: select() rejects non-socket fds (pipes/files →
+                    # WinError 10038). Fall back to a blocking read — batched data
+                    # already in the pipe makes os.read return immediately.
+                    ready = [fd]
                 if not ready:
                     return None
             raw = os.read(fd, 65536)
