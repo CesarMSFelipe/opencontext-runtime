@@ -1264,14 +1264,17 @@ def _dispatch(args: argparse.Namespace) -> None:
         return
     if command == "quality":
         quality_command = args.quality_command
-        if quality_command in ("check", "gate"):
+        if quality_command in ("check", "gate", "test-gaps"):
             from opencontext_cli.commands.quality_cmd import (
                 handle_quality_check,
                 handle_quality_gate,
+                handle_quality_test_gaps,
             )
 
             if quality_command == "check":
                 handle_quality_check(args)
+            elif quality_command == "test-gaps":
+                handle_quality_test_gaps(args)
             else:
                 handle_quality_gate(args)
             return

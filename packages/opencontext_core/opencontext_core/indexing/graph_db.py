@@ -44,6 +44,28 @@ def _fts_rowid(stable_id: str) -> int:
         return int(stable_id)
 
 
+# Multi-language test-file conventions: a path is a test file if it lives under a
+# tests/test/spec/__tests__ directory, or its file name is test_* / *_test /
+# *.test.* / *.spec.* . Used to separate test code from the code it exercises.
+_TEST_PATH_RE = re.compile(
+    r"(?:^|/)(?:tests?|spec|__tests__)/"
+    r"|(?:^|/)test_[^/]+$"
+    r"|_test\.[^/]+$"
+    r"|\.(?:test|spec)\.[^/]+$",
+    re.IGNORECASE,
+)
+
+
+def is_test_path(path: str) -> bool:
+    """True if ``path`` looks like a test file (multi-language conventions).
+
+    Recognises a ``tests/`` / ``test/`` / ``spec/`` / ``__tests__/`` directory
+    anywhere in the path, and ``test_*`` / ``*_test`` / ``*.test.*`` / ``*.spec.*``
+    file names — enough to tell test code from the production code it exercises.
+    """
+    return bool(_TEST_PATH_RE.search(path.replace("\\", "/")))
+
+
 @dataclass
 class Node:
     """A symbol node in the knowledge graph."""
@@ -715,6 +737,67 @@ class GraphDatabase:
             "edges": edge_count,
             "files": file_count,
         }
+
+    def find_test_gaps(
+        self, *, kinds: tuple[str, ...] = ("function", "method")
+    ) -> list[dict[str, Any]]:
+        """Definitions with no inbound reference from any test file (test-gaps).
+
+        A *gap* is a node of one of ``kinds`` defined in a NON-test source file
+        that no test file references — i.e. no edge whose ``call_site_file`` is a
+        test path targets it. This is a STRUCTURAL proxy (does any test mention
+        the symbol at all), not execution coverage, computed purely from the
+        persisted graph. Deterministic; ordered by ``file_path`` then ``line``.
+        """
+        conn = self._connect()
+
+        # "Covered" = referenced from a test file. Collect the test-file call
+        # sites first (regex in Python), then resolve their targets in one
+        # IN-query (the join stays in SQL).
+        test_files = [
+            row["call_site_file"]
+            for row in conn.execute(
+                "SELECT DISTINCT call_site_file FROM edges "
+                "WHERE call_site_file IS NOT NULL AND call_site_file != ''"
+            ).fetchall()
+            if is_test_path(row["call_site_file"])
+        ]
+        covered: set[str] = set()
+        if test_files:
+            placeholders = ",".join("?" for _ in test_files)
+            covered = {
+                row["target_node_id"]
+                for row in conn.execute(
+                    "SELECT DISTINCT target_node_id FROM edges "
+                    f"WHERE target_node_id IS NOT NULL AND call_site_file IN ({placeholders})",
+                    tuple(test_files),
+                ).fetchall()
+            }
+
+        kind_placeholders = ",".join("?" for _ in kinds)
+        rows = conn.execute(
+            "SELECT id, name, kind, file_path, line, container FROM nodes "
+            f"WHERE kind IN ({kind_placeholders}) ORDER BY file_path, line",
+            tuple(kinds),
+        ).fetchall()
+
+        gaps: list[dict[str, Any]] = []
+        for row in rows:
+            if is_test_path(row["file_path"]):
+                continue  # a test's own helpers are not untested production code
+            if row["id"] in covered:
+                continue
+            gaps.append(
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "kind": row["kind"],
+                    "file_path": row["file_path"],
+                    "line": row["line"],
+                    "container": row["container"],
+                }
+            )
+        return gaps
 
     def delete_file_and_nodes(self, file_path: str) -> None:
         """Delete all nodes and edges for a file."""
