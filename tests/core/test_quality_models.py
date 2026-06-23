@@ -348,3 +348,15 @@ def test_finding_metadata_defaults_are_independent_instances() -> None:
     b = Finding(rule="b", severity=CheckSeverity.INFO, message="m")
     a.metadata["k"] = "v"
     assert b.metadata == {}  # default_factory, not a shared mutable default
+
+
+def test_quality_metrics_carries_loc_gini_report_only() -> None:
+    from opencontext_core.quality.models import QualityMetrics
+
+    m = QualityMetrics(loc_gini_bp=4200)
+    d = m.as_dict()
+    assert d["loc_gini_bp"] == 4200
+    # Round-trips through the dict (e.g. baseline persistence) losslessly.
+    assert QualityMetrics.from_dict(d).loc_gini_bp == 4200
+    # A missing key defaults to 0, so older baselines stay loadable.
+    assert QualityMetrics.from_dict({}).loc_gini_bp == 0

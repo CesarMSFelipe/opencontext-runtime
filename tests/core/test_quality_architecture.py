@@ -642,3 +642,28 @@ def test_db_path_stays_under_tmp(tmp_path: Path) -> None:
 
 if __name__ == "__main__":  # pragma: no cover - manual run convenience
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+@pytest.mark.parametrize(
+    "values,expected",
+    [
+        ([], 0),
+        ([100], 0),  # a single file: no distribution signal
+        ([0, 0], 0),  # all empty: no signal
+        ([10, 10, 10, 10], 0),  # perfectly even -> 0
+    ],
+)
+def test_gini_bp_degenerate_and_even(values: list[int], expected: int) -> None:
+    from opencontext_core.quality.architecture import _gini_bp
+
+    assert _gini_bp(values) == expected
+
+
+def test_gini_bp_rises_with_concentration() -> None:
+    from opencontext_core.quality.architecture import _gini_bp
+
+    even = _gini_bp([50, 50, 50, 50])
+    mild = _gini_bp([10, 20, 30, 100])
+    extreme = _gini_bp([1, 1, 1, 1000])
+    assert even == 0
+    assert 0 < mild < extreme <= 10000
