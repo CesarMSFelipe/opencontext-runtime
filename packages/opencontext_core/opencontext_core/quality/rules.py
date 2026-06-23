@@ -176,7 +176,7 @@ def _coerce_int(value: Any, *, key: str, default: int) -> int:
     # bool is a subclass of int; reject it explicitly so 'true' isn't read as 1.
     if isinstance(value, bool) or not isinstance(value, int):
         raise QualityConfigError(f"quality.toml: '{key}' must be an integer, got {value!r}")
-    return value
+    return int(value)
 
 
 def _coerce_str(value: Any, *, key: str, default: str) -> str:
