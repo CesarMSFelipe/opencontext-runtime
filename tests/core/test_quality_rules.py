@@ -65,7 +65,6 @@ class TestDefaults:
         assert arch.god_file_in_degree == 8
         assert arch.god_file_loc == 600
         assert arch.max_cc == 25
-        assert arch.max_coupling == "B"
         assert arch.max_depth == 0
         assert arch.layers == ()
         assert arch.boundaries == ()
@@ -169,7 +168,6 @@ class TestArchitectureLoading:
                     "god_file_in_degree = 12",
                     "god_file_loc = 400",
                     "max_cc = 30",
-                    'max_coupling = "C"',
                     "max_depth = 7",
                 ]
             ),
@@ -180,7 +178,6 @@ class TestArchitectureLoading:
         assert arch.god_file_in_degree == 12
         assert arch.god_file_loc == 400
         assert arch.max_cc == 30
-        assert arch.max_coupling == "C"
         assert arch.max_depth == 7
 
     def test_architecture_partial_uses_defaults(self, tmp_path: Path) -> None:
@@ -191,11 +188,6 @@ class TestArchitectureLoading:
         assert arch.max_cycles == 0
         assert arch.no_god_files is True
         assert arch.god_file_in_degree == 8
-
-    def test_max_coupling_numeric_is_stringified(self, tmp_path: Path) -> None:
-        # A numeric coupling threshold normalizes to a string so downstream has one type.
-        _write_toml(tmp_path, "[architecture]\nmax_coupling = 12\n")
-        assert load_rules(tmp_path).architecture.max_coupling == "12"
 
     def test_layers_parsed(self, tmp_path: Path) -> None:
         _write_toml(

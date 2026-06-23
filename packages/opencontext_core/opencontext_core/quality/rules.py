@@ -112,7 +112,6 @@ class ArchitectureRules:
     god_file_in_degree: int = 8  # absolute fan-in cap (matches detect_god_nodes default)
     god_file_loc: int = 600  # LOC cap for a god-file
     max_cc: int = 25
-    max_coupling: str = "B"  # letter grade A..F or numeric string
     max_depth: int = 0  # 0 = disabled (DIRECTORY nesting)
     min_duplicate_tokens: int = 40  # min shared normalized tokens before a clone is flagged
     max_nesting: int = 5  # CODE block-nesting ceiling per function (0 disables)
@@ -299,21 +298,6 @@ def _parse_architecture(raw: Any) -> ArchitectureRules:
     table = _require_mapping(raw, context="[architecture]")
     defaults = ArchitectureRules()
 
-    # max_coupling may be written as a letter grade ("B") or a number (e.g. 12);
-    # normalize to a string so downstream parsing has one type to handle.
-    raw_coupling = table.get("max_coupling")
-    if raw_coupling is None:
-        max_coupling = defaults.max_coupling
-    elif isinstance(raw_coupling, str):
-        max_coupling = raw_coupling
-    elif isinstance(raw_coupling, int) and not isinstance(raw_coupling, bool):
-        max_coupling = str(raw_coupling)
-    else:
-        raise QualityConfigError(
-            f"quality.toml: [architecture] max_coupling must be a string or "
-            f"integer, got {raw_coupling!r}"
-        )
-
     return ArchitectureRules(
         max_cycles=_coerce_int(
             table.get("max_cycles"), key="architecture.max_cycles", default=defaults.max_cycles
@@ -334,7 +318,6 @@ def _parse_architecture(raw: Any) -> ArchitectureRules:
             default=defaults.god_file_loc,
         ),
         max_cc=_coerce_int(table.get("max_cc"), key="architecture.max_cc", default=defaults.max_cc),
-        max_coupling=max_coupling,
         max_depth=_coerce_int(
             table.get("max_depth"), key="architecture.max_depth", default=defaults.max_depth
         ),
