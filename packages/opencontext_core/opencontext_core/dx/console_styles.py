@@ -49,6 +49,32 @@ else:
     STYLE_SECONDARY = None  # type: ignore[assignment]
 
 
+# ── OpenContext logo — knowledge-graph motif in brand colors ──────────────────
+# Single source of truth so every menu, wizard and action screen renders the
+# same icon. Full form on roomy terminals, compact (3-line) form otherwise.
+LOGO = [
+    "",
+    f"  [bold {BRAND_PRIMARY}]◉[/][dim]──[/][bold {BRAND_SECONDARY}]◉[/][dim]──[/]"
+    f"[bold {BRAND_ACCENT}]◉[/]    [bold white]OpenContext Runtime[/]",
+    f"  [{BRAND_PRIMARY}]│[/]     [{BRAND_ACCENT}]│[/]    "
+    "[dim]Context Engineering for AI Agents[/]",
+    f"  [{BRAND_PRIMARY}]◉[/][dim]──[/][{BRAND_SECONDARY}]◉[/]  [{BRAND_ACCENT}]◉[/]",
+    f"  [{BRAND_PRIMARY}]│[/]  [{BRAND_SECONDARY}]│[/]       "
+    f"[bold {BRAND_PRIMARY}]*[/] [bold]87% token reduction[/]  "
+    f"[{BRAND_SECONDARY}]*[/] SDD workflow",
+    f"  [{BRAND_PRIMARY}]◉[/][dim]──[/][{BRAND_SECONDARY}]◉[/]       "
+    f"[{BRAND_ACCENT}]*[/] MCP server  [{BRAND_PRIMARY}]*[/] 13+ agents  "
+    f"[{BRAND_SECONDARY}]*[/] Zero secrets",
+    "",
+]
+
+COMPACT_LOGO = [
+    f"  [bold {BRAND_PRIMARY}]◉──◉[/]  [bold white]OpenContext Runtime[/]",
+    f"  [{BRAND_PRIMARY}]│  │[/]  [dim]Context Engineering · 87% token reduction[/]",
+    f"  [bold {BRAND_PRIMARY}]◉──◉[/]  [dim]SDD · MCP · 13+ agents · Zero secrets[/]",
+]
+
+
 class BrandConsole:
     """Console wrapper with brand styling."""
 
@@ -205,3 +231,20 @@ def header(title: str) -> None:
 def section(title: str) -> None:
     """Print section header."""
     console.section(title)
+
+
+def show_logo(*, compact: bool = False) -> None:
+    """Print the OpenContext logo. Falls back to the compact form on small
+    terminals (or when ``compact=True``), so it fits any menu or action screen."""
+    import shutil
+
+    lines = COMPACT_LOGO
+    if not compact:
+        try:
+            size = shutil.get_terminal_size()
+            if size.columns >= 64 and size.lines >= len(LOGO) + 14:
+                lines = LOGO
+        except Exception:
+            pass
+    for line in lines:
+        console.print(line)

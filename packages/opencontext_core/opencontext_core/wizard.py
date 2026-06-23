@@ -6,8 +6,6 @@ providers, and plugins. Uses rich for a modern interactive TUI.
 
 from __future__ import annotations
 
-import sys
-
 from rich.console import Console
 from rich.prompt import IntPrompt
 from rich.table import Table
@@ -30,58 +28,6 @@ from opencontext_core.user_prefs import (
 _SECURITY_MODE_CHOICES = [mode.value for mode in SecurityMode]
 
 console = Console()
-
-
-# ── TUI Menu ────────────────────────────────────────────────────────────────
-
-
-def run_wizard_menu() -> None:
-    """Show interactive menu and delegate to the selected section."""
-
-    # The menu loop terminates only on an explicit "quit" selection. Without a
-    # terminal, the navigable selector returns its default forever, so guard
-    # against a non-interactive hang and point at the non-interactive path.
-    if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        console.print(
-            "[yellow]The configuration menu needs a terminal.[/] "
-            "Run [cyan]opencontext config wizard --non-interactive[/] instead."
-        )
-        return
-
-    while True:
-        console.clear()
-        console.rule("[bold cyan]OpenContext Configuration[/]")
-        console.print()
-
-        choice = prompts.select(
-            "Configuration",
-            [
-                ("wizard", "Full configuration wizard"),
-                ("security", "Security & privacy"),
-                ("features", "Features"),
-                ("tokens", "Token budgets"),
-                ("agents", "Agent integrations"),
-                ("plugins", "Plugins"),
-                ("show", "Show current config"),
-                ("reset", "Reset to defaults"),
-                ("quit", "Quit"),
-            ],
-            default="wizard",
-        )
-
-        if choice == "quit":
-            console.print("[dim]Goodbye.[/]")
-            break
-        elif choice == "wizard":
-            run_wizard()
-        elif choice == "show":
-            show_config()
-            prompts.pause("Press Enter to return to menu")
-        elif choice == "reset":
-            reset_config()
-        else:
-            # security / features / tokens / agents / plugins
-            reconfigure(choice)
 
 
 def _ask_bool(question: str, default: bool = True) -> bool:
@@ -152,14 +98,13 @@ def _plugin_wizard_step(prefs: UserPreferences) -> None:
 
         console.print(table)
 
-    # Ask which plugins to install
-    to_install = []
-    for plug in available:
-        name = plug.name
-        if name in installed:
-            continue
-        if _ask_bool(f"Install '{name}'? ({plug.description[:50]})", default=False):
-            to_install.append(name)
+    # Ask which plugins to install — one checkbox, not N sequential yes/no prompts.
+    choices = [
+        (plug.name, f"{plug.name} — {plug.description[:50]}")
+        for plug in available
+        if plug.name not in installed
+    ]
+    to_install = list(prompts.checkbox("Select plugins to install", choices)) if choices else []
 
     # Install selected plugins
     if to_install:
@@ -345,13 +290,15 @@ def reconfigure(section: str | None = None) -> None:
             current,
         )
     elif section == "features":
-        prefs.features.knowledge_graph = _ask_bool(
-            "Knowledge Graph?", prefs.features.knowledge_graph
-        )
-        prefs.features.call_graph = _ask_bool("Call Graph?", prefs.features.call_graph)
-        prefs.features.learning_system = _ask_bool(
-            "Learning System?", prefs.features.learning_system
-        )
+        feature_opts = [
+            ("knowledge_graph", "Knowledge Graph"),
+            ("call_graph", "Call Graph"),
+            ("learning_system", "Learning System"),
+        ]
+        enabled = [key for key, _ in feature_opts if getattr(prefs.features, key)]
+        selected = set(prompts.checkbox("Features", feature_opts, defaults=enabled))
+        for key, _ in feature_opts:
+            setattr(prefs.features, key, key in selected)
     elif section == "tokens":
         prefs.default_token_budget = _ask_int("Token budget", prefs.default_token_budget)
     elif section == "agents":

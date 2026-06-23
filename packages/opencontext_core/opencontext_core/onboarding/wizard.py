@@ -18,6 +18,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from opencontext_core import prompts
 from opencontext_core.config import SecurityMode
+from opencontext_core.dx.console_styles import show_logo
 from opencontext_core.onboarding.service import (
     OnboardingOptions,
     OnboardingResult,
@@ -40,13 +41,6 @@ class OnboardingWizard:
     Wraps OnboardingService with InquirerPy-based interactive steps.
     Auto-detects non-interactive environments and falls back to defaults.
     """
-
-    WELCOME_ART = """
-[bold cyan]╔══════════════════════════════════════════════════════╗
-║          OpenContext — Context Engineering           ║
-║            Runtime for LLM Applications              ║
-╚══════════════════════════════════════════════════════╝[/]
-"""
 
     def __init__(self, root: str | Path = ".") -> None:
         self.root = Path(root).resolve()
@@ -117,9 +111,9 @@ class OnboardingWizard:
     def _show_welcome(self) -> None:
         if self._interactive:
             console.clear()
+        show_logo()
         welcome = Panel(
-            self.WELCOME_ART
-            + f"\n[bold]Project:[/] {self.root}\n"
+            f"[bold]Project:[/] {self.root}\n"
             + "\nThis wizard will guide you through 4 steps:\n"
             + "[cyan]1.[/] Configuration template\n"
             + "[cyan]2.[/] Security mode\n"

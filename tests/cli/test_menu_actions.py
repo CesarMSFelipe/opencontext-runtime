@@ -13,7 +13,6 @@ from __future__ import annotations
 import pytest
 
 from opencontext_cli.commands import menu_cmd
-from opencontext_core import wizard
 
 
 def test_run_backups_back_exits_cleanly(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -47,17 +46,73 @@ def test_run_uninstall_decline_is_safe(monkeypatch: pytest.MonkeyPatch) -> None:
     assert proceeded["clean"] is False
 
 
-def test_wizard_menu_non_tty_does_not_hang(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The menu loop exits only on "quit"; without a TTY the selector would return
-    # its default forever. The guard must short-circuit instead of looping.
+def test_config_menu_non_tty_does_not_hang(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The config menu loop exits only on "back"; without a TTY the selector would
+    # return its default forever. The guard must short-circuit instead of looping.
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
 
     selected: dict[str, bool] = {"called": False}
     monkeypatch.setattr(
-        wizard.prompts, "select", lambda *a, **k: selected.__setitem__("called", True)
+        menu_cmd.prompts, "select", lambda *a, **k: selected.__setitem__("called", True)
     )
 
-    wizard.run_wizard_menu()
+    menu_cmd.run_config_menu()
 
     assert selected["called"] is False  # selector never reached
+
+
+def test_config_menu_lists_unified_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Every setting must live in the one config menu — including the unreachable-
+    # before entries (memory backend, language) folded in during unification.
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr(menu_cmd, "_action_header", lambda *a, **k: None)
+
+    captured: dict[str, list] = {}
+
+    def fake_select(message: str, choices: list, **kw: object) -> str:
+        captured["keys"] = [c[0] for c in choices if isinstance(c, tuple)]
+        return "back"
+
+    monkeypatch.setattr(menu_cmd.prompts, "select", fake_select)
+    menu_cmd.run_config_menu()
+
+    for key in ("security", "features", "models", "agents", "plugins", "memory", "language", "sdd"):
+        assert key in captured["keys"], f"{key} missing from the unified config menu"
+
+
+def test_run_memory_backend_writes_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    import opencontext_core.config_sync as cs
+
+    monkeypatch.setattr(menu_cmd, "_action_header", lambda *a, **k: None)
+    monkeypatch.setattr(menu_cmd.prompts, "select", lambda *a, **k: "engram")
+    written: dict[str, object] = {}
+
+    def fake_set(path: str, value: object, **kw: object) -> bool:
+        written["path"] = path
+        written["value"] = value
+        return True
+
+    monkeypatch.setattr(cs, "set_yaml_key", fake_set)
+    menu_cmd._run_memory_backend()
+
+    assert written == {"path": "memory.provider", "value": "engram"}
+
+
+def test_run_language_writes_ui_language(monkeypatch: pytest.MonkeyPatch) -> None:
+    import opencontext_core.config_sync as cs
+
+    monkeypatch.setattr(menu_cmd, "_action_header", lambda *a, **k: None)
+    monkeypatch.setattr(menu_cmd.prompts, "select", lambda *a, **k: "es")
+    written: dict[str, object] = {}
+
+    def fake_set(path: str, value: object, **kw: object) -> bool:
+        written["path"] = path
+        written["value"] = value
+        return True
+
+    monkeypatch.setattr(cs, "set_yaml_key", fake_set)
+    menu_cmd._run_language()
+
+    assert written == {"path": "ui_language", "value": "es"}
