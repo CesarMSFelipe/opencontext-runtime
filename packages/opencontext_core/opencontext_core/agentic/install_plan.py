@@ -92,7 +92,7 @@ def _resolve_engram_action(config: AgenticFlowConfig) -> str | None:
 
 
 def _resolve_files_to_write(config: AgenticFlowConfig) -> list[str]:
-    files: list[str] = []
+    files: list[str] = ["opencontext.yaml"]
     if config.openspec_mode != OpenSpecMode.OFF:
         files.append("openspec/config.yaml")
     if config.budget_mode != BudgetMode.OFF:
