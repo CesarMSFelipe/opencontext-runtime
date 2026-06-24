@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from opencontext_core.agentic.config import AgenticFlowConfig
 from opencontext_core.compat import UTC
 
 PhaseName = Literal[
@@ -42,6 +43,7 @@ NextActionKind = Literal[
     "archive",
     "done",
     "blocked",
+    "observe_only",
 ]
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -115,6 +117,8 @@ class OcNewRunState(BaseModel):
     next_action: NextAction | None = None
     blocked_reason: str | None = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
+    # NOTE: config is persisted so resume() is faithful to the original preset.
+    config: AgenticFlowConfig | None = None
 
     def phase(self, name: PhaseName) -> PhaseState:
         for p in self.phases:
