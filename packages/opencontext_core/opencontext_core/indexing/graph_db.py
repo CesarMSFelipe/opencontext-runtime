@@ -738,6 +738,29 @@ class GraphDatabase:
             "files": file_count,
         }
 
+    def health_metrics(self) -> dict[str, Any]:
+        """Structural health metrics for the graph (graph_health report source).
+
+        - ``dangling_edges``: edges whose ``target_node_id`` references no live
+          node — the structural sign of a stale/partial index.
+        - ``languages``: per-language node counts (the indexed-surface breakdown).
+
+        Computed from the persisted graph only; deterministic.
+        """
+
+        conn = self._connect()
+        dangling = conn.execute(
+            "SELECT COUNT(*) FROM edges WHERE target_node_id IS NOT NULL "
+            "AND target_node_id NOT IN (SELECT id FROM nodes)"
+        ).fetchone()[0]
+        languages: dict[str, int] = {
+            row[0]: row[1]
+            for row in conn.execute(
+                "SELECT language, COUNT(*) FROM nodes GROUP BY language ORDER BY language"
+            ).fetchall()
+        }
+        return {"dangling_edges": dangling, "languages": languages}
+
     def find_test_gaps(
         self,
         *,
