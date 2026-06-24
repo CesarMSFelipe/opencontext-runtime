@@ -62,8 +62,13 @@ from opencontext_core.harness.phases import (
     VerifyPhase,
 )
 from opencontext_core.models.trace import RunEvent
+from opencontext_core.workflow.delegation_validator import (
+    DelegationValidationError,
+    DelegationValidator,
+)
 
 _log = logging.getLogger(__name__)
+_delegation_validator = DelegationValidator()
 
 
 class HarnessState:
@@ -206,6 +211,38 @@ class HarnessRunner:
             # gateway could not be constructed. Phases fall back to honest
             # planned/executor-absent reporting.
             return None
+
+    def _validate_phase_delegation_result(
+        self,
+        result: Any,
+        *,
+        phase: str,
+        requires_envelope: bool = False,
+        expected_artifacts: list[str] | None = None,
+    ) -> None:
+        """Validate a sub-agent result returned by real delegation.
+
+        LOCAL and MOCK delegation leave ``result.envelope=None``; this method is
+        a no-op for those paths (``requires_envelope=False`` and no envelope
+        present).  Only validates when the caller explicitly sets
+        ``requires_envelope=True`` or when ``result.envelope`` is populated by a
+        real delegated phase.
+
+        Raises:
+            DelegationValidationError: If the result fails validation.
+        """
+        has_envelope = getattr(result, "envelope", None) is not None
+        if not requires_envelope and not has_envelope:
+            return
+        try:
+            _delegation_validator.validate(
+                result,
+                requires_envelope=requires_envelope,
+                expected_artifacts=expected_artifacts,
+            )
+        except DelegationValidationError as exc:
+            _log.warning("phase %s delegation validation failed: %s", phase, exc)
+            raise
 
     def _generate_apply_edits(self, state: HarnessState) -> list[Any]:
         """Produce concrete file edits for the apply phase via the live gateway.
@@ -685,7 +722,62 @@ class HarnessRunner:
 
         self.persist_run(state, run_result)
         self._post_run_update(state)
+        self._post_run_evolution(state, run_result)
         return run_result
+
+    def _post_run_evolution(self, state: HarnessState, run_result: Any) -> None:
+        """Generate and persist evolution proposals from the completed run.
+
+        Runs only when ``config.learning.in_loop`` is ``True`` (default off).
+        Any exception is swallowed and appended as a warning — this hook MUST
+        NOT abort or modify the run result.
+        """
+        try:
+            in_loop = bool(getattr(getattr(self.config, "learning", None), "in_loop", False))
+            if not in_loop:
+                return
+
+            from opencontext_core.learning.evolution_engine import EvolutionEngine
+            from opencontext_core.learning.evolution_store import EvolutionStore
+
+            learned_patterns: list[Any] = []
+            optimized_budgets: list[Any] = []
+            memories_written: list[Any] = []
+
+            # Optionally call LearningOrchestrator if available
+            try:
+                from opencontext_core.learning.learning_orchestrator import LearningOrchestrator
+
+                orch = LearningOrchestrator(
+                    storage_path=state.root / ".storage" / "opencontext" / "learning",
+                    kg_db_path=state.root / ".storage" / "opencontext" / "context_graph.db",
+                )
+                orch.learn()
+                learned_patterns = list(orch.patterns.get_all_patterns().values())
+                optimized_budgets = list(orch.optimizer._budgets.values())
+            except Exception as _lo_exc:
+                _log.debug("post-run-evolution: LearningOrchestrator unavailable: %s", _lo_exc)
+
+            engine = EvolutionEngine()
+            proposals = engine.propose_from_run(
+                run_result=run_result,
+                learned_patterns=learned_patterns or None,
+                optimized_budgets=optimized_budgets or None,
+                memories_written=memories_written or None,
+            )
+
+            if proposals:
+                store = EvolutionStore(state.root)
+                for proposal in proposals:
+                    store.save(proposal)
+                _log.debug(
+                    "post-run-evolution: saved %d proposal(s) to EvolutionStore",
+                    len(proposals),
+                )
+
+        except Exception as _ev_exc:
+            state.warnings.append(f"post-run-evolution: {_ev_exc}")
+            _log.warning("post-run-evolution failed (non-fatal): %s", _ev_exc)
 
     def _post_run_update(self, state: HarnessState) -> None:
         """Re-index changed files after a run.
@@ -1769,6 +1861,41 @@ class HarnessRunner:
             (run_dir / filename).write_text(
                 json.dumps(data, indent=2, default=str), encoding="utf-8"
             )
+
+        # VerifyReport: serialized alongside the run artifacts when the verify phase ran.
+        # Written only when a ComplianceMatrix was produced by VerifyPhase.
+        try:
+            verify_phase_result = next(
+                (
+                    a
+                    for a in result.artifacts
+                    if getattr(a, "kind", "") == "verify-report"
+                ),
+                None,
+            )
+            if verify_phase_result is not None:
+                # Pull compliance matrix from run state metadata (set by VerifyPhase)
+                # by inspecting gates for the compliance_matrix gate metadata.
+                from opencontext_core.verify.compliance import ComplianceMatrix
+                from opencontext_core.verify.report import VerifyReport
+
+                _cm_data: Any = None
+                for gate in result.gates:
+                    if getattr(gate, "id", "") == "compliance_matrix":
+                        _cm_data = (getattr(gate, "metadata", None) or {}).get("matrix")
+                        break
+
+                if _cm_data is not None:
+                    _matrix = ComplianceMatrix.model_validate(_cm_data)
+                    _vreport = VerifyReport.compute_verdict(_matrix)
+                    _vreport_path = run_dir / "verify-report-compliance.json"
+                    _vreport_path.write_text(
+                        json.dumps(_vreport.model_dump(mode="json"), indent=2),
+                        encoding="utf-8",
+                    )
+                    files["verify-report-compliance.json"] = _vreport.model_dump(mode="json")
+        except Exception as _vr_exc:
+            _log.warning("persist_run: VerifyReport write failed (advisory): %s", _vr_exc)
 
         # Index the run so `opencontext run list/show/artifacts` (and any API
         # consumer) can resolve run_id -> artifact dir without re-scanning disk.
