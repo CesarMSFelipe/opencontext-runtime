@@ -95,7 +95,34 @@ class CockpitScreen(Screen):  # type: ignore[misc]
         self.app.exit()
 
     def action_new_change(self) -> None:
-        """Placeholder — future: open oc-new start prompt."""
+        """Open NewChangeScreen and start an oc-new run on submit."""
+        from opencontext_cli.tui.screens.new_change import NewChangeScreen
+
+        def _start(result: dict | None) -> None:
+            if not result:
+                return
+            try:
+                from opencontext_core.agentic.config import (
+                    AgenticFlowConfig,
+                    FlowMode,
+                    GitMode,
+                    MemoryMode,
+                    OpenSpecMode,
+                )
+                from opencontext_core.oc_new.conductor import OcNewConductor
+
+                cfg = AgenticFlowConfig(
+                    flow_mode=FlowMode(result["flow"]),
+                    memory_mode=MemoryMode(result["memory"]),
+                    openspec_mode=OpenSpecMode(result["openspec"]),
+                    git_mode=GitMode(result["git"]),
+                )
+                OcNewConductor(".").start(result["objective"], config=cfg)
+                self._refresh_state()
+            except Exception:
+                pass
+
+        self.app.push_screen(NewChangeScreen(), _start)
 
     def action_memory(self) -> None:
         """Placeholder — future: open memory browser."""
