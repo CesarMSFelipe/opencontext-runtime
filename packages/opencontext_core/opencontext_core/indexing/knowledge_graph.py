@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from opencontext_core.compat import StrEnum
 from opencontext_core.config import KnowledgeGraphConfig
 from opencontext_core.indexing.graph_db import Edge, FileRecord, GraphDatabase, Node
 from opencontext_core.indexing.tree_sitter_parser import (
@@ -632,3 +633,42 @@ class KnowledgeGraph:
             if file_path.startswith(prefix + "/") or file_path == prefix:
                 return True
         return False
+
+
+# --- Slice 4: engineering-domain KG schema extension ----------------------------
+# Additive only: existing string values and on-disk index format are untouched.
+# New values let SDD tooling (requirement/task/test/phase tracking) reuse the
+# same GraphDatabase as code symbols without renaming the schema.
+
+# ponytail: local extension module-side enum — the canonical NodeKind/EdgeKind
+# for the unified graph still live in opencontext_core.graph.{nodes,edges}.
+# Mirror only the engineering-domain additions here so indexing callers can
+# refer to them by symbolic name without an import to a separate package.
+
+
+class NodeKind(StrEnum):
+    """Engineering-domain node kinds accepted by the index.
+
+    Additive extension: pre-existing string kinds (e.g. ``function``, ``class``,
+    ``test``) are NOT redefined here — they keep their raw string form in the
+    SQLite store, and callers may compare ``node.kind`` against the values
+    listed below.
+    """
+
+    REQUIREMENT = "requirement"
+    TASK = "task"
+    TEST = "test"
+    PHASE = "phase"
+
+
+class EdgeKind(StrEnum):
+    """Engineering-domain edge kinds accepted by the index.
+
+    Additive extension: pre-existing string edge kinds (``calls``, ``imports``,
+    ...) are NOT redefined here — they keep their raw string form, and callers
+    may compare ``edge.kind`` against the values listed below.
+    """
+
+    IMPLEMENTS = "implements"
+    VERIFIED_BY = "verified_by"
+    DEPENDS_ON = "depends_on"
