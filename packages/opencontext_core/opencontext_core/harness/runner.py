@@ -414,6 +414,33 @@ class HarnessRunner:
         deps_subset = {p: [d for d in PHASE_DEPENDENCIES.get(p, []) if d in subset] for p in subset}
         return self.resolve_dag(subset, deps_subset)
 
+    def completed_phases(self, run_id: str) -> set[str]:
+        """Phases that finished (passed/warning) in a persisted run.
+
+        Reads ``.opencontext/runs/<run_id>/events.json`` — the append-only phase
+        ledger. A phase counts as completed only if its ``run_phase`` event has a
+        passing outcome, so a failed/blocked phase is re-run on resume, not
+        skipped. Returns an empty set when the run or ledger is absent.
+        """
+        import json as _json
+
+        events_path = self.root / ".opencontext" / "runs" / run_id / "events.json"
+        if not events_path.exists():
+            return set()
+        try:
+            data = _json.loads(events_path.read_text(encoding="utf-8"))
+        except (OSError, _json.JSONDecodeError):
+            return set()
+        done: set[str] = set()
+        for event in data.get("events", []) if isinstance(data, dict) else []:
+            if not isinstance(event, dict):
+                continue
+            if event.get("action") == "run_phase" and event.get("status") in ("passed", "warning"):
+                phase = event.get("phase")
+                if isinstance(phase, str):
+                    done.add(phase)
+        return done
+
     def run(
         self,
         workflow: str,
@@ -422,6 +449,7 @@ class HarnessRunner:
         *,
         apply_edits: list[Any] | None = None,
         approved_phases: set[str] | None = None,
+        resume_from: str | None = None,
     ) -> HarnessRunResult:
         """Execute a full workflow with all phases.
 
@@ -433,6 +461,14 @@ class HarnessRunner:
                 ApplyPhase. Each item is a ``{"path", "content"}`` dict.
             approved_phases: Phases for which human approval has been granted.
                 Used by the ``approval_required_for_writes`` pre-gate.
+            resume_from: Run id of a prior run to resume. Phases that completed
+                (passed/warning) in that run are skipped and recorded as
+                ``skipped`` events in this run's ledger; execution picks up at the
+                first incomplete phase.
+                # ponytail: skips re-running done phases, but does NOT rehydrate
+                # their artifacts into this run — a downstream phase that needs an
+                # earlier phase's output should not be resumed past it. Upgrade to
+                # artifact carry-over if cross-phase resume is needed.
         """
         state = self.create_run(workflow, task)
         if apply_edits:
@@ -455,7 +491,24 @@ class HarnessRunner:
         # scheduler (PHASE_DEPENDENCIES / WORKFLOW_TRACKS), not a hardcoded list.
         phase_ids = self.schedule_phases(workflow)
 
+        # Resume: phases that already completed in a prior run are skipped here and
+        # recorded as skipped events, so the ledger stays honest about what re-ran.
+        resume_completed = self.completed_phases(resume_from) if resume_from else set()
+
         for phase_id in phase_ids:
+            if phase_id in resume_completed:
+                events.append(
+                    RunEvent(
+                        index=len(events),
+                        phase=phase_id,
+                        action="skip_phase",
+                        inputs_summary=f"resumed from {resume_from}",
+                        status="skipped",
+                        observation="phase already completed in the resumed run",
+                    )
+                )
+                continue
+
             # Evaluate ConfidenceGate before running the phase
             phase_config = self.config.phases.get(phase_id)
             if phase_config is not None and phase_config.confidence_threshold is not None:
@@ -1716,4 +1769,16 @@ class HarnessRunner:
             (run_dir / filename).write_text(
                 json.dumps(data, indent=2, default=str), encoding="utf-8"
             )
+
+        # Index the run so `opencontext run list/show/artifacts` (and any API
+        # consumer) can resolve run_id -> artifact dir without re-scanning disk.
+        # Best-effort: a failed index write must not fail the run itself.
+        try:
+            from opencontext_core.harness.run_store import RunStore
+
+            RunStore(self.root).register(state.run_id, run_dir)
+        except Exception:
+            # Indexing is advisory — a failed index write must not fail the run.
+            pass
+
         return run_dir
