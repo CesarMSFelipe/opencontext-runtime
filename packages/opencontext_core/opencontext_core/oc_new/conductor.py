@@ -76,6 +76,9 @@ class OcNewConductor:
             used_input_tokens=input_tokens,
             used_output_tokens=output_tokens,
         )
+        # NOTE: After tasks phase completes, produce a git work plan.
+        if phase_name == "tasks" and state.config is not None:
+            self._write_git_plan(state)
         state = self._advance(state)
         self.store.save(state)
         return state
@@ -239,6 +242,28 @@ class OcNewConductor:
         from opencontext_core.agentic.modes import should_execute_code
 
         return should_execute_code(state.config.flow_mode)
+
+    def _write_git_plan(self, state: OcNewRunState) -> None:
+        """Build a GitWorkPlan and persist it to the run directory."""
+        import json
+
+        from opencontext_core.agentic.git_plan import GitWorkPlanner
+
+        if state.config is None:
+            return
+        git_mode = state.config.git_mode
+        task_phases = [p for p in state.phases if p.status in {"passed", "warning"}]
+        tasks = [p.name for p in task_phases]
+        planner = GitWorkPlanner()
+        plan = planner.plan(
+            change_id=state.identity.change_id,
+            tasks=tasks,
+            mode=git_mode,
+        )
+        run_dir = self.root / ".opencontext" / "runs" / state.identity.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        git_plan_path = run_dir / "git_plan.json"
+        git_plan_path.write_text(json.dumps(plan.model_dump(), indent=2))
 
     def _check_budget(self, state: OcNewRunState, phase_name: str) -> object:
         """Return a BudgetDecision for *phase_name* given current run state."""

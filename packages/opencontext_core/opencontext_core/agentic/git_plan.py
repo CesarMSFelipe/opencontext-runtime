@@ -47,6 +47,12 @@ class GitWorkPlanner:
             return self._single_pr(change_id, tasks, base_branch)
         if mode == GitMode.STACKED_PRS:
             return self._stacked_prs(change_id, tasks, base_branch)
+        if mode == GitMode.LOCAL_BRANCH:
+            return self._local_branch(change_id, tasks, base_branch)
+        if mode == GitMode.COMMIT_ONLY:
+            return self._commit_only(change_id, tasks, base_branch)
+        if mode == GitMode.PER_TASK_PRS:
+            return self._per_task_prs(change_id, tasks, base_branch)
         # GitMode.NONE or any future unknown mode — return an empty plan.
         return GitWorkPlan(mode=mode, base_branch=base_branch, apply_git_changes=False)
 
@@ -63,6 +69,67 @@ class GitWorkPlanner:
             mode=GitMode.SINGLE_PR,
             base_branch=base_branch,
             work_units=[unit],
+            apply_git_changes=True,
+        )
+
+    def _local_branch(
+        self, change_id: str, tasks: list[str], base_branch: str
+    ) -> GitWorkPlan:
+        """Create a local branch without any PR or git push — apply_git_changes=False."""
+        unit = GitWorkUnit(
+            branch_name=f"feat/{change_id}",
+            pr_title=f"feat: {change_id} (local)",
+            tasks=list(tasks),
+            base_branch=base_branch,
+            description="Local branch only — no remote push or PR.",
+        )
+        return GitWorkPlan(
+            mode=GitMode.LOCAL_BRANCH,
+            base_branch=base_branch,
+            work_units=[unit],
+            apply_git_changes=False,
+        )
+
+    def _commit_only(
+        self, change_id: str, tasks: list[str], base_branch: str
+    ) -> GitWorkPlan:
+        """Commit all tasks as a single unit — no PR created."""
+        unit = GitWorkUnit(
+            branch_name=f"feat/{change_id}",
+            pr_title=f"feat: {change_id}",
+            tasks=list(tasks),
+            base_branch=base_branch,
+            description="Commits applied directly — no PR.",
+        )
+        return GitWorkPlan(
+            mode=GitMode.COMMIT_ONLY,
+            base_branch=base_branch,
+            work_units=[unit],
+            apply_git_changes=True,
+        )
+
+    def _per_task_prs(
+        self, change_id: str, tasks: list[str], base_branch: str
+    ) -> GitWorkPlan:
+        """Create one work unit (branch + PR) per task."""
+        units: list[GitWorkUnit] = []
+        prev_branch = base_branch
+        for i, task in enumerate(tasks, start=1):
+            branch = f"feat/{change_id}/task-{i}"
+            units.append(
+                GitWorkUnit(
+                    branch_name=branch,
+                    pr_title=f"feat({change_id}): task {i} — {task[:60]}",
+                    tasks=[task],
+                    base_branch=prev_branch,
+                    description=f"Per-task PR for: {task[:80]}",
+                )
+            )
+            prev_branch = branch
+        return GitWorkPlan(
+            mode=GitMode.PER_TASK_PRS,
+            base_branch=base_branch,
+            work_units=units,
             apply_git_changes=True,
         )
 
