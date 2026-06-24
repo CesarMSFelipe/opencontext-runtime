@@ -71,3 +71,11 @@ class MemoryRecord(BaseModel):
         default=0,
         description="How many times this topic has been updated. Incremented on each upsert.",
     )
+    run_id: str | None = Field(
+        default=None,
+        description="Run that produced this record (provenance link to a RunEnvelope/receipt).",
+    )
+    provenance: str | None = Field(
+        default=None,
+        description="Origin channel: 'agent', 'harvest', 'manual', or 'import'.",
+    )
