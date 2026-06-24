@@ -63,14 +63,23 @@ class UpdateChecker:
 
     @classmethod
     def get_current_version(cls) -> str:
-        """Get the currently installed version."""
+        """Get the currently installed version.
 
-        try:
-            import importlib.metadata
+        Reads ``opencontext-cli`` first so this matches what ``opencontext
+        --version`` reports, then falls back to ``opencontext-core``. Releases
+        bump every package in lockstep, so on a consistent install these agree;
+        preferring the cli package keeps the update banner from contradicting
+        ``--version`` on a split install.
+        """
 
-            return importlib.metadata.version(PACKAGE_NAME)
-        except importlib.metadata.PackageNotFoundError:
-            return "0.0.0"
+        import importlib.metadata
+
+        for pkg in ("opencontext-cli", PACKAGE_NAME):
+            try:
+                return importlib.metadata.version(pkg)
+            except importlib.metadata.PackageNotFoundError:
+                continue
+        return "0.0.0"
 
     @classmethod
     def check(cls, force: bool = False) -> UpdateCheck:
@@ -340,6 +349,31 @@ class UpdateChecker:
             "skip_version": state.skip_version,
         }
         cls.CACHE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def pending_update_notices() -> list[str]:
+    """Cached update notices, re-validated against the LIVE installed version.
+
+    One source of truth for "is an update available?", shared by every surface that
+    shows it (the menu, banners). A stale cache (written before an upgrade) never
+    nags an already-current install because ``latest`` is compared to the live
+    version, and the live version — not the cached one — is shown. ``[]`` = current.
+    """
+    notices: list[str] = []
+    try:
+        state = UpdateChecker._load_cache()
+        if state.check and state.check.latest_version:
+            live = UpdateChecker.get_current_version()
+            if UpdateChecker._compare_versions(live, state.check.latest_version) < 0:
+                notices.append(f"opencontext {live} -> {state.check.latest_version}")
+    except Exception:
+        pass
+    try:
+        for eco in EcosystemUpdateChecker.check_cached():
+            notices.append(f"{eco.name} {eco.current_version} -> {eco.latest_version}")
+    except Exception:
+        pass
+    return notices
 
 
 # ── Ecosystem Update Checker ───────────────────────────────────────────────
