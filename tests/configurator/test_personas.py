@@ -19,6 +19,13 @@ _EXPECTED = {
     "oc-professor",
     "oc-reviewer",
     "oc-tester",
+    # Contractual agentic system personas
+    "oc-context-engineer",
+    "oc-requirements",
+    "oc-planner",
+    "oc-harness-verifier",
+    "oc-archivist",
+    "oc-evolution-steward",
 }
 
 
