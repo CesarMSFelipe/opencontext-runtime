@@ -10,7 +10,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from opencontext_core.workflow.phase_result import PhaseResultEnvelope
 
 from opencontext_core.context.budgeting import estimate_tokens
 from opencontext_core.harness.budget import TokenBudgetEnforcer
@@ -44,6 +47,43 @@ class PhaseResult:
     decisions: list[HarnessDecision] = field(default_factory=list)
     trace_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_envelope(
+        self,
+        run_id: str,
+        change_id: str,
+        duration_s: float = 0.0,
+    ) -> PhaseResultEnvelope:
+        """Produce a canonical ``PhaseResultEnvelope`` from this harness result.
+
+        Maps ``GateStatus`` to the envelope's ``PhaseResultStatus`` so the
+        conductor can call ``can_advance()`` without inspecting internal gate lists.
+        """
+        from opencontext_core.workflow.phase_result import PhaseResultEnvelope
+
+        _gate_to_envelope: dict[GateStatus, str] = {
+            GateStatus.PASSED: "passed",
+            GateStatus.WARNING: "warning",
+            GateStatus.FAILED: "failed",
+            GateStatus.SKIPPED: "skipped",
+        }
+        envelope_status = _gate_to_envelope.get(self.status, "failed")
+        artifact_ids = [str(a.path) for a in self.artifacts]
+        token_usage: dict[str, int] = {}
+        if self.ledger is not None:
+            token_usage = {
+                "used": self.ledger.used_tokens,
+                "budget": self.ledger.budget_tokens,
+            }
+        return PhaseResultEnvelope(
+            run_id=run_id,
+            change_id=change_id,
+            phase=self.phase,
+            status=envelope_status,  # type: ignore[arg-type]
+            artifacts=artifact_ids,
+            token_usage=token_usage,
+            duration_s=duration_s,
+        )
 
 
 # Default per-handoff compaction budget. The forwarded prior-phase artifact is
@@ -1909,6 +1949,96 @@ class VerifyPhase(HarnessPhase):
         except Exception:
             pass  # mutation is optional
 
+        # ComplianceMatrix (additive, behind verify.compliance_matrix flag — default off).
+        # Reads the spec from .sdd/changes/*/spec.md; skips gracefully when absent.
+        compliance_matrix: Any = None
+        try:
+            from opencontext_core.config import load_config_or_defaults
+
+            _vcfg = load_config_or_defaults(state.root / "opencontext.yaml", auto_detect=False)
+            _compliance_enabled = bool(
+                getattr(getattr(_vcfg, "verify", None), "compliance_matrix", False)
+            )
+            if _compliance_enabled:
+                from opencontext_core.verify.compliance import (
+                    ComplianceMatrix,
+                    VerificationKind,
+                    VerificationStatus,
+                )
+
+                # Resolve spec path: look for any spec.md under .sdd/changes/
+                spec_path: Path | None = None
+                sdd_changes = state.root / ".sdd" / "changes"
+                if sdd_changes.exists():
+                    candidates = sorted(sdd_changes.glob("*/spec.md"))
+                    if candidates:
+                        spec_path = candidates[-1]  # use most recently modified
+
+                if spec_path is None or not spec_path.exists():
+                    gates.append(
+                        PhaseGate(
+                            id="compliance_no_spec",
+                            phase="verify",
+                            status=GateStatus.WARNING,
+                            message=(
+                                "ComplianceMatrix: no spec.md found"
+                                " — skipping requirement coverage check."
+                            ),
+                        )
+                    )
+                else:
+                    matrix = ComplianceMatrix()
+                    spec_text = spec_path.read_text(encoding="utf-8")
+                    # Parse requirement IDs from lines like "### Requirement: REQ-xxx"
+                    import re as _re
+
+                    req_ids = _re.findall(r"###\s+Requirement:\s+(REQ-\S+)", spec_text)
+                    passed_gate_ids = {g.id for g in gates if g.status == GateStatus.PASSED}
+                    for req_id in req_ids:
+                        # Mark PASS if there is a matching gate already; else MISSING
+                        matched = any(req_id.lower() in gid.lower() for gid in passed_gate_ids)
+                        matrix.add(
+                            req_id,
+                            kind=VerificationKind.GATE,
+                            status=(
+                                VerificationStatus.PASS if matched else VerificationStatus.MISSING
+                            ),
+                        )
+                    compliance_matrix = matrix
+
+                    missing_reqs = [
+                        e.requirement_id
+                        for e in matrix.iter_entries()
+                        if e.status == VerificationStatus.MISSING
+                    ]
+                    gate_status = GateStatus.WARNING if missing_reqs else GateStatus.PASSED
+                    gates.append(
+                        PhaseGate(
+                            id="compliance_matrix",
+                            phase="verify",
+                            status=gate_status,
+                            message=(
+                                f"ComplianceMatrix: {len(req_ids) - len(missing_reqs)}"
+                                f"/{len(req_ids)} requirements covered."
+                                + (
+                                    f" Missing: {', '.join(missing_reqs)}"
+                                    if missing_reqs
+                                    else ""
+                                )
+                            ),
+                            metadata={"matrix": matrix.model_dump(mode="json")},
+                        )
+                    )
+        except Exception as _cm_exc:
+            gates.append(
+                PhaseGate(
+                    id="compliance_matrix_error",
+                    phase="verify",
+                    status=GateStatus.WARNING,
+                    message=f"ComplianceMatrix: failed to build ({_cm_exc})",
+                )
+            )
+
         status = (
             GateStatus.FAILED
             if any(g.status == GateStatus.FAILED for g in gates)
@@ -1934,6 +2064,7 @@ class VerifyPhase(HarnessPhase):
                 )
             ],
             metadata={
+                "_compliance_matrix": compliance_matrix,
                 "exit_code": test_result["exit_code"],
                 "passed": test_result["passed"],
                 "failed": test_result["failed"],
