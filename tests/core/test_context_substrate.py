@@ -25,11 +25,18 @@ def test_available_tokens_matches_budget(tmp_path) -> None:
     assert report.available_tokens == 5000
 
 
-def test_pack_hash_is_not_none(tmp_path) -> None:
+def test_pack_hash_is_none_when_builder_absent(tmp_path) -> None:
+    # G2: ContextPackBuilder is not shipped in this build. The substrate
+    # builder degrades honestly: context_pack_hash is None + a UserWarning
+    # is emitted. See opencontext_core/agentic/context_substrate.py.
+    import warnings
+
     builder = ContextSubstrateBuilder(root=tmp_path)
-    report = builder.build_for_phase(task="test", phase="design", budget=4000)
-    assert report.context_pack_hash is not None
-    assert len(report.context_pack_hash) > 0
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        report = builder.build_for_phase(task="test", phase="design", budget=4000)
+    assert report.context_pack_hash is None
+    assert any("unavailable" in str(w.message) for w in caught)
 
 
 def test_not_indexed_when_no_oc_dir(tmp_path) -> None:
