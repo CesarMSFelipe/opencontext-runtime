@@ -1041,6 +1041,13 @@ def _build_parser() -> argparse.ArgumentParser:
     workflow_resume.add_argument("run_id", help="Run ID or path to saved state.json.")
     workflow_resume.add_argument("--root", default=".", help="Project root.")
 
+    # UX façade verbs — delegated to OcNewConductor / OcNewStore / AgenticReceipt.
+    # Mounted under the existing ``workflow`` namespace to avoid colliding with the
+    # top-level ``status`` (main.py:1175) and ``approvals approve`` (main.py:1080).
+    from opencontext_cli.commands.ux_cmd import add_workflow_ux_parser
+
+    add_workflow_ux_parser(workflow_sub)
+
     preset_parser = subparsers.add_parser("preset", help="Workflow preset management.")
     preset_sub = preset_parser.add_subparsers(dest="preset_command", required=True)
     preset_list = preset_sub.add_parser("list", help="List available presets.")
@@ -1361,10 +1368,15 @@ def _dispatch(args: argparse.Namespace) -> None:
         )
         return
     if command == "workflow":
-        if getattr(args, "workflow_command", None) == "resume":
+        wf_cmd = getattr(args, "workflow_command", None)
+        if wf_cmd == "resume":
             _workflow_resume(getattr(args, "run_id", ""), getattr(args, "root", "."))
+        elif wf_cmd in {"start", "status", "approve", "receipt"}:
+            from opencontext_cli.commands.ux_cmd import handle_workflow_ux
+
+            handle_workflow_ux(args)
         else:
-            _unreachable(args.workflow_command)
+            _unreachable(wf_cmd)
         return
     if command == "preset":
         _preset(
