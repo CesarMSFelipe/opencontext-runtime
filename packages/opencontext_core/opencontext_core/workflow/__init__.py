@@ -9,6 +9,12 @@ from opencontext_core.workflow.harness import (
     ToolCallPlan,
     ToolCallRequest,
 )
+from opencontext_core.workflow.state import (
+    WorkflowEvent,
+    WorkflowGate,
+    WorkflowPhase,
+    WorkflowState,
+)
 from opencontext_core.workflow.steps import WorkflowServices
 
 __all__ = [
@@ -19,6 +25,10 @@ __all__ = [
     "ToolCallPlan",
     "ToolCallRequest",
     "WorkflowEngine",
+    "WorkflowEvent",
+    "WorkflowGate",
+    "WorkflowPhase",
     "WorkflowServices",
+    "WorkflowState",
     "default_step_registry",
 ]
