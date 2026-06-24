@@ -33,12 +33,21 @@ class AgenticInstallPlan:
     git_mode: GitMode
     engram_action: str | None  # e.g. "install via brew" or "already detected" or None
     files_to_write: list[str] = field(default_factory=list)
+    provisioning_commands: list[list[str]] = field(default_factory=list)
 
 
-def build_install_plan(config: AgenticFlowConfig) -> AgenticInstallPlan:
-    """Convert an AgenticFlowConfig into a human-readable install plan."""
+def build_install_plan(
+    config: AgenticFlowConfig,
+    *,
+    agents: list[str] | None = None,
+) -> AgenticInstallPlan:
+    """Convert an AgenticFlowConfig into a human-readable install plan.
+
+    When *agents* is provided, emits per-agent Engram provisioning commands.
+    """
     engram_action = _resolve_engram_action(config)
     files = _resolve_files_to_write(config)
+    provisioning_commands = _resolve_provisioning_commands(config, agents)
     return AgenticInstallPlan(
         preset=config.preset,
         components=list(config.components),
@@ -49,6 +58,7 @@ def build_install_plan(config: AgenticFlowConfig) -> AgenticInstallPlan:
         git_mode=config.git_mode,
         engram_action=engram_action,
         files_to_write=files,
+        provisioning_commands=provisioning_commands,
     )
 
 
@@ -71,6 +81,10 @@ def render_dry_run(plan: AgenticInstallPlan) -> str:
         lines.append("  Files to write:")
         for f in plan.files_to_write:
             lines.append(f"    - {f}")
+    if plan.provisioning_commands:
+        lines.append("  Provisioning commands:")
+        for cmd in plan.provisioning_commands:
+            lines.append(f"    $ {' '.join(cmd)}")
     lines.append("")
     lines.append("Run without --dry-run to apply.")
     return "\n".join(lines)
@@ -89,6 +103,43 @@ def _resolve_engram_action(config: AgenticFlowConfig) -> str | None:
     if plan.install_command:
         return f"install via {plan.install_command[0]}"
     return "manual install required (see https://github.com/dstotijn/engram)"
+
+
+def _resolve_provisioning_commands(
+    config: AgenticFlowConfig,
+    agents: list[str] | None,
+) -> list[list[str]]:
+    """Return Engram install + setup commands based on config and agent list."""
+    from opencontext_core.agentic.config import MemoryMode
+    from opencontext_core.memory.engram_provisioning import EngramProvisioner
+
+    wants_engram = (
+        ComponentId.ENGRAM in config.components
+        or config.memory_mode in {MemoryMode.AUTO, MemoryMode.ENGRAM, MemoryMode.HYBRID, MemoryMode.ENGRAM_ONLY}
+    )
+    if not wants_engram:
+        return []
+
+    provisioner = EngramProvisioner()
+    commands: list[list[str]] = []
+    seen: set[str] = set()
+
+    effective_agents: list[str | None] = list(agents) if agents else [None]
+    for agent in effective_agents:
+        plan = provisioner.plan_install(agent=agent)
+        if not plan.detected and config.install_engram_if_missing:
+            if plan.install_command:
+                cmd_key = " ".join(plan.install_command)
+                if cmd_key not in seen:
+                    commands.append(plan.install_command)
+                    seen.add(cmd_key)
+        if plan.setup_command:
+            cmd_key = " ".join(plan.setup_command)
+            if cmd_key not in seen:
+                commands.append(plan.setup_command)
+                seen.add(cmd_key)
+
+    return commands
 
 
 def _resolve_files_to_write(config: AgenticFlowConfig) -> list[str]:
