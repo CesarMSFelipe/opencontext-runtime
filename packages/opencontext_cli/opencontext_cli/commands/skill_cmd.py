@@ -39,6 +39,18 @@ def add_skill_parser(subparsers: Any) -> None:
     validate_parser = skill_sub.add_parser("validate", help="Validate a SKILL.md file.")
     validate_parser.add_argument("path", help="Path to SKILL.md or skill directory.")
 
+    explain_parser = skill_sub.add_parser(
+        "explain", help="Explain a skill: name, triggers, sections, size."
+    )
+    explain_parser.add_argument("path", help="Path to SKILL.md or skill directory.")
+    explain_parser.add_argument("--json", action="store_true", help="JSON output.")
+
+    lint_parser = skill_sub.add_parser(
+        "lint", help="Lint a skill for prompt-soup smells (bloat, vague triggers)."
+    )
+    lint_parser.add_argument("path", help="Path to SKILL.md or skill directory.")
+    lint_parser.add_argument("--json", action="store_true", help="JSON output.")
+
 
 def handle_skill(args: Any) -> None:
     """Handle skill commands."""
@@ -51,6 +63,10 @@ def handle_skill(args: Any) -> None:
         _handle_create(args)
     elif command == "validate":
         _handle_validate(args)
+    elif command == "explain":
+        _handle_explain(args)
+    elif command == "lint":
+        _handle_lint(args)
 
 
 def _handle_list(args: Any) -> None:
@@ -185,6 +201,54 @@ def _handle_validate(args: Any) -> None:
     else:
         console.print(f"[red]Some checks failed for[/] {skill_file}")
         raise SystemExit(1)
+
+
+def _handle_explain(args: Any) -> None:
+    import json as _json
+
+    from opencontext_core.skills.lint import explain_skill
+
+    try:
+        explanation = explain_skill(args.path)
+    except FileNotFoundError as exc:
+        console.error(str(exc))
+        raise SystemExit(1) from exc
+
+    if getattr(args, "json", False):
+        print(_json.dumps(explanation.model_dump(), indent=2))
+        return
+
+    console.header(f"Skill: {explanation.name}")
+    console.print(f"Path: {explanation.path}")
+    console.print(f"Description: {explanation.description or '—'}")
+    console.print(f"Triggers: {', '.join(explanation.triggers) or '—'}")
+    console.print(f"Sections: {', '.join(explanation.sections) or '—'}")
+    console.print(f"Body lines: {explanation.body_lines}")
+    console.print(f"Estimated tokens: {explanation.estimated_tokens}")
+
+
+def _handle_lint(args: Any) -> None:
+    import json as _json
+
+    from opencontext_core.skills.lint import lint_skill
+
+    report = lint_skill(args.path)
+
+    if getattr(args, "json", False):
+        print(_json.dumps(report.model_dump(), indent=2))
+        raise SystemExit(0 if report.ok() else 1)
+
+    if not report.findings:
+        console.print(f"[green]No issues[/] {report.path}")
+        raise SystemExit(0)
+
+    _styles = {"error": "red", "warning": "yellow", "info": "cyan"}
+    for finding in report.findings:
+        style = _styles.get(finding.severity, "white")
+        console.print(
+            f"  [{style}]{finding.severity.upper()}[/]  {finding.code}: {finding.message}"
+        )
+    raise SystemExit(0 if report.ok() else 1)
 
 
 def _parse_frontmatter(content: str) -> dict[str, Any]:

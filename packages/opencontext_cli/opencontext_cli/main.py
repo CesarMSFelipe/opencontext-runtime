@@ -12,9 +12,14 @@ from typing import Any, NoReturn
 
 import yaml
 
+from opencontext_cli.commands.aicx_cmd import add_aicx_parser, handle_aicx
 from opencontext_cli.commands.benchmark_cmd import add_benchmark_parser, handle_benchmark
 from opencontext_cli.commands.bridges_cmd import add_bridges_parser, handle_bridges
 from opencontext_cli.commands.bytecode_cmd import add_bytecode_commands, handle_bytecode
+from opencontext_cli.commands.capabilities_cmd import (
+    add_capabilities_parser,
+    handle_capabilities,
+)
 from opencontext_cli.commands.ci_check_cmd import add_ci_check_parser, handle_ci_check
 from opencontext_cli.commands.config_cmd import add_config_parser, handle_config
 from opencontext_cli.commands.contract_cmd import add_contract_commands, handle_contract
@@ -31,8 +36,10 @@ from opencontext_cli.commands.persona_cmd import add_persona_parser, handle_pers
 from opencontext_cli.commands.plugin_cmd import add_plugin_parser, handle_plugin
 from opencontext_cli.commands.privacy_cmd import add_privacy_parser, handle_privacy
 from opencontext_cli.commands.profile_cmd import add_profile_parser, handle_profile
+from opencontext_cli.commands.receipt_cmd import add_receipt_parser, handle_receipt
 from opencontext_cli.commands.review_cmd import add_review_parser, handle_review
 from opencontext_cli.commands.routes_cmd import add_routes_parser, handle_routes
+from opencontext_cli.commands.run_cmd import add_run_parser, handle_run_inspect
 from opencontext_cli.commands.setup_cmd import add_setup_parser, handle_setup
 from opencontext_cli.commands.skill_cmd import add_skill_parser, handle_skill
 from opencontext_cli.commands.stack_cmd import add_stack_parser, handle_stack
@@ -362,8 +369,8 @@ class _DeprecationAwareParser(argparse.ArgumentParser):
         super().error(message)
 
 
-class _PublicHelpFormatter(argparse.HelpFormatter):
-    """Omit subcommands registered with help=argparse.SUPPRESS from the listing."""
+class _PublicHelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """Omit SUPPRESS-ed subcommands and keep the grouped epilog newlines intact."""
 
     def _format_action(self, action: argparse.Action) -> str:
         if action.help == argparse.SUPPRESS:
@@ -371,8 +378,26 @@ class _PublicHelpFormatter(argparse.HelpFormatter):
         return super()._format_action(action)
 
 
+# Mental routes through the product, shown at the bottom of `opencontext --help`
+# so the command set reads as paths, not a flat feature list (Workstream A2).
+_COMMAND_GROUPS_EPILOG = """\
+command routes:
+  Observe    demo, explain, pack, context, tokens
+  Integrate  install, setup, mcp, persona, models, capabilities
+  Operate    clarify, loop, harness, workflow, runs
+  Govern     security, privacy, prompt, ci-check, receipt, aicx
+  Learn      memory, skill, plugin, benchmark
+
+Run 'opencontext <command> --help' for details on any command.
+"""
+
+
 def _build_parser() -> argparse.ArgumentParser:
-    parser = _DeprecationAwareParser(prog="opencontext", formatter_class=_PublicHelpFormatter)
+    parser = _DeprecationAwareParser(
+        prog="opencontext",
+        formatter_class=_PublicHelpFormatter,
+        epilog=_COMMAND_GROUPS_EPILOG,
+    )
     parser.add_argument(
         "--config",
         default=_default_config_path(),
@@ -491,7 +516,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "scope",
         nargs="?",
         default="runtime",
-        choices=["runtime", "security", "project", "providers", "tokens", "tools", "deep"],
+        choices=[
+            "runtime",
+            "security",
+            "project",
+            "providers",
+            "tokens",
+            "tools",
+            "graph",
+            "deep",
+        ],
     )
     doctor_parser.add_argument("--suggest-ignore", action="store_true")
     doctor_parser.add_argument(
@@ -712,6 +746,10 @@ def _build_parser() -> argparse.ArgumentParser:
     add_uninstall_parser(subparsers)
     add_stack_parser(subparsers)
     add_profile_parser(subparsers)
+    add_receipt_parser(subparsers)
+    add_run_parser(subparsers)
+    add_capabilities_parser(subparsers)
+    add_aicx_parser(subparsers)
     add_models_parser(subparsers)
     add_persona_parser(subparsers)
     add_sync_parser(subparsers)
@@ -874,6 +912,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "When active, rules from .opencontext/privacy.yaml are enforced.",
     )
     harness_run.add_argument("--json", action="store_true", help="Output results as JSON.")
+    harness_run.add_argument(
+        "--resume",
+        default=None,
+        metavar="RUN_ID",
+        help="Resume a prior run: skip phases that already completed in RUN_ID.",
+    )
 
     harness_list = harness_sub.add_parser(
         "list",
@@ -1229,6 +1273,7 @@ def _dispatch(args: argparse.Namespace) -> None:
             getattr(args, "privacy_profile", "off"),
             getattr(args, "json", False),
             getattr(args, "run_id", None),
+            getattr(args, "resume", None),
         )
         return
     if command == "workflow":
@@ -1333,6 +1378,18 @@ def _dispatch(args: argparse.Namespace) -> None:
         return
     if command == "profile":
         sys.exit(handle_profile(args))
+    if command == "receipt":
+        handle_receipt(args)
+        return
+    if command == "runs":
+        handle_run_inspect(args)
+        return
+    if command == "capabilities":
+        handle_capabilities(args)
+        return
+    if command == "aicx":
+        handle_aicx(args)
+        return
     if command == "models":
         sys.exit(handle_models(args))
     if command == "persona":
@@ -2416,6 +2473,43 @@ def _doctor(
             console.print(f"\n[bold red]✗ {report.failures} diagnostic(s) failed[/bold red]")
         return
 
+    # ── Graph health ──────────────────────────────────────────────────
+    if scope == "graph":
+        from opencontext_core.indexing.graph_health import compute_graph_health
+
+        report = compute_graph_health(".storage/opencontext/context_graph.db")
+
+        if json_output:
+            json.dump(report.model_dump(), sys.stdout, indent=2)
+            sys.stdout.write("\n")
+            sys.exit(0 if report.ok() else 1)
+
+        console.header("Graph Health")
+        style = {
+            "healthy": "green",
+            "degraded": "yellow",
+            "empty": "yellow",
+            "unavailable": "red",
+        }.get(report.status, "white")
+        console.print(f"Status: [{style}]{report.status}[/]")
+        console.table(
+            "Graph Metrics",
+            ["Metric", "Value"],
+            [
+                ["Nodes", str(report.nodes)],
+                ["Edges", str(report.edges)],
+                ["Files", str(report.files)],
+                ["Orphan symbols", str(report.orphan_symbols)],
+                ["Dangling edges", str(report.dangling_edges)],
+                ["Languages", ", ".join(f"{k}:{v}" for k, v in report.languages.items()) or "-"],
+            ],
+        )
+        for warning in report.warnings:
+            console.warning(warning)
+        if strict and not report.ok():
+            sys.exit(1)
+        return
+
     # ── Standard scopes ───────────────────────────────────────────────
     checks = (
         run_security_doctor(runtime.config) if scope == "security" else run_doctor(runtime.config)
@@ -2961,6 +3055,7 @@ def _harness(
     privacy_profile: str = "off",
     json_output: bool = False,
     run_id: str | None = None,
+    resume_from: str | None = None,
 ) -> None:
     """Handle harness commands (run, list)."""
     from opencontext_core.harness.models import BudgetMode, PrivacyProfile
@@ -3066,6 +3161,7 @@ def _harness(
                 workflow=workflow,
                 task=task,
                 budget_mode=BudgetMode(budget_mode),
+                resume_from=resume_from,
             )
             output = {
                 "status": "completed",
