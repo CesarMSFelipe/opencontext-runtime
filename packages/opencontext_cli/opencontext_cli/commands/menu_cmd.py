@@ -34,8 +34,16 @@ def _action_header(title: str) -> None:
 def run_main_menu() -> None:
     """Show the main OpenContext menu and delegate to the selected command."""
 
-    # Preferred surface: the unified Textual home (same chrome as every screen).
-    # Returns False with no terminal; any failure degrades to the selector below.
+    # NOTE: CockpitScreen is the default bare-opencontext entry point.
+    # Falls back to HomeScreen, then to the text-only message.
+    try:
+        from opencontext_cli.tui import run_cockpit_tui
+
+        if run_cockpit_tui():
+            return
+    except Exception:
+        pass
+
     try:
         from opencontext_cli.tui import run_home_tui
 

@@ -321,7 +321,7 @@ class HomeScreen(Screen):
         self.app.exit()
 
 
-class OpenContextApp(App):
+class OpenContextApp(App):  # type: ignore[misc]
     """The single OpenContext TUI application — every screen shares this shell."""
 
     CSS = """
@@ -338,12 +338,18 @@ class OpenContextApp(App):
     Footer { background: #11161D; }
     """
 
+    SCREENS: ClassVar[dict[str, type]] = {"config": ConfigScreen, "home": HomeScreen}
+
     def __init__(self, start: str = "config") -> None:
         super().__init__()
         self._start = start
 
     def on_mount(self) -> None:
-        if self._start == "home":
+        if self._start == "cockpit":
+            from opencontext_cli.tui.cockpit import CockpitScreen
+
+            self.push_screen(CockpitScreen())
+        elif self._start == "home":
             self.push_screen(HomeScreen())
         else:
             self.push_screen(ConfigScreen())
@@ -367,4 +373,15 @@ def run_home_tui(*, headless: bool = False) -> bool:
     if not headless and not (sys.stdin.isatty() and sys.stdout.isatty()):
         return False
     OpenContextApp(start="home").run()
+    return True
+
+
+def run_cockpit_tui(*, headless: bool = False) -> bool:
+    """Open the cockpit screen (default bare-opencontext entry).
+
+    Returns False when there's no terminal; True after exit.
+    """
+    if not headless and not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return False
+    OpenContextApp(start="cockpit").run()
     return True
