@@ -104,6 +104,29 @@ class OcNewConductor:
                     }
                 )
 
+            # NOTE: Budget gate — check before emitting any NextAction.
+            if state.config is not None:
+                budget_decision = self._check_budget(state, phase_def.name)
+                if not budget_decision.allowed:
+                    state = state.model_copy(
+                        update={
+                            "current_phase": phase_def.name,
+                            "blocked_reason": budget_decision.reason,
+                            "updated_at": datetime.now(tz=UTC),
+                        }
+                    )
+                    self.store.save(state)
+                    return state.model_copy(
+                        update={
+                            "next_action": NextAction(
+                                kind="blocked",
+                                phase=phase_def.name,
+                                persona=phase_def.persona,
+                                instruction=f"Budget exhausted: {budget_decision.reason}",
+                            ),
+                        }
+                    )
+
             if phase_def.name == "approval":
                 return state.model_copy(
                     update={
@@ -216,6 +239,24 @@ class OcNewConductor:
         from opencontext_core.agentic.modes import should_execute_code
 
         return should_execute_code(state.config.flow_mode)
+
+    def _check_budget(self, state: OcNewRunState, phase_name: str) -> object:
+        """Return a BudgetDecision for *phase_name* given current run state."""
+        from opencontext_core.agentic.budget import BudgetLedger
+        from opencontext_core.agentic.budget_controller import BudgetController
+
+        import json
+
+        ledger_path = (
+            self.root / ".opencontext" / "runs" / state.identity.run_id / "budget_ledger.json"
+        )
+        if ledger_path.exists():
+            ledger = BudgetLedger.model_validate_json(ledger_path.read_text())
+        else:
+            mode = getattr(state.config, "budget_mode", "warn")
+            ledger = BudgetLedger(mode=str(mode))
+
+        return BudgetController().decide(state.config, ledger, phase_name)
 
     def _memory_policy_for(self, phase: str) -> PhaseMemoryPolicy | None:
         """Return the memory read/write policy for *phase*, or None if unknown."""
