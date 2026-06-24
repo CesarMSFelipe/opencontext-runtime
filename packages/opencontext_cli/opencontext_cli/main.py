@@ -55,6 +55,8 @@ from opencontext_cli.commands.update_cmd import (
     handle_upgrade,
 )
 from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
+from opencontext_cli.commands.evolve_cmd import add_evolve_parser, handle_evolve
+from opencontext_cli.commands.learn_cmd import add_learn_parser, handle_learn
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
 from opencontext_core.config import SecurityMode, default_config_data, load_config
 from opencontext_core.context.modes import ContextMode
@@ -1193,6 +1195,8 @@ def _build_parser() -> argparse.ArgumentParser:
     add_contract_commands(subparsers)
     add_mutation_commands(subparsers)
     add_bytecode_commands(subparsers)
+    add_evolve_parser(subparsers)
+    add_learn_parser(subparsers)
 
     # Additive shorthand namespaces. The flat commands keep working; these are
     # extra entry points that resolve to the same parser (see _ALIAS_TARGETS).
@@ -1536,6 +1540,12 @@ def _dispatch(args: argparse.Namespace) -> None:
         return sys.exit(handle_loop(args, config=None))
     if command == "bytecode":
         return sys.exit(handle_bytecode(args))
+    if command == "evolve":
+        handle_evolve(args)
+        return
+    if command == "learn":
+        handle_learn(args)
+        return
     runtime = _runtime(args.config)
     if command == "index":
         _index(runtime, args.root, args.incremental)
