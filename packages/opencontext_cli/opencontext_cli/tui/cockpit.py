@@ -54,6 +54,8 @@ class CockpitScreen(Screen):  # type: ignore[misc]
         with Vertical(id="cockpit"):
             yield Static("", id="project-summary", markup=True)
             yield Static("", id="run-state", markup=True)
+            # NOTE: PR6 — additive workflow-state panel (read from WorkflowState).
+            yield Static("", id="workflow-panel", markup=True)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -72,17 +74,27 @@ class CockpitScreen(Screen):  # type: ignore[misc]
 
         summary_widget = self.query_one("#project-summary", Static)
         run_widget = self.query_one("#run-state", Static)
+        workflow_widget = self.query_one("#workflow-panel", Static)
 
         if state is None:
             summary_widget.update(f"[{DIM}]No active run — press N to start a new change.[/]")
             run_widget.update("")
+            workflow_widget.update("")
             return
 
         summary_widget.update(
-            f"[bold {PRIMARY}]Run:[/] {state.identity.run_id}  "
-            f"[{DIM}]{state.task[:60]}[/]"
+            f"[bold {PRIMARY}]Run:[/] {state.identity.run_id}  [{DIM}]{state.task[:60]}[/]"
         )
         run_widget.update(_render_phases(state))
+        # NOTE: PR6 — project live state into WorkflowState; render panel.
+        try:
+            from opencontext_core.workflow.panel import render_workflow_panel
+            from opencontext_core.workflow.state import WorkflowState
+
+            workflow = WorkflowState.project_from(state)
+            workflow_widget.update(render_workflow_panel(workflow))
+        except Exception:
+            workflow_widget.update("")
 
     def action_settings(self) -> None:
         """Navigate to the config screen."""
