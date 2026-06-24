@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -82,6 +83,13 @@ class OcNewConductor:
         # NOTE: After archive phase completes, emit the agentic receipt.
         if phase_name == "archive" and status in {"passed", "warning"}:
             self._write_receipt(state)
+            # NOTE: PR6 — propose post-archive lessons (approval-gated, never auto-write).
+            self.propose_archive_lessons(
+                run_id=state.identity.run_id,
+                change_id=state.identity.change_id,
+                config=state.config,
+                approved=self._lessons_approved(),
+            )
         state = self._advance(state)
         self.store.save(state)
         return state
@@ -132,6 +140,24 @@ class OcNewConductor:
                             ),
                         }
                     )
+                # NOTE: G3 — ASK budget mode pauses flow for user confirmation.
+                if budget_decision.should_ask_user:
+                    return state.model_copy(
+                        update={
+                            "current_phase": phase_def.name,
+                            "blocked_reason": None,
+                            "next_action": NextAction(
+                                kind="request_approval",
+                                phase=phase_def.name,
+                                persona=phase_def.persona,
+                                instruction=(
+                                    f"Budget confirmation required before {phase_def.name}: "
+                                    f"{budget_decision.reason}"
+                                ),
+                            ),
+                            "updated_at": datetime.now(tz=UTC),
+                        }
+                    )
 
             if phase_def.name == "approval":
                 return state.model_copy(
@@ -171,6 +197,25 @@ class OcNewConductor:
                     }
                 )
 
+            # NOTE: G4 — validate approval.json content before spawning apply subagent.
+            if phase_def.name == "apply":
+                run_dir = self.root / ".opencontext" / "runs" / state.identity.run_id
+                approval_error = self._validate_approval_content(run_dir)
+                if approval_error:
+                    return state.model_copy(
+                        update={
+                            "current_phase": phase_def.name,
+                            "blocked_reason": approval_error,
+                            "next_action": NextAction(
+                                kind="blocked",
+                                phase=phase_def.name,
+                                persona=phase_def.persona,
+                                instruction=approval_error,
+                            ),
+                            "updated_at": datetime.now(tz=UTC),
+                        }
+                    )
+
             # NOTE: observe_only / engram_only / openspec_only skip code-execution phases.
             if not self._should_execute_code(state) and phase_def.name in {"apply"}:
                 return state.model_copy(
@@ -181,9 +226,7 @@ class OcNewConductor:
                             kind="observe_only",
                             phase=phase_def.name,
                             persona=phase_def.persona,
-                            instruction=(
-                                f"Flow mode skips code execution for {phase_def.name}."
-                            ),
+                            instruction=(f"Flow mode skips code execution for {phase_def.name}."),
                         ),
                         "updated_at": datetime.now(tz=UTC),
                     }
@@ -273,6 +316,11 @@ class OcNewConductor:
             budget_ledger_hash=sha256_file(run_dir / "budget_ledger.json"),
             git_work_plan_hash=sha256_file(run_dir / "git_plan.json"),
             memory_snapshot_hash=sha256_tree(run_dir),
+            # NOTE: G5 — v2 identity fields populated from runtime state.
+            trace_id=getattr(getattr(state, "identity", None), "trace_id", None) or None,
+            task=getattr(state, "task", None) or None,
+            memory_mode=config.memory_mode.value if config else None,
+            preset=(config.preset.value if config and config.preset is not None else None),
         )
         receipt_path = run_dir / "receipt.json"
         receipt_path.write_text(json.dumps(receipt.model_dump(), indent=2))
@@ -303,8 +351,6 @@ class OcNewConductor:
         """Return a BudgetDecision for *phase_name* given current run state."""
         from opencontext_core.agentic.budget import BudgetLedger
         from opencontext_core.agentic.budget_controller import BudgetController
-
-        import json
 
         ledger_path = (
             self.root / ".opencontext" / "runs" / state.identity.run_id / "budget_ledger.json"
@@ -337,9 +383,7 @@ class OcNewConductor:
 
         from opencontext_core.agentic.budget import BudgetLedger, PhaseBudget
 
-        ledger_path = (
-            self.root / ".opencontext" / "runs" / run_id / "budget_ledger.json"
-        )
+        ledger_path = self.root / ".opencontext" / "runs" / run_id / "budget_ledger.json"
         if ledger_path.exists():
             ledger = BudgetLedger.model_validate_json(ledger_path.read_text())
         else:
@@ -358,12 +402,31 @@ class OcNewConductor:
     def _replace_phase(self, state: OcNewRunState, updated: PhaseState) -> OcNewRunState:
         return state.model_copy(
             update={
-                "phases": [
-                    updated if p.name == updated.name else p
-                    for p in state.phases
-                ],
+                "phases": [updated if p.name == updated.name else p for p in state.phases],
                 "updated_at": datetime.now(tz=UTC),
             }
+        )
+
+    def _validate_approval_content(self, run_dir: Path) -> str | None:
+        """Return a block reason if approval.json is missing or not approved, else None.
+
+        Fail-closed: parse errors and IO errors also return a block reason.
+        Approval is valid when data.get("status") == "approved" OR data.get("approved") is True.
+        """
+        approval_path = run_dir / "approval.json"
+        if not approval_path.exists():
+            # Existence is checked separately by _missing_artifacts; if we reach
+            # here without the file, treat it as unapproved (fail-closed).
+            return "approval.json not found"
+        try:
+            data = json.loads(approval_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return "approval.json is not valid JSON"
+        if data.get("status") == "approved" or data.get("approved") is True:
+            return None
+        return (
+            f"approval.json not approved: "
+            f"status={data.get('status')!r}, approved={data.get('approved')!r}"
         )
 
     def _missing_artifacts(self, state: OcNewRunState, phase_def: PhaseDefinition) -> list[str]:
@@ -374,3 +437,59 @@ class OcNewConductor:
             if not (run_dir / artifact).exists() and not (spec_dir / artifact).exists():
                 missing.append(artifact)
         return missing
+
+    # NOTE: PR6 — additive post-archive lesson proposal (approval-gated).
+    def _lessons_approved(self) -> bool:
+        """Return True iff the user has explicitly opted in to lesson capture.
+
+        Honour the ``OPENCONTEXT_CAPTURE_LESSONS`` env-var as a structured
+        opt-in. AUTOMATIC flow without this flag MUST NOT auto-write.
+        """
+        import os
+
+        return os.environ.get("OPENCONTEXT_CAPTURE_LESSONS", "").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+    def propose_archive_lessons(
+        self,
+        run_id: str,
+        change_id: str,
+        *,
+        approved: bool = False,
+        config: AgenticFlowConfig | None = None,
+        lessons: list[str] | None = None,
+    ) -> Path | None:
+        """Approval-gated post-archive lesson proposal.
+
+        Returns the path of the written proposal on success; None when
+        skipped. NEVER writes under ``~/.claude/skills/``; the project
+        namespace ``.opencontext/runs/<run_id>/lessons.json`` is used.
+        """
+        if not approved:
+            return None
+        import json
+
+        run_dir = self.root / ".opencontext" / "runs" / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        proposal_path = run_dir / "lessons.json"
+        # ponytail: fail-closed — assert the resolved path never touches the user home.
+        home = Path.home()
+        try:
+            proposal_path.resolve().relative_to(home.resolve())
+        except ValueError:
+            pass
+        else:
+            raise RuntimeError("propose_archive_lessons would write under the user home; aborting")
+        flow_mode = getattr(getattr(config, "flow_mode", None), "value", "automatic")
+        payload = {
+            "run_id": run_id,
+            "change_id": change_id,
+            "flow_mode": flow_mode,
+            "lessons": list(lessons or []),
+        }
+        proposal_path.write_text(json.dumps(payload, indent=2))
+        return proposal_path
