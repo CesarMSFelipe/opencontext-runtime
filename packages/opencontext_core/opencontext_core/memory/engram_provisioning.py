@@ -37,13 +37,18 @@ class EngramInstallPlan:
     message: str
 
 
-def _install_command() -> list[str] | None:
-    """Return the first usable install command or None if none found."""
+def _probe_package_managers() -> list[str] | None:
+    """Probe for a usable package manager and return its install command, or None."""
     if sys.platform == "darwin" and shutil.which("brew"):
         return ["brew", "install", "gentleman-programming/tap/engram"]
     if sys.platform == "win32" and shutil.which("scoop"):
         return ["scoop", "install", "engram"]
     return None
+
+
+def _install_command() -> list[str] | None:
+    """Return the first usable install command or None if none found."""
+    return _probe_package_managers()
 
 
 def _setup_command(agent: str | None) -> list[str] | None:
