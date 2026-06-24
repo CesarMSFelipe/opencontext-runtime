@@ -1035,9 +1035,22 @@ class OpenContextRuntime:
                 return SamplingGateway(sampler, model=model_config.model)
         if model_config.provider == "mock":
             return MockLLMGateway()
-        # Air-gapped mode must never reach an external provider.
+        # Air-gapped mode must never reach an external provider — but it must also
+        # not crash purely-local commands. index/context/explain/pack build the
+        # runtime (and thus a gateway) yet never call out to a model, so raising
+        # here broke offline use of the very features air-gapped exists to protect.
+        # Degrade to the LOCAL mock gateway with a loud warning instead — the same
+        # way an unknown provider is handled just below. Mock never reaches an
+        # external provider, so the air-gapped guarantee still holds; an actual
+        # generation attempt simply gets mock output it can act on, not a crash.
         if air_gapped:
-            raise ConfigurationError("air_gapped mode forbids external LLM providers.")
+            warnings.warn(
+                "air_gapped mode: no external LLM provider — using the local mock "
+                "gateway. Local features (index, context, explain, pack) work; for "
+                "real generation, configure a local model such as ollama.",
+                stacklevel=2,
+            )
+            return MockLLMGateway()
         from opencontext_core.llm.provider_gateway import build_provider_gateway
 
         gateway = build_provider_gateway(model_config.provider, model_config.model)

@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from opencontext_core.config import OpenContextConfig, default_config_data
-from opencontext_core.errors import ConfigurationError, ProviderError
+from opencontext_core.errors import ProviderError
 from opencontext_core.llm.provider_gateway import ProviderGateway, build_provider_gateway
 from opencontext_core.models.llm import LLMRequest
 from opencontext_core.runtime import OpenContextRuntime
@@ -66,7 +66,15 @@ def test_runtime_with_real_provider_builds_without_raising(monkeypatch: pytest.M
     assert runtime.llm_gateway is not None  # built, not raised
 
 
-def test_air_gapped_forbids_external_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_air_gapped_degrades_to_local_mock_not_external(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Air-gapped must never reach an external provider — but it must also not crash
+    # purely-local commands (index/context/explain/pack build the runtime yet never
+    # generate). So _gateway_from_config degrades to the LOCAL mock gateway with a
+    # warning instead of raising. Mock never calls out, so the guarantee holds.
+    from opencontext_core.llm.mock import MockLLMGateway
+
     data = default_config_data()
     data["models"]["default"]["provider"] = "anthropic"
     data["security"]["mode"] = "air_gapped"
@@ -74,5 +82,6 @@ def test_air_gapped_forbids_external_provider(monkeypatch: pytest.MonkeyPatch) -
     config = OpenContextConfig.model_validate(data)
     runtime = OpenContextRuntime.__new__(OpenContextRuntime)  # bypass __init__ wiring
     runtime.config = config
-    with pytest.raises(ConfigurationError):
-        runtime._gateway_from_config()
+    with pytest.warns(UserWarning, match="air_gapped"):
+        gateway = runtime._gateway_from_config()
+    assert isinstance(gateway, MockLLMGateway)  # local, never external
