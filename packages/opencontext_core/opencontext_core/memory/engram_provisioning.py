@@ -2,7 +2,7 @@
 
 Design decisions:
 - detect() delegates to engram_bridge.detect_engram() so there is one source of truth.
-- plan_install() probes brew/scoop/go and returns an InstallPlan; if no PM is found
+- plan_install() probes brew/scoop and returns an InstallPlan; if no PM is found
   it returns install_command=None and never raises.
 - install() only runs subprocess when yes=True; raises RuntimeError when detection fails
   and yes=False so the caller can prompt the user.
@@ -15,6 +15,17 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
+# NOTE: Map of known agent names to their engram setup sub-command argument.
+_AGENT_SETUP_MAP: dict[str, str] = {
+    "claude-code": "claude-code",
+    "codex": "codex",
+    "opencode": "opencode",
+    "cursor": "cursor",
+    "windsurf": "windsurf",
+    "aider": "aider",
+    "generic": "generic",
+}
+
 
 @dataclass(frozen=True)
 class EngramInstallPlan:
@@ -26,15 +37,22 @@ class EngramInstallPlan:
     message: str
 
 
-def _probe_package_managers() -> list[str] | None:
+def _install_command() -> list[str] | None:
     """Return the first usable install command or None if none found."""
     if sys.platform == "darwin" and shutil.which("brew"):
-        return ["brew", "install", "engram"]
+        return ["brew", "install", "gentleman-programming/tap/engram"]
     if sys.platform == "win32" and shutil.which("scoop"):
         return ["scoop", "install", "engram"]
-    if shutil.which("go"):
-        return ["go", "install", "github.com/dstotijn/engram@latest"]
     return None
+
+
+def _setup_command(agent: str | None) -> list[str] | None:
+    """Return the engram setup command for *agent*, or None if not in the known map."""
+    if not agent:
+        return None
+    if agent not in _AGENT_SETUP_MAP:
+        return None
+    return ["engram", "setup", _AGENT_SETUP_MAP[agent]]
 
 
 class EngramProvisioner:
@@ -55,27 +73,24 @@ class EngramProvisioner:
             return EngramInstallPlan(
                 detected=True,
                 install_command=None,
-                setup_command=None,
+                setup_command=_setup_command(agent),
                 message="Engram is already installed.",
             )
-        cmd = _probe_package_managers()
+        cmd = _install_command()
         if cmd is None:
             return EngramInstallPlan(
                 detected=False,
                 install_command=None,
                 setup_command=None,
                 message=(
-                    "No supported package manager found (brew/scoop/go). "
-                    "Install Engram manually: https://github.com/dstotijn/engram"
+                    "No supported package manager found (brew/scoop). "
+                    "Install Engram manually: https://github.com/gentleman-programming/engram"
                 ),
             )
-        setup: list[str] | None = None
-        if agent:
-            setup = ["engram", "setup", "--agent", agent]
         return EngramInstallPlan(
             detected=False,
             install_command=cmd,
-            setup_command=setup,
+            setup_command=_setup_command(agent),
             message=f"Engram can be installed via: {' '.join(cmd)}",
         )
 
