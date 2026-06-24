@@ -221,18 +221,27 @@ class RunReceipt(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    schema_version: str = Field(default="opencontext.run_receipt.v2")
     run_id: str = Field(description="Run id.")
     workflow_id: str = Field(description="Workflow id.")
     policy_hash: str = Field(description="Policy hash.")
     context_pack_hash: str = Field(description="Context pack hash.")
     prompt_hash: str = Field(description="Prompt hash.")
-    provider: str = Field(description="Provider.")
-    model: str = Field(description="Model.")
+    provider: str = Field(description="Requested provider.")
+    model: str = Field(description="Requested model.")
+    actual_provider: str | None = Field(default=None)
+    actual_model: str | None = Field(default=None)
+    model_hint_honored: bool | None = Field(default=None)
+    envelope_hash: str | None = Field(default=None)
+    artifacts_hash: str | None = Field(default=None)
     trace_id: str = Field(description="Trace id.")
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
     security_decisions: list[str] = Field(default_factory=list)
     cache_decisions: list[str] = Field(default_factory=list)
+    policy_decisions: list[str] = Field(default_factory=list)
+    tool_decisions: list[str] = Field(default_factory=list)
+    quality_status: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
 
 
@@ -251,8 +260,13 @@ class RunReceiptGenerator:
         trace_id: str,
         input_tokens: int,
         output_tokens: int,
+        quality_status: str | None = None,
     ) -> RunReceipt:
-        """Generate a receipt from hashed artifacts."""
+        """Generate a receipt from hashed artifacts.
+
+        ``quality_status`` (optional) records the run's quality-gate verdict so a
+        receipt carries the verification outcome, not just token/security facts.
+        """
 
         return RunReceipt(
             run_id=f"run-{uuid4().hex[:12]}",
@@ -265,6 +279,7 @@ class RunReceiptGenerator:
             trace_id=trace_id,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            quality_status=quality_status,
         )
 
 
