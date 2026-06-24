@@ -32,8 +32,8 @@ tmp/opencontext-proof/
 # Generated knowledge graph viewer (created by `opencontext knowledge-graph view`)
 opencontext-kg-view.html
 
-# SDD development workspace (local only)
-openspec/
+# SDD development workspace (local only — root only, not source packages)
+/openspec/
 
 # Local agent harness state and generated analysis output
 .agents/
@@ -59,8 +59,3 @@ Thumbs.db
 # Claude Code agent worktrees (transient, not project-owned)
 .claude/worktrees/
 .tools/*
-
-# opencontext:storage:start
-.storage/
-.opencontext/
-# opencontext:storage:end
