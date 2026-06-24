@@ -35,6 +35,34 @@ class RouteScanner(Protocol):
         """Scan project files and return detected routes."""
 
 
+class ProfileSignal(BaseModel):
+    """A framework-specific structural signal surfaced by a profile scanner.
+
+    A signal is one piece of stack-aware evidence — a Drupal hook, a service
+    definition, a permission — located at a file/line. Profile scanners emit
+    these so the runtime can ground context in framework structure, not just
+    generic symbols.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    profile: str = Field(description="Profile that produced this signal (e.g. 'drupal').")
+    kind: str = Field(description="Signal kind, e.g. 'hook', 'route', 'service', 'permission'.")
+    name: str = Field(description="Signal identifier (hook name, route id, etc.).")
+    file_path: str = Field(description="Project-relative file path.")
+    line: int = Field(default=0, ge=0, description="Line number in source file (0 if unknown).")
+    detail: str = Field(default="", description="Human-readable description of the signal.")
+
+
+class ProfileScanner(Protocol):
+    """Protocol for framework-specific structural scanners."""
+
+    profile: str
+
+    def scan(self, project_root: Path, paths: Sequence[str] = ()) -> list[ProfileSignal]:
+        """Scan project files and return detected profile signals."""
+
+
 class ProfileDetectionResult(BaseModel):
     """Detection result emitted by a technology profile."""
 
