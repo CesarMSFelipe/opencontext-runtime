@@ -54,6 +54,8 @@ class OcNewConductor:
         status: str = "passed",
         artifact_paths: list[str] | None = None,
         warnings: list[str] | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ) -> OcNewRunState:
         state = self.store.load(run_id)
         phase = state.phase(phase_name)  # type: ignore[arg-type]
@@ -68,7 +70,12 @@ class OcNewConductor:
             }
         )
         state = self._replace_phase(state, updated)
-        self._record_phase_budget(run_id, phase_name)
+        self._record_phase_budget(
+            run_id,
+            phase_name,
+            used_input_tokens=input_tokens,
+            used_output_tokens=output_tokens,
+        )
         state = self._advance(state)
         self.store.save(state)
         return state
