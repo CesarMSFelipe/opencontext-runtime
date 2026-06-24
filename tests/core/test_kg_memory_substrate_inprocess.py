@@ -90,17 +90,18 @@ class TestKgMemorySubstrateInProcess:
             print(json.dumps(summary, indent=2, default=str)[:2000])
 
             assert "error" not in result, f"verified-context handler errored: {result}"
+            data = result.get("data", result)
             # Real verified pipeline shape (gates/trust/trace), not the raw fallback.
-            assert result.get("trace_id"), "no trace id — pipeline did not run"
-            assert result.get("trust_decision"), "no trust decision in verified result"
-            context = result.get("context", "")
+            assert data.get("trace_id"), "no trace id — pipeline did not run"
+            assert data.get("trust_decision"), "no trust decision in verified result"
+            context = data.get("context", "")
             assert isinstance(context, str) and context.strip(), "verified context is empty"
             # The KG ranked the real symbols: auth.py is the impl, login.py the caller.
             assert "auth.py" in context, f"expected auth.py in pack, got:\n{context}"
             assert "authenticate_user" in context, "expected the target symbol in the pack"
             assert "login.py" in context, "caller login.py should be surfaced by the call graph"
             # Real, non-zero token accounting.
-            assert int(result.get("estimated_tokens", 0)) > 0, "pack reported zero tokens"
+            assert int(data.get("estimated_tokens", 0)) > 0, "pack reported zero tokens"
         finally:
             server.close()
 
@@ -124,10 +125,11 @@ class TestKgMemorySubstrateInProcess:
             print(json.dumps(saved, indent=2, default=str))
 
             assert "error" not in saved, f"memory save degraded/errored: {saved}"
-            assert saved.get("id"), "memory save returned no id"
-            assert saved.get("backend"), "memory save returned no backend (store not wired)"
-            assert saved.get("layer") == "semantic"
-            saved_id = saved["id"]
+            saved_data = saved.get("data", saved)
+            assert saved_data.get("id"), "memory save returned no id"
+            assert saved_data.get("backend"), "memory save returned no backend (store not wired)"
+            assert saved_data.get("layer") == "semantic"
+            saved_id = saved_data["id"]
 
             found = server._call_tool(
                 "opencontext_memory_search",
@@ -137,7 +139,7 @@ class TestKgMemorySubstrateInProcess:
             print(json.dumps(found, indent=2, default=str))
 
             assert "error" not in found, f"memory search errored: {found}"
-            results = found.get("results", [])
+            results = found.get("data", found).get("results", [])
             assert results, "memory search returned no records for a just-saved fact"
             ids = [r.get("id") for r in results]
             assert saved_id in ids, f"saved record {saved_id} not recalled; got ids {ids}"

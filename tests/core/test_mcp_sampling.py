@@ -157,7 +157,7 @@ def test_opencontext_run_drives_harness_with_host_sampler(
     out = server._call_tool("opencontext_run", {"task": "do X", "workflow": "sdd"})
 
     assert captured == {"workflow": "sdd", "task": "do X"}
-    assert out["host_model_used"] is True
+    assert out["data"]["host_model_used"] is True
     assert out["status"] == "passed"
 
 

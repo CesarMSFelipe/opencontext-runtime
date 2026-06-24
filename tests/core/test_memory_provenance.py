@@ -102,8 +102,8 @@ def test_mcp_save_accepts_provenance(tmp_path: Path) -> None:
         {"content": "fact", "layer": "semantic", "run_id": "run-7", "provenance": "agent"},
     )
     assert "error" not in result, result
-    assert result.get("run_id") == "run-7"
-    assert result.get("provenance") == "agent"
+    assert result["data"].get("run_id") == "run-7"
+    assert result["data"].get("provenance") == "agent"
     server.close()
 
 

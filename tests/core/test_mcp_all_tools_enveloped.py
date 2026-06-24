@@ -1,10 +1,10 @@
 """Tests for MCP tool result envelope contracts in _call_tool.
 
 Envelope coverage by path:
-  - denied → always ToolResultEnvelope (status=denied)
-  - unknown tool → always ToolResultEnvelope (status=failed)
-  - exception → always ToolResultEnvelope (status=failed)
-  - success → raw domain dict (per-handler adoption is a future step; see _call_tool docstring)
+  - denied → ToolResultEnvelope (status=denied), backward-compat error/reason keys
+  - unknown tool → ToolResultEnvelope (status=failed), backward-compat error key
+  - exception → ToolResultEnvelope (status=failed), backward-compat error key
+  - success → ToolResultEnvelope (status=passed), payload under data
 """
 from __future__ import annotations
 
@@ -54,8 +54,7 @@ def test_exception_returns_envelope():
     assert result.get("error") == "boom"
 
 
-def test_success_returns_domain_dict():
-    # Successful handlers return raw domain dicts — envelope adoption is per-handler.
+def test_success_returns_envelope_with_data():
     server = _make_server()
 
     def fake_handler(_params):
@@ -64,8 +63,11 @@ def test_success_returns_domain_dict():
     with patch.object(server, "_handlers", return_value={"opencontext_search": fake_handler}):
         result = server._call_tool("opencontext_search", {})
 
-    assert result.get("items") == [1, 2, 3]
-    assert result.get("count") == 3
+    assert result.get("schema_version") == "opencontext.mcp_tool_result.v1"
+    assert result.get("status") == "passed"
+    assert result.get("tool") == "opencontext_search"
+    assert result.get("data") == {"items": [1, 2, 3], "count": 3}
+    assert "error" not in result
 
 
 def test_denied_has_backward_compat_error_key():

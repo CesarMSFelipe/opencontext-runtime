@@ -121,8 +121,8 @@ class TestMemorySave:
             {"content": "JWT tokens are used for login auth"},
         )
         assert "error" not in result, result
-        assert result.get("layer") == "episodic"
-        assert result.get("id")
+        assert result["data"].get("layer") == "episodic"
+        assert result["data"].get("id")
         server.close()
 
     def test_explicit_layer_and_key_round_trips_via_search(self, tmp_path: Path) -> None:
@@ -139,15 +139,15 @@ class TestMemorySave:
             },
         )
         assert "error" not in save, save
-        assert save.get("layer") == "failure"
-        saved_id = save["id"]
+        assert save["data"].get("layer") == "failure"
+        saved_id = save["data"]["id"]
 
         found = server._call_tool(
             "opencontext_memory_search",
             {"query": "payment retry race"},
         )
         assert "error" not in found, found
-        ids = [r.get("id") for r in found.get("results", [])]
+        ids = [r.get("id") for r in found["data"].get("results", [])]
         assert saved_id in ids
         server.close()
 
@@ -158,7 +158,7 @@ class TestMemorySave:
         server = _server_with_store(tmp_path, store)
         a = server._call_tool("opencontext_memory_save", {"content": "same text"})
         b = server._call_tool("opencontext_memory_save", {"content": "same text"})
-        assert a["id"] != b["id"]
+        assert a["data"]["id"] != b["data"]["id"]
         # both persisted (no silent topic-key upsert/overwrite)
         listed = store.list_records(limit=50)
         assert len({r.id for r in listed}) >= 2
@@ -246,7 +246,7 @@ class TestMemorySaveBackendReporting:
         server = _server_with_store(tmp_path, composite)
         result = server._call_tool("opencontext_memory_save", {"content": "durable fact"})
         assert "error" not in result, result
-        assert result.get("layer") == "episodic"
+        assert result["data"].get("layer") == "episodic"
         server.close()
 
     def test_engramless_save_reports_degraded_local_backend(self, tmp_path: Path) -> None:
@@ -258,8 +258,8 @@ class TestMemorySaveBackendReporting:
         )
         server = _server_with_store(tmp_path, composite)
         result = server._call_tool("opencontext_memory_save", {"content": "durable fact"})
-        assert result.get("backend") == "local"
-        assert result.get("degraded") is True
+        assert result["data"].get("backend") == "local"
+        assert result["data"].get("degraded") is True
         server.close()
 
     def test_local_layer_is_not_degraded(self, tmp_path: Path) -> None:
@@ -274,8 +274,8 @@ class TestMemorySaveBackendReporting:
             "opencontext_memory_save",
             {"content": "a failing pattern", "layer": "failure"},
         )
-        assert result.get("backend") == "local"
-        assert result.get("degraded") is False
+        assert result["data"].get("backend") == "local"
+        assert result["data"].get("degraded") is False
         server.close()
 
     def test_plain_local_store_reports_local_backend(self, tmp_path: Path) -> None:
@@ -283,8 +283,8 @@ class TestMemorySaveBackendReporting:
 
         server = _server_with_store(tmp_path, _local_store(tmp_path))
         result = server._call_tool("opencontext_memory_save", {"content": "fact"})
-        assert result.get("backend") == "local"
-        assert result.get("degraded") is False
+        assert result["data"].get("backend") == "local"
+        assert result["data"].get("degraded") is False
         server.close()
 
 
@@ -310,7 +310,7 @@ class TestMemorySearchContext:
             {"query": "scoped record", "scope": "failure"},
         )
         assert "error" not in scoped, scoped
-        layers = {r.get("layer") for r in scoped.get("results", [])}
+        layers = {r.get("layer") for r in scoped["data"].get("results", [])}
         assert layers <= {"failure"}
         server.close()
 
@@ -336,8 +336,8 @@ class TestMemorySearchContext:
         ctx = server._call_tool("opencontext_memory_context", {"query": "caching layers"})
         assert "error" not in ctx, ctx
         # context is returned as a markdown string
-        assert isinstance(ctx.get("context"), str)
-        assert "caching layers" in ctx["context"]
+        assert isinstance(ctx["data"].get("context"), str)
+        assert "caching layers" in ctx["data"]["context"]
         after = len(store.list_records(limit=50))
         assert after == before  # no new write
         server.close()
@@ -349,7 +349,7 @@ class TestMemoryJudge:
             "opencontext_memory_save",
             {"content": "belief under judgement", "layer": "failure"},
         )
-        return str(result["id"])
+        return str(result["data"]["id"])
 
     def test_reinforce_curates_one_record(self, tmp_path: Path) -> None:
         store = _local_store(tmp_path)

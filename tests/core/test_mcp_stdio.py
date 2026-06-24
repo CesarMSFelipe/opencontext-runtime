@@ -69,7 +69,7 @@ class TestTraceTool:
             },
         )
         assert "error" in result
-        assert "SYMBOL_NOT_FOUND" in result.get("code", "")
+        assert "SYMBOL_NOT_FOUND" in result["data"].get("code", "")
         server.close()
 
     def test_trace_requires_both_params(self, tmp_path: Path) -> None:
@@ -161,9 +161,9 @@ class TestMCPServer:
 
         server = MCPServer(db_path=tmp_path / "test.db")
         result = server._call_tool("opencontext_status", {})
-        assert result["indexed"] is False
-        assert result["nodes"] == 0
-        assert result["edges"] == 0
+        assert result["data"]["indexed"] is False
+        assert result["data"]["nodes"] == 0
+        assert result["data"]["edges"] == 0
         server.close()
 
     def test_explicit_max_nodes_is_honored(self, tmp_path: Path) -> None:
@@ -201,7 +201,7 @@ class TestMCPServer:
             # MCP tools/call envelope: a content array plus structured payload.
             assert result["content"][0]["type"] == "text"
             assert result["isError"] is False
-            assert "indexed" in result["structuredContent"]
+            assert "indexed" in result["structuredContent"]["data"]
         server.close()
 
     def test_notifications_initialized_gets_no_response(self, tmp_path: Path) -> None:
@@ -249,7 +249,7 @@ class TestMCPPolicyEnforcement:
         server.policy = default_policy
         result = server._call_tool("opencontext_status", {})
         assert "error" not in result or "denied" not in result.get("error", "").lower()
-        assert result.get("indexed") is False
+        assert result["data"].get("indexed") is False
         server.close()
 
     def test_unapproved_tool_is_denied_before_execution(self, tmp_path: Path) -> None:
@@ -343,8 +343,8 @@ def test_context_tool_injects_project_profile(tmp_path: Path) -> None:
         server.close()
 
     assert "error" not in result, result
-    assert result["context"].startswith("## Project Profile")
-    assert "Serve a knowledge graph to agents." in result["context"]
+    assert result["data"]["context"].startswith("## Project Profile")
+    assert "Serve a knowledge graph to agents." in result["data"]["context"]
 
 
 def test_context_tool_has_no_profile_section_when_absent(tmp_path: Path) -> None:
@@ -356,4 +356,4 @@ def test_context_tool_has_no_profile_section_when_absent(tmp_path: Path) -> None
         server.close()
 
     assert "error" not in result, result
-    assert "## Project Profile" not in result["context"]
+    assert "## Project Profile" not in result["data"]["context"]

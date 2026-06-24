@@ -165,10 +165,10 @@ class TestQualityScopeAll:
         result = server._call_tool(_TOOL, {"scope": "all"})
         assert "error" not in result, result
         # The report-dict shape ci-check run speaks.
-        assert set(result) >= {"summary", "results", "health", "delta"}
+        assert set(result["data"]) >= {"summary", "results", "health", "delta"}
         # One file-level import cycle detected.
-        assert result["health"]["metrics"]["cycles"] == 1
-        rules = {row["check"] for row in result["results"]}
+        assert result["data"]["health"]["metrics"]["cycles"] == 1
+        rules = {row["check"] for row in result["data"]["results"]}
         assert "max_cycles" in rules
         server.close()
 
@@ -177,8 +177,8 @@ class TestQualityScopeAll:
         _make_project(tmp_path)
         server = _server(tmp_path)
         result = server._call_tool(_TOOL, {"scope": "all"})
-        assert result["health"]["score"] == 9600
-        assert result["health"]["components"]["cycles"] == 400
+        assert result["data"]["health"]["score"] == 9600
+        assert result["data"]["health"]["components"]["cycles"] == 400
         server.close()
 
     def test_clean_project_scores_perfect_and_no_findings(self, tmp_path: Path) -> None:
@@ -187,11 +187,11 @@ class TestQualityScopeAll:
         server = _server(tmp_path)
         result = server._call_tool(_TOOL, {"scope": "all"})
         assert "error" not in result, result
-        assert result["health"]["metrics"]["cycles"] == 0
-        assert result["health"]["score"] == 10000
-        assert result["results"] == []
+        assert result["data"]["health"]["metrics"]["cycles"] == 0
+        assert result["data"]["health"]["score"] == 10000
+        assert result["data"]["results"] == []
         # No cycle, no boundary, no over-threshold complexity -> not blocking.
-        assert result["summary"]["success"] is True
+        assert result["data"]["summary"]["success"] is True
         server.close()
 
 
@@ -207,8 +207,8 @@ class TestQualityScopeDiff:
         server = _server(tmp_path)
         result = server._call_tool(_TOOL, {"scope": "diff"})
         assert "error" not in result, result
-        assert result["health"]["metrics"]["cycles"] == 1
-        rules = {row["check"] for row in result["results"]}
+        assert result["data"]["health"]["metrics"]["cycles"] == 1
+        rules = {row["check"] for row in result["data"]["results"]}
         assert "max_cycles" in rules
         server.close()
 
@@ -232,8 +232,8 @@ class TestQualityScopeDiff:
         server = _server(tmp_path)
         result = server._call_tool(_TOOL, {"scope": "diff"})
         assert "error" not in result, result
-        assert set(result) >= {"summary", "results", "health", "delta"}
-        assert result["results"] == []
+        assert set(result["data"]) >= {"summary", "results", "health", "delta"}
+        assert result["data"]["results"] == []
         server.close()
 
 
@@ -339,7 +339,7 @@ class TestQualityDegradesHonestly:
         result = server._call_tool(_TOOL, {"scope": "all", "rules": str(cfg)})
         assert "error" not in result, result
         # Still finds the cycle; the rules file simply selected strict mode.
-        assert result["health"]["metrics"]["cycles"] == 1
+        assert result["data"]["health"]["metrics"]["cycles"] == 1
         server.close()
 
     def test_handler_returns_dict_not_raise_on_bad_root(self, tmp_path: Path) -> None:
@@ -421,7 +421,7 @@ class TestQualityEvolutionTrend:
         server.close()
 
         assert "error" not in result, result
-        assert result["trend"] == {
+        assert result["data"]["trend"] == {
             "latest": 9600,
             "previous": 9000,
             "delta": 600,
@@ -437,5 +437,5 @@ class TestQualityEvolutionTrend:
         result = server._call_tool(_TOOL, {"scope": "all"})
         server.close()
 
-        assert result["trend"] == {"latest": 0, "previous": 0, "delta": 0, "count": 0}
+        assert result["data"]["trend"] == {"latest": 0, "previous": 0, "delta": 0, "count": 0}
         assert not (tmp_path / ".opencontext").exists()

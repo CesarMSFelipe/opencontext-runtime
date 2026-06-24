@@ -755,10 +755,9 @@ class MCPServer:
         the call.
 
         Returns a :class:`~opencontext_core.mcp.schemas.ToolResultEnvelope`
-        dict for denied/failed cases; successful handlers return their own
-        domain dicts (envelope adoption per-handler is a future step).
-        Backward-compat keys ``error`` and ``reason`` are included so
-        existing callers that check ``"error" in result`` still work.
+        dict for all outcomes. Success payload is under ``data``; denied/failed
+        cases also include backward-compat ``error``/``reason`` keys so callers
+        that check ``"error" in result`` still work.
         """
 
         from opencontext_core.mcp.schemas import (
@@ -795,7 +794,22 @@ class MCPServer:
             return d
 
         try:
-            return cast("dict[str, Any]", handler(params))
+            payload = cast("dict[str, Any]", handler(params))
+            # Handlers that detect their own errors return {"error": ...} dicts.
+            # Surface the error key so _to_tool_result sets isError=True.
+            if "error" in payload:
+                d = ToolResultEnvelope(
+                    tool=name,
+                    status="failed",
+                    data=payload,
+                ).model_dump()
+                d["error"] = payload["error"]
+                return d
+            return ToolResultEnvelope(
+                tool=name,
+                status="passed",
+                data=payload,
+            ).model_dump()
         except Exception as exc:
             d = ToolResultEnvelope(
                 tool=name,
