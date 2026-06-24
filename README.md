@@ -5,7 +5,12 @@
 <h1 align="center">OpenContext Runtime</h1>
 
 <p align="center">
-  <strong>Deterministic context for AI coding agents.</strong>
+  <strong>Local control plane for AI software engineering agents.</strong>
+</p>
+
+<p align="center">
+  Verified context · governed workflows · secure MCP tools · project memory<br>
+  · quality gates · auditable receipts — across your existing coding agents.
 </p>
 
 <p align="center">
