@@ -123,13 +123,17 @@ class BrandConsole:
         self.print(f"[{BRAND_DIM}]{message}[/{BRAND_DIM}]")
 
     def header(self, title: str) -> None:
-        """Print a branded header panel."""
+        """Print a branded header — the logo plus a titled panel — so every command
+        surface (install, status, doctor, uninstall…) carries the same brand chrome
+        as the interactive menus, not a bare title rule."""
         if self._console:
+            for line in COMPACT_LOGO:
+                self._console.print(line)
             self._console.print(
                 Panel(
                     Text(title, justify="center", style=f"bold {BRAND_PRIMARY}"),
                     border_style=BRAND_PRIMARY,
-                    padding=(1, 2),
+                    padding=(0, 2),
                 )
             )
         else:

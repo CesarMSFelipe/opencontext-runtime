@@ -46,73 +46,77 @@ def test_run_uninstall_decline_is_safe(monkeypatch: pytest.MonkeyPatch) -> None:
     assert proceeded["clean"] is False
 
 
-def test_config_menu_non_tty_does_not_hang(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The config menu loop exits only on "back"; without a TTY the selector would
-    # return its default forever. The guard must short-circuit instead of looping.
-    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
-    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-
-    selected: dict[str, bool] = {"called": False}
+def test_config_menu_prefers_the_tui(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The config menu is the Textual TUI and nothing else — when it runs,
+    # run_config_menu returns without falling back to any selector.
+    monkeypatch.setattr("opencontext_cli.tui.run_config_tui", lambda **k: True)
+    reached = {"selector": False}
     monkeypatch.setattr(
-        menu_cmd.prompts, "select", lambda *a, **k: selected.__setitem__("called", True)
+        menu_cmd.prompts, "select", lambda *a, **k: reached.__setitem__("selector", True) or "back"
     )
-
     menu_cmd.run_config_menu()
+    assert reached["selector"] is False
 
-    assert selected["called"] is False  # selector never reached
+
+def test_config_menu_no_tty_points_to_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No terminal → no second parallel menu; just a message pointing at the CLI.
+    monkeypatch.setattr("opencontext_cli.tui.run_config_tui", lambda **k: False)
+    called = {"select": False}
+    monkeypatch.setattr(
+        menu_cmd.prompts, "select", lambda *a, **k: called.__setitem__("select", True)
+    )
+    printed: list[str] = []
+    monkeypatch.setattr(menu_cmd.console, "print", lambda *a, **k: printed.append(str(a)))
+    menu_cmd.run_config_menu()
+    assert called["select"] is False
+    assert any("needs a terminal" in p for p in printed)
 
 
-def test_config_menu_lists_unified_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Every setting must live in the one config menu — including the unreachable-
-    # before entries (memory backend, language) folded in during unification.
-    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
-    monkeypatch.setattr(menu_cmd, "_action_header", lambda *a, **k: None)
+def test_offer_engram_install_skips_when_already_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    import opencontext_core.memory.engram_bridge as eb
+
+    monkeypatch.setattr(eb, "detect_engram", lambda: True)
+    asked = {"confirm": False}
+    monkeypatch.setattr(
+        menu_cmd.prompts, "confirm", lambda *a, **k: asked.__setitem__("confirm", True) or True
+    )
+    menu_cmd._offer_engram_install()
+    assert asked["confirm"] is False  # never prompts when Engram is already there
+
+
+def test_offer_engram_install_declined_installs_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+
+    import opencontext_core.memory.engram_bridge as eb
+
+    monkeypatch.setattr(eb, "detect_engram", lambda: False)
+    monkeypatch.setattr(menu_cmd.prompts, "confirm", lambda *a, **k: False)
+    ran = {"called": False}
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: ran.__setitem__("called", True))
+    menu_cmd._offer_engram_install()
+    assert ran["called"] is False
+
+
+def test_offer_engram_install_runs_installer_on_accept(monkeypatch: pytest.MonkeyPatch) -> None:
+    import shutil
+    import subprocess
+
+    import opencontext_core.memory.engram_bridge as eb
+
+    # Not present, then present after the install runs.
+    detect = iter([False, True])
+    monkeypatch.setattr(eb, "detect_engram", lambda: next(detect))
+    monkeypatch.setattr(menu_cmd.prompts, "confirm", lambda *a, **k: True)
+    monkeypatch.setattr(shutil, "which", lambda name: None)  # no pipx → pip path
 
     captured: dict[str, list] = {}
 
-    def fake_select(message: str, choices: list, **kw: object) -> str:
-        captured["keys"] = [c[0] for c in choices if isinstance(c, tuple)]
-        return "back"
+    class _Result:
+        returncode = 0
+        stderr = ""
 
-    monkeypatch.setattr(menu_cmd.prompts, "select", fake_select)
-    menu_cmd.run_config_menu()
-
-    for key in ("security", "features", "models", "agents", "plugins", "memory", "language", "sdd"):
-        assert key in captured["keys"], f"{key} missing from the unified config menu"
-
-
-def test_run_memory_backend_writes_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    import opencontext_core.config_sync as cs
-
-    monkeypatch.setattr(menu_cmd, "_action_header", lambda *a, **k: None)
-    monkeypatch.setattr(menu_cmd.prompts, "select", lambda *a, **k: "engram")
-    written: dict[str, object] = {}
-
-    def fake_set(path: str, value: object, **kw: object) -> bool:
-        written["path"] = path
-        written["value"] = value
-        return True
-
-    monkeypatch.setattr(cs, "set_yaml_key", fake_set)
-    menu_cmd._run_memory_backend()
-
-    assert written == {"path": "memory.provider", "value": "engram"}
-
-
-def test_run_language_writes_ui_language(monkeypatch: pytest.MonkeyPatch) -> None:
-    import opencontext_core.config_sync as cs
-
-    monkeypatch.setattr(menu_cmd, "_action_header", lambda *a, **k: None)
-    monkeypatch.setattr(menu_cmd.prompts, "select", lambda *a, **k: "es")
-    written: dict[str, object] = {}
-
-    def fake_set(path: str, value: object, **kw: object) -> bool:
-        written["path"] = path
-        written["value"] = value
-        return True
-
-    monkeypatch.setattr(cs, "set_yaml_key", fake_set)
-    menu_cmd._run_language()
-
-    assert written == {"path": "ui_language", "value": "es"}
+    monkeypatch.setattr(
+        subprocess, "run", lambda cmd, **k: captured.__setitem__("cmd", cmd) or _Result()
+    )
+    menu_cmd._offer_engram_install()
+    assert "engram" in captured["cmd"]  # an install of the engram package was issued

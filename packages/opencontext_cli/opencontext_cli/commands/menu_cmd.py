@@ -17,7 +17,6 @@ from opencontext_cli.commands.verified_context_view import (
 )
 from opencontext_core import prompts
 from opencontext_core.dx.console_styles import console, show_logo
-from opencontext_core.update import EcosystemUpdateChecker, UpdateChecker
 
 
 def _action_header(title: str) -> None:
@@ -35,184 +34,46 @@ def _action_header(title: str) -> None:
 def run_main_menu() -> None:
     """Show the main OpenContext menu and delegate to the selected command."""
 
-    if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        console.print(
-            "[yellow]The interactive menu needs a terminal.[/] "
-            "Run a subcommand instead, e.g. [cyan]opencontext --help[/]."
-        )
-        return
+    # Preferred surface: the unified Textual home (same chrome as every screen).
+    # Returns False with no terminal; any failure degrades to the selector below.
+    try:
+        from opencontext_cli.tui import run_home_tui
 
-    while True:
-        try:
-            console.clear()
-        except Exception:
-            pass
+        if run_home_tui():
+            return
+    except Exception:
+        pass
 
-        show_logo()
-        console.print()
-        _print_kg_header()
-        console.print()
-
-        _print_update_banner()
-        console.print()
-
-        choice = prompts.select(
-            "Main menu",
-            [
-                (None, "Setup"),
-                ("install", "Install / reconfigure"),
-                ("upgrade", "Upgrade all packages"),
-                ("sync", "Re-sync environment"),
-                (None, "Configure"),
-                ("configure", "Settings (providers, agents, plugins, SDD, features…)"),
-                (None, "Tools"),
-                ("verified", "Verified context for a task"),
-                ("memory", "Context memory"),
-                ("doctor", "Doctor"),
-                ("backups", "Backups"),
-                ("uninstall", "Uninstall"),
-                ("quit", "Quit"),
-            ],
-            default="install",
-        )
-
-        if choice == "quit":
-            console.print("[dim]Goodbye.[/]")
-            break
-
-        actions = {
-            "install": _run_install,
-            "upgrade": _run_upgrade,
-            "sync": _run_sync,
-            "configure": run_config_menu,
-            "memory": _run_memory_tools,
-            "doctor": _run_doctor,
-            "backups": _run_backups,
-            "uninstall": _run_uninstall,
-            "verified": _run_verified_context,
-        }
-        action = actions.get(choice)
-        if action is not None:
-            action()
-
-        prompts.pause("Press Enter to return to menu")
+    # No terminal (or the TUI could not start) → no interactive menu exists. Point
+    # the user at the CLI rather than a second, parallel selector.
+    console.print(
+        "[yellow]The interactive menu needs a terminal.[/] "
+        "Run a subcommand instead, e.g. [cyan]opencontext --help[/], "
+        "[cyan]opencontext install[/], or [cyan]opencontext doctor[/]."
+    )
 
 
 def run_config_menu() -> None:
-    """Single configuration surface — every setting lives here, one path each.
+    """Open the unified configuration surface — the one Textual TUI.
 
-    Both ``opencontext`` (home menu → Configure) and ``opencontext config`` open
-    this same menu, so settings are never split across two places. Section
-    actions are reused from the home menu (models/agents/sdd) and from the core
-    wizard (security/features/tokens/plugins/show/reset), composed here because
-    the CLI may import core but not vice versa.
+    There is a single menu system (``opencontext`` home and ``opencontext config``
+    both open it). Without a terminal there is no interactive menu at all, so point
+    the user at the non-interactive equivalents rather than spawning a second,
+    parallel selector — duplicate menus are exactly what this unification removes.
     """
-    from opencontext_core import wizard
-
-    # The loop ends only on "back"; without a terminal the selector returns its
-    # default forever, so guard against a non-interactive hang.
-    if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        console.print(
-            "[yellow]The configuration menu needs a terminal.[/] "
-            "Run [cyan]opencontext config wizard --non-interactive[/] instead."
-        )
-        return
-
-    def _wrap(title: str, fn: Any) -> Any:
-        # Core-wizard actions carry no header of their own; wrap them so every
-        # config sub-screen shows the OpenContext logo + title, like the CLI ones.
-        def run() -> None:
-            _action_header(title)
-            fn()
-
-        return run
-
-    actions = {
-        "wizard": _wrap("Full setup wizard", wizard.run_wizard),
-        "security": _wrap("Security & privacy", lambda: wizard.reconfigure("security")),
-        "features": _wrap("Features", lambda: wizard.reconfigure("features")),
-        "tokens": _wrap("Token budgets", lambda: wizard.reconfigure("tokens")),
-        "models": _run_configure_models,
-        "agents": _run_agent_integrations,
-        "plugins": _wrap("Plugins", lambda: wizard.reconfigure("plugins")),
-        "memory": _run_memory_backend,
-        "language": _run_language,
-        "sdd": _run_sdd_profiles,
-        "show": _wrap("Current configuration", wizard.show_config),
-        "reset": _wrap("Reset to defaults", wizard.reset_config),
-    }
-
-    while True:
-        _action_header("Configuration")
-        choice = prompts.select(
-            "Configuration",
-            [
-                (None, "Setup"),
-                ("wizard", "Full setup wizard"),
-                (None, "Settings"),
-                ("security", "Security & privacy"),
-                ("features", "Features"),
-                ("tokens", "Token budgets"),
-                ("models", "Providers & models"),
-                ("agents", "Agent integrations"),
-                ("plugins", "Plugins"),
-                ("memory", "Memory backend"),
-                ("language", "Language"),
-                ("sdd", "SDD & TDD settings"),
-                (None, "Config file"),
-                ("show", "Show current config"),
-                ("reset", "Reset to defaults"),
-                ("back", "Back"),
-            ],
-            default="wizard",
-        )
-
-        if choice == "back":
-            break
-
-        action = actions.get(choice)
-        if action is not None:
-            action()
-
-        prompts.pause("Press Enter to return to configuration")
-
-
-def _print_update_banner() -> None:
-    """Show a one-line update notice if any cached update is available."""
-    notices: list[str] = []
     try:
-        state = UpdateChecker._load_cache()
-        if state.check and state.check.is_outdated:
-            notices.append(
-                f"opencontext {state.check.current_version} -> {state.check.latest_version}"
-            )
+        from opencontext_cli.tui import run_config_tui
+
+        if run_config_tui():
+            return
     except Exception:
         pass
-    try:
-        for eco in EcosystemUpdateChecker.check_cached():
-            notices.append(f"{eco.name} {eco.current_version} -> {eco.latest_version}")
-    except Exception:
-        pass
-    if notices:
-        joined = ", ".join(notices)
-        console.print(
-            f"  [bold yellow]Updates available:[/] {joined}  "
-            "[dim](choose “Upgrade all packages”)[/]"
-        )
-        console.print()
 
-
-def _print_kg_header() -> None:
-    """Show the knowledge-graph status panel at the top of the menu."""
-    try:
-        status = gather_kg_status(".")
-        console.print(render_kg_header(status))
-    except Exception:
-        # The header is informational; never block the menu on a status read.
-        pass
-
-
-# ── Menu action dispatchers ─────────────────────────────────────────────
+    console.print(
+        "[yellow]The configuration menu needs a terminal.[/] Use "
+        "[cyan]opencontext config wizard --non-interactive[/], or a direct subcommand: "
+        "[cyan]config reconfigure <section>[/] · [cyan]config set[/] · [cyan]config get[/]."
+    )
 
 
 def _run_install() -> None:
@@ -251,254 +112,61 @@ def _run_sync() -> None:
         console.print(f"[red]Sync failed: {exc}[/]")
 
 
-def _run_configure_models() -> None:
-    """Configure the default provider and model (this menu entry's actual job)."""
-    _action_header("Providers & models")
-
-    from opencontext_core.user_prefs import UserConfigStore
-
-    store = UserConfigStore()
-    prefs = store.load()
-
-    console.print("[bold]Current model configuration:[/]")
-    console.print(f"  Default provider: {prefs.default_provider or '[dim]not set[/dim]'}")
-    console.print(f"  Default model:    {prefs.default_model or '[dim]not set[/dim]'}")
-    console.print()
-
-    known_providers = ["anthropic", "openai", "mock"]
-    known_models = {
-        "anthropic": ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"],
-        "openai": ["gpt-4o", "gpt-4o-mini", "o1"],
-        "mock": ["mock-llm"],
-    }
-
-    provider = prompts.select(
-        "Default provider",
-        known_providers,
-        default=prefs.default_provider or "anthropic",
-    )
-    model_choices = known_models.get(provider, [])
-    if model_choices:
-        model = prompts.select(
-            "Default model",
-            model_choices,
-            default=prefs.default_model
-            if prefs.default_model in model_choices
-            else model_choices[0],
-        )
-    else:
-        model = prompts.text("Default model", default=prefs.default_model or "")
-
-    prefs.default_provider = provider
-    prefs.default_model = model
-    store.save(prefs)
-    # Bridge to opencontext.yaml — the runtime reads models.default from yaml, so
-    # without this the chosen provider/model silently no-op at runtime.
-    from opencontext_core.config_sync import sync_runtime_prefs_to_yaml
-
-    sync_runtime_prefs_to_yaml(prefs)
-    console.print("[green]✓ Model configuration saved[/]")
-
-    # Per-persona SDD routing: pick the model for each phase (sent to the agent
-    # as an MCP sampling hint). Opt-in so the default flow stays one step.
-    if prompts.confirm("Also set a model per SDD persona?", default=False):
-        _configure_persona_models()
-
-
-def _configure_persona_models() -> None:
-    """Navigable per-persona model routing for SDD phases. Reuses models_cmd."""
-    import yaml
-
-    from opencontext_cli.commands import models_cmd
-    from opencontext_core.config import find_config
-
-    cfg_path = find_config(".")
-    if cfg_path is None:
-        console.print(
-            "[yellow]No opencontext.yaml found.[/] Run [cyan]opencontext install[/] first."
-        )
-        return
-
-    model_hints = [
-        ("claude-opus-4-8", "opus — strongest"),
-        ("claude-sonnet-4-6", "sonnet — balanced"),
-        ("claude-haiku-4-5-20251001", "haiku — cheap & fast"),
-        ("__default__", "Use the default model"),
-        ("__custom__", "Custom model id…"),
-    ]
-
-    while True:
-        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
-        persona_models = (data.get("sdd", {}) or {}).get("persona_models", {}) or {}
-        choices: list[Any] = [
-            (name, f"{name:12} {phases:18} → {persona_models.get(pid, 'default')}")
-            for name, (pid, phases) in models_cmd.PERSONAS.items()
-        ]
-        choices += [prompts.SEPARATOR, ("__done__", "Done")]
-
-        pick = prompts.select("Model per SDD persona", choices, default="__done__")
-        if pick == "__done__":
-            break
-
-        hint = prompts.select(f"Model for {pick}", model_hints, default="__default__")
-        if hint == "__custom__":
-            hint = prompts.text(f"Custom model id for {pick}").strip()
-            if not hint:
-                continue
-        if hint == "__default__":
-            # Drop the override so this persona falls back to the default model.
-            persona_id = models_cmd.PERSONAS[pick][0]
-            sdd = data.setdefault("sdd", {})
-            sdd.setdefault("persona_models", {}).pop(persona_id, None)
-            cfg_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
-            console.print(f"[green]✓ {pick} → default[/]")
-        else:
-            models_cmd._set_persona(cfg_path, pick, hint)
-
-
-def _run_agent_integrations() -> None:
-    """Configure agent integrations — show current state, offer regeneration."""
-    _action_header("Agent integrations")
-
-    from pathlib import Path
-
-    from opencontext_core.configurator import KNOWN_AGENTS, Configurator
-    from opencontext_core.user_prefs import UserConfigStore
-
-    store = UserConfigStore()
-    prefs = store.load()
-    configured = getattr(prefs, "agent_integrations", {}) or {}
-
-    console.print("[bold]Configured agents:[/]")
-    if configured:
-        for agent, enabled in configured.items():
-            icon = "[green]●[/]" if enabled else "[dim]○[/]"
-            console.print(f"  {icon}  {agent}")
-    else:
-        console.print("  [dim]None configured yet[/]")
-    console.print()
-
-    supported = list(KNOWN_AGENTS)
-    enabled_now = [a for a in supported if configured.get(a)]
-    targets = prompts.checkbox(
-        "Select agents to configure",
-        supported,
-        defaults=enabled_now,
-    )
-    if not targets:
-        console.print("[dim]No agents selected.[/]")
-        return
-
-    # Single engine: merges a managed block into existing files and writes the
-    # MCP entry per agent, reversible by `opencontext uninstall`.
-    configurator = Configurator(Path("."))
-    for target in targets:
-        try:
-            report = configurator.configure_one(target, "local")
-            files = report.get("files", [])
-            console.print(f"[green]✓ Configured {len(files)} file(s) for {target}[/]")
-            for f in files:
-                console.print(f"  [dim]{f}[/]")
-            prefs.agent_integrations[target] = True
-        except Exception as exc:
-            console.print(f"[red]Failed to configure {target}: {exc}[/]")
-    store.save(prefs)
-
-
-def _run_sdd_profiles() -> None:
-    """Configure SDD model profile and TDD mode."""
-    _action_header("SDD & TDD settings")
+def _offer_engram_install() -> None:
+    """Provision Engram (PyPI) when a backend needs it but it's not installed."""
     try:
-        from opencontext_core.user_prefs import UserConfigStore
+        from opencontext_core.memory.engram_bridge import detect_engram
+    except Exception:
+        return
+    if detect_engram():
+        return
 
-        store = UserConfigStore()
-        prefs = store.load()
-
-        console.print("[bold]Current settings:[/]")
-        console.print(f"  SDD model profile: [cyan]{prefs.sdd.sdd_model_profile or 'default'}[/]")
-        console.print(f"  TDD mode:          [cyan]{prefs.sdd.tdd_mode or 'ask'}[/]")
-        console.print(f"  Token budget/phase: [cyan]{getattr(prefs, 'sdd_token_budget', 3000)}[/]")
-        console.print()
-
-        profile = prompts.select(
-            "SDD model profile",
-            ["default", "cheap", "hybrid", "premium"],
-            default=prefs.sdd.sdd_model_profile or "hybrid",
+    console.print()
+    console.print(
+        "[yellow]Engram isn't installed.[/] It's a standalone package — no gentle-ai required."
+    )
+    if not prompts.confirm("Install Engram now?", default=True):
+        console.print(
+            "[dim]Skipped — this backend falls back to the local engine until Engram is present.[/]"
         )
-        tdd = prompts.select(
-            "TDD mode",
-            ["ask", "strict", "off"],
-            default=prefs.sdd.tdd_mode or "ask",
+        console.print(
+            "[dim]Install later:[/] [cyan]pipx install engram[/] [dim](or pip install engram)[/]"
         )
-        prefs.sdd.sdd_model_profile = profile
-        prefs.sdd.tdd_mode = tdd
-        store.save(prefs)
-        console.print()
-        console.print("[green]✓ SDD & TDD settings saved[/]")
+        return
+
+    import shutil
+    import subprocess
+
+    from rich.status import Status
+
+    # Prefer pipx so the `engram` CLI lands on PATH (detect_engram looks for it);
+    # fall back to pip in the current interpreter.
+    cmd = (
+        ["pipx", "install", "engram"]
+        if shutil.which("pipx")
+        else [sys.executable, "-m", "pip", "install", "engram"]
+    )
+    console.print(f"[dim]$ {' '.join(cmd)}[/]")
+    try:
+        with Status("Installing Engram...", console=console, spinner="dots"):
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        console.print("[red]Install timed out.[/] Try [cyan]pipx install engram[/] manually.")
+        return
     except Exception as exc:
-        console.print(f"[red]Failed: {exc}[/]")
+        console.print(f"[red]Install error:[/] {exc}")
+        return
 
-
-def _run_memory_backend() -> None:
-    """Choose the memory backend (local / engram / auto) — writes memory.provider."""
-    _action_header("Memory backend")
-
-    from opencontext_core.config import find_config, load_config
-    from opencontext_core.config_sync import set_yaml_key
-
-    current = "local"
-    cf = find_config(".")
-    if cf is not None and cf.exists():
-        try:
-            current = load_config(cf).memory.provider
-        except Exception:
-            pass
-
-    console.print(f"[bold]Current backend:[/] [cyan]{current}[/]\n")
-    choice = prompts.select(
-        "Memory backend",
-        [
-            ("local", "Local — OpenContext's own engine (layers, decay, recall)"),
-            ("engram", "Engram — episodic & semantic → Engram, the rest → OpenContext"),
-            ("auto", "Auto — couple with Engram if present, else local"),
-        ],
-        default=current if current in ("local", "engram", "auto") else "local",
-    )
-    if set_yaml_key("memory.provider", choice):
-        console.print(f"[green]✓ Memory backend set to {choice}[/]")
-    else:
+    if res.returncode == 0 and detect_engram():
+        console.print("[green]✓ Engram installed and detected.[/]")
+    elif res.returncode == 0:
         console.print(
-            "[yellow]No opencontext.yaml found.[/] Run [cyan]opencontext install[/] first."
+            "[yellow]Installed, but the 'engram' CLI isn't on PATH yet.[/] "
+            "Open a new shell (or run [cyan]pipx ensurepath[/]) and retry."
         )
-
-
-def _run_language() -> None:
-    """Choose the interface language (en / es) — writes ui_language."""
-    _action_header("Language")
-
-    from opencontext_core.config import find_config, load_config
-    from opencontext_core.config_sync import set_yaml_key
-
-    current = "en"
-    cf = find_config(".")
-    if cf is not None and cf.exists():
-        try:
-            current = getattr(load_config(cf), "ui_language", "en")
-        except Exception:
-            pass
-
-    console.print(f"[bold]Current language:[/] [cyan]{current}[/]\n")
-    choice = prompts.select(
-        "Interface language",
-        [("en", "English"), ("es", "Español")],
-        default=current if current in ("en", "es") else "en",
-    )
-    if set_yaml_key("ui_language", choice):
-        console.print(f"[green]✓ Language set to {choice}[/]")
     else:
-        console.print(
-            "[yellow]No opencontext.yaml found.[/] Run [cyan]opencontext install[/] first."
-        )
+        console.print(f"[red]Install failed.[/] {(res.stderr or '').strip()[:200]}")
+        console.print("[dim]Try manually:[/] [cyan]pipx install engram[/]")
 
 
 def _run_memory_tools() -> None:

@@ -26,6 +26,7 @@ dependencies = [
   "opencontext-profiles>=0.1.0",
   "argcomplete>=3.0.0",
   "InquirerPy>=0.3.4",
+  "textual>=0.80",
 ]
 
 [project.urls]
