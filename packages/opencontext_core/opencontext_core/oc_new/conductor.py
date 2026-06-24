@@ -79,6 +79,9 @@ class OcNewConductor:
         # NOTE: After tasks phase completes, produce a git work plan.
         if phase_name == "tasks" and state.config is not None:
             self._write_git_plan(state)
+        # NOTE: After archive phase completes, emit the agentic receipt.
+        if phase_name == "archive" and status in {"passed", "warning"}:
+            self._write_receipt(state)
         state = self._advance(state)
         self.store.save(state)
         return state
@@ -242,6 +245,37 @@ class OcNewConductor:
         from opencontext_core.agentic.modes import should_execute_code
 
         return should_execute_code(state.config.flow_mode)
+
+    def _write_receipt(self, state: OcNewRunState) -> None:
+        """Build and write AgenticReceipt to the run directory after archive."""
+        import json
+
+        from opencontext_core.agentic.receipt import AgenticReceipt, sha256_file, sha256_tree
+
+        run_dir = self.root / ".opencontext" / "runs" / state.identity.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        config = state.config
+        flow_mode = config.flow_mode.value if config else "automatic"
+        openspec_mode = config.openspec_mode.value if config else "off"
+        budget_mode = config.budget_mode.value if config else "warn"
+        git_mode = config.git_mode.value if config else "none"
+
+        receipt = AgenticReceipt(
+            run_id=state.identity.run_id,
+            change_id=state.identity.change_id,
+            flow_mode=flow_mode,
+            openspec_mode=openspec_mode,
+            budget_mode=budget_mode,
+            git_mode=git_mode,
+            status="complete",
+            completed_phases=list(state.completed_phases()),
+            budget_ledger_hash=sha256_file(run_dir / "budget_ledger.json"),
+            git_work_plan_hash=sha256_file(run_dir / "git_plan.json"),
+            memory_snapshot_hash=sha256_tree(run_dir),
+        )
+        receipt_path = run_dir / "receipt.json"
+        receipt_path.write_text(json.dumps(receipt.model_dump(), indent=2))
 
     def _write_git_plan(self, state: OcNewRunState) -> None:
         """Build a GitWorkPlan and persist it to the run directory."""

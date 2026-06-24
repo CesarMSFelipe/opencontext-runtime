@@ -6,7 +6,41 @@ remain valid. schema_version is bumped to .v2 to distinguish extended receipts.
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
+
 from pydantic import BaseModel, Field
+
+
+def sha256_file(path: Path | str) -> str | None:
+    """Return the hex SHA-256 digest of *path*, or None if the file does not exist."""
+    p = Path(path)
+    if not p.exists() or not p.is_file():
+        return None
+    h = hashlib.sha256()
+    with open(p, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def sha256_tree(directory: Path | str) -> str | None:
+    """Return a stable SHA-256 digest over all files in *directory* (sorted).
+
+    Returns None when the directory does not exist or is empty.
+    """
+    d = Path(directory)
+    if not d.exists() or not d.is_dir():
+        return None
+    h = hashlib.sha256()
+    found_any = False
+    for file_path in sorted(d.rglob("*")):
+        if file_path.is_file():
+            found_any = True
+            rel = file_path.relative_to(d).as_posix()
+            h.update(rel.encode())
+            h.update(file_path.read_bytes())
+    return h.hexdigest() if found_any else None
 
 
 class AgenticReceipt(BaseModel, extra="forbid"):
