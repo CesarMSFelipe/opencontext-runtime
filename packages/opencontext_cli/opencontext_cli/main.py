@@ -478,6 +478,68 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["strict", "ask", "off"],
         help="TDD posture (default: auto-detect from project).",
     )
+    # NOTE: Agentic-flow flags — resolve to AgenticFlowConfig via preset_config().
+    install_parser.add_argument(
+        "--preset",
+        default=None,
+        choices=["full-opencontext", "agentic-minimal", "memory-only", "sdd-only",
+                 "context-only", "custom"],
+        help="Agentic preset (default: none — use existing install flow).",
+    )
+    install_parser.add_argument(
+        "--memory",
+        default=None,
+        choices=["auto", "engram", "local", "off"],
+        dest="memory_mode",
+        help="Memory mode for the agentic flow.",
+    )
+    install_parser.add_argument(
+        "--install-engram",
+        action="store_true",
+        default=False,
+        help="Provision Engram if not already installed.",
+    )
+    install_parser.add_argument(
+        "--openspec",
+        default=None,
+        choices=["full", "minimal", "off"],
+        dest="openspec_mode",
+        help="OpenSpec artifact persistence mode.",
+    )
+    install_parser.add_argument(
+        "--budget",
+        default=None,
+        choices=["strict", "warn", "off"],
+        dest="budget_mode",
+        help="Token budget enforcement mode.",
+    )
+    install_parser.add_argument(
+        "--phase-budget",
+        type=int,
+        default=None,
+        dest="phase_budget",
+        help="Token budget per phase (default: 8000).",
+    )
+    install_parser.add_argument(
+        "--git",
+        default=None,
+        choices=["none", "single_pr", "stacked_prs"],
+        dest="git_mode",
+        help="Git work strategy.",
+    )
+    install_parser.add_argument(
+        "--scope",
+        default=None,
+        choices=["global", "workspace"],
+        help="Config scope (global or workspace).",
+    )
+    install_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        dest="dry_run",
+        help="Print the install plan without making any changes.",
+    )
 
     onboard_parser = subparsers.add_parser("onboard", help=argparse.SUPPRESS)
     onboard_parser.add_argument("root", nargs="?", default=".", help="Project root.")
@@ -1812,12 +1874,48 @@ def _print_agent_instructions(agents: list, console: Any) -> None:
             )
 
 
+def _install_dry_run(args: argparse.Namespace) -> None:
+    """Print the agentic install plan without making any changes."""
+    from opencontext_core.agentic.config import AgenticFlowConfig, PresetId
+    from opencontext_core.agentic.install_plan import build_install_plan, render_dry_run
+    from opencontext_core.agentic.presets import preset_config
+
+    preset_str = getattr(args, "preset", None)
+    if preset_str:
+        cfg = preset_config(PresetId(preset_str))
+    else:
+        cfg = AgenticFlowConfig()
+    plan = build_install_plan(cfg)
+    print(render_dry_run(plan))
+
+
+def _install_provision_engram(args: argparse.Namespace) -> None:
+    """Provision Engram if not already installed."""
+    from opencontext_core.memory.engram_provisioning import EngramProvisioner
+
+    agent = getattr(args, "agent", None)
+    yes = getattr(args, "yes", False)
+    try:
+        EngramProvisioner().install(agent=agent, yes=yes)
+    except RuntimeError as exc:
+        print(f"Engram provisioning: {exc}")
+
+
 def _install(args: argparse.Namespace) -> None:
     """Quick project setup wizard with auto-detection and step-by-step progress."""
     from rich.status import Status
 
     from opencontext_core import prompts
     from opencontext_core.dx.console_styles import console
+
+    # NOTE: Handle --dry-run before any side effects.
+    if getattr(args, "dry_run", False):
+        _install_dry_run(args)
+        return
+
+    # NOTE: Handle --install-engram provisioning before the main flow.
+    if getattr(args, "install_engram", False):
+        _install_provision_engram(args)
 
     try:
         console.clear()

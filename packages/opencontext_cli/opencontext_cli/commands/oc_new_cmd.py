@@ -110,6 +110,12 @@ def add_oc_new_parser(subparsers: Any) -> None:
 
     start = sub.add_parser("start", help="Start a new oc-new run.")
     start.add_argument("task", help='Task description, e.g. "add graph health command"')
+    start.add_argument(
+        "--flow",
+        default=None,
+        choices=["automatic", "stepwise", "hybrid", "engram_only", "openspec_only", "observe_only"],
+        help="Flow mode controlling when the conductor pauses (default: automatic).",
+    )
 
     status = sub.add_parser("status", help="Show current run state.")
     status.add_argument("--run-id", dest="run_id", default=None)
@@ -133,6 +139,16 @@ def add_oc_new_parser(subparsers: Any) -> None:
     sub.add_parser("list", help="List all oc-new runs.")
 
 
+def _build_start_config(args: Any) -> Any:
+    """Build an AgenticFlowConfig from CLI start args, or return None if no flags set."""
+    flow_str: str | None = getattr(args, "flow", None)
+    if flow_str is None:
+        return None
+    from opencontext_core.agentic.config import AgenticFlowConfig, FlowMode
+
+    return AgenticFlowConfig(flow_mode=FlowMode(flow_str))
+
+
 def handle_oc_new(args: Any) -> None:
     root = _root(args)
     conductor = OcNewConductor(root)
@@ -141,7 +157,8 @@ def handle_oc_new(args: Any) -> None:
     cmd = args.oc_new_command
 
     if cmd == "start":
-        state = conductor.start(args.task)
+        config = _build_start_config(args)
+        state = conductor.start(args.task, config=config)
         _print_state(state, json_out=json_out)
 
     elif cmd == "status":
