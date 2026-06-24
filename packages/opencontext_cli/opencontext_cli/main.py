@@ -14,6 +14,7 @@ import yaml
 
 from opencontext_cli.commands.aicx_cmd import add_aicx_parser, handle_aicx
 from opencontext_cli.commands.benchmark_cmd import add_benchmark_parser, handle_benchmark
+from opencontext_cli.commands.engram_cmd import add_engram_parser, handle_engram
 from opencontext_cli.commands.bridges_cmd import add_bridges_parser, handle_bridges
 from opencontext_cli.commands.bytecode_cmd import add_bytecode_commands, handle_bytecode
 from opencontext_cli.commands.capabilities_cmd import (
@@ -839,6 +840,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_verify_parser(subparsers)
     add_update_parser(subparsers)
     add_upgrade_parser(subparsers)
+    add_engram_parser(subparsers)
     # ── Advanced ──────────────────────────────────────────────────────
     add_benchmark_parser(subparsers)
     add_skill_parser(subparsers)
@@ -1512,6 +1514,8 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command == "upgrade":
         handle_upgrade(args)
         return
+    if command == "engram":
+        sys.exit(handle_engram(args))
     if command == "contract":
         sys.exit(handle_contract(args))
     if command == "mutation":
