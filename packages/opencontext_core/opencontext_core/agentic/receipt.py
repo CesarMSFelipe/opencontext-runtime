@@ -69,6 +69,12 @@ class AgenticReceipt(BaseModel, extra="forbid"):
     memory_snapshot_hash: str | None = None
     context_substrate_summary: str | None = None
 
+    # NOTE: v2 identity fields — optional for backward compatibility.
+    trace_id: str | None = None
+    task: str | None = None
+    memory_mode: str | None = None
+    preset: str | None = None
+
     completed_phases: list[str]
     failed_phases: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
