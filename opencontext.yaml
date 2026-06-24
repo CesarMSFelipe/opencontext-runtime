@@ -211,3 +211,6 @@ workflows:
     - context.archive
     - trace.sdd_persist
 ui_language: en
+knowledge_graph:
+  enabled: true
+  track_call_sites: true

@@ -58,3 +58,9 @@ Thumbs.db
 
 # Claude Code agent worktrees (transient, not project-owned)
 .claude/worktrees/
+.tools/*
+
+# opencontext:storage:start
+.storage/
+.opencontext/
+# opencontext:storage:end
