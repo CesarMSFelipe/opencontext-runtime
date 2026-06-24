@@ -138,6 +138,104 @@ def _to_tool_result(result: dict[str, Any]) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
+# Per-tool output schemas (workstream C3).
+#
+# Every tool's structured result is an object. On the failure/denied path
+# ``_call_tool`` returns a ToolResultEnvelope (schema_version/tool/status/
+# warnings/policy) plus the back-compat ``error``/``reason`` keys; on success a
+# handler returns its own domain dict. A single rigid schema can't describe both
+# arms, so each tool advertises a PERMISSIVE object schema: documented top-level
+# keys (optional, no ``required``) for discoverability, with
+# ``additionalProperties: true`` so neither the success dict nor the envelope is
+# rejected. Honest metadata, not a contract the handlers would have to be
+# rewritten to satisfy.
+# --------------------------------------------------------------------------- #
+
+# Envelope/error keys that any tool may return on the failure path.
+_ENVELOPE_OUTPUT_KEYS: tuple[str, ...] = (
+    "schema_version",
+    "tool",
+    "status",
+    "warnings",
+    "policy",
+    "error",
+    "reason",
+)
+
+# Conservative top-level success keys per tool (additionalProperties covers the
+# nested detail). Derived from each handler's return shape.
+_TOOL_SUCCESS_KEYS: dict[str, tuple[str, ...]] = {
+    "opencontext_search": ("results", "count"),
+    "opencontext_context": ("context", "estimated_tokens", "coverage", "symbol"),
+    "opencontext_callers": ("callers", "symbol", "file"),
+    "opencontext_callees": ("callees", "symbol", "file"),
+    "opencontext_impact": (
+        "symbol",
+        "affected_files",
+        "affected_nodes",
+        "risk_level",
+        "centrality",
+        "test_files",
+    ),
+    "opencontext_node": ("name", "kind", "file", "line", "signature", "docstring", "container"),
+    "opencontext_files": ("indexed", "files", "nodes", "edges", "languages", "directories"),
+    "opencontext_status": ("indexed", "nodes", "edges", "files"),
+    "opencontext_trace": ("found", "path", "hops", "code", "depth_exceeded"),
+    "opencontext_quality": ("diff",),
+    "opencontext_replace_symbol_body": (
+        "applied",
+        "symbol",
+        "file",
+        "changed_range",
+        "approval_required",
+        "hint",
+    ),
+    "opencontext_insert_before_symbol": ("applied", "symbol", "file", "approval_required", "hint"),
+    "opencontext_insert_after_symbol": ("applied", "symbol", "file", "approval_required", "hint"),
+    "opencontext_rename_symbol": ("applied", "symbol", "file", "new_name", "approval_required"),
+    "opencontext_run": (
+        "run_id",
+        "workflow",
+        "status",
+        "host_model_used",
+        "artifacts",
+        "gates",
+        "warnings",
+    ),
+    "opencontext_memory_save": (
+        "id",
+        "layer",
+        "key",
+        "backend",
+        "degraded",
+        "run_id",
+        "provenance",
+    ),
+    "opencontext_memory_search": ("results", "count"),
+    "opencontext_memory_context": ("context", "count"),
+    "opencontext_memory_judge": ("id", "relation", "ok"),
+}
+
+
+def _tool_output_schema(name: str) -> dict[str, Any]:
+    """Permissive per-tool output schema for ``tools/list`` (C3).
+
+    Documents the keys a tool may return (success keys + envelope/error keys) as
+    optional properties; ``additionalProperties: true`` keeps both response arms
+    valid.
+    """
+    keys = (*_TOOL_SUCCESS_KEYS.get(name, ()), *_ENVELOPE_OUTPUT_KEYS)
+    # Each documented key accepts any type (the value here is "this key appears",
+    # not its exact shape — that stays open for handler freedom).
+    properties: dict[str, dict[str, Any]] = {key: {} for key in keys}
+    return {
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": True,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Memory tools (workstream A) — agent-driven write/read/curate over the
 # existing CompositeMemoryStore reached as ``runtime._v2_memory_store``.
 # --------------------------------------------------------------------------- #
@@ -185,6 +283,11 @@ def _make_memory_record(params: dict[str, Any]) -> Any:
     tags = params.get("tags") or []
     now = datetime.now(UTC)
 
+    # Provenance (G): link a memory back to the run that produced it and record
+    # how it was created. Optional — a content-only save still works unchanged.
+    run_id = params.get("run_id")
+    provenance = params.get("provenance")
+
     return MemoryRecord(
         id=uuid.uuid4().hex,
         layer=layer,
@@ -197,6 +300,8 @@ def _make_memory_record(params: dict[str, Any]) -> Any:
         updated_at=now,
         # topic_key stays None unless the caller asked for topic-keyed upsert.
         topic_key=params.get("topic_key"),
+        run_id=str(run_id) if run_id is not None else None,
+        provenance=str(provenance) if provenance is not None else None,
     )
 
 
@@ -441,6 +546,14 @@ class MCPServer:
                         "items": {"type": "string"},
                         "description": "Optional free-form tags",
                     },
+                    "run_id": {
+                        "type": "string",
+                        "description": "Optional run id this memory came from (provenance)",
+                    },
+                    "provenance": {
+                        "type": "string",
+                        "description": "Optional origin: agent|harvest|manual|import",
+                    },
                 },
             },
             "opencontext_memory_search": {
@@ -617,6 +730,7 @@ class MCPServer:
                         "type": "object",
                         "properties": info["parameters"],
                     },
+                    "outputSchema": _tool_output_schema(name),
                 }
                 for name, info in self.tools.items()
             ]
@@ -639,26 +753,57 @@ class MCPServer:
         before the handler runs. This is the single chokepoint for all MCP
         tools; the handler map below is only consulted if the policy allows
         the call.
+
+        Returns a :class:`~opencontext_core.mcp.schemas.ToolResultEnvelope`
+        dict for denied/failed cases; successful handlers return their own
+        domain dicts (envelope adoption per-handler is a future step).
+        Backward-compat keys ``error`` and ``reason`` are included so
+        existing callers that check ``"error" in result`` still work.
         """
+
+        from opencontext_core.mcp.schemas import (
+            ToolPolicyDecision,
+            ToolResultEnvelope,
+            ToolWarning,
+        )
 
         # 1. Policy gate. No tool executes without a prior policy check.
         if not self.policy.allows(name):
-            return {
-                "error": f"Tool '{name}' denied by policy",
-                "reason": "tool_not_allowlisted",
-                "policy": "ToolPermissionPolicy",
-            }
+            d = ToolResultEnvelope(
+                tool=name,
+                status="denied",
+                policy=ToolPolicyDecision(
+                    decision="denied",
+                    reason="tool_not_allowlisted",
+                    policy="ToolPermissionPolicy",
+                ),
+            ).model_dump()
+            # NOTE: backward compat — callers that check "error"/"reason" keys
+            d["error"] = f"Tool '{name}' denied by policy"
+            d["reason"] = "tool_not_allowlisted"
+            return d
 
         handlers = self._handlers()
-
         handler = handlers.get(name)
         if handler is None:
-            return {"error": f"Unknown tool: {name}"}
+            d = ToolResultEnvelope(
+                tool=name,
+                status="failed",
+                warnings=[ToolWarning(code="unknown_tool", message=f"Unknown tool: {name}")],
+            ).model_dump()
+            d["error"] = f"Unknown tool: {name}"
+            return d
 
         try:
             return cast("dict[str, Any]", handler(params))
         except Exception as exc:
-            return {"error": str(exc)}
+            d = ToolResultEnvelope(
+                tool=name,
+                status="failed",
+                warnings=[ToolWarning(code="exception", message=str(exc))],
+            ).model_dump()
+            d["error"] = str(exc)
+            return d
 
     def _handlers(self) -> dict[str, Any]:
         """Return the mapping of tool name -> handler. Kept as a method so
@@ -692,8 +837,14 @@ class MCPServer:
         }
 
     def _default_tool_names(self) -> list[str]:
-        """Tool names registered at construction time. Used as the default
-        allowlist so a vanilla :class:`MCPServer` keeps working unchanged."""
+        """Safe-by-default read-only + memory tool allowlist.
+
+        Code-write tools (replace_symbol_body, insert_*, rename_symbol) and
+        opencontext_run are NOT included here — they require an explicit
+        policy opt-in so a vanilla server can't silently mutate source files.
+        Pass ``policy=ToolPermissionPolicy(allowed_tools=set(server.tools.keys()))``
+        to restore the full allowlist when needed (e.g. in write-tool tests).
+        """
 
         return [
             "opencontext_search",
@@ -705,11 +856,6 @@ class MCPServer:
             "opencontext_files",
             "opencontext_status",
             "opencontext_trace",
-            "opencontext_replace_symbol_body",
-            "opencontext_insert_before_symbol",
-            "opencontext_insert_after_symbol",
-            "opencontext_rename_symbol",
-            "opencontext_run",
             "opencontext_memory_save",
             "opencontext_memory_search",
             "opencontext_memory_context",
@@ -777,7 +923,7 @@ class MCPServer:
         """Project a ``MemoryRecord`` to a JSON-safe result dict."""
 
         layer = getattr(record, "layer", None)
-        return {
+        result: dict[str, Any] = {
             "id": getattr(record, "id", None),
             "layer": getattr(layer, "value", layer),
             "key": getattr(record, "key", None),
@@ -785,6 +931,13 @@ class MCPServer:
             "confidence": getattr(record, "confidence", None),
             "tags": list(getattr(record, "tags", []) or []),
         }
+        run_id = getattr(record, "run_id", None)
+        provenance = getattr(record, "provenance", None)
+        if run_id is not None:
+            result["run_id"] = run_id
+        if provenance is not None:
+            result["provenance"] = provenance
+        return result
 
     def _handle_memory_save(self, params: dict[str, Any]) -> dict[str, Any]:
         """Persist a memory record to the live store (A-REQ-2/3/4)."""
@@ -801,13 +954,19 @@ class MCPServer:
 
         record_id = store.write(record)
         backend, degraded = _resolve_backend(store, record.layer.value)
-        return {
+        result: dict[str, Any] = {
             "id": record_id or record.id,
             "layer": record.layer.value,
             "key": record.key,
             "backend": backend,
             "degraded": degraded,
         }
+        # Echo provenance only when supplied — keeps the response shape stable.
+        if record.run_id is not None:
+            result["run_id"] = record.run_id
+        if record.provenance is not None:
+            result["provenance"] = record.provenance
+        return result
 
     def _handle_memory_search(self, params: dict[str, Any]) -> dict[str, Any]:
         """Search the memory store, optionally scoped to a layer (A-REQ-5)."""

@@ -50,9 +50,10 @@ def _shipped_skill_names() -> list[str]:
 
 
 def _shipped_mcp_tool_names(tmp_path: Path) -> list[str]:
-    """MCP tool names from the live default allowlist (no runtime needed)."""
+    """Every exposed MCP tool name (the handler map), not just the safe default
+    allowlist — so code-write/run tools stay prefix-guarded too."""
     server = MCPServer(db_path=tmp_path / "naming-guard.db", runtime=None)
-    return list(server._default_tool_names())
+    return list(server._handlers())
 
 
 def _shipped_persona_ids() -> list[str]:

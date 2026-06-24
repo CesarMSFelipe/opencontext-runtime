@@ -125,8 +125,20 @@ def run_security_doctor(config: OpenContextConfig) -> list[DoctorCheck]:
 
     from opencontext_core.mcp_stdio import MCPServer
 
-    server = MCPServer()  # default allowlist = every registered tool
-    policy_default_allows_registered = server.policy.allows("opencontext_search")
+    server = MCPServer()  # default allowlist = safe read-only + memory tools
+    # Safe-by-default posture: read/memory tools allowed, code-write tools and
+    # opencontext_run require an explicit policy opt-in (fail-closed).
+    _default_allowed = set(server._default_tool_names())
+    _write_tools = {
+        "opencontext_replace_symbol_body",
+        "opencontext_insert_before_symbol",
+        "opencontext_insert_after_symbol",
+        "opencontext_rename_symbol",
+        "opencontext_run",
+    }
+    policy_default_allows_registered = server.policy.allows("opencontext_search") and not (
+        _default_allowed & _write_tools
+    )
 
     return [
         DoctorCheck(
@@ -151,8 +163,9 @@ def run_security_doctor(config: OpenContextConfig) -> list[DoctorCheck]:
             name="mcp.policy.default_allowlist",
             ok=policy_default_allows_registered,
             details=(
-                f"Default policy allowlists all "
-                f"{len(server._default_tool_names())} registered MCP tools."
+                f"Default policy allowlists {len(_default_allowed)} safe tools "
+                f"(read + memory); {len(_write_tools)} code-write/run tools "
+                f"require explicit opt-in."
             ),
         ),
         DoctorCheck(

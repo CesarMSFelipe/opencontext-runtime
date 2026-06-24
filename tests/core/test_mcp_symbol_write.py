@@ -52,6 +52,9 @@ def indexed_project(tmp_path: Path) -> tuple[MCPServer, Path]:
     kg.close()
 
     server = MCPServer(db_path=tmp_path / "kg.db", project_root=root)
+    # NOTE: write-tool tests need explicit policy; code-write tools not in safe default
+    from opencontext_core.tools.policy import ToolPermissionPolicy
+    server.policy = ToolPermissionPolicy(allowed_tools=set(server.tools.keys()))
     yield server, root
     server.close()
 
@@ -70,7 +73,7 @@ class TestRegistration:
             "opencontext_rename_symbol",
         ):
             assert name in server.tools
-            assert name in server._default_tool_names()
+            # NOTE: write tools NOT in safe default allowlist; checked in test_mcp_safe_defaults.py
             assert name in server._handlers()
         server.close()
 
@@ -251,6 +254,7 @@ class TestRenameSymbol:
         kg.index_project(root)
         kg.close()
         server = MCPServer(db_path=tmp_path / "kg.db", project_root=root)
+        server.policy = ToolPermissionPolicy(allowed_tools=set(server.tools.keys()))
         try:
             result = server._call_tool(
                 "opencontext_rename_symbol",

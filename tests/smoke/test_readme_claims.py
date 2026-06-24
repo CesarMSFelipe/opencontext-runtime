@@ -312,13 +312,21 @@ class TestMCPTools:
     )
 
     def test_mcp_tools_exist(self, tmp_path):
-        """Live MCP server exposes its full documented tool set."""
+        """Live MCP server exposes its full documented tool set.
+
+        The exposed tool set is the handler map (and ``server.tools``), NOT the
+        default allowlist: code-write tools and ``opencontext_run`` are exposed
+        but excluded from the safe default allowlist (see
+        ``tests/core/test_mcp_safe_defaults.py``).
+        """
         from opencontext_core.mcp_stdio import MCPServer
 
         server = MCPServer(db_path=tmp_path / "context_graph.db")
-        names = set(server._default_tool_names())
-        assert names == set(server._handlers())
+        names = set(server._handlers())
+        assert names == set(server.tools)
         assert names == self._EXPECTED_TOOLS, f"tool set drift: {names}"
+        # The safe default allowlist is a strict subset of the exposed set.
+        assert set(server._default_tool_names()) < names
 
     def test_mcp_tool_names_match_readme(self, tmp_path):
         """Documented tool names all exist on the live server."""
@@ -332,11 +340,12 @@ class TestMCPTools:
         """README's stated MCP tool count must equal the live server's.
 
         A code<->doc invariant: this is what caught (and now prevents) the drift
-        where the README advertised 9 tools while the server exposed 13.
+        where the README advertised 9 tools while the server exposed 13. The
+        count is the EXPOSED tool set (handlers), not the default allowlist.
         """
         from opencontext_core.mcp_stdio import MCPServer
 
-        n = len(MCPServer(db_path=tmp_path / "context_graph.db")._default_tool_names())
+        n = len(MCPServer(db_path=tmp_path / "context_graph.db")._handlers())
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         assert f"{n} tools" in readme or f"{n} MCP tools" in readme, (
             f"README must state '{n} tools' or '{n} MCP tools' to match the live MCP server; "

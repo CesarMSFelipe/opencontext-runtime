@@ -15,7 +15,11 @@ from opencontext_core.mcp_stdio import MCPServer
 
 @pytest.fixture
 def server(tmp_path: Path) -> MCPServer:
-    return MCPServer(db_path=tmp_path / ".storage" / "opencontext" / "context_graph.db")
+    s = MCPServer(db_path=tmp_path / ".storage" / "opencontext" / "context_graph.db")
+    # NOTE: opencontext_run not in safe default; sampling tests need it explicitly
+    from opencontext_core.tools.policy import ToolPermissionPolicy
+    s.policy = ToolPermissionPolicy(allowed_tools=set(s.tools.keys()))
+    return s
 
 
 @pytest.fixture(autouse=True)
