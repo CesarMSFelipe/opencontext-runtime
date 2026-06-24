@@ -6,12 +6,15 @@ task and phase. The ContextSubstrateBuilder is stateless; call build_for_phase()
 
 from __future__ import annotations
 
-import hashlib
-import json
+import warnings
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+# NOTE: G2 — ContextPackBuilder and CompressionEngine are not available in this build.
+# When they are absent, build_for_phase() emits a UserWarning and sets hash=None.
+_PACK_AVAILABLE = False
 
 
 class ContextSubstrateReport(BaseModel, extra="forbid"):
@@ -45,73 +48,35 @@ class ContextSubstrateBuilder:
     ) -> ContextSubstrateReport:
         """Return a ContextSubstrateReport summarising available context for *phase*.
 
-        Tries to build a real context pack via ContextPackBuilder and compress it
-        via CompressionEngine. Falls back to a scaffold report on any error.
+        NOTE: G2 — ContextPackBuilder and CompressionEngine are not available.
+        Emits a RuntimeWarning and sets context_pack_hash=None (honest, no fake hash).
         """
         indexed, graph_status = self._check_index()
         available = budget or 0
-        warnings: list[str] = []
+        substrate_warnings: list[str] = []
 
         if not indexed:
-            warnings.append(f"Knowledge graph not indexed — context for {phase!r} may be limited.")
+            substrate_warnings.append(
+                f"Knowledge graph not indexed — context for {phase!r} may be limited."
+            )
 
-        # Scaffold defaults — overridden below when real pack succeeds.
-        pack_hash: str | None = None
-        used_tokens: int = 0
-        compression_enabled: bool = False
-        compression_savings: int = 0
-        pack_content: str = ""
-
-        # Try to build a real context pack.
-        try:
-            from opencontext_core.context.pack import ContextPackBuilder  # type: ignore[import]
-
-            pack = ContextPackBuilder(
-                root=self.root,
-                query=task,
-                max_tokens=available or 8000,
-            ).build()
-            pack_content = str(pack)
-            used_tokens = len(pack_content) // 4
-            pack_hash = hashlib.sha256(pack_content.encode()).hexdigest()[:16]
-        except ImportError as exc:
-            warnings.append(f"ContextPackBuilder unavailable: {exc}")
-        except Exception as exc:
-            warnings.append(f"Context pack build error: {exc}")
-
-        # Fall back to a synthetic hash when pack build failed.
-        if pack_hash is None:
-            pack_data = {"task": task, "phase": phase, "indexed": indexed, "available": available}
-            pack_hash = hashlib.sha256(
-                json.dumps(pack_data, sort_keys=True).encode()
-            ).hexdigest()[:16]
-
-        # Try to compress the pack content.
-        if pack_content:
-            original_size = len(pack_content)
-            try:
-                from opencontext_core.compression.engine import CompressionEngine  # type: ignore[import]
-
-                result = CompressionEngine().compress(pack_content)
-                compressed_content = str(result)
-                compressed_size = len(compressed_content)
-                compression_savings = max(0, original_size - compressed_size)
-                compression_enabled = True
-            except ImportError as exc:
-                warnings.append(f"CompressionEngine unavailable: {exc}")
-            except Exception as exc:
-                warnings.append(f"Compression error: {exc}")
+        # NOTE: G2 — emit an honest warning; do NOT synthesise a fake hash.
+        warnings.warn(
+            "ContextPackBuilder unavailable — context hashing disabled",
+            UserWarning,
+            stacklevel=2,
+        )
 
         return ContextSubstrateReport(
             indexed=indexed,
             graph_status=graph_status,
-            context_pack_hash=pack_hash,
-            used_tokens=used_tokens,
+            context_pack_hash=None,
+            used_tokens=0,
             available_tokens=available,
-            compression_enabled=compression_enabled,
-            compression_savings=compression_savings,
+            compression_enabled=False,
+            compression_savings=0,
             omissions=[],
-            warnings=warnings,
+            warnings=substrate_warnings,
         )
 
     def _check_index(self) -> tuple[bool, str]:
@@ -127,13 +92,18 @@ class ContextSubstrateBuilder:
 
 if __name__ == "__main__":
     import tempfile
+    import warnings as _warnings
 
     with tempfile.TemporaryDirectory() as tmp:
         builder = ContextSubstrateBuilder(root=tmp)
-        report = builder.build_for_phase(task="add health check", phase="explore", budget=8000)
+        with _warnings.catch_warnings(record=True) as caught:
+            _warnings.simplefilter("always")
+            report = builder.build_for_phase(task="add health check", phase="explore", budget=8000)
         assert isinstance(report, ContextSubstrateReport)
         assert report.available_tokens == 8000
-        assert report.context_pack_hash is not None
+        # NOTE: G2 — context_pack_hash is None (honest; no fake hash).
+        assert report.context_pack_hash is None, f"Expected None, got {report.context_pack_hash}"
+        assert any("unavailable" in str(w.message) for w in caught), "Expected UserWarning"
 
         # Round-trip
         ContextSubstrateReport.model_validate(report.model_dump())
