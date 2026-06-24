@@ -125,13 +125,22 @@ class CockpitScreen(Screen):  # type: ignore[misc]
         self.app.push_screen(NewChangeScreen(), _start)
 
     def action_memory(self) -> None:
-        """Placeholder — future: open memory browser."""
+        """Open the memory browser screen."""
+        from opencontext_cli.tui.screens.memory import MemoryBrowserScreen
+
+        self.app.push_screen(MemoryBrowserScreen())
 
     def action_context(self) -> None:
-        """Placeholder — future: open KG/context viewer."""
+        """Open the KG/context viewer screen."""
+        from opencontext_cli.tui.screens.context import ContextViewerScreen
+
+        self.app.push_screen(ContextViewerScreen())
 
     def action_budget(self) -> None:
-        """Placeholder — future: show budget ledger."""
+        """Open the budget ledger screen."""
+        from opencontext_cli.tui.screens.budget import BudgetScreen
+
+        self.app.push_screen(BudgetScreen())
 
     def action_doctor(self) -> None:
         """Placeholder — future: open doctor screen."""
