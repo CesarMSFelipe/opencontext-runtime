@@ -153,6 +153,17 @@ class OcNewConductor:
                     }
                 )
 
+            policy = self._memory_policy_for(phase_def.name)
+            memory_backend = "local"
+            if state.config is not None:
+                memory_backend = state.config.memory_mode.value
+            mem_metadata: dict = {
+                "backend": memory_backend,
+                "read_layers": [l.value for l in policy.read_layers] if policy else [],
+                "write_layers": [l.value for l in policy.write_layers] if policy else [],
+                "key": state.identity.memory_key,
+            }
+
             return state.model_copy(
                 update={
                     "current_phase": phase_def.name,
@@ -168,6 +179,7 @@ class OcNewConductor:
                         ),
                         required_tools=phase_def.required_tools,
                         expected_artifacts=phase_def.expected_artifacts,
+                        metadata={"memory": mem_metadata},
                     ),
                     "updated_at": datetime.now(tz=UTC),
                 }

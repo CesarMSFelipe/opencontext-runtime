@@ -104,6 +104,8 @@ class NextAction(BaseModel):
     instruction: str
     required_tools: list[str] = Field(default_factory=list)
     expected_artifacts: list[str] = Field(default_factory=list)
+    # NOTE: metadata carries transport data (memory policy, budget hints) keyed by subsystem.
+    metadata: dict = Field(default_factory=dict)
 
 
 class OcNewRunState(BaseModel):
@@ -146,6 +148,9 @@ class AgentHandoff(BaseModel):
     allowed_tools: list[str] = Field(default_factory=list)
     context_summary: str = ""
     previous_phase_summary: str = ""
+    memory_backend: str = "local"
+    read_memory_layers: list[str] = Field(default_factory=list)
+    write_memory_layers: list[str] = Field(default_factory=list)
 
 
 def render_handoff_markdown(handoff: AgentHandoff) -> str:
