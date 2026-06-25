@@ -134,17 +134,43 @@ class MetaHarnessScanner:
             return False, f"Memory backend roundtrip failed: {exc}"
 
     def _check_kg_snapshot_path(self) -> tuple[bool, str]:
-        """Check that a KG artifact exists on disk (behavioral, not just importable)."""
+        """Check that a POPULATED KG exists on disk (behavioral, not just importable).
+
+        Mere file existence is not enough: instantiating the runtime can create an
+        empty ``context_graph.db`` as a side effect, so an unindexed project would
+        otherwise pass. We require the graph to actually contain nodes.
+        """
+        import json
+        import sqlite3
         from pathlib import Path
 
         cwd = Path.cwd()
-        candidates = [
-            cwd / ".storage" / "opencontext" / "context_graph.db",
-            cwd / ".opencontext" / "knowledge_graph.json",
-        ]
-        for path in candidates:
-            if path.exists():
-                return True, f"KG artifact found: {path.relative_to(cwd)}"
+        db = cwd / ".storage" / "opencontext" / "context_graph.db"
+        if db.exists():
+            try:
+                conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+                try:
+                    count = conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
+                finally:
+                    conn.close()
+            except Exception as exc:
+                return False, f"KG db present but unreadable: {exc}"
+            if count > 0:
+                return True, f"KG populated: {count} node(s) in {db.relative_to(cwd)}"
+            return False, "KG db exists but is empty — run 'opencontext index .' first"
+
+        json_path = cwd / ".opencontext" / "knowledge_graph.json"
+        if json_path.exists():
+            try:
+                data = json.loads(json_path.read_text(encoding="utf-8"))
+                nodes = data.get("nodes") if isinstance(data, dict) else None
+                if nodes:
+                    rel = json_path.relative_to(cwd)
+                    return True, f"KG populated: {len(nodes)} node(s) in {rel}"
+                return False, "KG snapshot exists but has no nodes — run 'opencontext index .'"
+            except Exception as exc:
+                return False, f"KG snapshot present but unreadable: {exc}"
+
         return (
             False,
             "No KG artifact found (expected .storage/opencontext/context_graph.db "

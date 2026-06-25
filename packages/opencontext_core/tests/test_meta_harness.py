@@ -121,3 +121,38 @@ class TestMetaHarnessScanner:
 
         assert sum(_WEIGHTS) == 100
         assert len(_WEIGHTS) == 9
+
+
+class TestKgSnapshotCheckIsBehavioral:
+    """The KG check must require a POPULATED graph, not just a present (possibly
+    side-effect-created, empty) context_graph.db — else it false-greens."""
+
+    @staticmethod
+    def _make_db(path, node_count: int) -> None:
+        import sqlite3
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(path)
+        conn.execute("CREATE TABLE nodes (id TEXT)")
+        conn.executemany("INSERT INTO nodes VALUES (?)", [(str(i),) for i in range(node_count)])
+        conn.commit()
+        conn.close()
+
+    def test_empty_kg_db_fails(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._make_db(tmp_path / ".storage" / "opencontext" / "context_graph.db", 0)
+        passed, explanation = MetaHarnessScanner()._check_kg_snapshot_path()
+        assert passed is False
+        assert "empty" in explanation.lower()
+
+    def test_missing_kg_fails(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        passed, _ = MetaHarnessScanner()._check_kg_snapshot_path()
+        assert passed is False
+
+    def test_populated_kg_db_passes(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._make_db(tmp_path / ".storage" / "opencontext" / "context_graph.db", 3)
+        passed, explanation = MetaHarnessScanner()._check_kg_snapshot_path()
+        assert passed is True
+        assert "3 node" in explanation
