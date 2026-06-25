@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from opencontext_cli.commands.uninstall_cmd import verify_no_traces
+from opencontext_cli.commands.uninstall_cmd import _purge_project_artifacts, verify_no_traces
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +139,31 @@ def test_verify_flag_exits_1_when_traces(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # --full does not delete untracked files
 # ---------------------------------------------------------------------------
+
+
+def test_purge_removes_oc_storage_leaves_sibling(tmp_path):
+    """--purge removes .storage/opencontext but leaves .storage/other-tool."""
+    oc_storage = tmp_path / ".storage" / "opencontext"
+    oc_storage.mkdir(parents=True)
+    sibling = tmp_path / ".storage" / "other-tool"
+    sibling.mkdir()
+
+    _purge_project_artifacts(tmp_path)
+
+    assert not oc_storage.exists()
+    assert sibling.exists()
+    assert (tmp_path / ".storage").exists()  # non-empty, so not removed
+
+
+def test_purge_removes_empty_storage_parent(tmp_path):
+    """When .storage/opencontext is the only child, .storage itself is removed."""
+    oc_storage = tmp_path / ".storage" / "opencontext"
+    oc_storage.mkdir(parents=True)
+
+    _purge_project_artifacts(tmp_path)
+
+    assert not oc_storage.exists()
+    assert not (tmp_path / ".storage").exists()
 
 
 def test_full_does_not_delete_untracked(tmp_path, monkeypatch):
