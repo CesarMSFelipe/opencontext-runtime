@@ -18,12 +18,7 @@ def _block(req_id: str, body: str) -> str:
 def test_valid_ears_spec_passes() -> None:
     spec = _block(
         "REQ-01",
-        (
-            "#### Scenario: foo\n\n"
-            "- GIVEN a precondition\n"
-            "- WHEN a user does x\n"
-            "- THEN y happens\n"
-        ),
+        ("#### Scenario: foo\n\n- GIVEN a precondition\n- WHEN a user does x\n- THEN y happens\n"),
     )
     result = RequirementsQualityGate().evaluate(spec)
     assert result.status == GateStatus.PASSED
@@ -33,12 +28,7 @@ def test_valid_ears_spec_passes() -> None:
 def test_valid_bdd_spec_passes() -> None:
     spec = _block(
         "REQ-02",
-        (
-            "#### Scenario: bar\n\n"
-            "- Given a precondition\n"
-            "- When a user does x\n"
-            "- Then y happens\n"
-        ),
+        ("#### Scenario: bar\n\n- Given a precondition\n- When a user does x\n- Then y happens\n"),
     )
     result = RequirementsQualityGate().evaluate(spec)
     assert result.status == GateStatus.PASSED

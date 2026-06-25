@@ -1,4 +1,5 @@
 """Tests for AgentHandoff and render_handoff_markdown."""
+
 from __future__ import annotations
 
 from opencontext_core.oc_new.handoff import AgentHandoff, render_handoff_markdown
@@ -19,7 +20,7 @@ def test_handoff_roundtrip():
         context_summary="The project uses FastAPI.",
         previous_phase_summary="Spec approved in 2 iterations.",
     )
-    assert handoff.schema_version == "opencontext.agent_handoff.v1"
+    assert handoff.schema_version == "opencontext.agent_handoff.v2"
     assert handoff.phase == "design"
     assert handoff.persona == "oc-architect"
 

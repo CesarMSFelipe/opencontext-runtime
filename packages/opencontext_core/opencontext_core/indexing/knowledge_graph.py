@@ -640,7 +640,7 @@ class KnowledgeGraph:
 # New values let SDD tooling (requirement/task/test/phase tracking) reuse the
 # same GraphDatabase as code symbols without renaming the schema.
 
-# ponytail: local extension module-side enum — the canonical NodeKind/EdgeKind
+# NOTE: local extension module-side enum — the canonical NodeKind/EdgeKind
 # for the unified graph still live in opencontext_core.graph.{nodes,edges}.
 # Mirror only the engineering-domain additions here so indexing callers can
 # refer to them by symbolic name without an import to a separate package.

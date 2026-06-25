@@ -48,7 +48,8 @@ class KGFreshnessChecker:
             mtime = _resolve_mtime(project_root, entry)
             if mtime > stalest_mtime:
                 stalest_mtime = mtime
-                stalest_path = entry.get("path")
+                _p = entry.get("path")
+                stalest_path = _p if isinstance(_p, str) else None
 
         if stalest_path is None:
             return FreshnessReport(fresh=True, stalest_path=None, stalest_age_s=None)
@@ -64,17 +65,19 @@ def _oldest(files: list[dict[str, object]]) -> float:
     return min(mtimes) if mtimes else 0.0
 
 
-def _resolve_mtime(project_root: Path | None, entry: dict) -> float:
+def _resolve_mtime(project_root: Path | None, entry: dict[str, object]) -> float:
     """Resolve a single file's mtime.
 
     Tries git first (when ``project_root`` is a git repo), then the manifest's
     ``metadata.modified_at_epoch``, then filesystem mtime as a final fallback.
     """
-    rel = entry.get("path", "")
-    meta = entry.get("metadata") or {}
+    rel_val = entry.get("path", "")
+    rel = rel_val if isinstance(rel_val, str) else ""
+    meta_val = entry.get("metadata") or {}
+    meta: dict[str, object] = meta_val if isinstance(meta_val, dict) else {}
     if "modified_at_epoch" in meta:
         try:
-            return float(meta["modified_at_epoch"])
+            return float(meta["modified_at_epoch"])  # type: ignore[arg-type]
         except (TypeError, ValueError):
             pass
     if project_root is not None:

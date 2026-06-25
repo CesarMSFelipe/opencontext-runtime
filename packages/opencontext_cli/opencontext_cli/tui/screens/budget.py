@@ -51,10 +51,7 @@ class BudgetScreen(Screen):  # type: ignore[misc,valid-type]
             from pathlib import Path
 
             ledger_path = (
-                Path(".opencontext")
-                / "runs"
-                / state.identity.run_id
-                / "budget_ledger.json"
+                Path(".opencontext") / "runs" / state.identity.run_id / "budget_ledger.json"
             )
             if not ledger_path.exists():
                 return "No active run"
@@ -73,7 +70,10 @@ class BudgetScreen(Screen):  # type: ignore[misc,valid-type]
             total_budget = ledger.total_budget
             if total_budget:
                 remaining = total_budget - ledger.used_total
-                lines.append(f"\n[bold]Budget:[/] {ledger.used_total} / {total_budget}  ({remaining} remaining)")
+                lines.append(
+                    f"\n[bold]Budget:[/] {ledger.used_total} / {total_budget}"
+                    f"  ({remaining} remaining)"
+                )
             return "\n".join(lines)
         except Exception:
             return "No active run"

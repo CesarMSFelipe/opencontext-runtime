@@ -225,7 +225,8 @@ class EvolutionEngine:
         procedural = [
             m
             for m in memories_written
-            if str(getattr(m, "layer", "") or getattr(m, "type", "")).upper() in (
+            if str(getattr(m, "layer", "") or getattr(m, "type", "")).upper()
+            in (
                 "PROCEDURAL",
                 "PATTERN",
             )

@@ -72,13 +72,16 @@ class TestProposeContextWeights:
 
 
 class TestProposeBudgetChanges:
-    @pytest.mark.parametrize("confidence,expect_proposal", [
-        (0.0, False),
-        (0.29, False),
-        (0.30, True),
-        (0.31, True),
-        (1.0, True),
-    ])
+    @pytest.mark.parametrize(
+        "confidence,expect_proposal",
+        [
+            (0.0, False),
+            (0.29, False),
+            (0.30, True),
+            (0.31, True),
+            (1.0, True),
+        ],
+    )
     def test_confidence_threshold_boundary(self, engine, confidence, expect_proposal):
         budgets = [_budget("apply", confidence)]
         proposals = engine._propose_budget_changes(budgets)
@@ -99,10 +102,12 @@ class TestProposeBudgetChanges:
         assert engine._propose_budget_changes([]) == []
 
     def test_multiple_budgets_above_threshold(self, engine):
-        proposals = engine._propose_budget_changes([
-            _budget("apply", 0.8),
-            _budget("verify", 0.6),
-        ])
+        proposals = engine._propose_budget_changes(
+            [
+                _budget("apply", 0.8),
+                _budget("verify", 0.6),
+            ]
+        )
         assert len(proposals) == 2
 
 
@@ -139,10 +144,12 @@ class TestProposeHarnessGates:
         assert proposal.requires_approval is True
 
     def test_multiple_failed_gates_generate_multiple_proposals(self, engine):
-        run = _run(gates=[
-            _gate("lint", "failed"),
-            _gate("tests", "failed"),
-        ])
+        run = _run(
+            gates=[
+                _gate("lint", "failed"),
+                _gate("tests", "failed"),
+            ]
+        )
         proposals = engine._propose_harness_gates(run)
         assert len(proposals) == 2
 
@@ -177,10 +184,12 @@ class TestProposeSkillCandidates:
 
 class TestSafetyConstraint:
     def test_no_harness_gate_proposal_is_auto_applicable(self, engine):
-        run = _run(gates=[
-            _gate("gate-a", "failed"),
-            _gate("gate-b", "warning"),
-        ])
+        run = _run(
+            gates=[
+                _gate("gate-a", "failed"),
+                _gate("gate-b", "warning"),
+            ]
+        )
         for proposal in engine._propose_harness_gates(run):
             assert proposal.auto_applicable is False, (
                 f"Proposal {proposal.proposal_id!r} has auto_applicable=True — "

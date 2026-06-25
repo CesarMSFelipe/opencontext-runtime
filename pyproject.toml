@@ -36,6 +36,8 @@ strict = true
 mypy_path = "packages/opencontext_core:packages/opencontext_profiles"
 warn_unreachable = true
 exclude = [
+  "packages/.*/build/",
+  "packages/.*/tests/",
 ]
 
 # InquirerPy ships partial/dynamic type info and no usable stubs; the wizard

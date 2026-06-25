@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import pytest
 
+pytest.importorskip("textual", reason="textual not installed")
+
 from opencontext_cli.commands import menu_cmd
 
 

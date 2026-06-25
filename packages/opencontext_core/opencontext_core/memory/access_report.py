@@ -55,7 +55,7 @@ class MemoryAccessReport:
 __all__ = ["AccessEntry", "MemoryAccessReport"]
 
 
-if __name__ == "__main__":  # ponytail: tiny executable sanity check
+if __name__ == "__main__":  # NOTE: tiny executable sanity check
     report = MemoryAccessReport()
     report.record_read("spec/foo", phase="spec")
     report.record_write("decisions/r", phase="apply")

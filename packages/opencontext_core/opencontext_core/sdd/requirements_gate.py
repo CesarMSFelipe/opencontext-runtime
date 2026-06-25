@@ -49,9 +49,7 @@ class RequirementsQualityGate:
         for req_id, body in blocks:
             if self._ears_ok(body) or self._bdd_ok(body):
                 continue
-            errors.append(
-                f"{req_id}: missing WHEN…THEN or Given/When/Then acceptance criterion"
-            )
+            errors.append(f"{req_id}: missing WHEN…THEN or Given/When/Then acceptance criterion")
 
         status = GateStatus.PASSED if not errors else GateStatus.FAILED
         return GateResult(status=status, errors=errors)

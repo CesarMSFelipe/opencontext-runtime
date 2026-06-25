@@ -502,7 +502,7 @@ class HarnessRunner:
                 (passed/warning) in that run are skipped and recorded as
                 ``skipped`` events in this run's ledger; execution picks up at the
                 first incomplete phase.
-                # ponytail: skips re-running done phases, but does NOT rehydrate
+                # NOTE: skips re-running done phases, but does NOT rehydrate
                 # their artifacts into this run — a downstream phase that needs an
                 # earlier phase's output should not be resumed past it. Upgrade to
                 # artifact carry-over if cross-phase resume is needed.
@@ -1866,11 +1866,7 @@ class HarnessRunner:
         # Written only when a ComplianceMatrix was produced by VerifyPhase.
         try:
             verify_phase_result = next(
-                (
-                    a
-                    for a in result.artifacts
-                    if getattr(a, "kind", "") == "verify-report"
-                ),
+                (a for a in result.artifacts if getattr(a, "kind", "") == "verify-report"),
                 None,
             )
             if verify_phase_result is not None:

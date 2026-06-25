@@ -12,6 +12,8 @@ import asyncio
 
 import pytest
 
+textual = pytest.importorskip("textual", reason="textual not installed")
+
 
 @pytest.fixture(autouse=True)
 def _isolated_config(tmp_path, monkeypatch):
@@ -34,9 +36,7 @@ def _project(tmp_path):
     return tmp_path
 
 
-def test_config_screen_builds_three_categories(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_config_screen_builds_three_categories(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     from textual.widgets import ListView
 
     from opencontext_cli.tui.app import OpenContextApp

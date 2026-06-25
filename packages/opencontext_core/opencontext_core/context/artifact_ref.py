@@ -22,9 +22,7 @@ class ArtifactRef(BaseModel):
     backend: Backend = Field(description="Storage backend where the artifact lives")
     path: str = Field(description="Backend-relative path or pointer")
     hash: str = Field(description="Content hash for integrity verification")
-    required: bool = Field(
-        default=True, description="If True, missing artifact fails the run"
-    )
+    required: bool = Field(default=True, description="If True, missing artifact fails the run")
     full_content_required: bool = Field(
         default=False, description="If True, summary-only retrieval is insufficient"
     )
@@ -32,9 +30,7 @@ class ArtifactRef(BaseModel):
 
 if __name__ == "__main__":
     # Self-check: round-trip + backend validation.
-    ref = ArtifactRef(
-        key="k", backend="local", path="p", hash="h", required=True
-    )
+    ref = ArtifactRef(key="k", backend="local", path="p", hash="h", required=True)
     assert ref.backend == "local"
     try:
         ArtifactRef(key="k", backend="nope", path="p", hash="h", required=True)  # type: ignore[arg-type]

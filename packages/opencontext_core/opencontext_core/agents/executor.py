@@ -99,6 +99,7 @@ def apply_edit(root: Path, edit: ApplyEdit) -> AppliedEditReceipt:
     path.write_text("".join(new_lines), encoding="utf-8")
     return AppliedEditReceipt(path=edit.path, operation=edit.operation, changed=True)
 
+
 # Phases that produce an LLM-authored artifact through the delegation seam.
 WORK_PRODUCING_PHASES: tuple[str, ...] = ("spec", "design", "tasks")
 

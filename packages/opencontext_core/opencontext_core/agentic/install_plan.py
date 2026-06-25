@@ -113,10 +113,12 @@ def _resolve_provisioning_commands(
     from opencontext_core.agentic.config import MemoryMode
     from opencontext_core.memory.engram_provisioning import EngramProvisioner
 
-    wants_engram = (
-        ComponentId.ENGRAM in config.components
-        or config.memory_mode in {MemoryMode.AUTO, MemoryMode.ENGRAM, MemoryMode.HYBRID, MemoryMode.ENGRAM_ONLY}
-    )
+    wants_engram = ComponentId.ENGRAM in config.components or config.memory_mode in {
+        MemoryMode.AUTO,
+        MemoryMode.ENGRAM,
+        MemoryMode.HYBRID,
+        MemoryMode.ENGRAM_ONLY,
+    }
     if not wants_engram:
         return []
 

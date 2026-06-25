@@ -10,7 +10,13 @@ from pathlib import Path
 
 import pytest
 
+from opencontext_core.agentic.context_substrate import ContextSubstrateBuilder
+from opencontext_core.agents.executor import ApplyEdit, ApplyOperation, apply_edit
+from opencontext_core.harness.models import HarnessReport
+from opencontext_core.learning.evolution_apply import EvolutionApplier
+from opencontext_core.memory.provider import MemoryProvider
 from opencontext_core.oc_new.flow import OC_NEW_FLOW
+from opencontext_core.oc_new.models import AgentHandoff, HandoffBudget
 from opencontext_core.personas import (
     PersonaVisibility,
     hidden_delegation_personas,
@@ -18,13 +24,6 @@ from opencontext_core.personas import (
     public_support_personas,
 )
 from opencontext_core.workflow.phase_result import PhaseResultEnvelope
-from opencontext_core.oc_new.models import AgentHandoff, HandoffBudget
-from opencontext_core.agents.executor import ApplyOperation, ApplyEdit, apply_edit
-from opencontext_core.learning.evolution_apply import EvolutionApplier, EvolutionApplyResult
-from opencontext_core.memory.provider import MemoryProvider
-from opencontext_core.harness.models import HarnessReport
-from opencontext_core.agentic.context_substrate import ContextSubstrateBuilder
-
 
 EXPECTED_FLOW_PERSONAS = {
     "explore": "oc-explorer",
@@ -294,12 +293,10 @@ def test_evolution_applier_rejects_high_risk_kind() -> None:
 
 
 def test_memory_provider_is_runtime_checkable() -> None:
-    import typing
 
     # runtime_checkable Protocol exposes __protocol_attrs__
     assert hasattr(MemoryProvider, "__protocol_attrs__") or (
-        hasattr(MemoryProvider, "_is_runtime_protocol")
-        and MemoryProvider._is_runtime_protocol  # type: ignore[attr-defined]
+        hasattr(MemoryProvider, "_is_runtime_protocol") and MemoryProvider._is_runtime_protocol  # type: ignore[attr-defined]
     ), "MemoryProvider must be @runtime_checkable"
 
 
@@ -342,8 +339,8 @@ def test_verify_phase_has_required_expected_artifacts() -> None:
 
 
 def test_sdd_config_has_flow_mode_field() -> None:
-    from opencontext_core.config import SDDConfig
     from opencontext_core.agentic.config import FlowMode
+    from opencontext_core.config import SDDConfig
 
     assert "flow_mode" in SDDConfig.model_fields
     cfg = SDDConfig()
@@ -351,8 +348,8 @@ def test_sdd_config_has_flow_mode_field() -> None:
 
 
 def test_memory_policy_config_has_mode_field() -> None:
-    from opencontext_core.config import MemoryPolicyConfig
     from opencontext_core.agentic.config import MemoryMode
+    from opencontext_core.config import MemoryPolicyConfig
 
     assert "mode" in MemoryPolicyConfig.model_fields
     cfg = MemoryPolicyConfig()
@@ -361,6 +358,5 @@ def test_memory_policy_config_has_mode_field() -> None:
 
 def test_context_config_has_budget_mode_field() -> None:
     from opencontext_core.config import ContextConfig
-    from opencontext_core.agentic.config import BudgetMode
 
     assert "budget_mode" in ContextConfig.model_fields

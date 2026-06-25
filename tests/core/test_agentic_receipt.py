@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 import pydantic
+import pytest
 
 from opencontext_core.agentic.receipt import AgenticReceipt
 

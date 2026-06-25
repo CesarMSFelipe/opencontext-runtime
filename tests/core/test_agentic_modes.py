@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from opencontext_core.agentic.config import FlowMode
 from opencontext_core.agentic.modes import (
     should_execute_code,
@@ -12,8 +10,16 @@ from opencontext_core.agentic.modes import (
 )
 
 _ALL_PHASES = [
-    "explore", "propose", "spec", "design", "tasks",
-    "approval", "apply", "verify", "review", "archive",
+    "explore",
+    "propose",
+    "spec",
+    "design",
+    "tasks",
+    "approval",
+    "apply",
+    "verify",
+    "review",
+    "archive",
 ]
 
 

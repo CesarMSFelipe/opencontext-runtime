@@ -14,7 +14,9 @@ from opencontext_core.models.agent_memory import (
 )
 
 
-def _make_record(lifecycle: MemoryLifecycle = MemoryLifecycle.CANDIDATE, suffix: str = "") -> MemoryRecord:
+def _make_record(
+    lifecycle: MemoryLifecycle = MemoryLifecycle.CANDIDATE, suffix: str = ""
+) -> MemoryRecord:
     now = datetime.now(tz=UTC)
     return MemoryRecord(
         id=f"test-lifecycle-{lifecycle.value}{suffix}",
@@ -118,6 +120,7 @@ class TestSQLiteMemoryBackendLifecycle:
 
             # Opening with SQLiteMemoryBackend should migrate without error.
             from opencontext_core.memory.backends import SQLiteMemoryBackend
+
             SQLiteMemoryBackend(db_path)
             # Verify column was added.
             conn2 = sqlite3.connect(db_path)

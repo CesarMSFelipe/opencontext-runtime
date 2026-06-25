@@ -19,6 +19,7 @@ class PersonaVisibility(StrEnum):
     PUBLIC_SUPPORT = "public_support"
     HIDDEN_DELEGATION = "hidden_delegation"
 
+
 # Every persona reaches the knowledge graph and persistent memory through the
 # opencontext MCP server, never through native code search. Grep/Glob are
 # deliberately excluded from the allow-lists below so exploration is forced

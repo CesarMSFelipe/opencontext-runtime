@@ -21,7 +21,7 @@ from opencontext_core.oc_new.models import (
     PhaseStatus,
 )
 
-PhaseNameAlias = PhaseName  # ponytail: narrow alias for UX consumers
+PhaseNameAlias = PhaseName  # NOTE: narrow alias for UX consumers
 PhaseStatusAlias = PhaseStatus
 NextActionKindAlias = NextActionKind
 
@@ -123,7 +123,7 @@ __all__ = [
 ]
 
 
-if __name__ == "__main__":  # ponytail: tiny executable sanity check
+if __name__ == "__main__":  # NOTE: tiny executable sanity check
     from opencontext_core.oc_new.models import ChangeIdentity, NextAction, PhaseState
 
     state = OcNewRunState(

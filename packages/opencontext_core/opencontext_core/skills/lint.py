@@ -21,7 +21,7 @@ from opencontext_core.skills.registry import (
 
 Severity = Literal["error", "warning", "info"]
 
-# Prompt-soup thresholds. ponytail: simple constants, tune if real skills outgrow them.
+# Prompt-soup thresholds. NOTE: simple constants, tune if real skills outgrow them.
 _MAX_BODY_LINES = 300
 _MAX_DESCRIPTION_CHARS = 500
 _MAX_TRIGGERS = 20
@@ -65,11 +65,7 @@ def _resolve_skill_file(path: Path) -> Path:
 
 
 def _sections(content: str) -> list[str]:
-    return [
-        line[3:].strip()
-        for line in content.splitlines()
-        if line.startswith("## ")
-    ]
+    return [line[3:].strip() for line in content.splitlines() if line.startswith("## ")]
 
 
 def explain_skill(path: Path | str) -> SkillExplanation:
@@ -85,7 +81,7 @@ def explain_skill(path: Path | str) -> SkillExplanation:
     content = skill_file.read_text(encoding="utf-8")
     frontmatter = _parse_frontmatter(content)
     body_lines = content.count("\n") + 1
-    # ponytail: char/4 token estimate — good enough to flag bloat, not billing.
+    # NOTE: char/4 token estimate — good enough to flag bloat, not billing.
     estimated_tokens = len(content) // 4
 
     return SkillExplanation(

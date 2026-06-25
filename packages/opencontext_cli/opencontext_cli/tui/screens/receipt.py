@@ -52,9 +52,7 @@ class ReceiptViewer(Screen):  # type: ignore[misc,valid-type]
         try:
             from opencontext_core.workflow.phase_result import PhaseResultEnvelope
 
-            env = PhaseResultEnvelope.model_validate_json(
-                receipt_path.read_text(encoding="utf-8")
-            )
+            env = PhaseResultEnvelope.model_validate_json(receipt_path.read_text(encoding="utf-8"))
             status_color = "green" if env.status in ("passed", "success") else "red"
             lines = [
                 f"[bold]Run:[/] {env.run_id}",

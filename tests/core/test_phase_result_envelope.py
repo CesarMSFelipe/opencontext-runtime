@@ -96,7 +96,6 @@ def test_envelope_error_round_trips_when_set() -> None:
 
 def test_old_envelope_deserializes_without_new_fields() -> None:
     """Old JSON without the 5 new fields deserializes with defaults."""
-    import json
 
     old = {
         "schema_version": "1.0",

@@ -99,9 +99,7 @@ class EngramProvisioner:
             message=f"Engram can be installed via: {' '.join(cmd)}",
         )
 
-    def install(
-        self, *, agent: str | None = None, yes: bool = False
-    ) -> EngramInstallPlan:
+    def install(self, *, agent: str | None = None, yes: bool = False) -> EngramInstallPlan:
         """Run the install plan when yes=True.
 
         Raises RuntimeError if Engram is not detected after install or if
@@ -135,9 +133,7 @@ def _run_command(cmd: list[str]) -> None:
     """Execute a subprocess command; raises RuntimeError on non-zero exit."""
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(
-            f"Command failed: {' '.join(cmd)}\n{result.stderr or result.stdout}"
-        )
+        raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{result.stderr or result.stdout}")
 
 
 if __name__ == "__main__":

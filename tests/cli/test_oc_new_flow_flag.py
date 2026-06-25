@@ -27,14 +27,18 @@ def _run(argv: list[str], monkeypatch: object, tmp_path: Path) -> tuple[int, str
 
 
 def test_flow_automatic_starts_run(tmp_path, monkeypatch) -> None:
-    rc, out = _run(["oc-new", "start", "add health check", "--flow", "automatic"], monkeypatch, tmp_path)
+    rc, out = _run(
+        ["oc-new", "start", "add health check", "--flow", "automatic"], monkeypatch, tmp_path
+    )
     assert rc == 0
     assert "explore" in out
 
 
 def test_flow_stepwise_yields_request_approval(tmp_path, monkeypatch) -> None:
     """--flow stepwise: conductor pauses at first non-approval phase."""
-    rc, out = _run(["oc-new", "start", "stepwise task", "--flow", "stepwise"], monkeypatch, tmp_path)
+    rc, out = _run(
+        ["oc-new", "start", "stepwise task", "--flow", "stepwise"], monkeypatch, tmp_path
+    )
     assert rc == 0
     # stepwise mode pauses before first phase — next_action.kind = request_approval
     assert "request_approval" in out
@@ -50,7 +54,9 @@ def test_flow_none_defaults_to_automatic_behavior(tmp_path, monkeypatch) -> None
 def test_invalid_flow_value_rejected(tmp_path, monkeypatch, capsys) -> None:
     """Invalid --flow value must produce a CLI error."""
     monkeypatch.chdir(tmp_path)
-    with patch.object(sys, "argv", ["opencontext", "oc-new", "start", "task", "--flow", "invalid-mode"]):
+    with patch.object(
+        sys, "argv", ["opencontext", "oc-new", "start", "task", "--flow", "invalid-mode"]
+    ):
         try:
             main()
             exit_code = 0
@@ -61,5 +67,5 @@ def test_invalid_flow_value_rejected(tmp_path, monkeypatch, capsys) -> None:
 
 
 def test_flow_hybrid_starts_run(tmp_path, monkeypatch) -> None:
-    rc, out = _run(["oc-new", "start", "hybrid task", "--flow", "hybrid"], monkeypatch, tmp_path)
+    rc, _ = _run(["oc-new", "start", "hybrid task", "--flow", "hybrid"], monkeypatch, tmp_path)
     assert rc == 0

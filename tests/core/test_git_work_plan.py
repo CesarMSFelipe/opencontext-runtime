@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 import pydantic
+import pytest
 
 from opencontext_core.agentic.config import GitMode
 from opencontext_core.agentic.git_plan import GitWorkPlan, GitWorkPlanner

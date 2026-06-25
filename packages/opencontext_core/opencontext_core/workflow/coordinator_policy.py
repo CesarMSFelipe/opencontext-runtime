@@ -31,7 +31,7 @@ class CoordinatorPolicy:
 __all__ = ["CoordinatorPolicy"]
 
 
-if __name__ == "__main__":  # ponytail: tiny executable sanity check
+if __name__ == "__main__":  # NOTE: tiny executable sanity check
     p = CoordinatorPolicy()
     p.assert_allowed(threading.get_ident())  # main thread ok
     try:

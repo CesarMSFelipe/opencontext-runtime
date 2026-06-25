@@ -6,6 +6,7 @@ Envelope coverage by path:
   - exception → ToolResultEnvelope (status=failed), backward-compat error key
   - success → ToolResultEnvelope (status=passed), payload under data
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch

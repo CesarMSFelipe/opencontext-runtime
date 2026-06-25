@@ -49,9 +49,7 @@ class AICXLockfile(BaseModel):
 
 def _compute_lock_hash(entries: list[AICXLockEntry]) -> str:
     # Deterministic: hash the sorted (name, sha256) pairs.
-    payload = json.dumps(
-        sorted((e.name, e.sha256) for e in entries), separators=(",", ":")
-    )
+    payload = json.dumps(sorted((e.name, e.sha256) for e in entries), separators=(",", ":"))
     return _sha(payload)
 
 
@@ -108,9 +106,7 @@ def build_lockfile(root: str | Path = ".") -> AICXLockfile:
         },
         sort_keys=True,
     )
-    entries.append(
-        AICXLockEntry(name="graph", sha256=_sha(graph_sig), detail=graph.status)
-    )
+    entries.append(AICXLockEntry(name="graph", sha256=_sha(graph_sig), detail=graph.status))
 
     return AICXLockfile(entries=entries, lock_hash=_compute_lock_hash(entries))
 
@@ -149,11 +145,7 @@ def verify_lockfile(root: str | Path = ".") -> dict[str, object]:
     except FileNotFoundError:
         return {"ok": False, "error": "not_locked"}
     current = build_lockfile(root)
-    drifted = [
-        e.name
-        for e in current.entries
-        if _sha_for(pinned, e.name) != e.sha256
-    ]
+    drifted = [e.name for e in current.entries if _sha_for(pinned, e.name) != e.sha256]
     return {
         "ok": pinned.matches(current),
         "pinned_hash": pinned.lock_hash,
