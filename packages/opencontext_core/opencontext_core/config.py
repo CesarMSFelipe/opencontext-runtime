@@ -8,6 +8,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
+from opencontext_core.agentic.config import BudgetMode, FlowMode, MemoryMode
 from opencontext_core.compat import StrEnum
 from opencontext_core.errors import ConfigurationError
 from opencontext_core.models.context import CompressionStrategy
@@ -451,6 +452,10 @@ class ContextConfig(BaseModel):
     sections: ContextSectionConfig = Field(description="Per-section budgets.")
     ranking: RankingConfig = Field(description="Ranking settings.")
     compression: CompressionConfig = Field(description="Compression settings.")
+    budget_mode: BudgetMode = Field(
+        default=BudgetMode.WARN,
+        description="Token budget enforcement strategy (off/warn/strict/adaptive/ask).",
+    )
 
 
 class CompressionPolicyConfig(BaseModel):
@@ -694,6 +699,10 @@ class MemoryPolicyConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = Field(default=True, description="Local memory layer enabled.")
+    mode: MemoryMode = Field(
+        default=MemoryMode.AUTO,
+        description="Memory backend mode (auto/engram/local/off/hybrid/engram_only).",
+    )
     provider: str = Field(
         default="local",
         description=(
@@ -960,6 +969,10 @@ class SDDConfig(BaseModel):
     artifact_store: ArtifactStoreConfig = Field(default_factory=ArtifactStoreConfig)
     delivery_strategy: DeliveryStrategy = Field(default=DeliveryStrategy.PLAN_ONLY)
     chain_strategy: ChainStrategy = Field(default=ChainStrategy.STACKED_TO_MAIN)
+    flow_mode: FlowMode = Field(
+        default=FlowMode.HYBRID,
+        description="Pause and execution policy for the agentic flow.",
+    )
     track: str = Field(
         default="full",
         description=(
