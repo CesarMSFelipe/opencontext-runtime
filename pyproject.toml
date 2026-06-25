@@ -8,6 +8,7 @@ src = [
   "packages/opencontext_profiles",
   "tests",
 ]
+exclude = ["packages/*/build", "packages/*/dist"]
 
 [tool.ruff.lint]
 select = ["B", "E", "F", "I", "RUF", "UP"]

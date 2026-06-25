@@ -20,6 +20,8 @@ htmlcov/
 # Build and packaging outputs
 dist/
 build/
+packages/*/build/
+packages/*/dist/
 *.egg-info/
 pip-wheel-metadata/
 site/
