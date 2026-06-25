@@ -49,11 +49,24 @@ class GraphScreen(Screen):  # type: ignore[misc, valid-type]
         self,
         view_state: GraphViewState | None = None,
         title: str = "Graph",
+        *,
+        mode: GraphMode = GraphMode.RUN,
+        root: Path | str = ".",
+        run_id: str | None = None,
         **kwargs: Any,
     ) -> None:
         if _TEXTUAL_AVAILABLE:
             super().__init__(**kwargs)
-        self._view_state = view_state or GraphViewState(nodes=[], edges=[])
+        # When no explicit view_state is given, load it from disk by mode:
+        # RUN+run_id → the oc-new run graph; KG → the knowledge graph; else empty.
+        if view_state is None:
+            if mode == GraphMode.RUN and run_id:
+                view_state = load_graph_for_run(run_id, root=root)
+            elif mode == GraphMode.KG:
+                view_state = load_graph_for_kg(root=root)
+            else:
+                view_state = GraphViewState(nodes=[], edges=[], mode=mode)
+        self._view_state = view_state
         self._title = title
         self._no_tui = not sys.stdout.isatty()
 
