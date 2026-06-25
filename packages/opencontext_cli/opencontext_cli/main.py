@@ -4194,9 +4194,14 @@ def _memory(args: argparse.Namespace) -> None:
         hit = False
         store = _agent_memory_store(args)
         if store is not None:
-            for rec in store.search(args.query, limit=10):
+            results = store.search(args.query, limit=10)
+            if results:
+                print("Use `memory get <id>` for full content.\n")
+            for rec in results:
                 seen.add(rec.id)
-                print(f"{rec.id} [{rec.layer.value}]: {rec.content[:100]}...")
+                ts = rec.updated_at.strftime("%Y-%m-%d %H:%M") if rec.updated_at else "?"
+                score = f"{rec.confidence:.2f}"
+                print(f"{rec.id} [{rec.layer.value}] ts={ts} score={score}: {rec.content[:100]}...")
                 hit = True
         for item in repo.search(args.query):
             if item.id in seen:

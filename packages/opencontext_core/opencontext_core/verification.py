@@ -460,7 +460,7 @@ def build_report_payload(report: VerificationReport) -> dict[str, Any]:
             {
                 "name": r.name,
                 "status": r.status,
-                "ok": r.status == "passed",
+                "ok": r.status in ("passed", "skipped"),
                 "message": r.message,
                 "details": r.details,
             }

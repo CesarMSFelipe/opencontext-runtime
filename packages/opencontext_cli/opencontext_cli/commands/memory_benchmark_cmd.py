@@ -78,7 +78,8 @@ def handle_memory_benchmark(args: Any) -> None:
         if fixture_path is None:
             print(
                 f"Error: fixture {fixture_name!r} not found. Searched:\n"
-                + "\n".join(f"  {c}" for c in candidates),
+                + "\n".join(f"  {c}" for c in candidates)
+                + "\nTip: supply an explicit path with --fixture-path <path>.",
                 file=sys.stderr,
             )
             raise SystemExit(1)
@@ -108,3 +109,9 @@ def handle_memory_benchmark(args: Any) -> None:
         print(f"  Precision@{k}: {result.precision_at_5:.3f}")
         print(f"  Latency p50:  {result.p50_ms:.1f} ms")
         print(f"  Latency p95:  {result.p95_ms:.1f} ms")
+        if result.recall_at_5 == 0.0:
+            print(
+                "\nNote: Recall@k is 0.0 — the memory store appears empty or has no relevant "
+                "records. Populate the store with 'opencontext memory harvest' (or run an "
+                "agentic loop) to see meaningful recall scores."
+            )

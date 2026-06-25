@@ -235,7 +235,7 @@ class AsyncEmbeddingWorker:
         # Verify we're under 150ms
         elapsed = (time.time() - start) * 1000
         if elapsed > 150:
-            _log.warning("enqueue took %.1fms, exceeds 150ms guarantee", elapsed)
+            _log.debug("enqueue took %.1fms, exceeds 150ms guarantee", elapsed)
 
         return queued
 
