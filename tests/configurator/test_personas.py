@@ -11,6 +11,12 @@ from opencontext_cli.commands import persona_cmd
 from opencontext_core.configurator.service import Configurator
 from opencontext_core.personas import PERSONAS, get_persona
 
+_PUBLIC_EXPECTED = {
+    "oc-orchestrator",
+    "oc-professor",
+    "oc-reviewer",
+}
+
 _EXPECTED = {
     "oc-orchestrator",
     "oc-explorer",
@@ -19,7 +25,6 @@ _EXPECTED = {
     "oc-professor",
     "oc-reviewer",
     "oc-tester",
-    # Contractual agentic system personas
     "oc-context-engineer",
     "oc-requirements",
     "oc-planner",
@@ -94,7 +99,7 @@ def test_configure_writes_persona_files(tmp_path: Path, monkeypatch: pytest.Monk
 
     agents_dir = project / ".claude" / "agents"
     written = {p.stem for p in agents_dir.glob("oc-*.md")}
-    assert written == _EXPECTED
+    assert written == _PUBLIC_EXPECTED
     body = (agents_dir / "oc-orchestrator.md").read_text(encoding="utf-8")
     assert "name: OC Orchestrator" in body
 
@@ -112,7 +117,7 @@ def test_rendered_persona_has_tools_frontmatter(
     project.mkdir()
     Configurator(project_root=project).configure(["claude-code"], scope="local")
 
-    body = (project / ".claude" / "agents" / "oc-explorer.md").read_text(encoding="utf-8")
+    body = (project / ".claude" / "agents" / "oc-reviewer.md").read_text(encoding="utf-8")
     frontmatter = body.split("---", 2)[1]
     assert "tools:" in frontmatter
     assert "opencontext_" in frontmatter
