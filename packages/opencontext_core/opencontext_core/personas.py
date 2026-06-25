@@ -39,12 +39,14 @@ class Persona:
     description: str
     system_prompt: str
     tools: tuple[str, ...] = field(default_factory=tuple)
+    visibility: str = "delegation"  # "public" | "delegation"
 
 
 _ORCHESTRATOR = Persona(
     id="oc-orchestrator",
     name="OC Orchestrator",
     description="Thin coordinator: plans, delegates, and verifies through the gates.",
+    visibility="public",
     system_prompt="""You are the OC Orchestrator.
 
 You coordinate work end to end without doing it all yourself. Keep the main
@@ -83,6 +85,7 @@ _PROFESSOR = Persona(
     id="oc-professor",
     name="OC Professor",
     description="Teaching mentor: explains the why and the concept before the code.",
+    visibility="public",
     system_prompt="""You are the OC Professor.
 
 You help people understand, not just ship. Lead with the concept and the reason,
@@ -105,6 +108,7 @@ _REVIEWER = Persona(
     id="oc-reviewer",
     name="OC Reviewer",
     description="Rigorous reviewer: code review, GGA gates, judgment-day review. One finding per line.",  # noqa: E501
+    visibility="public",
     system_prompt="""You are the OC Reviewer.
 
 Three modes: code review, GGA quality enforcement, and judgment-day adversarial review.
@@ -469,6 +473,19 @@ PERSONAS: tuple[Persona, ...] = (
     _EVOLUTION_STEWARD,
 )
 _BY_ID: dict[str, Persona] = {p.id: p for p in PERSONAS}
+
+
+def public_personas() -> tuple[Persona, ...]:
+    """Return personas with visibility == 'public' (written to visible agent dirs)."""
+    return tuple(p for p in PERSONAS if p.visibility == "public")
+
+
+def delegation_personas() -> tuple[Persona, ...]:
+    """Return personas with visibility == 'delegation' (internal, not emitted)."""
+    return tuple(p for p in PERSONAS if p.visibility == "delegation")
+
+
+assert len(public_personas()) + len(delegation_personas()) == len(PERSONAS)
 
 # Which persona drives each SDD/harness phase. The agent system auto-switches to
 # this persona's system prompt for the phase. Professor is intentionally NOT a
