@@ -39,6 +39,14 @@ class TestExplorePhaseWithNullMemory:
         data = default_config_data()
         data["project"]["name"] = "test-project"
         config_path.write_text(yaml.safe_dump(data), encoding="utf-8")
+        # A real source file to explore. opencontext.yaml is now filtered out of
+        # retrieval (REQ-05), so the project needs at least one non-OC file or
+        # there is nothing to retrieve.
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.py").write_text(
+            "def health():\n    return {'status': 'ok'}\n", encoding="utf-8"
+        )
 
         phase_config = PhaseConfig(budget_tokens=6000, gates=[])
         phase = ExplorePhase(

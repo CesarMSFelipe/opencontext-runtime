@@ -116,7 +116,9 @@ def test_api_setup_project_without_cli(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["files"] == 3
+    # Only real source files are indexed: src/auth.py + README.md. The generated
+    # opencontext.yaml is excluded from the index (REQ-05), so it is not counted.
+    assert body["files"] == 2
     assert (project_root / "opencontext.yaml").exists()
     assert (project_root / ".opencontext/agents/README.md").exists()
     assert (project_root / ".opencontext/models/default.yaml").exists()
