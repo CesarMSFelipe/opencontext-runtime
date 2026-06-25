@@ -492,8 +492,14 @@ def _build_parser() -> argparse.ArgumentParser:
     install_parser.add_argument(
         "--preset",
         default=None,
-        choices=["full-opencontext", "agentic-minimal", "memory-only", "sdd-only",
-                 "context-only", "custom"],
+        choices=[
+            "full-opencontext",
+            "agentic-minimal",
+            "memory-only",
+            "sdd-only",
+            "context-only",
+            "custom",
+        ],
         help="Agentic preset (default: none — use existing install flow).",
     )
     install_parser.add_argument(
@@ -2595,9 +2601,7 @@ def _doctor(
 
     # ── MetaHarness ───────────────────────────────────────────────────
     if scope == "metaharness":
-        handle_doctor_metaharness(
-            type("Args", (), {"json_output": json_output})()
-        )
+        handle_doctor_metaharness(type("Args", (), {"json_output": json_output})())
         return
 
     # ── Deep Diagnostics ──────────────────────────────────────────────

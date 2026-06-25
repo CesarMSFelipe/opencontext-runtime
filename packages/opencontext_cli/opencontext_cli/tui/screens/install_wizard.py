@@ -15,6 +15,7 @@ except ImportError:
     Screen = object  # type: ignore[assignment,misc]
     ComposeResult = Any  # type: ignore[assignment]
     Binding = object  # type: ignore[assignment]
+
     def reactive(default):  # type: ignore[assignment]
         return default
 
@@ -106,7 +107,7 @@ class InstallWizard(Screen):  # type: ignore[misc,valid-type]
             return (
                 header
                 + "\n[bold]Memory backend:[/bold]\n\n"
-                + "  [bold][1][/bold] Engram  [dim](recommended — cross-session semantic memory)[/dim]\n"
+                + "  [bold][1][/bold] Engram  [dim](recommended — cross-session memory)[/dim]\n"
                 + "  [bold][2][/bold] Local only  [dim](SQLite, project-scoped)[/dim]\n"
                 + "  [bold][3][/bold] Off  [dim](no memory persistence)[/dim]\n\n"
                 + "Press [bold][n][/bold] to continue."
@@ -116,7 +117,7 @@ class InstallWizard(Screen):  # type: ignore[misc,valid-type]
             return (
                 header
                 + "\n[bold]SDD flow mode:[/bold]\n\n"
-                + "  [bold][1][/bold] Hybrid  [dim](recommended — auto-advances, pauses on risk)[/dim]\n"
+                + "  [bold][1][/bold] Hybrid  [dim](recommended — auto-advances, pauses)[/dim]\n"
                 + "  [bold][2][/bold] Automatic  [dim](fully autonomous)[/dim]\n"
                 + "  [bold][3][/bold] Stepwise  [dim](pause after every phase)[/dim]\n\n"
                 + "Press [bold][n][/bold] to continue."

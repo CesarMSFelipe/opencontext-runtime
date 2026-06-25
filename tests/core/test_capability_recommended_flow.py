@@ -1,4 +1,5 @@
 """Tests for ClientCapability recommended_flow field."""
+
 from __future__ import annotations
 
 from opencontext_core.configurator.capability import build_capability_matrix
@@ -41,5 +42,8 @@ def test_all_clients_have_recommended_flow():
     matrix = build_capability_matrix()
     for cap in matrix.clients:
         assert cap.recommended_flow in {
-            "native_oc_new", "mcp_run", "cli_loop", "instructions_only"
+            "native_oc_new",
+            "mcp_run",
+            "cli_loop",
+            "instructions_only",
         }, f"{cap.agent_id} has invalid recommended_flow: {cap.recommended_flow}"

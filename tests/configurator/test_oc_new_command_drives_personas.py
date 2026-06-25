@@ -39,7 +39,7 @@ def test_oc_new_command_spawns_each_phase_persona() -> None:
 def test_oc_new_command_no_stale_personas() -> None:
     """spec/tasks/archive must not name oc-orchestrator; verify must not name oc-reviewer."""
     body = _oc_new_body()
-    # oc-orchestrator is still valid for propose — check it is not used for spec/tasks/archive/verify
+    # oc-orchestrator valid for propose — not for spec/tasks/archive/verify
     assert "subagent_type: oc-reviewer" not in body, (
         "verify persona must be oc-harness-verifier, not oc-reviewer"
     )

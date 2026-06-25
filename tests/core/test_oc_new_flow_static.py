@@ -1,4 +1,5 @@
 """Static flow smoke test — drives conductor through all 10 phases using file stubs."""
+
 from __future__ import annotations
 
 from opencontext_core.oc_new.conductor import OcNewConductor
@@ -20,6 +21,7 @@ def test_verify_phase_expected_artifacts_include_evidence() -> None:
     artifacts = _phase("verify").expected_artifacts
     assert "compliance-matrix.json" in artifacts
     assert "harness-report.json" in artifacts
+
 
 # Artifacts that each phase needs from the previous phase
 _PHASE_ARTIFACTS: dict[str, list[str]] = {

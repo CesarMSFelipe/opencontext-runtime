@@ -20,7 +20,7 @@ def _tiktoken_module() -> Any | None:
     """Return the imported ``tiktoken`` module, or ``None`` when unavailable."""
 
     try:
-        import tiktoken
+        import tiktoken  # type: ignore[import-not-found]
     except ImportError:
         return None
     return tiktoken

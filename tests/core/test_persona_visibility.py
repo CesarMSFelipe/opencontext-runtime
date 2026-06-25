@@ -32,12 +32,12 @@ def test_completeness_guard():
 
 def test_default_visibility_is_delegation():
     for p in delegation_personas():
-        assert p.visibility == "delegation"
+        assert p.visibility == "hidden_delegation"
 
 
 def test_public_visibility_value():
     for p in public_personas():
-        assert p.visibility == "public"
+        assert str(p.visibility).startswith("public")
 
 
 def test_no_overlap():

@@ -104,10 +104,7 @@ class TestGraphViewStateCap:
     def test_bfs_trims_from_focal_node(self) -> None:
         mod = _get_models()
         nodes = [mod.GraphNodeView(node_id=str(i), label=str(i)) for i in range(70)]
-        edges = [
-            mod.GraphEdgeView(source_id=str(i), target_id=str(i + 1))
-            for i in range(69)
-        ]
+        edges = [mod.GraphEdgeView(source_id=str(i), target_id=str(i + 1)) for i in range(69)]
         state = mod.GraphViewState.build(nodes, edges, focal_node_id="0")
         assert len(state.nodes) <= 60
 

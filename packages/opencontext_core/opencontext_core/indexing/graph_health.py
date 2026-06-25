@@ -91,9 +91,7 @@ def compute_graph_health(db_path: str | Path) -> GraphHealthReport:
     # but a very high ratio is worth surfacing.
     if nodes and orphan_count / nodes > 0.5:
         status = "degraded"
-        warnings.append(
-            f"{orphan_count}/{nodes} symbols have no inbound reference (advisory)"
-        )
+        warnings.append(f"{orphan_count}/{nodes} symbols have no inbound reference (advisory)")
 
     return GraphHealthReport(
         status=status,

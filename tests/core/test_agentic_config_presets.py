@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
 import pydantic
+import pytest
 
-from opencontext_core.agentic.config import AgenticFlowConfig, PresetId, ComponentId
+from opencontext_core.agentic.config import AgenticFlowConfig, ComponentId, PresetId
 from opencontext_core.agentic.presets import preset_config
 
 
@@ -56,7 +56,7 @@ def test_config_json_round_trip() -> None:
 
 def test_oc_new_run_state_accepts_config_field() -> None:
     """OcNewRunState.config field survives model_dump / model_validate round-trip."""
-    from opencontext_core.oc_new.models import OcNewRunState, ChangeIdentity, PhaseState
+    from opencontext_core.oc_new.models import ChangeIdentity, OcNewRunState, PhaseState
 
     identity = ChangeIdentity.from_task("test task")
     state = OcNewRunState(

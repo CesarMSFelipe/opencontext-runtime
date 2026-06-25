@@ -26,7 +26,9 @@ def test_no_pm_degrades_gracefully() -> None:
     provisioner = EngramProvisioner()
     with (
         patch.object(provisioner, "detect", return_value=False),
-        patch("opencontext_core.memory.engram_provisioning._probe_package_managers", return_value=None),
+        patch(
+            "opencontext_core.memory.engram_provisioning._probe_package_managers", return_value=None
+        ),
     ):
         plan = provisioner.plan_install()
     assert plan.install_command is None
@@ -47,12 +49,14 @@ def test_install_raises_when_not_detected_and_yes_false() -> None:
     provisioner = EngramProvisioner()
     with (
         patch.object(provisioner, "detect", return_value=False),
-        patch("opencontext_core.memory.engram_provisioning._probe_package_managers",
-              return_value=["brew", "install", "engram"]),
+        patch(
+            "opencontext_core.memory.engram_provisioning._probe_package_managers",
+            return_value=["brew", "install", "engram"],
+        ),
     ):
         try:
             provisioner.install(yes=False)
-            assert False, "Expected RuntimeError"
+            raise AssertionError("Expected RuntimeError")
         except RuntimeError:
             pass
 
@@ -61,8 +65,10 @@ def test_install_plan_with_brew_has_command() -> None:
     provisioner = EngramProvisioner()
     with (
         patch.object(provisioner, "detect", return_value=False),
-        patch("opencontext_core.memory.engram_provisioning._probe_package_managers",
-              return_value=["brew", "install", "engram"]),
+        patch(
+            "opencontext_core.memory.engram_provisioning._probe_package_managers",
+            return_value=["brew", "install", "engram"],
+        ),
     ):
         plan = provisioner.plan_install()
     assert plan.install_command == ["brew", "install", "engram"]

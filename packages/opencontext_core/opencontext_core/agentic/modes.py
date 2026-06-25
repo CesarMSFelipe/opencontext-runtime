@@ -9,14 +9,10 @@ from __future__ import annotations
 from opencontext_core.agentic.config import FlowMode
 
 # NOTE: Phases that HYBRID mode pauses at in addition to "approval".
-_HYBRID_PAUSE_PHASES = frozenset(
-    {"spec", "design", "tasks", "approval", "verify", "review"}
-)
+_HYBRID_PAUSE_PHASES = frozenset({"spec", "design", "tasks", "approval", "verify", "review"})
 
 # NOTE: Modes that disable all code execution.
-_NO_EXECUTE_MODES = frozenset(
-    {FlowMode.ENGRAM_ONLY, FlowMode.OPENSPEC_ONLY, FlowMode.OBSERVE_ONLY}
-)
+_NO_EXECUTE_MODES = frozenset({FlowMode.ENGRAM_ONLY, FlowMode.OPENSPEC_ONLY, FlowMode.OBSERVE_ONLY})
 
 # NOTE: Modes that disable writing OpenSpec artifacts.
 _NO_OPENSPEC_MODES = frozenset({FlowMode.ENGRAM_ONLY, FlowMode.OBSERVE_ONLY})

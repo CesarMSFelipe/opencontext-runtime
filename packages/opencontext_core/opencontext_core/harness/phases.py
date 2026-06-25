@@ -2020,11 +2020,7 @@ class VerifyPhase(HarnessPhase):
                             message=(
                                 f"ComplianceMatrix: {len(req_ids) - len(missing_reqs)}"
                                 f"/{len(req_ids)} requirements covered."
-                                + (
-                                    f" Missing: {', '.join(missing_reqs)}"
-                                    if missing_reqs
-                                    else ""
-                                )
+                                + (f" Missing: {', '.join(missing_reqs)}" if missing_reqs else "")
                             ),
                             metadata={"matrix": matrix.model_dump(mode="json")},
                         )

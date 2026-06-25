@@ -1,4 +1,5 @@
 """Tests for OcNewConductor."""
+
 from __future__ import annotations
 
 from opencontext_core.oc_new.conductor import OcNewConductor
@@ -94,7 +95,6 @@ def test_conductor_state_persisted(tmp_path):
 
 def test_mark_done_reads_artifacts_from_envelope_file(tmp_path):
     """When phase-result.<phase>.json exists, its artifacts field is used."""
-    import json
 
     from opencontext_core.workflow.phase_result import PhaseResultEnvelope
 
@@ -114,9 +114,7 @@ def test_mark_done_reads_artifacts_from_envelope_file(tmp_path):
         duration_s=0.1,
         artifacts=["explore.artifact.json", "context-pack.json"],
     )
-    (run_dir / "phase-result.explore.json").write_text(
-        envelope.model_dump_json(), encoding="utf-8"
-    )
+    (run_dir / "phase-result.explore.json").write_text(envelope.model_dump_json(), encoding="utf-8")
 
     new_state = conductor.mark_done(state.identity.run_id, "explore", artifact_paths=[])
     explore_phase = new_state.phase("explore")

@@ -44,9 +44,7 @@ def require_phase_envelope(result: Any) -> PhaseResultEnvelope:
             return payload
         return PhaseResultEnvelope.model_validate(payload)
     except Exception as exc:
-        raise DelegationValidationError(
-            f"Invalid PhaseResultEnvelope payload: {exc}"
-        ) from exc
+        raise DelegationValidationError(f"Invalid PhaseResultEnvelope payload: {exc}") from exc
 
 
 def validate_expected_artifacts(

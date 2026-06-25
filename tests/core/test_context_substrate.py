@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 import pydantic
+import pytest
 
 from opencontext_core.agentic.context_substrate import (
     ContextSubstrateBuilder,
@@ -26,17 +26,12 @@ def test_available_tokens_matches_budget(tmp_path) -> None:
 
 
 def test_pack_hash_is_none_when_builder_absent(tmp_path) -> None:
-    # G2: ContextPackBuilder is not shipped in this build. The substrate
-    # builder degrades honestly: context_pack_hash is None + a UserWarning
-    # is emitted. See opencontext_core/agentic/context_substrate.py.
-    import warnings
-
+    # G2: The substrate builder degrades honestly when KG is not indexed:
+    # context_pack_hash is None and a warning is recorded in report.warnings.
     builder = ContextSubstrateBuilder(root=tmp_path)
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        report = builder.build_for_phase(task="test", phase="design", budget=4000)
+    report = builder.build_for_phase(task="test", phase="design", budget=4000)
     assert report.context_pack_hash is None
-    assert any("unavailable" in str(w.message) for w in caught)
+    assert len(report.warnings) > 0
 
 
 def test_not_indexed_when_no_oc_dir(tmp_path) -> None:

@@ -65,8 +65,12 @@ class TestRequirePhaseEnvelope:
 class TestValidateExpectedArtifacts:
     def _envelope(self, artifacts: list[str]) -> PhaseResultEnvelope:
         return PhaseResultEnvelope(
-            run_id="r", change_id="c", phase="apply",
-            status="passed", duration_s=0.5, artifacts=artifacts,
+            run_id="r",
+            change_id="c",
+            phase="apply",
+            status="passed",
+            duration_s=0.5,
+            artifacts=artifacts,
         )
 
     def test_returns_empty_when_all_expected_present(self):
@@ -108,10 +112,14 @@ class TestDelegationValidator:
         validator = DelegationValidator()
         result = _result(envelope={**_valid_envelope_dict(), "artifacts": ["spec.md"]})
         with pytest.raises(DelegationValidationError, match="missing expected artifacts"):
-            validator.validate(result, requires_envelope=True, expected_artifacts=["spec.md", "design.md"])
+            validator.validate(
+                result, requires_envelope=True, expected_artifacts=["spec.md", "design.md"]
+            )
 
     def test_passes_when_all_expected_artifacts_present(self):
         validator = DelegationValidator()
         result = _result(envelope={**_valid_envelope_dict(), "artifacts": ["spec.md", "design.md"]})
-        env = validator.validate(result, requires_envelope=True, expected_artifacts=["spec.md", "design.md"])
+        env = validator.validate(
+            result, requires_envelope=True, expected_artifacts=["spec.md", "design.md"]
+        )
         assert env is not None

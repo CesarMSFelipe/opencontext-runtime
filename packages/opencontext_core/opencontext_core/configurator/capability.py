@@ -125,9 +125,7 @@ def build_capability_matrix() -> CapabilityMatrix:
                 mcp=True,
                 mcp_shape=adapter.mcp_shape.value,
                 honors_agents_md=adapter.honors_agents_md,
-                instructions_scope=(
-                    "project" if adapter.instructions_project_scoped else "home"
-                ),
+                instructions_scope=("project" if adapter.instructions_project_scoped else "home"),
                 instructions_filename=adapter.instructions_filename,
                 **extra,  # type: ignore[arg-type]
             )

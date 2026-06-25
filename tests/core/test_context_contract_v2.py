@@ -71,9 +71,7 @@ def test_v2_profile_fields_default_none() -> None:
 
 
 def test_v2_fields_round_trip_via_yaml() -> None:
-    c = _make_contract(
-        workflow_hint="sdd", policy_profile="strict", quality_profile="strict"
-    )
+    c = _make_contract(workflow_hint="sdd", policy_profile="strict", quality_profile="strict")
     parsed = yaml.safe_load(c.to_yaml())
     assert parsed["workflow_hint"] == "sdd"
     assert parsed["policy_profile"] == "strict"

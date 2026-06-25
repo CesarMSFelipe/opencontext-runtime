@@ -6,9 +6,7 @@ import json
 import os
 from pathlib import Path
 
-import pytest
-
-from opencontext_core.install_manager import InstallState, InstallationManager
+from opencontext_core.install_manager import InstallationManager, InstallState
 
 
 def test_install_state_files_default():

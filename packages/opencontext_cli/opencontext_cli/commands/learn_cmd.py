@@ -120,9 +120,7 @@ def _handle_status(args: argparse.Namespace) -> None:
     total_ops = feedback.get("total_operations", feedback.get("total", "?"))
     print(f"  Total ops seen : {total_ops}")
     if patterns:
-        avg_success = sum(
-            v.get("success_rate", 0.0) for v in patterns.values()
-        ) / len(patterns)
+        avg_success = sum(v.get("success_rate", 0.0) for v in patterns.values()) / len(patterns)
         print(f"  Avg success    : {avg_success:.0%}")
 
 

@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from opencontext_cli.commands.uninstall_cmd import _purge_project_artifacts, verify_no_traces
-
 
 # ---------------------------------------------------------------------------
 # verify_no_traces unit tests

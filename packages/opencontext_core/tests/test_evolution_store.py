@@ -6,7 +6,9 @@ from opencontext_core.learning.evolution import EvolutionProposal
 from opencontext_core.learning.evolution_store import EvolutionStore
 
 
-def _proposal(proposal_id: str, kind: str = "context_weight", status: str = "proposed") -> EvolutionProposal:
+def _proposal(
+    proposal_id: str, kind: str = "context_weight", status: str = "proposed"
+) -> EvolutionProposal:
     return EvolutionProposal(
         proposal_id=proposal_id,
         kind=kind,

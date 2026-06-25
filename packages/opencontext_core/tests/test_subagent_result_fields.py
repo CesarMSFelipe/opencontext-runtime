@@ -21,7 +21,13 @@ class TestSubAgentResultNewFields:
         assert result.token_usage == {}
 
     def test_can_set_envelope(self):
-        payload = {"run_id": "r", "change_id": "c", "phase": "apply", "status": "passed", "duration_s": 0.5}
+        payload = {
+            "run_id": "r",
+            "change_id": "c",
+            "phase": "apply",
+            "status": "passed",
+            "duration_s": 0.5,
+        }
         result = SubAgentResult(status="success", output="done", envelope=payload)
         assert result.envelope == payload
 
@@ -30,11 +36,15 @@ class TestSubAgentResultNewFields:
         assert result.skill_path == "skills/my-skill.md"
 
     def test_can_set_memory_policy(self):
-        result = SubAgentResult(status="success", output="done", memory_policy={"layer": "EPISODIC"})
+        result = SubAgentResult(
+            status="success", output="done", memory_policy={"layer": "EPISODIC"}
+        )
         assert result.memory_policy == {"layer": "EPISODIC"}
 
     def test_can_set_token_usage(self):
-        result = SubAgentResult(status="success", output="done", token_usage={"input": 100, "output": 50})
+        result = SubAgentResult(
+            status="success", output="done", token_usage={"input": 100, "output": 50}
+        )
         assert result.token_usage == {"input": 100, "output": 50}
 
     def test_existing_fields_unchanged(self):

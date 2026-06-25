@@ -124,9 +124,7 @@ class OcNewConductor:
             update={
                 "status": status,
                 "completed_at": datetime.now(tz=UTC),
-                "artifact_paths": (
-                    resolved if resolved is not None else phase.artifact_paths
-                ),
+                "artifact_paths": (resolved if resolved is not None else phase.artifact_paths),
                 "warnings": resolved_warnings if resolved_warnings is not None else phase.warnings,
             }
         )
@@ -599,7 +597,7 @@ class OcNewConductor:
         run_dir = self.root / ".opencontext" / "runs" / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         proposal_path = run_dir / "lessons.json"
-        # ponytail: fail-closed — assert the resolved path never touches the user home.
+        # NOTE: fail-closed — assert the resolved path never touches the user home.
         home = Path.home()
         try:
             proposal_path.resolve().relative_to(home.resolve())

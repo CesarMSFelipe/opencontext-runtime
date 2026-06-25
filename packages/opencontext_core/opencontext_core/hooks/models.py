@@ -58,7 +58,7 @@ class HookInput(BaseModel):
 __all__ = ["HookDecision", "HookEvent", "HookInput"]
 
 
-if __name__ == "__main__":  # ponytail: tiny executable sanity check
+if __name__ == "__main__":  # NOTE: tiny executable sanity check
     assert {e.name for e in HookEvent} == {"PHASE_START", "PHASE_END", "RUN_START", "RUN_END"}
     assert {d.name for d in HookDecision} == {"PROCEED", "HALT"}
     inp = HookInput(phase_name="spec", run_id="run-1")

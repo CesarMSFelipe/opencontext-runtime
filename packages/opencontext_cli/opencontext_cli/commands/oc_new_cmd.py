@@ -130,8 +130,9 @@ def add_oc_new_parser(subparsers: Any) -> None:
     done.add_argument("phase", help="Phase name, e.g. explore")
     done.add_argument("--run-id", dest="run_id", default=None)
     done.add_argument("--artifact", dest="artifacts", action="append", default=[], metavar="PATH")
-    done.add_argument("--status", dest="done_status", default="passed",
-                      choices=["passed", "warning", "failed"])
+    done.add_argument(
+        "--status", dest="done_status", default="passed", choices=["passed", "warning", "failed"]
+    )
 
     resume = sub.add_parser("resume", help="Resume a run (re-compute next action).")
     resume.add_argument("run_id", help="Run ID to resume")

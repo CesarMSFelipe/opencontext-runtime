@@ -83,6 +83,7 @@ def _make_server(tmp_path: Path, *, require_write_approval: bool | None) -> tupl
     server = MCPServer(db_path=tmp_path / "kg.db", project_root=root, runtime=runtime)
     # NOTE: write-tool tests need explicit policy; code-write tools not in safe default
     from opencontext_core.tools.policy import ToolPermissionPolicy
+
     server.policy = ToolPermissionPolicy(allowed_tools=set(server.tools.keys()))
     return server, root
 

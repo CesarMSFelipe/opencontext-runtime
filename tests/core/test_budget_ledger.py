@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 import pydantic
+import pytest
 
 from opencontext_core.agentic.budget import BudgetLedger, PhaseBudget
 
@@ -19,18 +19,18 @@ def test_phase_spend_accumulates() -> None:
 
 def test_over_budget_false_when_within_limit() -> None:
     ledger = BudgetLedger(mode="strict", total_budget=1000)
-    ledger = ledger.add_phase(PhaseBudget(
-        phase="explore", used_input_tokens=600, used_output_tokens=200
-    ))
+    ledger = ledger.add_phase(
+        PhaseBudget(phase="explore", used_input_tokens=600, used_output_tokens=200)
+    )
     assert ledger.total_spent == 800
     assert not ledger.over_budget
 
 
 def test_over_budget_true_when_exceeded() -> None:
     ledger = BudgetLedger(mode="strict", total_budget=500)
-    ledger = ledger.add_phase(PhaseBudget(
-        phase="apply", used_input_tokens=400, used_output_tokens=250
-    ))
+    ledger = ledger.add_phase(
+        PhaseBudget(phase="apply", used_input_tokens=400, used_output_tokens=250)
+    )
     assert ledger.total_spent == 650
     assert ledger.over_budget
 

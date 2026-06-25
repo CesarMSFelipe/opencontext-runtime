@@ -92,8 +92,16 @@ _EXPECTED_PHASES = frozenset(PHASE_MEMORY_POLICY.keys())
 
 if __name__ == "__main__":
     all_phases = {
-        "explore", "propose", "spec", "design", "tasks",
-        "approval", "apply", "verify", "review", "archive",
+        "explore",
+        "propose",
+        "spec",
+        "design",
+        "tasks",
+        "approval",
+        "apply",
+        "verify",
+        "review",
+        "archive",
     }
     assert _EXPECTED_PHASES == all_phases, f"Missing phases: {all_phases - _EXPECTED_PHASES}"
 

@@ -6,8 +6,16 @@ from opencontext_core.memory.phase_policy import PHASE_MEMORY_POLICY, PhaseMemor
 from opencontext_core.models.agent_memory import MemoryLayer
 
 _EXPECTED_PHASES = {
-    "explore", "propose", "spec", "design", "tasks",
-    "approval", "apply", "verify", "review", "archive",
+    "explore",
+    "propose",
+    "spec",
+    "design",
+    "tasks",
+    "approval",
+    "apply",
+    "verify",
+    "review",
+    "archive",
 }
 
 

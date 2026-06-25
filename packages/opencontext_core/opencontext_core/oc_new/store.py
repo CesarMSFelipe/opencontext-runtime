@@ -36,7 +36,9 @@ class OcNewStore:
         states: list[OcNewRunState] = []
         for state_file in sorted(runs_dir.glob("*/state.json"), key=lambda p: p.stat().st_mtime):
             try:
-                states.append(OcNewRunState.model_validate_json(state_file.read_text(encoding="utf-8")))
+                states.append(
+                    OcNewRunState.model_validate_json(state_file.read_text(encoding="utf-8"))
+                )
             except Exception:
                 continue
         return states

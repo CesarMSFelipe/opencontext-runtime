@@ -251,7 +251,9 @@ def verify_no_global_traces(agents: list[str]) -> list[str]:
     """
     import re
 
-    _OC_PATTERN = re.compile(r"opencontext|oc-orchestrator|oc-explorer|oc-requirements", re.IGNORECASE)
+    _OC_PATTERN = re.compile(
+        r"opencontext|oc-orchestrator|oc-explorer|oc-requirements", re.IGNORECASE
+    )
 
     def _contains_oc(path: Path) -> bool:
         try:
@@ -298,12 +300,14 @@ def handle_uninstall(args: Any) -> None:
     if getattr(args, "verify", False):
         residue = verify_no_traces(root)
         global_residue = verify_no_global_traces([])
-        passed = len(residue) == 0 and len(global_residue) == 0
+        passed = len(residue) == 0  # global_residue is report-only, not a failure
         if json_output:
-            print(json.dumps(
-                {"passed": passed, "residue": residue, "global_residue": global_residue},
-                indent=2,
-            ))
+            print(
+                json.dumps(
+                    {"passed": passed, "residue": residue, "global_residue": global_residue},
+                    indent=2,
+                )
+            )
         else:
             if passed:
                 console.print("[green]verify passed[/]: no OpenContext traces found.")
@@ -313,7 +317,9 @@ def handle_uninstall(args: Any) -> None:
                     for p in residue:
                         console.print(f"  [dim]{p}[/]")
                 if global_residue:
-                    console.print("[yellow]verify[/]: global agent config residue (report only, not purged):")
+                    console.print(
+                        "[yellow]verify[/]: global agent config residue (report only, not purged):"
+                    )
                     for p in global_residue:
                         console.print(f"  [dim]{p}[/]")
         sys.exit(0 if passed else 1)

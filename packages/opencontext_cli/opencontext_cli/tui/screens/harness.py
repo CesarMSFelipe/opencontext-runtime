@@ -57,7 +57,9 @@ class HarnessPanel(Screen):  # type: ignore[misc,valid-type]
             lines = [
                 f"[bold]Run:[/] {report.run_id}",
                 f"[bold]Change:[/] {report.change_id}",
-                f"[bold]Status:[/] [{status_color}]{'PASSED' if report.passed else 'FAILED'}[/{status_color}]",
+                f"[bold]Status:[/] [{status_color}]"
+                f"{'PASSED' if report.passed else 'FAILED'}"
+                f"[/{status_color}]",
             ]
             if report.failures:
                 lines.append("")

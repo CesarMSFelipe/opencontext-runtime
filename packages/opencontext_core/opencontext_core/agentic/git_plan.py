@@ -56,9 +56,7 @@ class GitWorkPlanner:
         # GitMode.NONE or any future unknown mode — return an empty plan.
         return GitWorkPlan(mode=mode, base_branch=base_branch, apply_git_changes=False)
 
-    def _single_pr(
-        self, change_id: str, tasks: list[str], base_branch: str
-    ) -> GitWorkPlan:
+    def _single_pr(self, change_id: str, tasks: list[str], base_branch: str) -> GitWorkPlan:
         unit = GitWorkUnit(
             branch_name=f"feat/{change_id}",
             pr_title=f"feat: {change_id}",
@@ -72,9 +70,7 @@ class GitWorkPlanner:
             apply_git_changes=True,
         )
 
-    def _local_branch(
-        self, change_id: str, tasks: list[str], base_branch: str
-    ) -> GitWorkPlan:
+    def _local_branch(self, change_id: str, tasks: list[str], base_branch: str) -> GitWorkPlan:
         """Create a local branch without any PR or git push — apply_git_changes=False."""
         unit = GitWorkUnit(
             branch_name=f"feat/{change_id}",
@@ -90,9 +86,7 @@ class GitWorkPlanner:
             apply_git_changes=False,
         )
 
-    def _commit_only(
-        self, change_id: str, tasks: list[str], base_branch: str
-    ) -> GitWorkPlan:
+    def _commit_only(self, change_id: str, tasks: list[str], base_branch: str) -> GitWorkPlan:
         """Commit all tasks as a single unit — no PR created."""
         unit = GitWorkUnit(
             branch_name=f"feat/{change_id}",
@@ -108,9 +102,7 @@ class GitWorkPlanner:
             apply_git_changes=True,
         )
 
-    def _per_task_prs(
-        self, change_id: str, tasks: list[str], base_branch: str
-    ) -> GitWorkPlan:
+    def _per_task_prs(self, change_id: str, tasks: list[str], base_branch: str) -> GitWorkPlan:
         """Create one work unit (branch + PR) per task."""
         units: list[GitWorkUnit] = []
         prev_branch = base_branch
@@ -133,9 +125,7 @@ class GitWorkPlanner:
             apply_git_changes=True,
         )
 
-    def _stacked_prs(
-        self, change_id: str, tasks: list[str], base_branch: str
-    ) -> GitWorkPlan:
+    def _stacked_prs(self, change_id: str, tasks: list[str], base_branch: str) -> GitWorkPlan:
         units: list[GitWorkUnit] = []
         prev_branch = base_branch
         for i, task in enumerate(tasks, start=1):

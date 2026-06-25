@@ -18,6 +18,7 @@ def server(tmp_path: Path) -> MCPServer:
     s = MCPServer(db_path=tmp_path / ".storage" / "opencontext" / "context_graph.db")
     # NOTE: opencontext_run not in safe default; sampling tests need it explicitly
     from opencontext_core.tools.policy import ToolPermissionPolicy
+
     s.policy = ToolPermissionPolicy(allowed_tools=set(s.tools.keys()))
     return s
 
