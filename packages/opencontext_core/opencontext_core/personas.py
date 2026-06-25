@@ -482,7 +482,7 @@ PERSONAS: tuple[Persona, ...] = (
 _BY_ID: dict[str, Persona] = {p.id: p for p in PERSONAS}
 
 
-def public_main_persona() -> "Persona":
+def public_main_persona() -> Persona:
     """Return the single PUBLIC_MAIN persona (raises RuntimeError if count != 1)."""
     mains = [p for p in PERSONAS if p.visibility == PersonaVisibility.PUBLIC_MAIN]
     if len(mains) != 1:
@@ -490,22 +490,22 @@ def public_main_persona() -> "Persona":
     return mains[0]
 
 
-def public_support_personas() -> tuple["Persona", ...]:
+def public_support_personas() -> tuple[Persona, ...]:
     """Return personas with visibility == PUBLIC_SUPPORT."""
     return tuple(p for p in PERSONAS if p.visibility == PersonaVisibility.PUBLIC_SUPPORT)
 
 
-def hidden_delegation_personas() -> tuple["Persona", ...]:
+def hidden_delegation_personas() -> tuple[Persona, ...]:
     """Return personas with visibility == HIDDEN_DELEGATION."""
     return tuple(p for p in PERSONAS if p.visibility == PersonaVisibility.HIDDEN_DELEGATION)
 
 
-def public_personas() -> tuple["Persona", ...]:
+def public_personas() -> tuple[Persona, ...]:
     """Return all public personas (main + support), written to visible agent dirs."""
-    return (public_main_persona(),) + public_support_personas()
+    return (public_main_persona(), *public_support_personas())
 
 
-def delegation_personas() -> tuple["Persona", ...]:
+def delegation_personas() -> tuple[Persona, ...]:
     """Backwards-compat alias for hidden_delegation_personas()."""
     return hidden_delegation_personas()
 

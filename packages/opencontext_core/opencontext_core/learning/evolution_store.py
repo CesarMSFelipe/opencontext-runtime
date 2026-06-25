@@ -9,9 +9,9 @@ quality *scores*. This store tracks propose-only evolution signals.
 
 from __future__ import annotations
 
+import builtins
 import json
 from pathlib import Path
-from typing import List
 
 from opencontext_core.learning.evolution import EvolutionProposal
 
@@ -102,7 +102,7 @@ class EvolutionStore:
                 continue
         return proposals
 
-    def list_by_status(self, status: str) -> List[EvolutionProposal]:
+    def list_by_status(self, status: str) -> builtins.list[EvolutionProposal]:
         """Return proposals whose ``status`` matches the given value."""
         return [p for p in self.list() if p.status == status]
 

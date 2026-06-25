@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import tempfile
-from datetime import timedelta
+from datetime import UTC, timedelta
 from pathlib import Path
 
 import pytest
 
-from opencontext_core.workflow.leases import AgentCoordinationStore, AgentLease, AgentLeaseStatus
-from opencontext_core.workflow.signals import AgentSignal, AgentSignalKind
+from opencontext_core.workflow.leases import AgentCoordinationStore, AgentLeaseStatus
+from opencontext_core.workflow.signals import AgentSignalKind
 
 
 class TestAgentLeaseFields:
@@ -77,7 +77,6 @@ class TestAgentCoordinationStoreRoundTrip:
 
     def test_expired_lease_allows_new_acquire(self) -> None:
         """An expired lease (past expires_at) should allow a new acquire."""
-        from datetime import timezone
         import sqlite3
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -88,7 +87,7 @@ class TestAgentCoordinationStoreRoundTrip:
             # Manually backdate expires_at to simulate expiry.
             from datetime import datetime
 
-            past = datetime(2020, 1, 1, tzinfo=timezone.utc).isoformat()
+            past = datetime(2020, 1, 1, tzinfo=UTC).isoformat()
             conn = sqlite3.connect(str(db_path))
             conn.execute(
                 "UPDATE agent_leases SET expires_at = ? WHERE lease_id = ?",
@@ -107,6 +106,7 @@ class TestCoordinatorPolicyUnchanged:
     def test_coordinator_policy_still_raises_on_non_main_thread(self) -> None:
         """D5 must not weaken CoordinatorPolicy.assert_allowed."""
         import threading
+
         from opencontext_core.workflow.coordinator_policy import CoordinatorPolicy
 
         policy = CoordinatorPolicy()
@@ -114,5 +114,5 @@ class TestCoordinatorPolicyUnchanged:
         policy.assert_allowed(thread_id=threading.get_ident())
 
         # A synthetic non-main thread_id should raise.
-        with pytest.raises(Exception):
+        with pytest.raises((RuntimeError, ValueError, AssertionError)):
             policy.assert_allowed(thread_id=-1)

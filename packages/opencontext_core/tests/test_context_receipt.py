@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from opencontext_core.context.receipt import ContextReceipt, ContextSavingsReport
-from opencontext_core.context.savings import ContextSavingsReport as SavingsFromModule
 
 
 class TestContextSavingsReportDegradedPath:

@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-from opencontext_core.agentic.context_substrate import ContextSubstrateBuilder, ContextSubstrateReport
+from opencontext_core.agentic.context_substrate import (
+    ContextSubstrateBuilder,
+)
 
 
 def test_build_for_phase_no_kg_sets_no_kg_reason(tmp_path: Path) -> None:

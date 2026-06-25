@@ -107,14 +107,14 @@ class BudgetController:
 
     def record(
         self,
-        ledger: "BudgetLedger",
+        ledger: BudgetLedger,
         phase: str,
         *,
         input_tokens: int = 0,
         output_tokens: int = 0,
         compression_savings: int = 0,
         estimated_cost_usd: float | None = None,
-    ) -> "BudgetLedger":
+    ) -> BudgetLedger:
         """Append a PhaseBudget entry and return the updated ledger."""
         from opencontext_core.agentic.budget import PhaseBudget
 

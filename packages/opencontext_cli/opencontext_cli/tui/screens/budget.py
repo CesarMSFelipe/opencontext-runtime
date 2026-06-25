@@ -48,7 +48,6 @@ class BudgetScreen(Screen):  # type: ignore[misc,valid-type]
             if state is None:
                 return "[dim]No active run — budget data unavailable.[/dim]"
 
-            import json
             from pathlib import Path
 
             ledger_path = (
@@ -76,8 +75,8 @@ class BudgetScreen(Screen):  # type: ignore[misc,valid-type]
                 remaining = total_budget - ledger.used_total
                 lines.append(f"\n[bold]Budget:[/] {ledger.used_total} / {total_budget}  ({remaining} remaining)")
             return "\n".join(lines)
-        except Exception as exc:
-            return f"No active run"
+        except Exception:
+            return "No active run"
 
     def action_dismiss(self) -> None:
         self.app.pop_screen()

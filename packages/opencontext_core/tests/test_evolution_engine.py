@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import types
+
 import pytest
 
-from opencontext_core.learning.evolution import EvolutionProposal
 from opencontext_core.learning.evolution_engine import EvolutionEngine
 
 

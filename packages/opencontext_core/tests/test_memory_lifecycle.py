@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
-
-from opencontext_core.models.agent_memory import DecayPolicy, MemoryLayer, MemoryLifecycle, MemoryRecord
+from opencontext_core.models.agent_memory import (
+    DecayPolicy,
+    MemoryLayer,
+    MemoryLifecycle,
+    MemoryRecord,
+)
 
 
 def _make_record(lifecycle: MemoryLifecycle = MemoryLifecycle.CANDIDATE, suffix: str = "") -> MemoryRecord:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     return MemoryRecord(
         id=f"test-lifecycle-{lifecycle.value}{suffix}",
         layer=MemoryLayer.EPISODIC,
@@ -33,7 +36,7 @@ class TestMemoryLifecycleEnum:
         assert MemoryLifecycle.EXPIRED == "expired"
 
     def test_default_is_candidate(self) -> None:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         record = MemoryRecord(
             id="test-default-lifecycle",
             layer=MemoryLayer.WORKING,
@@ -46,7 +49,7 @@ class TestMemoryLifecycleEnum:
         assert record.lifecycle == MemoryLifecycle.CANDIDATE
 
     def test_no_typeerror_without_lifecycle_arg(self) -> None:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         # Should not raise
         record = MemoryRecord(
             id="test-no-lifecycle-arg",
@@ -115,7 +118,7 @@ class TestSQLiteMemoryBackendLifecycle:
 
             # Opening with SQLiteMemoryBackend should migrate without error.
             from opencontext_core.memory.backends import SQLiteMemoryBackend
-            backend = SQLiteMemoryBackend(db_path)
+            SQLiteMemoryBackend(db_path)
             # Verify column was added.
             conn2 = sqlite3.connect(db_path)
             cols = {row[1] for row in conn2.execute("PRAGMA table_info(memory_records)")}

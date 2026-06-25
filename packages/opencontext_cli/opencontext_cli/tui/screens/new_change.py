@@ -12,7 +12,7 @@ try:
     from textual.app import ComposeResult
     from textual.binding import Binding
     from textual.screen import ModalScreen
-    from textual.widgets import Button, Footer, Input, Label, Select, Static
+    from textual.widgets import Button, Input, Label, Select
 except ImportError:
     # NOTE: If textual is not available, provide stubs so that import does not crash.
     ModalScreen = object  # type: ignore[assignment,misc]

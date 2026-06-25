@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
-
-import pytest
 
 from opencontext_core.memory.capture import (
     CaptureEventKind,
@@ -120,11 +117,10 @@ class TestConductorCaptureIntegration:
             conductor = OcNewConductor(root=tmp, capture_service=svc)
 
             # Start a run — PHASE_START is emitted during _advance.
-            state = conductor.start("test task for capture hooks")
-            run_id = state.identity.run_id
+            conductor.start("test task for capture hooks")
 
             # At least one event should have been captured.
-            captured = backend.search("Phase")
+            backend.search("Phase")
             # Events may or may not fire depending on whether _advance hits
             # a spawn_subagent path. The service itself must be wired.
             assert svc is conductor._capture_service

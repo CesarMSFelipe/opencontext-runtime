@@ -35,6 +35,7 @@ from opencontext_cli.commands.learn_cmd import add_learn_parser, handle_learn
 from opencontext_cli.commands.loop_cmd import add_loop_commands, handle_loop
 from opencontext_cli.commands.memory_benchmark_cmd import (
     add_memory_benchmark_parser,
+    handle_memory_benchmark,
 )
 from opencontext_cli.commands.metaharness_cmd import (
     handle_doctor_metaharness,
@@ -4366,6 +4367,9 @@ def _memory(args: argparse.Namespace) -> None:
         return
     if command == "doctor":
         _memory_doctor()
+        return
+    if command == "benchmark":
+        handle_memory_benchmark(args)
         return
     _unreachable(command)
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from opencontext_core.harness.meta import MetaHarnessCheck, MetaHarnessReport, MetaHarnessScanner
 
 
@@ -18,13 +16,16 @@ class TestMetaHarnessReport:
         assert report.passed is True
 
     def test_one_fail_drops_below_90(self) -> None:
-        # 8 pass × 11 = 88 (the check with weight 12 fails)
+        # 8 pass x 11 = 88 (the check with weight 12 fails)
         checks = [
             MetaHarnessCheck(name="big_check", passed=False, score_contribution=0, explanation="fail"),
         ]
-        checks += [
-            MetaHarnessCheck(name=f"check_{i}", passed=True, score_contribution=11, explanation="OK")
-            for i in range(8)
+        checks = [
+            *checks,
+            *[
+                MetaHarnessCheck(name=f"check_{i}", passed=True, score_contribution=11, explanation="OK")
+                for i in range(8)
+            ],
         ]
         report = MetaHarnessReport.from_checks(checks)
         assert report.score <= 89
@@ -41,9 +42,7 @@ class TestMetaHarnessReport:
         assert report_90.passed is True
 
         # 89 → not passed
-        checks_89 = checks_90[:-1] + [
-            MetaHarnessCheck(name="c8", passed=True, score_contribution=9, explanation="OK")
-        ]
+        checks_89 = [*checks_90[:-1], MetaHarnessCheck(name="c8", passed=True, score_contribution=9, explanation="OK")]
         report_89 = MetaHarnessReport.from_checks(checks_89)
         assert report_89.score == 89
         assert report_89.passed is False

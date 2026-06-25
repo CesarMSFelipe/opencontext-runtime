@@ -14,15 +14,12 @@ has been seeded with matching memory data (detected via num_results > 0).
 from __future__ import annotations
 
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
-import pytest
 
 from opencontext_core.memory.backends import SQLiteMemoryBackend
 from opencontext_core.memory.benchmark import MemoryBenchmarkResult, run_benchmark
 from opencontext_core.models.agent_memory import DecayPolicy, MemoryLayer, MemoryRecord
-
 
 FIXTURE_PATH = (
     Path(__file__).parent.parent.parent.parent
@@ -72,7 +69,7 @@ class TestRunBenchmarkWithData:
 
     def _seed_backend(self, backend: SQLiteMemoryBackend) -> None:
         """Insert memory records that match fixture relevant IDs."""
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         keys = [
             "auth:jwt_middleware",
             "auth:token_validation",

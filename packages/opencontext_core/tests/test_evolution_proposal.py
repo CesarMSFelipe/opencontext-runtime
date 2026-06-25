@@ -5,8 +5,6 @@ from pydantic import ValidationError
 
 from opencontext_core.learning.evolution import (
     EvolutionProposal,
-    EvolutionKind,
-    EvolutionStatus,
 )
 
 _ALL_KINDS = (

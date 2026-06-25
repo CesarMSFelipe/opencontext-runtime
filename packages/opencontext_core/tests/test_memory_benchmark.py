@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from opencontext_core.memory.benchmark import (
-    MemoryBenchmarkQuestion,
-    MemoryBenchmarkResult,
     precision_at_k,
     recall_at_k,
     reciprocal_rank,

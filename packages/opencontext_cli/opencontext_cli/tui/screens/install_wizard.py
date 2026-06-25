@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from enum import auto, Enum
+from enum import Enum, auto
 from typing import Any, ClassVar
 
 try:
@@ -15,7 +15,8 @@ except ImportError:
     Screen = object  # type: ignore[assignment,misc]
     ComposeResult = Any  # type: ignore[assignment]
     Binding = object  # type: ignore[assignment]
-    reactive = lambda default: default  # type: ignore[assignment]
+    def reactive(default):  # type: ignore[assignment]
+        return default
 
 
 class WizardStep(Enum):

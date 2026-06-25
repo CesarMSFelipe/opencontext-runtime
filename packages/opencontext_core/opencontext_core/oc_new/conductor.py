@@ -421,7 +421,7 @@ class OcNewConductor:
         git_plan_path = run_dir / "git_plan.json"
         git_plan_path.write_text(json.dumps(plan.model_dump(), indent=2))
 
-    def _check_budget(self, state: OcNewRunState, phase_name: str) -> "BudgetDecision":
+    def _check_budget(self, state: OcNewRunState, phase_name: str) -> BudgetDecision:
         """Return a BudgetDecision for *phase_name* given current run state."""
         from opencontext_core.agentic.budget import BudgetLedger
         from opencontext_core.agentic.budget_controller import BudgetController
