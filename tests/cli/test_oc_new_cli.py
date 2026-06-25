@@ -75,6 +75,7 @@ def test_oc_new_list(tmp_path, monkeypatch, capsys):
 
 def test_oc_new_done_advances_phase(tmp_path, monkeypatch, capsys):
     from opencontext_core.oc_new.store import OcNewStore
+    from opencontext_core.workflow.phase_result import PhaseResultEnvelope
 
     _run(["oc-new", "start", "test task"], monkeypatch, tmp_path)
     capsys.readouterr()
@@ -87,6 +88,19 @@ def test_oc_new_done_advances_phase(tmp_path, monkeypatch, capsys):
     # Create the artifact that propose needs (explore.artifact.json)
     run_dir = tmp_path / ".opencontext" / "runs" / run_id
     (run_dir / "explore.artifact.json").write_text("{}", encoding="utf-8")
+
+    # Write the phase-result envelope (required by conductor.mark_done).
+    envelope = PhaseResultEnvelope(
+        run_id=run_id,
+        change_id=state.identity.change_id,
+        phase="explore",
+        status="passed",
+        duration_s=0.0,
+        artifacts=["explore.artifact.json"],
+    )
+    (run_dir / "phase-result.explore.json").write_text(
+        envelope.model_dump_json(), encoding="utf-8"
+    )
 
     rc = _run(
         ["oc-new", "done", "explore", "--run-id", run_id, "--artifact", "explore.artifact.json"],
