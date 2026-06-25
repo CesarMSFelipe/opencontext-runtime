@@ -14,7 +14,6 @@ import yaml
 
 from opencontext_cli.commands.aicx_cmd import add_aicx_parser, handle_aicx
 from opencontext_cli.commands.benchmark_cmd import add_benchmark_parser, handle_benchmark
-from opencontext_cli.commands.engram_cmd import add_engram_parser, handle_engram
 from opencontext_cli.commands.bridges_cmd import add_bridges_parser, handle_bridges
 from opencontext_cli.commands.bytecode_cmd import add_bytecode_commands, handle_bytecode
 from opencontext_cli.commands.capabilities_cmd import (
@@ -25,12 +24,21 @@ from opencontext_cli.commands.ci_check_cmd import add_ci_check_parser, handle_ci
 from opencontext_cli.commands.config_cmd import add_config_parser, handle_config
 from opencontext_cli.commands.contract_cmd import add_contract_commands, handle_contract
 from opencontext_cli.commands.demo_cmd import add_demo_parser, handle_demo
+from opencontext_cli.commands.engram_cmd import add_engram_parser, handle_engram
+from opencontext_cli.commands.evolve_cmd import add_evolve_parser, handle_evolve
 from opencontext_cli.commands.explain_cmd import add_explain_parser, handle_explain
 from opencontext_cli.commands.extension_cmd import add_extension_parser, handle_extension
 from opencontext_cli.commands.git_cmd import add_git_parser, handle_git
 from opencontext_cli.commands.hints_cmd import add_hints_parser, handle_hints
 from opencontext_cli.commands.kg_cmd import add_kg_parser, handle_kg
+from opencontext_cli.commands.learn_cmd import add_learn_parser, handle_learn
 from opencontext_cli.commands.loop_cmd import add_loop_commands, handle_loop
+from opencontext_cli.commands.memory_benchmark_cmd import (
+    add_memory_benchmark_parser,
+)
+from opencontext_cli.commands.metaharness_cmd import (
+    handle_doctor_metaharness,
+)
 from opencontext_cli.commands.models_cmd import add_models_parser, handle_models
 from opencontext_cli.commands.mutation_cmd import add_mutation_commands, handle_mutation
 from opencontext_cli.commands.oc_new_cmd import add_oc_new_parser, handle_oc_new
@@ -55,8 +63,6 @@ from opencontext_cli.commands.update_cmd import (
     handle_upgrade,
 )
 from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
-from opencontext_cli.commands.evolve_cmd import add_evolve_parser, handle_evolve
-from opencontext_cli.commands.learn_cmd import add_learn_parser, handle_learn
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
 from opencontext_core.config import SecurityMode, default_config_data, load_config
 from opencontext_core.context.modes import ContextMode
@@ -609,6 +615,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "tools",
             "graph",
             "deep",
+            "metaharness",
         ],
     )
     doctor_parser.add_argument("--suggest-ignore", action="store_true")
@@ -1180,6 +1187,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "import", help="Import memory from an exported JSON file (skips existing ids)."
     )
     memory_import.add_argument("path", help="Path to an exported memory JSON file.")
+    add_memory_benchmark_parser(memory_sub)
 
     status_parser = subparsers.add_parser("status", help="Show project status.")
     status_parser.add_argument("root", nargs="?", default=".", help="Project root.")
@@ -2583,6 +2591,13 @@ def _doctor(
     strict: bool = False,
 ) -> None:
     from opencontext_core.dx.console_styles import console
+
+    # ── MetaHarness ───────────────────────────────────────────────────
+    if scope == "metaharness":
+        handle_doctor_metaharness(
+            type("Args", (), {"json_output": json_output})()
+        )
+        return
 
     # ── Deep Diagnostics ──────────────────────────────────────────────
     if scope == "deep":
