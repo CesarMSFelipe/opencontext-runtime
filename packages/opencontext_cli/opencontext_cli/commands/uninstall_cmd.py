@@ -173,9 +173,17 @@ def _run_full_uninstall(root: object, scope: str, json_output: bool) -> None:
     except Exception:
         pass
 
-    # 3. Purge known project artifacts
-    purged = _purge_project_artifacts(root)
-    report["purged"] = purged
+    # 3. Clear ledger BEFORE purging. InstallationManager() eagerly recreates
+    #    .opencontext/{agent-configs,backups} in its constructor, so it must run
+    #    before the purge — otherwise the purge runs first and the constructor
+    #    resurrects .opencontext, leaving residue that fails verify.
+    try:
+        from opencontext_core.install_manager import InstallationManager
+
+        InstallationManager().clear_state()
+        report["state_cleared"] = True
+    except Exception:
+        pass
 
     # 4. Glob sweep oc-*.md under known persona/command dirs
     for pattern in (".claude/agents/oc-*.md", ".claude/commands/oc-*.md"):
@@ -186,14 +194,10 @@ def _run_full_uninstall(root: object, scope: str, json_output: bool) -> None:
             except Exception:
                 pass
 
-    # 5. Clear ledger
-    try:
-        from opencontext_core.install_manager import InstallationManager
-
-        InstallationManager().clear_state()
-        report["state_cleared"] = True
-    except Exception:
-        pass
+    # 5. Purge known project artifacts — MUST be the last filesystem mutation so
+    #    nothing recreates .opencontext after it is removed.
+    purged = _purge_project_artifacts(root)
+    report["purged"] = purged
 
     # 6. Verify traces
     residue = verify_no_traces(root)

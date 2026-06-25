@@ -319,3 +319,34 @@ def test_mcp_json_absent_no_error_on_full_uninstall(tmp_path, monkeypatch):
             handle_uninstall(args)
         except SystemExit as exc:
             assert exc.code in (None, 0), f"full uninstall exited non-zero: {exc.code}"
+
+
+def test_full_uninstall_leaves_no_opencontext_dir(tmp_path, monkeypatch):
+    """Regression: --full must not leave .opencontext behind.
+
+    InstallationManager.__init__ eagerly recreates .opencontext/{agent-configs,
+    backups}; if the purge runs before the last InstallationManager() call, the
+    constructor resurrects .opencontext and verify fails. Uses the REAL manager
+    (HOME redirected) so the recreation side-effect is exercised.
+    """
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    project = tmp_path / "project"
+    project.mkdir()
+    # Simulate an installed project.
+    (project / ".opencontext" / "agent-configs").mkdir(parents=True)
+    (project / ".opencontext" / "backups").mkdir(parents=True)
+    (project / ".opencontext" / "harness.yaml").write_text("x", encoding="utf-8")
+    (project / "opencontext.yaml").write_text("version: 1\n", encoding="utf-8")
+    (project / ".mcp.json").write_text('{"mcpServers":{}}', encoding="utf-8")
+
+    from opencontext_cli.commands.uninstall_cmd import _run_full_uninstall, verify_no_traces
+
+    _run_full_uninstall(str(project), "workspace", json_output=True)
+
+    assert not (project / ".opencontext").exists(), (
+        ".opencontext must be gone after --full uninstall (InstallationManager "
+        "recreation must not survive the purge)."
+    )
+    assert verify_no_traces(str(project)) == []
