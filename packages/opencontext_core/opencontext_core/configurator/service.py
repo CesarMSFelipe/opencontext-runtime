@@ -227,9 +227,9 @@ class Configurator:
                 changed.append(str(path))
         subdir = constants.global_agents_subdir(adapter.agent_id)
         if subdir:
-            from opencontext_core.personas import PERSONAS
+            from opencontext_core.personas import public_personas
 
-            for persona in PERSONAS:
+            for persona in public_personas():
                 path = adapter.config_dir / subdir / f"{persona.id}.md"
                 if path.exists():
                     path.unlink()
@@ -256,10 +256,10 @@ class Configurator:
                     changed.append(str(path))
         persona_rel = constants.persona_dir(adapter.agent_id)
         if persona_rel:
-            from opencontext_core.personas import PERSONAS
+            from opencontext_core.personas import public_personas
 
             persona_dir = self.project_root / persona_rel
-            for persona in PERSONAS:
+            for persona in public_personas():
                 path = persona_dir / f"{persona.id}.md"
                 if path.exists():
                     path.unlink()  # whole file we created
@@ -352,11 +352,11 @@ class Configurator:
 
     def _plan_personas(self, adapter: Adapter) -> list[PlanEntry]:
         """Plan the agent's persona/subagent files (OC Orchestrator/Professor/Reviewer)."""
-        from opencontext_core.personas import PERSONAS
+        from opencontext_core.personas import public_personas
 
         persona_dir = self.project_root / str(constants.persona_dir(adapter.agent_id))
         entries: list[PlanEntry] = []
-        for persona in PERSONAS:
+        for persona in public_personas():
             path = persona_dir / f"{persona.id}.md"
             content = _render_persona(persona)
             entries.append((path, _content_if_changed(path, content)))
@@ -397,12 +397,12 @@ class Configurator:
 
     def _plan_global_personas(self, adapter: Adapter) -> list[PlanEntry]:
         """Write OC personas to the agent's global agents dir (e.g. ~/.config/opencode/agents/)."""
-        from opencontext_core.personas import PERSONAS
+        from opencontext_core.personas import public_personas
 
         subdir = constants.global_agents_subdir(adapter.agent_id)
         agents_dir = adapter.config_dir / str(subdir)
         entries: list[PlanEntry] = []
-        for persona in PERSONAS:
+        for persona in public_personas():
             path = agents_dir / f"{persona.id}.md"
             content = _render_persona(persona)
             entries.append((path, _content_if_changed(path, content)))

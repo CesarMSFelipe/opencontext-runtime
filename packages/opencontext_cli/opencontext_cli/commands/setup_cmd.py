@@ -30,6 +30,25 @@ from opencontext_core.user_prefs import UserConfigStore
 console = Console()
 
 
+def _save_install_ledger(report: dict[str, Any]) -> None:
+    """Persist written file paths to InstallState so uninstall --full can clean up."""
+    try:
+        from opencontext_core.install_manager import InstallationManager, InstallState
+
+        all_files = [f for r in report.get("results", []) for f in r.get("files", [])]
+        if not all_files:
+            return
+        mgr = InstallationManager()
+        existing = mgr._load_state()
+        existing_files = existing.files if existing else []
+        merged = list(dict.fromkeys([*existing_files, *all_files]))
+        state = existing if existing else InstallState()
+        state.files = merged
+        mgr._save_state(state)
+    except Exception:
+        pass
+
+
 def _wizard_clear(
     step: int,
     total: int,
@@ -316,6 +335,7 @@ def _run_configurator(args: Any) -> None:
         report["skipped"] = unknown
     _maybe_write_stack_standards(root, scope, report)
     _maybe_write_gitignore(root, scope)
+    _save_install_ledger(report)
     _report_configured(report, unknown, json_output)
 
 

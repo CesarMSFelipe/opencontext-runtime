@@ -70,6 +70,7 @@ class InstallState:
     agents: list[str] = field(default_factory=list)
     profiles: list[str] = field(default_factory=list)
     hooks_run: list[str] = field(default_factory=list)
+    files: list[str] = field(default_factory=list)
 
 
 class InstallationManager:
@@ -424,31 +425,34 @@ class InstallationManager:
                 agents=data.get("agents", []),
                 profiles=data.get("profiles", []),
                 hooks_run=data.get("hooks_run", []),
+                files=data.get("files", []),
             )
         except (json.JSONDecodeError, OSError):
             return None
 
     def _save_state(self, state: InstallState) -> None:
-        """Save installation state."""
+        """Save installation state atomically (temp + os.replace)."""
+        import os
         import time
 
         if not state.installed_at:
             state.installed_at = time.strftime("%Y-%m-%d %H:%M:%S")
 
-        self.state_path.write_text(
-            json.dumps(
-                {
-                    "version": state.version,
-                    "installed_at": state.installed_at,
-                    "components": state.components,
-                    "agents": state.agents,
-                    "profiles": state.profiles,
-                    "hooks_run": state.hooks_run,
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
+        data = json.dumps(
+            {
+                "version": state.version,
+                "installed_at": state.installed_at,
+                "components": state.components,
+                "agents": state.agents,
+                "profiles": state.profiles,
+                "hooks_run": state.hooks_run,
+                "files": state.files,
+            },
+            indent=2,
         )
+        tmp = self.state_path.with_suffix(".tmp")
+        tmp.write_text(data, encoding="utf-8")
+        os.replace(tmp, self.state_path)
 
     def _resolve_components(
         self,
