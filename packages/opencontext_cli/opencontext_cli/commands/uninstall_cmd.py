@@ -51,7 +51,7 @@ def _strip_project_managed_blocks(root: object, scope: str) -> None:
             pass
 
 
-_PURGE_TARGETS = (".opencontext", ".storage", "opencontext.yaml", "harness.yaml")
+_PURGE_TARGETS = (".opencontext", ".storage/opencontext", "opencontext.yaml", "harness.yaml")
 
 
 def _purge_project_artifacts(root: object) -> list[str]:
@@ -73,6 +73,13 @@ def _purge_project_artifacts(root: object) -> list[str]:
             else:
                 target.unlink()
             removed.append(name)
+        except Exception:
+            pass
+    storage = base / ".storage"
+    if storage.is_dir() and not any(storage.iterdir()):
+        try:
+            storage.rmdir()
+            removed.append(".storage")
         except Exception:
             pass
     return removed

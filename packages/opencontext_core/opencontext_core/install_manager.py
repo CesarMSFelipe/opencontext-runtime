@@ -186,11 +186,13 @@ class InstallationManager:
         except Exception:
             pass
 
+        files = [f for r in results for f in (r.get("files", []) if isinstance(r, dict) else [])]
         self._save_state(
             InstallState(
                 version=self.VERSION,
                 components=list(to_install),
                 agents=agents,
+                files=files,
             )
         )
 
