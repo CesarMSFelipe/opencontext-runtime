@@ -15,6 +15,7 @@ apply any configuration change automatically.
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -69,6 +70,14 @@ def add_evolve_parser(subparsers: Any) -> None:
     reject_parser.add_argument("proposal_id", help="Proposal ID to reject.")
     reject_parser.add_argument("--root", default=".", help="Project root.")
 
+    # apply
+    apply_parser = evolve_sub.add_parser(
+        "apply",
+        help="Apply an approved evolution proposal by ID.",
+    )
+    apply_parser.add_argument("proposal_id", help="Proposal ID to apply.")
+    apply_parser.add_argument("--root", default=".", help="Project root.")
+
 
 def handle_evolve(args: argparse.Namespace) -> None:
     """Dispatch evolve subcommands."""
@@ -79,6 +88,8 @@ def handle_evolve(args: argparse.Namespace) -> None:
         _handle_approve(args)
     elif cmd == "reject":
         _handle_reject(args)
+    elif cmd == "apply":
+        sys.exit(_handle_apply(args))
     else:
         print("evolve: unknown subcommand. Use --help for usage.")
 
@@ -152,3 +163,36 @@ def _handle_reject(args: argparse.Namespace) -> None:
         print(f"evolve reject: proposal '{proposal_id}' not found.")
         raise SystemExit(1)
     print(f"Proposal {proposal_id} rejected.")
+
+
+def _handle_apply(args: argparse.Namespace) -> int:
+    from opencontext_core.learning.evolution_apply import EvolutionApplier
+
+    store = _get_store(args)
+    proposal_id = args.proposal_id
+    proposal = store.load(proposal_id)
+
+    if proposal is None:
+        print(f"Evolution proposal not found: {proposal_id}", file=sys.stderr)
+        return 1
+
+    if proposal.status != "approved":
+        print(
+            f"Proposal {proposal_id} is not approved. "
+            f"Run: opencontext evolve approve {proposal_id}",
+            file=sys.stderr,
+        )
+        return 1
+
+    root = Path(getattr(args, "root", ".")).resolve()
+    applier = EvolutionApplier(project_root=root)
+    result = applier.apply(proposal, approved=True)
+
+    if result.applied:
+        print(f"Applied: {proposal.proposal_id}")
+        for f in result.changed_files:
+            print(f"  modified: {f}")
+        return 0
+    else:
+        print(f"Not applied: {result.reason}")
+        return 1

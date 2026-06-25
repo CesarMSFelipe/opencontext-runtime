@@ -243,6 +243,46 @@ def verify_no_traces(root: object) -> list[str]:
     return residue
 
 
+def verify_no_global_traces(agents: list[str]) -> list[str]:
+    """Check global agent config dirs for OpenContext residue.
+
+    Returns list of paths with residue. MUST NOT delete any files — report only.
+    """
+    import re
+
+    _OC_PATTERN = re.compile(r"opencontext|oc-orchestrator|oc-explorer|oc-requirements", re.IGNORECASE)
+
+    def _contains_oc(path: Path) -> bool:
+        try:
+            return bool(_OC_PATTERN.search(path.read_text(encoding="utf-8", errors="ignore")))
+        except OSError:
+            return False
+
+    residue: list[str] = []
+    home = Path.home()
+
+    # Claude Code global agents dir
+    claude_global_agents = home / ".claude" / "agents"
+    if claude_global_agents.exists():
+        for child in claude_global_agents.glob("oc-*.md"):
+            if child.is_file():
+                residue.append(str(child))
+
+    # Claude Code hidden delegates dir
+    claude_delegates = home / ".claude" / "agents" / ".opencontext-delegates"
+    if claude_delegates.exists():
+        for child in claude_delegates.glob("oc-*.md"):
+            if child.is_file():
+                residue.append(str(child))
+
+    # Claude Code settings.json
+    claude_settings = home / ".claude" / "settings.json"
+    if claude_settings.exists() and _contains_oc(claude_settings):
+        residue.append(str(claude_settings))
+
+    return residue
+
+
 def handle_uninstall(args: Any) -> None:
     """Remove OpenContext's managed config from the requested agents."""
     from opencontext_cli.main import _resolve_flag
@@ -256,16 +296,25 @@ def handle_uninstall(args: Any) -> None:
     # --verify: read-only trace scan
     if getattr(args, "verify", False):
         residue = verify_no_traces(root)
-        passed = len(residue) == 0
+        global_residue = verify_no_global_traces([])
+        passed = len(residue) == 0 and len(global_residue) == 0
         if json_output:
-            print(json.dumps({"passed": passed, "residue": residue}, indent=2))
+            print(json.dumps(
+                {"passed": passed, "residue": residue, "global_residue": global_residue},
+                indent=2,
+            ))
         else:
             if passed:
                 console.print("[green]verify passed[/]: no OpenContext traces found.")
             else:
-                console.print("[yellow]verify failed[/]: traces remain:")
-                for p in residue:
-                    console.print(f"  [dim]{p}[/]")
+                if residue:
+                    console.print("[yellow]verify failed[/]: project traces remain:")
+                    for p in residue:
+                        console.print(f"  [dim]{p}[/]")
+                if global_residue:
+                    console.print("[yellow]verify[/]: global agent config residue (report only, not purged):")
+                    for p in global_residue:
+                        console.print(f"  [dim]{p}[/]")
         sys.exit(0 if passed else 1)
 
     # --full: complete trace removal
