@@ -2063,6 +2063,7 @@ def _install(args: argparse.Namespace) -> None:
         sdd_model_profile=_sdd_profile,
         orchestrator_profile="opencontext",
         token_budget_per_phase=3000,
+        workspace_only=(getattr(args, "scope", None) == "workspace"),
     )
     _msg = "Setting up project (config, index, SDD, agents, harness)..."
     with Status(_msg, console=console, spinner="dots"):  # type: ignore[arg-type]

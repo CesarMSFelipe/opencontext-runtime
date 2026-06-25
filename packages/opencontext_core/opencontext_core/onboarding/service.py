@@ -61,6 +61,9 @@ class OnboardingOptions:
     setup_mcp: bool = False
     force_agent_files: bool = False
     token_budget_per_phase: int | None = None
+    # When True (--scope workspace), write ONLY repo-local files. No writes under
+    # $HOME: no global agent config, no user-prefs store, no home backups.
+    workspace_only: bool = False
 
 
 @dataclass
@@ -178,7 +181,10 @@ class OnboardingService:
         mark_setup_complete(prefs)
         for known_agent in list(prefs.agent_integrations):
             prefs.agent_integrations[known_agent] = known_agent in options.active_clients
-        store.save(prefs)
+        # Workspace-only installs must not write the user-level prefs store ($HOME).
+        # The prefs object is still used below to seed the project's opencontext.yaml.
+        if not options.workspace_only:
+            store.save(prefs)
         # Bridge runtime-affecting prefs into opencontext.yaml — the runtime reads
         # provider/model/security from yaml, not from the prefs store.
         from opencontext_core.config_sync import sync_runtime_prefs_to_yaml
@@ -235,7 +241,9 @@ class OnboardingService:
         known_clients = [c for c in options.active_clients if c in KNOWN_AGENTS]
         if known_clients:
             configurator = Configurator(root, instructions_builder=_instructions)
-            report = configurator.configure(known_clients, scope="local")
+            report = configurator.configure(
+                known_clients, scope="local", project_only=options.workspace_only
+            )
             for entry in report.get("results", []):
                 for path in entry.get("files", []):
                     result.generated_agent_files.append(f"{entry['agent']}: {path}")
