@@ -1,0 +1,52 @@
+[
+  {
+    "query": "JWT authentication middleware implementation",
+    "relevant": ["auth:jwt_middleware", "auth:token_validation"],
+    "metadata": {"phase": "apply", "domain": "auth"}
+  },
+  {
+    "query": "database connection pool configuration",
+    "relevant": ["db:connection_pool", "db:pool_config"],
+    "metadata": {"phase": "apply", "domain": "database"}
+  },
+  {
+    "query": "test suite fails on CI environment",
+    "relevant": ["failure:ci_test_failure", "failure:env_mismatch"],
+    "metadata": {"phase": "verify", "domain": "testing"}
+  },
+  {
+    "query": "context pack builder token budget exceeded",
+    "relevant": ["budget:token_limit", "budget:pack_overflow"],
+    "metadata": {"phase": "explore", "domain": "context"}
+  },
+  {
+    "query": "memory harvest from agent trace",
+    "relevant": ["episodic:harvest_run", "episodic:agent_trace"],
+    "metadata": {"phase": "archive", "domain": "memory"}
+  },
+  {
+    "query": "SQLite WAL mode connection discipline",
+    "relevant": ["procedural:sqlite_wal", "procedural:connection_pattern"],
+    "metadata": {"phase": "design", "domain": "storage"}
+  },
+  {
+    "query": "phase boundary PHASE_START emission",
+    "relevant": ["episodic:phase_start", "capture:phase_boundary"],
+    "metadata": {"phase": "apply", "domain": "lifecycle"}
+  },
+  {
+    "query": "knowledge graph indexing slow on large repo",
+    "relevant": ["failure:kg_timeout", "procedural:kg_indexing"],
+    "metadata": {"phase": "verify", "domain": "kg"}
+  },
+  {
+    "query": "agent lease acquire and release round trip",
+    "relevant": ["procedural:lease_acquire", "procedural:coordination"],
+    "metadata": {"phase": "design", "domain": "coordination"}
+  },
+  {
+    "query": "ruff mypy linting errors new module",
+    "relevant": ["failure:lint_error", "procedural:ruff_mypy"],
+    "metadata": {"phase": "verify", "domain": "quality"}
+  }
+]
