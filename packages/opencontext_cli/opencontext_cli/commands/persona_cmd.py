@@ -14,7 +14,7 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-from opencontext_core.personas import PERSONAS, get_persona
+from opencontext_core.personas import PERSONAS, delegation_personas, get_persona, public_personas
 
 console = Console()
 
@@ -34,7 +34,9 @@ def add_persona_parser(subparsers: Any) -> None:
         ),
     )
     sub = parser.add_subparsers(dest="persona_command", required=True)
-    sub.add_parser("list", help="List available personas.")
+    lst = sub.add_parser("list", help="List available personas.")
+    lst.add_argument("--all", action="store_true", help="Include delegation subagents.")
+    lst.add_argument("--delegates", action="store_true", help="Show only delegation subagents.")
     show = sub.add_parser("show", help="Show a persona's description and prompt.")
     show.add_argument("id", help="Persona id (e.g. oc-orchestrator, oc-architect, oc-builder).")
     sub.add_parser("models", help="Show per-persona model assignments.")
@@ -47,11 +49,17 @@ def add_persona_parser(subparsers: Any) -> None:
 def handle_persona(args: Any) -> int:
     """Dispatch a ``persona`` subcommand. Returns a process exit code."""
     if args.persona_command == "list":
-        table = Table(title=f"OpenContext personas ({len(PERSONAS)})")
+        if getattr(args, "all", False):
+            rows = PERSONAS
+        elif getattr(args, "delegates", False):
+            rows = delegation_personas()
+        else:
+            rows = public_personas()
+        table = Table(title=f"OpenContext personas ({len(rows)})")
         table.add_column("Id", style="cyan")
         table.add_column("Name", style="bold")
         table.add_column("Description")
-        for persona in PERSONAS:
+        for persona in rows:
             table.add_row(persona.id, persona.name, persona.description)
         console.print(table)
         return 0
