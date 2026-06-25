@@ -90,3 +90,51 @@ def test_conductor_state_persisted(tmp_path):
     loaded = conductor.store.load(run_id)
     assert loaded.task == "My task"
     assert loaded.identity.run_id == run_id
+
+
+def test_mark_done_reads_artifacts_from_envelope_file(tmp_path):
+    """When phase-result.<phase>.json exists, its artifacts field is used."""
+    import json
+
+    from opencontext_core.workflow.phase_result import PhaseResultEnvelope
+
+    conductor = OcNewConductor(tmp_path)
+    state = conductor.start("test envelope read")
+    run_dir = tmp_path / ".opencontext" / "runs" / state.identity.run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write both the expected artifact and the phase-result envelope
+    (run_dir / "explore.artifact.json").write_text("{}", encoding="utf-8")
+    (run_dir / "context-pack.json").write_text("{}", encoding="utf-8")
+    envelope = PhaseResultEnvelope(
+        run_id=state.identity.run_id,
+        change_id=state.identity.change_id,
+        phase="explore",
+        status="passed",
+        duration_s=0.1,
+        artifacts=["explore.artifact.json", "context-pack.json"],
+    )
+    (run_dir / "phase-result.explore.json").write_text(
+        envelope.model_dump_json(), encoding="utf-8"
+    )
+
+    new_state = conductor.mark_done(state.identity.run_id, "explore", artifact_paths=[])
+    explore_phase = new_state.phase("explore")
+    # Artifacts from envelope must be used, not the empty artifact_paths=[]
+    assert "explore.artifact.json" in explore_phase.artifact_paths
+
+
+def test_mark_done_falls_back_to_artifact_paths_when_no_file(tmp_path):
+    """When no phase-result file exists, artifact_paths param is used, no exception."""
+    conductor = OcNewConductor(tmp_path)
+    state = conductor.start("test fallback")
+    run_dir = tmp_path / ".opencontext" / "runs" / state.identity.run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "explore.artifact.json").write_text("{}", encoding="utf-8")
+
+    # No phase-result.explore.json created — should fall back to artifact_paths
+    new_state = conductor.mark_done(
+        state.identity.run_id, "explore", artifact_paths=["explore.artifact.json"]
+    )
+    explore_phase = new_state.phase("explore")
+    assert "explore.artifact.json" in explore_phase.artifact_paths
