@@ -114,6 +114,126 @@ def add_uninstall_parser(subparsers: Any) -> None:
         action="store_true",
         help="Also delete project artifacts (.opencontext/, .storage/, *.yaml configs).",
     )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Remove all traces: ledger-tracked files, known artifacts, oc-*.md glob sweep.",
+    )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Scan for remaining OpenContext traces and report pass/fail (no files removed).",
+    )
+
+
+def _run_full_uninstall(root: object, scope: str, json_output: bool) -> None:
+    """Execute the --full uninstall: deconfigure, ledger delete, purge, glob sweep."""
+    from pathlib import Path
+
+    base = Path(str(root))
+    report: dict[str, Any] = {"status": "full_uninstall", "removed": []}
+
+    # 1. Deconfigure all detected agents
+    configurator = Configurator(project_root=root)
+    agents = configurator.detect_installed() or list(KNOWN_AGENTS)
+    valid = [a for a in agents if a in set(KNOWN_AGENTS)]
+    if valid:
+        dec = configurator.deconfigure(valid, scope=scope)
+        report["deconfigure"] = dec
+
+    # 2. Delete ledger-tracked paths that exist under root
+    try:
+        from opencontext_core.install_manager import InstallationManager
+
+        mgr = InstallationManager()
+        state = mgr._load_state()
+        if state and state.files:
+            for fp in state.files:
+                p = Path(fp)
+                try:
+                    if p.is_relative_to(base) and p.exists():
+                        p.unlink()
+                        report["removed"].append(str(p))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # 3. Purge known project artifacts
+    purged = _purge_project_artifacts(root)
+    report["purged"] = purged
+
+    # 4. Glob sweep oc-*.md under known persona/command dirs
+    for pattern in (".claude/agents/oc-*.md", ".claude/commands/oc-*.md"):
+        for p in base.glob(pattern):
+            try:
+                p.unlink()
+                report["removed"].append(str(p))
+            except Exception:
+                pass
+
+    # 5. Clear ledger
+    try:
+        from opencontext_core.install_manager import InstallationManager
+
+        InstallationManager().clear_state()
+        report["state_cleared"] = True
+    except Exception:
+        pass
+
+    # 6. Verify traces
+    residue = verify_no_traces(root)
+    report["verify"] = {"passed": len(residue) == 0, "residue": residue}
+
+    if json_output:
+        print(json.dumps(report, indent=2))
+        return
+    console.print(
+        Panel.fit(
+            "[bold green]Full uninstall complete[/bold green]",
+            border_style="green",
+        )
+    )
+    if report.get("purged"):
+        console.print(f"  [dim]purged: {', '.join(report['purged'])}[/]")
+    if residue:
+        console.print("[yellow]Traces remain:[/]")
+        for p in residue:
+            console.print(f"  [dim]{p}[/]")
+    else:
+        console.print("[green]verify passed[/]: no traces remain.")
+
+
+def verify_no_traces(root: object) -> list[str]:
+    """Scan known locations for OpenContext residue; return list of remaining traces."""
+    from pathlib import Path
+
+    base = Path(str(root))
+    residue: list[str] = []
+
+    for name in (".opencontext", ".storage/opencontext"):
+        p = base / name
+        if p.exists():
+            residue.append(str(p))
+
+    for name in ("opencontext.yaml", "harness.yaml", ".mcp.json"):
+        p = base / name
+        if p.exists():
+            residue.append(str(p))
+
+    for pattern in (".claude/agents/oc-*.md", ".claude/commands/oc-*.md"):
+        residue.extend(str(p) for p in base.glob(pattern))
+
+    for fname in ("AGENTS.md", "CLAUDE.md", "GEMINI.md", "QWEN.md"):
+        p = base / fname
+        if p.exists():
+            try:
+                if "opencontext" in p.read_text(encoding="utf-8").lower():
+                    residue.append(str(p))
+            except OSError:
+                pass
+
+    return residue
 
 
 def handle_uninstall(args: Any) -> None:
@@ -124,6 +244,39 @@ def handle_uninstall(args: Any) -> None:
     dry_run = _resolve_flag(getattr(args, "dry_run", False), "OPENCONTEXT_DRY_RUN")
     json_output = _resolve_flag(getattr(args, "json", False), "OPENCONTEXT_JSON")
     yes = _resolve_flag(getattr(args, "yes", False), "OPENCONTEXT_YES")
+    root = getattr(args, "root", ".")
+
+    # --verify: read-only trace scan
+    if getattr(args, "verify", False):
+        residue = verify_no_traces(root)
+        passed = len(residue) == 0
+        if json_output:
+            print(json.dumps({"passed": passed, "residue": residue}, indent=2))
+        else:
+            if passed:
+                console.print("[green]verify passed[/]: no OpenContext traces found.")
+            else:
+                console.print("[yellow]verify failed[/]: traces remain:")
+                for p in residue:
+                    console.print(f"  [dim]{p}[/]")
+        sys.exit(0 if passed else 1)
+
+    # --full: complete trace removal
+    if getattr(args, "full", False):
+        if not yes and not sys.stdin.isatty():
+            sys.stderr.write("--full requires --yes in non-interactive mode.\n")
+            sys.exit(1)
+        if not yes:
+            console.print(
+                "[red]--full will delete all OpenContext traces under the project root.[/]"
+            )
+            if not __import__("opencontext_core.prompts", fromlist=["confirm"]).confirm(
+                "Proceed?", default=False
+            ):
+                console.print("[yellow]Full uninstall cancelled.[/]")
+                return
+        _run_full_uninstall(root, scope, json_output)
+        return
 
     configurator = Configurator(project_root=getattr(args, "root", "."))
 
