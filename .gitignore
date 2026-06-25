@@ -59,3 +59,4 @@ Thumbs.db
 # Claude Code agent worktrees (transient, not project-owned)
 .claude/worktrees/
 .tools/*
+.sdd
