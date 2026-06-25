@@ -48,6 +48,43 @@ class OcNewConductor:
         self.store.save(state)
         return state
 
+    def _load_required_phase_envelope(
+        self,
+        state: OcNewRunState,
+        phase_name: str,
+    ) -> PhaseResultEnvelope:
+        """Load a phase-result envelope from the run directory.
+
+        When ``require_phase_envelopes`` is True (the default) the envelope
+        file MUST exist; its absence raises ``RuntimeError``.  When the flag
+        is False and the file is absent a synthetic "passed" envelope is
+        returned so the caller can continue without breaking.
+        """
+        run_dir = self.store.run_dir(state.identity.run_id)
+        path = run_dir / f"phase-result.{phase_name}.json"
+
+        require = True
+        if state.config is not None:
+            require = getattr(state.config, "require_phase_envelopes", True)
+
+        if not path.exists():
+            if require:
+                raise RuntimeError(f"Missing required phase envelope: {path}")
+            return PhaseResultEnvelope(
+                run_id=state.identity.run_id,
+                change_id=state.identity.change_id,
+                phase=phase_name,
+                status="passed",
+                duration_s=0.0,
+            )
+
+        env = PhaseResultEnvelope.model_validate_json(path.read_text(encoding="utf-8"))
+
+        if env.phase != phase_name:
+            raise RuntimeError(f"Envelope phase mismatch: {env.phase} != {phase_name}")
+
+        return env
+
     def mark_done(
         self,
         run_id: str,
@@ -64,12 +101,16 @@ class OcNewConductor:
         run_dir = self.store.run_dir(run_id)
         envelope_path = run_dir / f"phase-result.{phase_name}.json"
         resolved = artifact_paths
+        resolved_warnings = warnings
         if envelope_path.exists():
             try:
-                env = PhaseResultEnvelope.model_validate_json(
-                    envelope_path.read_text(encoding="utf-8")
-                )
+                env = self._load_required_phase_envelope(state, phase_name)
                 resolved = env.artifacts
+                if not env.can_advance():
+                    # Override caller-supplied status when the envelope blocks advance.
+                    status = "failed" if env.status == "failed" else "blocked"
+                if env.risks:
+                    resolved_warnings = list(resolved_warnings or []) + env.risks
             except Exception:
                 resolved = artifact_paths
         updated = phase.model_copy(
@@ -79,7 +120,7 @@ class OcNewConductor:
                 "artifact_paths": (
                     resolved if resolved is not None else phase.artifact_paths
                 ),
-                "warnings": warnings if warnings is not None else phase.warnings,
+                "warnings": resolved_warnings if resolved_warnings is not None else phase.warnings,
             }
         )
         state = self._replace_phase(state, updated)

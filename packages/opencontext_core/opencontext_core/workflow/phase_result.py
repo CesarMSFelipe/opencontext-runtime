@@ -48,16 +48,29 @@ class PhaseResultEnvelope(BaseModel):
     trace_id: str | None = None
     required_artifacts: list[str] = Field(default_factory=list)
     missing_artifacts: list[str] = Field(default_factory=list)
+    context_report_path: str | None = None
+    memory_report_path: str | None = None
+    harness_report_path: str | None = None
+    compliance_matrix_path: str | None = None
+    verify_report_path: str | None = None
+    risks: list[str] = Field(default_factory=list)
+    next_recommended: str = ""
 
     def can_advance(self) -> bool:
         """True iff this phase cleared the gate and the conductor should promote."""
-        return self.status in _ADVANCE_STATUSES
+        if self.status not in _ADVANCE_STATUSES:
+            return False
+        if self.missing_artifacts:
+            return False
+        if self.error:
+            return False
+        return True
 
 
 __all__ = ["PhaseResultEnvelope", "PhaseResultStatus"]
 
 
-if __name__ == "__main__":  # ponytail: tiny executable sanity check
+if __name__ == "__main__":  # NOTE: sanity check
     env = PhaseResultEnvelope(
         run_id="r", change_id="c", phase="apply", status="passed", duration_s=0.1
     )
