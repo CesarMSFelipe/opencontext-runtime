@@ -127,3 +127,49 @@ def test_global_install_uses_agent_installer(tmp_path, monkeypatch):
     assert installer_called, (
         "Global (default) install must call AgentInstaller but it was not called."
     )
+
+
+def test_workspace_install_writes_nothing_under_home_integration(tmp_path, monkeypatch):
+    """End-to-end: a real --scope workspace install must leave $HOME untouched.
+
+    This is the integration counterpart to the unit test above — it runs the
+    REAL onboarding/configurator path (no mocking) and asserts that not a single
+    file lands under $HOME, while project-local agent files ARE created.
+    """
+    import subprocess
+    import sys
+
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "src").mkdir()
+    (project / "src" / "app.py").write_text("def h():\n    return 1\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+
+    env = dict(**{k: v for k, v in __import__("os").environ.items()})
+    env["HOME"] = str(fake_home)
+    env.pop("XDG_CONFIG_HOME", None)
+    proc = subprocess.run(
+        [
+            sys.executable, "-m", "opencontext_cli.main", "install", ".",
+            "--yes", "--agent", "claude-code", "--memory", "local",
+            "--budget", "warn", "--git", "none", "--scope", "workspace",
+        ],
+        cwd=project,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert proc.returncode == 0, f"install failed: {proc.stdout}\n{proc.stderr}"
+
+    home_files = [p for p in fake_home.rglob("*") if p.is_file()]
+    assert home_files == [], (
+        "--scope workspace must not write any file under $HOME. Found: "
+        + ", ".join(str(p.relative_to(fake_home)) for p in home_files)
+    )
+    # Project-local agent wiring must still happen.
+    assert (project / ".mcp.json").exists()
+    assert (project / "opencontext.yaml").exists()
+    assert (project / ".claude" / "agents" / "oc-orchestrator.md").exists()

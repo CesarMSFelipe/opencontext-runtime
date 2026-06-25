@@ -57,7 +57,12 @@ class Configurator:
         return [a.agent_id for a in iter_adapters() if a.config_dir.exists()]
 
     def configure(
-        self, agents: list[str], scope: str = "local", *, dry_run: bool = False
+        self,
+        agents: list[str],
+        scope: str = "local",
+        *,
+        dry_run: bool = False,
+        project_only: bool = False,
     ) -> dict[str, Any]:
         """Configure ``agents`` and return a structured report.
 
@@ -69,9 +74,17 @@ class Configurator:
         per-agent by the adapter: AGENTS.md-honoring agents get project-root
         instructions, while MCP config, personas, and CLAUDE.md/GEMINI.md agents
         always write to the agent's own config dir under home.
+
+        When ``project_only`` is true, ONLY repo-local files are written (the
+        project-root ``.mcp.json``); the agent's home-dir config (home MCP,
+        CLAUDE.md, settings) and the home backup are skipped. This is what a
+        ``--scope workspace`` install uses so it never touches ``$HOME``.
         """
 
-        results = [self.configure_one(agent_id, scope, dry_run=dry_run) for agent_id in agents]
+        results = [
+            self.configure_one(agent_id, scope, dry_run=dry_run, project_only=project_only)
+            for agent_id in agents
+        ]
         status_key = "planned" if dry_run else "configured"
         configured = sum(1 for r in results if r["status"] == status_key)
         return {
@@ -84,7 +97,12 @@ class Configurator:
         }
 
     def configure_one(
-        self, agent_id: str, scope: str = "local", *, dry_run: bool = False
+        self,
+        agent_id: str,
+        scope: str = "local",
+        *,
+        dry_run: bool = False,
+        project_only: bool = False,
     ) -> dict[str, Any]:
         """Configure a single agent; returns its per-agent result entry."""
 
@@ -97,6 +115,19 @@ class Configurator:
                 "agent": agent_id,
                 "status": "planned",
                 "plan": plan_actions(targets),
+            }
+
+        # project_only: write nothing under $HOME — no home backup. Write every
+        # planned file that lives under the project root (repo .mcp.json, project
+        # commands, agents, delegates) and skip home-dir files (home MCP, CLAUDE.md,
+        # settings). Used by --scope workspace installs.
+        if project_only:
+            files = self._write_project_local_only(adapter)
+            return {
+                "agent": agent_id,
+                "status": "configured",
+                "files": files,
+                "backup_id": None,
             }
 
         backup = BackupStore().create([agent_id], targets, source="configure")
@@ -115,6 +146,23 @@ class Configurator:
             "files": files,
             "backup_id": backup.id if backup is not None else None,
         }
+
+    def _write_project_local_only(self, adapter: Adapter) -> list[str]:
+        """Write every planned file under the project root; touch nothing under $HOME."""
+        root = self.project_root.resolve()
+        files: list[str] = []
+        for path, content in self._plan(adapter):
+            try:
+                resolved = path.resolve()
+            except OSError:
+                resolved = path
+            if root != resolved and root not in resolved.parents:
+                continue  # home-dir file — skip in project-only mode
+            if content is not None:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                write_text_atomic(path, content)
+            files.append(str(path))
+        return files
 
     # ------------------------------------------------------------------
 
