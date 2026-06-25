@@ -6,15 +6,12 @@ task and phase. The ContextSubstrateBuilder is stateless; call build_for_phase()
 
 from __future__ import annotations
 
-import warnings
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
-
-# NOTE: G2 — ContextPackBuilder and CompressionEngine are not available in this build.
-# When they are absent, build_for_phase() emits a UserWarning and sets hash=None.
-_PACK_AVAILABLE = False
 
 
 class ContextSubstrateReport(BaseModel, extra="forbid"):
@@ -24,6 +21,7 @@ class ContextSubstrateReport(BaseModel, extra="forbid"):
     indexed: bool
     graph_status: str
     context_pack_hash: str | None = None
+    no_kg_reason: str | None = None
     used_tokens: int = 0
     available_tokens: int = 0
     compression_enabled: bool = False
@@ -54,23 +52,50 @@ class ContextSubstrateBuilder:
         indexed, graph_status = self._check_index()
         available = budget or 0
         substrate_warnings: list[str] = []
+        context_pack_hash: str | None = None
+        no_kg_reason: str | None = None
 
         if not indexed:
             substrate_warnings.append(
                 f"Knowledge graph not indexed — context for {phase!r} may be limited."
             )
-
-        # NOTE: G2 — emit an honest warning; do NOT synthesise a fake hash.
-        warnings.warn(
-            "ContextPackBuilder unavailable — context hashing disabled",
-            UserWarning,
-            stacklevel=2,
-        )
+            no_kg_reason = "knowledge_graph.json not found"
+        else:
+            kg_file = self.root / ".opencontext" / "knowledge_graph.json"
+            try:
+                kg_data = json.loads(kg_file.read_text(encoding="utf-8"))
+                # Collect sortable identifiers from the KG.
+                if isinstance(kg_data, dict) and "nodes" in kg_data:
+                    nodes = kg_data["nodes"]
+                    if isinstance(nodes, list):
+                        keys = sorted(
+                            str(n.get("id", n.get("path", "")))
+                            for n in nodes
+                            if isinstance(n, dict)
+                        )
+                    else:
+                        keys = sorted(str(k) for k in nodes)
+                elif isinstance(kg_data, dict):
+                    keys = sorted(kg_data.keys())
+                elif isinstance(kg_data, list):
+                    keys = sorted(
+                        str(n.get("id", n.get("path", ""))) if isinstance(n, dict) else str(n)
+                        for n in kg_data
+                    )
+                else:
+                    keys = [str(kg_data)]
+                digest = hashlib.sha256("\n".join(keys).encode()).hexdigest()
+                context_pack_hash = f"sha256:{digest}"
+            except Exception as exc:
+                substrate_warnings.append(f"Failed to hash knowledge graph: {exc}")
+                no_kg_reason = f"knowledge_graph.json unreadable: {exc}"
+                context_pack_hash = None
 
         return ContextSubstrateReport(
             indexed=indexed,
             graph_status=graph_status,
-            context_pack_hash=None,
+            context_pack_hash=context_pack_hash,
+            no_kg_reason=no_kg_reason,
             used_tokens=0,
             available_tokens=available,
             compression_enabled=False,
@@ -91,21 +116,36 @@ class ContextSubstrateBuilder:
 
 
 if __name__ == "__main__":
+    import json as _json
     import tempfile
-    import warnings as _warnings
 
     with tempfile.TemporaryDirectory() as tmp:
         builder = ContextSubstrateBuilder(root=tmp)
-        with _warnings.catch_warnings(record=True) as caught:
-            _warnings.simplefilter("always")
-            report = builder.build_for_phase(task="add health check", phase="explore", budget=8000)
+        # Case 1: no KG — hash is None, no_kg_reason is set.
+        report = builder.build_for_phase(task="add health check", phase="explore", budget=8000)
         assert isinstance(report, ContextSubstrateReport)
         assert report.available_tokens == 8000
-        # NOTE: G2 — context_pack_hash is None (honest; no fake hash).
         assert report.context_pack_hash is None, f"Expected None, got {report.context_pack_hash}"
-        assert any("unavailable" in str(w.message) for w in caught), "Expected UserWarning"
+        assert report.no_kg_reason is not None
+
+        # Case 2: KG present — hash is deterministic.
+        import os
+
+        oc_dir = os.path.join(tmp, ".opencontext")
+        os.makedirs(oc_dir, exist_ok=True)
+        kg_path = os.path.join(oc_dir, "knowledge_graph.json")
+        kg_content = {"nodes": [{"id": "a"}, {"id": "b"}]}
+        with open(kg_path, "w") as fh:
+            _json.dump(kg_content, fh)
+        report2 = builder.build_for_phase(task="add health check", phase="explore", budget=8000)
+        assert report2.context_pack_hash is not None
+        assert report2.context_pack_hash.startswith("sha256:")
+        assert report2.indexed is True
+        # Determinism: same KG → same hash.
+        report3 = builder.build_for_phase(task="other", phase="design", budget=4000)
+        assert report2.context_pack_hash == report3.context_pack_hash
 
         # Round-trip
-        ContextSubstrateReport.model_validate(report.model_dump())
+        ContextSubstrateReport.model_validate(report2.model_dump())
 
     print("agentic/context_substrate.py self-check passed.")
