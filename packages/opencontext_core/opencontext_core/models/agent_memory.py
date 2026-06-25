@@ -20,6 +20,15 @@ class MemoryLayer(StrEnum):
     FAILURE = "failure"
 
 
+class MemoryLifecycle(StrEnum):
+    """Lifecycle state for a MemoryRecord — tracks progression from candidate to expiry."""
+
+    CANDIDATE = "candidate"
+    ACTIVE = "active"
+    SUPERSEDED = "superseded"
+    EXPIRED = "expired"
+
+
 class DecayPolicy(BaseModel):
     """Policy controlling how a memory record ages over time."""
 
@@ -78,4 +87,8 @@ class MemoryRecord(BaseModel):
     provenance: str | None = Field(
         default=None,
         description="Origin channel: 'agent', 'harvest', 'manual', or 'import'.",
+    )
+    lifecycle: MemoryLifecycle = Field(
+        default=MemoryLifecycle.CANDIDATE,
+        description="Lifecycle state of this record.",
     )
