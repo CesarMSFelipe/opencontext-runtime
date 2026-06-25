@@ -132,10 +132,27 @@ class OcNewRunState(BaseModel):
         return [p.name for p in self.phases if p.status in {"passed", "warning", "skipped"}]
 
 
+class ArtifactRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    path: str | None = None
+    kind: str = ""
+
+
+class HandoffBudget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    phase_budget: int = 0
+    used_before_phase: int = 0
+    max_output_tokens: int = 0
+    budget_mode: str = "warn"
+
+
 class AgentHandoff(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: str = "opencontext.agent_handoff.v1"
+    schema_version: str = "opencontext.agent_handoff.v2"
     run_id: str
     change_id: str
     trace_id: str
@@ -151,6 +168,14 @@ class AgentHandoff(BaseModel):
     memory_backend: str = "local"
     read_memory_layers: list[str] = Field(default_factory=list)
     write_memory_layers: list[str] = Field(default_factory=list)
+    # v2 fields (all defaulted for backwards compat)
+    skill: str = ""
+    skill_path: str | None = None
+    artifact_refs: list[ArtifactRef] = Field(default_factory=list)
+    budget: HandoffBudget = Field(default_factory=HandoffBudget)
+    context_report_ref: str | None = None
+    result_schema: str = "opencontext.phase_result.v1"
+    denied_tools: list[str] = Field(default_factory=list)
 
 
 def render_handoff_markdown(handoff: AgentHandoff) -> str:

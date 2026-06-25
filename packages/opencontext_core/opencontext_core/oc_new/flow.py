@@ -86,6 +86,10 @@ OC_NEW_FLOW: tuple[PhaseDefinition, ...] = (
             "verify.artifact.json",
             "compliance-matrix.json",
             "harness-report.json",
+            # NOTE: tdd-evidence.json and quality-gate.json are SHOULD (warn-only)
+            # pending DoD #18 confirmation — not yet hard-required.
+            "tdd-evidence.json",
+            "quality-gate.json",
         ],
         required_tools=[
             "opencontext_memory_context",
