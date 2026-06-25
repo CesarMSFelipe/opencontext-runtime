@@ -43,6 +43,11 @@ class PhaseResultEnvelope(BaseModel):
     token_usage: dict[str, int] = Field(default_factory=dict)
     duration_s: float
     error: str | None = None
+    persona: str | None = None
+    skill: str | None = None
+    trace_id: str | None = None
+    required_artifacts: list[str] = Field(default_factory=list)
+    missing_artifacts: list[str] = Field(default_factory=list)
 
     def can_advance(self) -> bool:
         """True iff this phase cleared the gate and the conductor should promote."""

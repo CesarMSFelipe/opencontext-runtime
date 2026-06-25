@@ -92,3 +92,43 @@ def test_envelope_error_round_trips_when_set() -> None:
     env = _envelope("failed", error="boom")
     assert env.error == "boom"
     assert env.can_advance() is False
+
+
+def test_old_envelope_deserializes_without_new_fields() -> None:
+    """Old JSON without the 5 new fields deserializes with defaults."""
+    import json
+
+    old = {
+        "schema_version": "1.0",
+        "run_id": "r",
+        "change_id": "c",
+        "phase": "apply",
+        "status": "passed",
+        "duration_s": 1.0,
+    }
+    env = PhaseResultEnvelope.model_validate(old)
+    assert env.persona is None
+    assert env.skill is None
+    assert env.trace_id is None
+    assert env.required_artifacts == []
+    assert env.missing_artifacts == []
+
+
+def test_new_envelope_fields_round_trip() -> None:
+    """New fields survive serialize→deserialize."""
+    env = PhaseResultEnvelope(
+        run_id="r",
+        change_id="c",
+        phase="spec",
+        status="passed",
+        duration_s=0.5,
+        persona="oc-builder",
+        trace_id="t1",
+        required_artifacts=["spec.md"],
+        missing_artifacts=[],
+    )
+    restored = PhaseResultEnvelope.model_validate_json(env.model_dump_json())
+    assert restored.persona == "oc-builder"
+    assert restored.trace_id == "t1"
+    assert restored.required_artifacts == ["spec.md"]
+    assert restored.missing_artifacts == []

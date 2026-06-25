@@ -17,6 +17,7 @@ from opencontext_core.oc_new.models import (
     PhaseState,
 )
 from opencontext_core.oc_new.store import OcNewStore
+from opencontext_core.workflow.phase_result import PhaseResultEnvelope
 
 if TYPE_CHECKING:
     from opencontext_core.agentic.config import AgenticFlowConfig
@@ -60,12 +61,23 @@ class OcNewConductor:
     ) -> OcNewRunState:
         state = self.store.load(run_id)
         phase = state.phase(phase_name)  # type: ignore[arg-type]
+        run_dir = self.store.run_dir(run_id)
+        envelope_path = run_dir / f"phase-result.{phase_name}.json"
+        resolved = artifact_paths
+        if envelope_path.exists():
+            try:
+                env = PhaseResultEnvelope.model_validate_json(
+                    envelope_path.read_text(encoding="utf-8")
+                )
+                resolved = env.artifacts
+            except Exception:
+                resolved = artifact_paths
         updated = phase.model_copy(
             update={
                 "status": status,
                 "completed_at": datetime.now(tz=UTC),
                 "artifact_paths": (
-                    artifact_paths if artifact_paths is not None else phase.artifact_paths
+                    resolved if resolved is not None else phase.artifact_paths
                 ),
                 "warnings": warnings if warnings is not None else phase.warnings,
             }
@@ -238,8 +250,8 @@ class OcNewConductor:
                 memory_backend = state.config.memory_mode.value
             mem_metadata: dict = {
                 "backend": memory_backend,
-                "read_layers": [l.value for l in policy.read_layers] if policy else [],
-                "write_layers": [l.value for l in policy.write_layers] if policy else [],
+                "read_layers": [layer.value for layer in policy.read_layers] if policy else [],
+                "write_layers": [layer.value for layer in policy.write_layers] if policy else [],
                 "key": state.identity.memory_key,
             }
 
