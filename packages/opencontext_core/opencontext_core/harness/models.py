@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from opencontext_core.compat import StrEnum
 from opencontext_core.models.trace import RunEvent
@@ -187,6 +187,19 @@ class HarnessDecision:
     rationale: str
     trace_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+class HarnessReport(BaseModel):
+    """JSON-serializable harness report for archive gate consumption."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str = "opencontext.harness_report.v1"
+    run_id: str = ""
+    change_id: str = ""
+    passed: bool = False
+    failures: list[str] = Field(default_factory=list)
+    duration_s: float = 0.0
 
 
 @dataclass

@@ -13,11 +13,91 @@ behavior whenever no real model is configured.
 
 from __future__ import annotations
 
+from enum import StrEnum
+from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from opencontext_core.agents.delegation import DelegationMode, SubAgentDelegate
 from opencontext_core.llm.gateway import LLMGateway
 from opencontext_core.models.llm import LLMRequest
+
+
+class ApplyOperation(StrEnum):
+    REPLACE_RANGE = "replace_range"
+    INSERT_AFTER = "insert_after"
+    DELETE_RANGE = "delete_range"
+    CREATE_FILE = "create_file"
+
+
+class ApplyEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    operation: ApplyOperation
+    start_line: int | None = None
+    end_line: int | None = None
+    after_line: int | None = None
+    content: str = ""
+    reason: str = ""
+    requirement_refs: list[str] = Field(default_factory=list)
+    task_refs: list[str] = Field(default_factory=list)
+
+
+class AppliedEditReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    operation: ApplyOperation
+    changed: bool
+
+
+def apply_edit(root: Path, edit: ApplyEdit) -> AppliedEditReceipt:
+    path = (root / edit.path).resolve()
+    # Safety: ensure path is under root
+    try:
+        path.relative_to(root.resolve())
+    except ValueError:
+        raise RuntimeError(f"Path escape attempt: {edit.path}")
+
+    if edit.operation == ApplyOperation.CREATE_FILE:
+        if path.exists():
+            raise RuntimeError(f"Cannot create existing file: {edit.path}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(edit.content, encoding="utf-8")
+        return AppliedEditReceipt(path=edit.path, operation=edit.operation, changed=True)
+
+    if not path.exists():
+        raise RuntimeError(f"File not found: {edit.path}")
+
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+
+    if edit.operation == ApplyOperation.REPLACE_RANGE:
+        if edit.start_line is None or edit.end_line is None:
+            raise RuntimeError("replace_range requires start_line and end_line")
+        start = edit.start_line - 1  # 1-based to 0-based
+        end = edit.end_line  # exclusive
+        new_content = edit.content if edit.content.endswith("\n") else edit.content + "\n"
+        new_lines = lines[:start] + [new_content] + lines[end:]
+
+    elif edit.operation == ApplyOperation.INSERT_AFTER:
+        if edit.after_line is None:
+            raise RuntimeError("insert_after requires after_line")
+        idx = edit.after_line  # insert after line N (1-based) = index N
+        new_content = edit.content if edit.content.endswith("\n") else edit.content + "\n"
+        new_lines = lines[:idx] + [new_content] + lines[idx:]
+
+    elif edit.operation == ApplyOperation.DELETE_RANGE:
+        if edit.start_line is None or edit.end_line is None:
+            raise RuntimeError("delete_range requires start_line and end_line")
+        new_lines = lines[: edit.start_line - 1] + lines[edit.end_line :]
+
+    else:
+        raise RuntimeError(f"Unsupported operation: {edit.operation}")
+
+    path.write_text("".join(new_lines), encoding="utf-8")
+    return AppliedEditReceipt(path=edit.path, operation=edit.operation, changed=True)
 
 # Phases that produce an LLM-authored artifact through the delegation seam.
 WORK_PRODUCING_PHASES: tuple[str, ...] = ("spec", "design", "tasks")
