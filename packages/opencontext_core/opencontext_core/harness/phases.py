@@ -1198,7 +1198,12 @@ class CodeEditExecutor:
         p = Path(raw_path)
         if not p.is_absolute():
             p = self.root / p
-        return p
+        # Containment guard (security boundary): an edit MUST stay within the
+        # project root. Reject absolute paths and ../ escapes before any write.
+        resolved = p.resolve()
+        if not resolved.is_relative_to(self.root.resolve()):
+            raise PermissionError(f"path escape blocked: {raw_path}")
+        return resolved
 
     def _check_forbidden(self, edits: list[FileEdit]) -> None:
         """Raise before any write if an edit targets a forbidden path.

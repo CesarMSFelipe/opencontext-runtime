@@ -226,3 +226,28 @@ class TestPlanningPhasesRealExecutor:
         assert result.status != GateStatus.PASSED
         manifest = _read_manifest(result)
         assert manifest["status"] != "completed"
+
+
+def test_code_edit_executor_blocks_path_escape(tmp_path: Path) -> None:
+    """Security boundary: edits MUST stay within the project root.
+
+    Regression for the live-apply path-traversal hole — CodeEditExecutor
+    previously wrote ``../`` and absolute paths outside root with no guard.
+    """
+    from opencontext_core.harness.phases import CodeEditExecutor, FileEdit
+
+    root = tmp_path / "proj"
+    root.mkdir()
+    ex = CodeEditExecutor(root)
+
+    import pytest
+
+    for raw in ("../escaped.txt", str(tmp_path / "abs_escaped.txt")):
+        with pytest.raises(PermissionError):
+            ex.apply([FileEdit(path=raw, content="PWNED")])
+    assert not (tmp_path / "escaped.txt").exists()
+    assert not (tmp_path / "abs_escaped.txt").exists()
+
+    # In-root edits (including nested) still succeed.
+    ex.apply([FileEdit(path="sub/ok.py", content="x = 1")])
+    assert (root / "sub" / "ok.py").read_text() == "x = 1"
