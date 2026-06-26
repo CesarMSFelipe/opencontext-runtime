@@ -85,6 +85,14 @@ OpenContext is the layer **between your coding agent and your codebase** — it 
 </div>
 
 <p align="center">
+  <img src="docs/assets/all-systems.svg" alt="OpenContext, all systems at a glance: it sits between your coding agent and your codebase. The runtime holds six systems — context and code graph, controlled SDD loop, model per persona, persistent memory, security by default, and 19 MCP tools. The codebase is indexed once and queried offline." width="720">
+</p>
+
+<p align="center">
+  <sub>All systems · the layer between your agent and your codebase · six systems, one runtime</sub>
+</p>
+
+<p align="center">
   <img src="docs/assets/divider.svg" alt="" width="720">
 </p>
 
