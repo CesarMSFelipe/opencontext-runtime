@@ -131,6 +131,19 @@ class OcNewConductor:
                         f"Required artifacts missing: {missing_str}",
                     ]
 
+        # NOTE: REQ-P1.1 — disk-check envelope declared artifacts (D1: fail-closed).
+        if status == "passed" and env.artifacts:
+            run_dir = self.store.run_dir(run_id)
+            declared_missing = [
+                a for a in env.artifacts if not (run_dir / a).exists()
+            ]
+            if declared_missing:
+                status = "blocked"
+                resolved_warnings = [
+                    *(resolved_warnings or []),
+                    f"Declared artifacts missing on disk: {', '.join(declared_missing)}",
+                ]
+
         # NOTE: REQ-01b — fail-closed archive gate (only when still on track to pass).
         if phase_name == "archive" and status == "passed":
             from opencontext_core.oc_new.archive_gate import OcNewArchiveGate
