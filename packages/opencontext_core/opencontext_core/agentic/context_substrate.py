@@ -106,10 +106,10 @@ class ContextSubstrateBuilder:
                     # NOTE: Keep db reference alive so _conn is not GC-closed.
                     db = GraphDatabase(sqlite_db)
                     conn = db._connect()
-                    rows = conn.execute("SELECT id, content FROM nodes").fetchall()
+                    rows = conn.execute("SELECT id, content_snippet FROM nodes").fetchall()
                     sorted_ids = sorted(str(r["id"]) for r in rows)
                     joined_content = " ".join(
-                        str(r["content"] or "") for r in rows if r["content"]
+                        str(r["content_snippet"] or "") for r in rows if r["content_snippet"]
                     )
                     digest = hashlib.sha256("\n".join(sorted_ids).encode()).hexdigest()
                     context_pack_hash = f"sha256:{digest}"

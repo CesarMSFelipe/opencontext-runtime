@@ -47,17 +47,24 @@ def test_t2_sqlite_substrate_hash_and_tokens() -> None:
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        # Create minimal context_graph.db with a nodes table.
+        # Create minimal context_graph.db with the real schema (content_snippet, not content).
         db_dir = root / ".storage" / "opencontext"
         db_dir.mkdir(parents=True)
         db_path = db_dir / "context_graph.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute(
-            "CREATE TABLE nodes (id TEXT PRIMARY KEY, content TEXT, name TEXT, kind TEXT)"
+            "CREATE TABLE nodes ("
+            "id TEXT PRIMARY KEY NOT NULL, "
+            "name TEXT NOT NULL, "
+            "kind TEXT NOT NULL, "
+            "file_path TEXT NOT NULL, "
+            "language TEXT NOT NULL, "
+            "content_snippet TEXT"
+            ")"
         )
         conn.execute(
-            "INSERT INTO nodes (id, content, name, kind) "
-            "VALUES ('n1', 'hello world', 'n1', 'file')"
+            "INSERT INTO nodes (id, name, kind, file_path, language, content_snippet) "
+            "VALUES ('n1', 'n1', 'file', 'foo.py', 'python', 'hello world')"
         )
         conn.commit()
         conn.close()
