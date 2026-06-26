@@ -23,6 +23,21 @@ from opencontext_cli.tui.graph.models import (
     GraphViewState,
 )
 
+# NOTE: Maps KG node kind strings → GraphNodeKind enum; unknown → FILE default.
+_KIND_MAP: dict[str, GraphNodeKind] = {
+    "file": GraphNodeKind.FILE,
+    "symbol": GraphNodeKind.SYMBOL,
+    "memory": GraphNodeKind.MEMORY,
+    "agent": GraphNodeKind.AGENT,
+    "phase": GraphNodeKind.PHASE,
+    "unknown": GraphNodeKind.UNKNOWN,
+}
+
+
+def _map_kind(raw: str) -> GraphNodeKind:
+    """Return the GraphNodeKind for *raw*, defaulting to FILE for unknown values."""
+    return _KIND_MAP.get(raw, GraphNodeKind.FILE)
+
 
 class GraphScreen(Screen[None]):
     """Full-screen interactive graph display."""
@@ -153,7 +168,8 @@ def load_graph_for_kg(root: Path | str = ".") -> GraphViewState:
                 if isinstance(item, dict):
                     nid = str(item.get("id", item.get("path", "")))
                     label = str(item.get("label", item.get("name", nid)))
-                    nodes.append(GraphNodeView(node_id=nid, label=label, kind=GraphNodeKind.FILE))
+                    raw_kind = str(item.get("kind", "file"))
+                    nodes.append(GraphNodeView(node_id=nid, label=label, kind=_map_kind(raw_kind)))
 
             edges = []
             for item in raw_edges:
@@ -185,7 +201,7 @@ def load_graph_for_kg(root: Path | str = ".") -> GraphViewState:
                 GraphNodeView(
                     node_id=str(r["id"]),
                     label=str(r["name"]),
-                    kind=GraphNodeKind.FILE,
+                    kind=_map_kind(str(r["kind"] or "file")),
                 )
                 for r in node_rows
             ]
