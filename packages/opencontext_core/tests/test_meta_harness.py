@@ -7,29 +7,33 @@ from opencontext_core.harness.meta import MetaHarnessCheck, MetaHarnessReport, M
 
 class TestMetaHarnessReport:
     def test_all_pass_score_100(self) -> None:
+        # 9 x 10 + 2 x 5 = 100
+        weights = [10, 10, 10, 10, 10, 10, 10, 10, 10, 5, 5]
         checks = [
             MetaHarnessCheck(name=f"check_{i}", passed=True, score_contribution=w, explanation="OK")
-            for i, w in enumerate([12, 11, 11, 11, 11, 11, 11, 11, 11])
+            for i, w in enumerate(weights)
         ]
         report = MetaHarnessReport.from_checks(checks)
         assert report.score == 100
         assert report.passed is True
 
-    def test_one_fail_drops_below_90(self) -> None:
-        # 8 pass x 11 = 88 (the check with weight 12 fails)
+    def test_multiple_fails_drop_below_90(self) -> None:
+        # 9 pass x 10 + 2 fail x 5 (5-weight checks) = 90 → still passes (boundary)
+        # 9 pass x 10 + 1 pass x 5 + 1 fail x 5 = 95 → passes (only one 5-weight fails)
+        # 2 fail x 10 + 9 pass x 10 = 90 → boundary (still passes)
+        # 3 fail x 10 + 8 pass x 10 = 80 → fails
+        # Verify that enough failures drive the score below gate.
         checks = [
             MetaHarnessCheck(
-                name="big_check", passed=False, score_contribution=0, explanation="fail"
-            ),
+                name=f"fail_{i}", passed=False, score_contribution=0, explanation="fail"
+            )
+            for i in range(3)  # 3 failures × 10 = 30 lost → 100 - 30 = 70 < 90
         ]
-        checks = [
-            *checks,
-            *[
-                MetaHarnessCheck(
-                    name=f"check_{i}", passed=True, score_contribution=11, explanation="OK"
-                )
-                for i in range(8)
-            ],
+        checks += [
+            MetaHarnessCheck(
+                name=f"check_{i}", passed=True, score_contribution=10, explanation="OK"
+            )
+            for i in range(8)
         ]
         report = MetaHarnessReport.from_checks(checks)
         assert report.score <= 89
@@ -71,10 +75,10 @@ class TestMetaHarnessReport:
 
 
 class TestMetaHarnessScanner:
-    def test_scan_returns_9_checks(self) -> None:
+    def test_scan_returns_11_checks(self) -> None:
         scanner = MetaHarnessScanner()
         report = scanner.scan()
-        assert len(report.checks) == 9
+        assert len(report.checks) == 11
 
     def test_check_names_are_unique(self) -> None:
         scanner = MetaHarnessScanner()
@@ -96,11 +100,13 @@ class TestMetaHarnessScanner:
             "archive_gate",
             "tui_app",
             "uninstall_cmd",
+            "mcp_json",
+            "opencontext_yaml",
         }
         assert names == expected
 
     def test_exception_in_one_check_does_not_stop_others(self) -> None:
-        """Monkey-patch one check to raise; all 9 checks must still run."""
+        """Monkey-patch one check to raise; all 11 checks must still run."""
         scanner = MetaHarnessScanner()
         original = scanner._check_memory_backend
 
@@ -109,7 +115,7 @@ class TestMetaHarnessScanner:
 
         scanner._check_memory_backend = _raises  # type: ignore[method-assign]
         report = scanner.scan()
-        assert len(report.checks) == 9
+        assert len(report.checks) == 11
         failing = next(c for c in report.checks if c.name == "memory_backend")
         assert failing.passed is False
         assert "simulated check failure" in failing.explanation
@@ -120,7 +126,7 @@ class TestMetaHarnessScanner:
         from opencontext_core.harness.meta import _WEIGHTS
 
         assert sum(_WEIGHTS) == 100
-        assert len(_WEIGHTS) == 9
+        assert len(_WEIGHTS) == 11
 
 
 class TestKgSnapshotCheckIsBehavioral:
@@ -141,18 +147,18 @@ class TestKgSnapshotCheckIsBehavioral:
     def test_empty_kg_db_fails(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
         self._make_db(tmp_path / ".storage" / "opencontext" / "context_graph.db", 0)
-        passed, explanation = MetaHarnessScanner()._check_kg_snapshot_path()
+        passed, explanation = MetaHarnessScanner(root=tmp_path)._check_kg_snapshot_path()
         assert passed is False
         assert "empty" in explanation.lower()
 
     def test_missing_kg_fails(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
-        passed, _ = MetaHarnessScanner()._check_kg_snapshot_path()
+        passed, _ = MetaHarnessScanner(root=tmp_path)._check_kg_snapshot_path()
         assert passed is False
 
     def test_populated_kg_db_passes(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
         self._make_db(tmp_path / ".storage" / "opencontext" / "context_graph.db", 3)
-        passed, explanation = MetaHarnessScanner()._check_kg_snapshot_path()
+        passed, explanation = MetaHarnessScanner(root=tmp_path)._check_kg_snapshot_path()
         assert passed is True
         assert "3 node" in explanation

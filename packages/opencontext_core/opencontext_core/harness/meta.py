@@ -1,8 +1,8 @@
 """MetaHarnessScanner — pre-flight capability readiness scanner.
 
-Runs 9 independent checks and scores the installation 0-100.
-Weight scheme: 8 checks x 11 points + 1 check x 12 points = 100.
-Gate: score >= 90 -> passed=True. One failure -> score <= 89 -> passed=False.
+Runs 11 independent checks and scores the installation 0-100.
+Weight scheme: 9 checks x 10 points + 2 checks x 5 points = 100.
+Gate: score >= 90 -> passed=True.
 
 Each check is wrapped in try/except so a failure in one check never prevents
 the remaining checks from running.
@@ -11,6 +11,7 @@ the remaining checks from running.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -38,11 +39,15 @@ class MetaHarnessReport:
         return cls(score=score, checks=checks, passed=score >= 90)
 
 
-_WEIGHTS = [12, 11, 11, 11, 11, 11, 11, 11, 11]  # 9 checks, sum = 100
+# 11 checks: 9 x 10 + 2 x 5 = 100
+_WEIGHTS = [10, 10, 10, 10, 10, 10, 10, 10, 10, 5, 5]
 
 
 class MetaHarnessScanner:
-    """Runs all 9 pre-flight checks and produces a MetaHarnessReport."""
+    """Runs all 11 pre-flight checks and produces a MetaHarnessReport."""
+
+    def __init__(self, root: Path | str | None = None) -> None:
+        self._root: Path = Path(root) if root is not None else Path.cwd()
 
     def scan(self) -> MetaHarnessReport:
         """Run all checks. Each check is isolated; exceptions → passed=False."""
@@ -56,6 +61,8 @@ class MetaHarnessScanner:
             ("archive_gate", self._check_archive_gate),
             ("tui_app", self._check_tui_app),
             ("uninstall_cmd", self._check_uninstall_cmd),
+            ("mcp_json", self._check_mcp_json),
+            ("opencontext_yaml", self._check_opencontext_yaml),
         ]
         checks: list[MetaHarnessCheck] = []
         for (name, fn), weight in zip(raw_checks, _WEIGHTS, strict=True):
@@ -88,15 +95,26 @@ class MetaHarnessScanner:
             return False, f"Import failed: {exc}"
 
     def _check_hidden_delegates_path(self) -> tuple[bool, str]:
-        try:
-            from opencontext_core.personas import delegation_personas
+        """Probe .claude/agents/.opencontext-delegates/ on disk in the project root.
 
-            delegates = delegation_personas()
-            if delegates:
-                return True, f"{len(delegates)} hidden delegation persona(s) defined"
-            return False, "No hidden delegation personas found"
+        Requires at least 10 delegate files to pass (behavioral, not import-only).
+        """
+        try:
+            delegates_dir = self._root / ".claude" / "agents" / ".opencontext-delegates"
+            if not delegates_dir.exists():
+                return False, (
+                    f"Delegates directory not found: {delegates_dir!s} "
+                    "(run 'opencontext install' to provision)"
+                )
+            entries = [e for e in delegates_dir.iterdir() if e.is_file()]
+            if len(entries) >= 10:
+                return True, f"{len(entries)} delegate file(s) in {delegates_dir!s}"
+            return False, (
+                f"Only {len(entries)} delegate file(s) found in {delegates_dir!s} "
+                "(expected ≥ 10; run 'opencontext install' to provision)"
+            )
         except Exception as exc:
-            return False, f"Import failed: {exc}"
+            return False, f"Delegates path check failed: {exc}"
 
     def _check_memory_backend(self) -> tuple[bool, str]:
         """In-process write+read roundtrip against SQLiteMemoryBackend (CWD-rooted)."""
@@ -142,9 +160,8 @@ class MetaHarnessScanner:
         """
         import json
         import sqlite3
-        from pathlib import Path
 
-        cwd = Path.cwd()
+        cwd = self._root
         db = cwd / ".storage" / "opencontext" / "context_graph.db"
         if db.exists():
             try:
@@ -156,7 +173,7 @@ class MetaHarnessScanner:
             except Exception as exc:
                 return False, f"KG db present but unreadable: {exc}"
             if count > 0:
-                return True, f"KG populated: {count} node(s) in {db.relative_to(cwd)}"
+                return True, f"KG populated: {count} node(s) in {db!s}"
             return False, "KG db exists but is empty — run 'opencontext index .' first"
 
         json_path = cwd / ".opencontext" / "knowledge_graph.json"
@@ -165,8 +182,7 @@ class MetaHarnessScanner:
                 data = json.loads(json_path.read_text(encoding="utf-8"))
                 nodes = data.get("nodes") if isinstance(data, dict) else None
                 if nodes:
-                    rel = json_path.relative_to(cwd)
-                    return True, f"KG populated: {len(nodes)} node(s) in {rel}"
+                    return True, f"KG populated: {len(nodes)} node(s) in {json_path!s}"
                 return False, "KG snapshot exists but has no nodes — run 'opencontext index .'"
             except Exception as exc:
                 return False, f"KG snapshot present but unreadable: {exc}"
@@ -178,14 +194,21 @@ class MetaHarnessScanner:
         )
 
     def _check_context_substrate(self) -> tuple[bool, str]:
-        try:
-            from opencontext_core.agentic.context_substrate import (
-                ContextSubstrateReport,  # noqa: F401
-            )
+        """Instantiate ContextSubstrateBuilder in a temp dir and call build_for_phase.
 
-            return True, "ContextSubstrateReport importable (substrate not degraded)"
+        A successful build (even with no KG present) proves the substrate is functional.
+        """
+        import tempfile
+
+        try:
+            from opencontext_core.agentic.context_substrate import ContextSubstrateBuilder
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                builder = ContextSubstrateBuilder(root=tmp_dir)
+                report = builder.build_for_phase(task="meta-harness-check", phase="explore", budget=4000)
+                return True, f"ContextSubstrateBuilder.build_for_phase succeeded (tokens={report.available_tokens})"
         except Exception as exc:
-            return False, f"Import failed: {exc}"
+            return False, f"Context substrate build failed: {exc}"
 
     def _check_handoff_v2_schema(self) -> tuple[bool, str]:
         try:
@@ -207,10 +230,11 @@ class MetaHarnessScanner:
             return False, f"Import/check failed: {exc}"
 
     def _check_archive_gate(self) -> tuple[bool, str]:
+        """Verify OcNewArchiveGate (the correct archive gate class) is importable."""
         try:
-            from opencontext_core.harness.gates import ContextPackCreatedGate  # noqa: F401
+            from opencontext_core.oc_new.archive_gate import OcNewArchiveGate  # noqa: F401
 
-            return True, "Archive gate (ContextPackCreatedGate) importable"
+            return True, "OcNewArchiveGate importable (correct archive gate class)"
         except Exception as exc:
             return False, f"Import failed: {exc}"
 
@@ -272,3 +296,17 @@ class MetaHarnessScanner:
             return True, "uninstall_cmd importable"
         except Exception as exc:
             return False, f"Import failed: {exc}"
+
+    def _check_mcp_json(self) -> tuple[bool, str]:
+        """Check that .mcp.json is present in the project root."""
+        mcp_path = self._root / ".mcp.json"
+        if mcp_path.exists():
+            return True, f".mcp.json present at {mcp_path!s}"
+        return False, f".mcp.json not found at {mcp_path!s} (run 'opencontext install' to provision)"
+
+    def _check_opencontext_yaml(self) -> tuple[bool, str]:
+        """Check that opencontext.yaml is present in the project root."""
+        yaml_path = self._root / "opencontext.yaml"
+        if yaml_path.exists():
+            return True, f"opencontext.yaml present at {yaml_path!s}"
+        return False, f"opencontext.yaml not found at {yaml_path!s} (run 'opencontext init' to create)"
