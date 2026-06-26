@@ -352,7 +352,11 @@ class OcNewConductor:
                         ),
                         required_tools=phase_def.required_tools,
                         expected_artifacts=phase_def.expected_artifacts,
-                        metadata={"memory": mem_metadata},
+                        metadata={
+                        "memory": mem_metadata,
+                        "context_report_ref": None,
+                        "result_schema": "opencontext.phase_result.v1",
+                    },
                     ),
                     "updated_at": datetime.now(tz=UTC),
                 }
