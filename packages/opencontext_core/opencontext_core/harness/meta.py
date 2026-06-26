@@ -210,6 +210,12 @@ class MetaHarnessScanner:
             if report.context_pack_hash is None:
                 reason = "; ".join(report.warnings) if report.warnings else "hash is None"
                 return False, f"Context substrate degraded: {reason}"
+            if report.used_tokens <= 0:
+                return False, "Context substrate degraded: used_tokens <= 0"
+            if report.selected_tokens <= 0:
+                return False, "Context substrate degraded: selected_tokens <= 0"
+            if report.baseline_tokens < report.selected_tokens:
+                return False, "Context substrate degraded: baseline_tokens < selected_tokens"
             if report.warnings:
                 return False, f"Context substrate warnings: {'; '.join(report.warnings)}"
             return (

@@ -56,6 +56,7 @@ def test_spawn_acquires_lease_and_emits_started(tmp_path: Path) -> None:
 
     # acquire must have been called
     mock_store.acquire.assert_called_once()
+    assert mock_store.acquire.call_args.args[0] == OC_NEW_FLOW[0].persona
     # signal must have been called with STARTED kind
     mock_store.signal.assert_called_once()
     call_args = mock_store.signal.call_args
