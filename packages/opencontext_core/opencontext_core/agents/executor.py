@@ -172,16 +172,21 @@ _APPLY_INSTRUCTION = (
 )
 
 
-def parse_file_edits(text: str) -> list[dict[str, str]]:
-    """Parse a model response into ``[{"path", "content"}, ...]`` edits.
+def parse_file_edits(text: str) -> list[dict[str, str] | ApplyEdit]:
+    """Parse a model response into file-edit objects.
 
-    Tolerant of surrounding prose / code fences: it scans for the outermost JSON
-    array. Any element missing a string ``path``/``content`` is dropped. Returns
-    ``[]`` when nothing parseable is found, so a malformed response yields no
-    edits (ApplyPhase then reports planned, never a bad write).
+    Returns a mixed list: elements with an ``"operation"`` key are validated
+    and returned as :class:`ApplyEdit` objects (dropped on ``ValidationError``);
+    legacy ``{"path", "content"}`` elements are returned as plain dicts. The
+    two shapes can coexist in the same response — this function is additive.
+
+    Tolerant of surrounding prose / code fences: it scans for the outermost
+    JSON array. Returns ``[]`` when nothing parseable is found.
     """
     import json
     import re
+
+    from pydantic import ValidationError
 
     start = text.find("[")
     end = text.rfind("]")
@@ -204,12 +209,22 @@ def parse_file_edits(text: str) -> list[dict[str, str]]:
             data = json.loads(repaired)
         except json.JSONDecodeError:
             return []
-    edits: list[dict[str, str]] = []
+    edits: list[dict[str, str] | ApplyEdit] = []
     for item in data if isinstance(data, list) else []:
-        path = item.get("path") if isinstance(item, dict) else None
-        content = item.get("content") if isinstance(item, dict) else None
-        if isinstance(path, str) and path and isinstance(content, str):
-            edits.append({"path": path, "content": content})
+        if not isinstance(item, dict):
+            continue
+        if "operation" in item:
+            # ApplyEdit-shaped: validate and include, or drop on error.
+            try:
+                edits.append(ApplyEdit(**item))
+            except (ValidationError, TypeError):
+                pass
+        else:
+            # Legacy whole-file edit: require string path and content.
+            path = item.get("path")
+            content = item.get("content")
+            if isinstance(path, str) and path and isinstance(content, str):
+                edits.append({"path": path, "content": content})
     return edits
 
 
