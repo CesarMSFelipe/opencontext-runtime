@@ -1,0 +1,86 @@
+cases:
+  - id: runtime-first-context
+    query: "How does the runtime prepare compact context for a non-CLI agent adapter?"
+    expected_sources:
+      - "packages/opencontext_core/opencontext_core/runtime.py"
+      - "examples/agent-wrappers/prepare_context.py"
+    forbidden_sources:
+      - ".storage/"
+      - ".opencontext/"
+    min_source_coverage: 1.0
+
+  - id: api-context-endpoint
+    query: "Which API schemas define the context request and response for external agents?"
+    expected_sources:
+      - "packages/opencontext_api/opencontext_api/schemas.py"
+      - "tests/api/test_api_scaffolds.py"
+    forbidden_sources:
+      - ".storage/"
+      - ".opencontext/"
+    min_source_coverage: 1.0
+
+  - id: token-budgeting
+    query: "Where are context token budgets and packing enforced?"
+    expected_sources:
+      - "packages/opencontext_core/opencontext_core/context/packing.py"
+      - "packages/opencontext_core/opencontext_core/models/context.py"
+    forbidden_sources:
+      - ".storage/"
+      - ".opencontext/"
+    min_source_coverage: 1.0
+
+  - id: python-sdk-usage
+    query: "Show how to use OpenContext as a Python library for context preparation"
+    expected_sources:
+      - "examples/agent-wrappers/prepare_context.py"
+    forbidden_sources:
+      - ".storage/"
+      - ".opencontext/"
+    min_source_coverage: 1.0
+
+  # ── Locate-symbol cases (converted from comparative BUILTIN_SCENARIOS) ──
+  # These model "locate symbol X + its callers + assemble context to modify it",
+  # the loop a realistic OpenContext-free agent runs with grep+Read. Each carries a
+  # target_symbol (the SIN's primary grep) and a difficulty tier. min_source_coverage
+  # is set HONESTLY to what the engine genuinely achieves on a refreshed index — not
+  # tuned to flatter; a real shortfall on the spread-across-files case is a finding to
+  # surface, not hide.
+
+  - id: simple/bridge-count-method
+    query: "Add count_by_type() to BridgeDetector returning a dict of bridge_type to count"
+    target_symbol: "BridgeDetector"
+    difficulty: simple
+    expected_sources:
+      - "packages/opencontext_core/opencontext_core/indexing/bridge_detector.py"
+    forbidden_sources:
+      - ".storage/"
+      - ".opencontext/"
+    min_source_coverage: 1.0
+
+  - id: medium/bridges-json-output
+    query: "Add a --json flag to 'opencontext bridges scan' to output results as JSON"
+    target_symbol: "BridgeDetector"
+    difficulty: medium
+    expected_sources:
+      - "packages/opencontext_cli/opencontext_cli/commands/bridges_cmd.py"
+      - "packages/opencontext_core/opencontext_core/indexing/bridge_detector.py"
+    forbidden_sources:
+      - ".storage/"
+      - ".opencontext/"
+    min_source_coverage: 0.5
+
+  - id: hard/workflow-async-tracing
+    query: >-
+      Add RuntimeTrace persistence to WorkflowEngine.run_workflow(): record per-step
+      timings to the trace model and persist after each step
+    target_symbol: "run_workflow"
+    difficulty: hard
+    expected_sources:
+      - "packages/opencontext_core/opencontext_core/workflow/engine.py"
+      - "packages/opencontext_core/opencontext_core/models/workflow.py"
+      - "packages/opencontext_core/opencontext_core/models/trace.py"
+      - "packages/opencontext_core/opencontext_core/workflow/hooks.py"
+    forbidden_sources:
+      - ".storage/"
+      - ".opencontext/"
+    min_source_coverage: 0.5

@@ -10,6 +10,7 @@ misses an expected source or hits a forbidden one fails), never a reduction thre
 
 from __future__ import annotations
 
+import importlib.resources
 import sys
 from pathlib import Path
 from typing import Any
@@ -25,9 +26,11 @@ from opencontext_core.evaluation.efficiency import (
 from opencontext_core.evaluation.evaluator import load_context_bench_cases
 from opencontext_core.runtime import OpenContextRuntime
 
-# parents: [0]=commands [1]=opencontext_cli [2]=opencontext_cli project [3]=packages [4]=repo root
-_REPO_ROOT = Path(__file__).parents[4]
-DEFAULT_SUITE = str(_REPO_ROOT / "examples" / "evals" / "contextbench.yaml")
+# NOTE: Resolve via importlib.resources so DEFAULT_SUITE works under editable install
+# and wheel alike. The yaml is packaged as opencontext_cli/data/contextbench.yaml.
+DEFAULT_SUITE = str(
+    importlib.resources.files("opencontext_cli").joinpath("data/contextbench.yaml")
+)
 
 
 def add_benchmark_parser(subparsers: Any) -> None:
