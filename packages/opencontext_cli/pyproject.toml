@@ -41,3 +41,6 @@ opencontext = "opencontext_cli.main:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["opencontext_cli*"]
+
+[tool.setuptools.package-data]
+opencontext_cli = ["fixtures/memory/*.json"]
