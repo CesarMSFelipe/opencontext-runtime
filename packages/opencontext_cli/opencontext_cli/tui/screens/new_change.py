@@ -13,32 +13,33 @@ from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Select
 
+# textual Select options are (prompt, value) tuples: label shown, value returned.
 _FLOW_OPTIONS = [
-    ("automatic", "Automatic — fully automated flow"),
-    ("stepwise", "Stepwise — pause after each phase"),
-    ("hybrid", "Hybrid — pause before code phases"),
-    ("observe_only", "Observe only — no code execution"),
+    ("Automatic — fully automated flow", "automatic"),
+    ("Stepwise — pause after each phase", "stepwise"),
+    ("Hybrid — pause before code phases", "hybrid"),
+    ("Observe only — no code execution", "observe_only"),
 ]
 
 _MEMORY_OPTIONS = [
-    ("auto", "Auto — detect best backend"),
-    ("engram", "Engram — persistent memory"),
-    ("local", "Local — in-run memory only"),
-    ("off", "Off — no memory"),
+    ("Auto — detect best backend", "auto"),
+    ("Engram — persistent memory", "engram"),
+    ("Local — in-run memory only", "local"),
+    ("Off — no memory", "off"),
 ]
 
 _OPENSPEC_OPTIONS = [
-    ("full", "Full — all SDD artifacts"),
-    ("minimal", "Minimal — essential artifacts"),
-    ("off", "Off — no artifact persistence"),
+    ("Full — all SDD artifacts", "full"),
+    ("Minimal — essential artifacts", "minimal"),
+    ("Off — no artifact persistence", "off"),
 ]
 
 _GIT_OPTIONS = [
-    ("none", "None — no git operations"),
-    ("single_pr", "Single PR — one branch + PR"),
-    ("local_branch", "Local branch — commit, no push"),
-    ("commit_only", "Commit only — commit, no PR"),
-    ("per_task_prs", "Per-task PRs — one PR per task"),
+    ("None — no git operations", "none"),
+    ("Single PR — one branch + PR", "single_pr"),
+    ("Local branch — commit, no push", "local_branch"),
+    ("Commit only — commit, no PR", "commit_only"),
+    ("Per-task PRs — one PR per task", "per_task_prs"),
 ]
 
 
