@@ -59,7 +59,7 @@ class ContextSubstrateBuilder:
         context_pack_hash: str | None = None
         no_kg_reason: str | None = None
 
-        used_tokens_from_sqlite: int = 0
+        sqlite_tokens: int = 0
         if not indexed:
             substrate_warnings.append(
                 f"Knowledge graph not indexed — context for {phase!r} may be limited."
@@ -114,30 +114,32 @@ class ContextSubstrateBuilder:
                     digest = hashlib.sha256("\n".join(sorted_ids).encode()).hexdigest()
                     context_pack_hash = f"sha256:{digest}"
                     # NOTE: used_tokens estimated from word count x 1.3 token factor.
-                    used_tokens_from_sqlite = int(len(joined_content.split()) * 1.3)
+                    sqlite_tokens = int(len(joined_content.split()) * 1.3)
                 except Exception as exc:
                     substrate_warnings.append(f"Failed to read SQLite graph: {exc}")
                     context_pack_hash = None
-                    used_tokens_from_sqlite = 0
+                    sqlite_tokens = 0
 
-        # NOTE: Measure baseline tokens from KG content when available.
         baseline_tokens = 0
         selected_tokens = 0
         compressed_tokens = 0
         if context_pack_hash is not None:
-            try:
-                kg_file = self.root / ".opencontext" / "knowledge_graph.json"
-                raw_content = kg_file.read_text(encoding="utf-8")
-                baseline_tokens = int(len(raw_content.split()) * 1.3)
-                # NOTE: selected_tokens = baseline until a real pack selects a subset.
-                selected_tokens = baseline_tokens
-                # NOTE: compressed_tokens approximation (no compressor wired here).
-                compressed_tokens = int(selected_tokens * 0.8)
-            except Exception:
-                pass
+            if sqlite_tokens:
+                selected_tokens = sqlite_tokens
+            else:
+                try:
+                    raw_content = (self.root / ".opencontext" / "knowledge_graph.json").read_text(
+                        encoding="utf-8"
+                    )
+                    selected_tokens = int(len(raw_content.split()) * 1.3)
+                except Exception:
+                    selected_tokens = 0
+            # ponytail: no real pack object here; use conservative no-compression metrics
+            # until ContextPackBuilder is wired into this adapter.
+            baseline_tokens = selected_tokens
+            compressed_tokens = selected_tokens
 
-        # used_tokens: prefer JSON-derived (via baseline_tokens) or SQLite fallback.
-        used_tokens = baseline_tokens if baseline_tokens > 0 else used_tokens_from_sqlite
+        used_tokens = compressed_tokens
 
         return ContextSubstrateReport(
             indexed=indexed,

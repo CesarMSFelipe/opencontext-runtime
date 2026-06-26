@@ -171,6 +171,34 @@ class TestKgSubstrateCheckIsBehavioral:
             f"Explanation must mention hash or tokens: {explanation}"
         )
 
+    def test_substrate_check_fails_when_metrics_are_incomplete(
+        self, tmp_path: Path, monkeypatch: object
+    ) -> None:
+        from opencontext_core.agentic.context_substrate import ContextSubstrateReport
+
+        class BadBuilder:
+            def __init__(self, root: Path) -> None:
+                pass
+
+            def build_for_phase(self, **kwargs: object) -> ContextSubstrateReport:
+                return ContextSubstrateReport(
+                    indexed=True,
+                    graph_status="indexed",
+                    context_pack_hash="sha256:x",
+                    used_tokens=14,
+                    selected_tokens=0,
+                    baseline_tokens=0,
+                    compressed_tokens=0,
+                )
+
+        monkeypatch.setattr(
+            "opencontext_core.agentic.context_substrate.ContextSubstrateBuilder",
+            BadBuilder,
+        )
+        passed, explanation = MetaHarnessScanner(root=tmp_path)._check_context_substrate()
+        assert passed is False
+        assert "selected_tokens" in explanation
+
     def test_substrate_check_fails_on_empty_dir(self, tmp_path: Path) -> None:
         """_check_context_substrate must return passed=False when no DB is provisioned."""
         # No DB provisioned — empty tmpdir.

@@ -152,9 +152,11 @@ class OcNewConductor:
         resolved_warnings = warnings
         env = self._load_required_phase_envelope(state, phase_name)
         resolved = env.artifacts
+        blocked_reason: str | None = None
         if not env.can_advance():
             # Override caller-supplied status when the envelope blocks advance.
             status = "failed" if env.status == "failed" else "blocked"
+            blocked_reason = f"phase envelope status is {env.status}"
         if env.risks:
             resolved_warnings = list(resolved_warnings or []) + env.risks
 
@@ -169,9 +171,10 @@ class OcNewConductor:
                 if missing_artifacts:
                     missing_str = ", ".join(missing_artifacts)
                     status = "blocked"
+                    blocked_reason = f"Required artifacts missing: {missing_str}"
                     resolved_warnings = [
                         *(resolved_warnings or []),
-                        f"Required artifacts missing: {missing_str}",
+                        blocked_reason,
                     ]
 
         # NOTE: REQ-P1.1 — disk-check envelope declared artifacts (D1: fail-closed).
@@ -179,10 +182,12 @@ class OcNewConductor:
             run_dir = self.store.run_dir(run_id)
             declared_missing = [a for a in env.artifacts if not (run_dir / a).exists()]
             if declared_missing:
+                missing_str = ", ".join(declared_missing)
                 status = "blocked"
+                blocked_reason = f"Declared artifacts missing on disk: {missing_str}"
                 resolved_warnings = [
                     *(resolved_warnings or []),
-                    f"Declared artifacts missing on disk: {', '.join(declared_missing)}",
+                    blocked_reason,
                 ]
 
         # NOTE: REQ-01b — fail-closed archive gate (only when still on track to pass).
@@ -194,6 +199,7 @@ class OcNewConductor:
                 OcNewArchiveGate().assert_can_archive(run_dir)
             except RuntimeError as exc:
                 status = "blocked"
+                blocked_reason = str(exc)
                 resolved_warnings = [*(resolved_warnings or []), str(exc)]
 
         updated = phase.model_copy(
@@ -205,6 +211,8 @@ class OcNewConductor:
             }
         )
         state = self._replace_phase(state, updated)
+        if blocked_reason is not None:
+            state = state.model_copy(update={"blocked_reason": blocked_reason})
 
         # NOTE: Emit capture events for phase boundaries.
         self._emit_phase_capture(
@@ -231,6 +239,20 @@ class OcNewConductor:
                 run_id,
                 _e,
             )
+
+        if status == "blocked":
+            state = state.model_copy(
+                update={
+                    "current_phase": phase_name,
+                    "next_action": NextAction(
+                        kind="blocked",
+                        phase=phase_name,  # type: ignore[arg-type]
+                        instruction=blocked_reason or f"{phase_name} blocked",
+                    ),
+                }
+            )
+            self.store.save(state)
+            return state
 
         # NOTE: After tasks phase completes, produce a git work plan.
         if phase_name == "tasks" and state.config is not None:
@@ -411,7 +433,7 @@ class OcNewConductor:
                 from opencontext_core.workflow.signals import AgentSignalKind
 
                 _lease = self._coord_store.acquire(
-                    state.identity.run_id,
+                    phase_def.persona or "user",
                     state.identity.run_id,
                     phase_def.name,
                 )

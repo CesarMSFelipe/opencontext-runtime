@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -18,7 +19,9 @@ def test_head2head_cli_json_exit_zero(tmp_path: Path) -> None:
 
     proc = subprocess.run(
         [
-            "opencontext",
+            sys.executable,
+            "-m",
+            "opencontext_cli",
             "benchmark",
             "head2head",
             "--repos",

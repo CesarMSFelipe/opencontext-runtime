@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 import pydantic
 import pytest
 
@@ -50,3 +52,26 @@ def test_none_budget_gives_zero_tokens(tmp_path) -> None:
     builder = ContextSubstrateBuilder(root=tmp_path)
     report = builder.build_for_phase(task="test", phase="archive", budget=None)
     assert report.available_tokens == 0
+
+
+def test_sqlite_substrate_populates_consistent_token_metrics(tmp_path) -> None:
+    db_dir = tmp_path / ".storage" / "opencontext"
+    db_dir.mkdir(parents=True)
+    conn = sqlite3.connect(db_dir / "context_graph.db")
+    conn.execute("CREATE TABLE nodes (id TEXT PRIMARY KEY, content_snippet TEXT)")
+    conn.execute(
+        "INSERT INTO nodes (id, content_snippet) VALUES (?, ?)",
+        ("n1", "alpha beta gamma delta"),
+    )
+    conn.commit()
+    conn.close()
+
+    report = ContextSubstrateBuilder(root=tmp_path).build_for_phase(
+        task="test", phase="explore", budget=4000
+    )
+
+    assert report.context_pack_hash
+    assert report.used_tokens > 0
+    assert report.selected_tokens >= report.used_tokens
+    assert report.baseline_tokens >= report.selected_tokens
+    assert report.compressed_tokens == report.used_tokens

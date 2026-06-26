@@ -58,6 +58,8 @@ def test_mark_done_blocked_when_declared_artifact_missing(tmp_path: Path) -> Non
     assert any(nonexistent in w for w in warnings), (
         f"Expected warning mentioning '{nonexistent}', got: {warnings}"
     )
+    assert state.blocked_reason is not None
+    assert nonexistent in state.blocked_reason
 
 
 def test_mark_done_passes_when_declared_artifacts_present(tmp_path: Path) -> None:
@@ -127,6 +129,8 @@ def test_mark_done_blocked_when_required_artifact_missing(tmp_path: Path) -> Non
     # The propose phase should be blocked (not passed).
     propose_phase = state.phase("propose")  # type: ignore[arg-type]
     assert propose_phase.status == "blocked"
+    assert state.blocked_reason is not None
+    assert "explore.artifact.json" in state.blocked_reason
     # Warning should name the missing artifact.
     warnings = propose_phase.warnings or []
     assert any("explore.artifact.json" in w for w in warnings), (
