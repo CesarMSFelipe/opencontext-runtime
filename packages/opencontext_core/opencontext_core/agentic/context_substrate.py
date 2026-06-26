@@ -59,6 +59,7 @@ class ContextSubstrateBuilder:
         context_pack_hash: str | None = None
         no_kg_reason: str | None = None
 
+        used_tokens_from_sqlite: int = 0
         if not indexed:
             substrate_warnings.append(
                 f"Knowledge graph not indexed — context for {phase!r} may be limited."
@@ -66,34 +67,58 @@ class ContextSubstrateBuilder:
             no_kg_reason = "knowledge_graph.json not found"
         else:
             kg_file = self.root / ".opencontext" / "knowledge_graph.json"
-            try:
-                kg_data = json.loads(kg_file.read_text(encoding="utf-8"))
-                # Collect sortable identifiers from the KG.
-                if isinstance(kg_data, dict) and "nodes" in kg_data:
-                    nodes = kg_data["nodes"]
-                    if isinstance(nodes, list):
+            if kg_file.exists():
+                try:
+                    kg_data = json.loads(kg_file.read_text(encoding="utf-8"))
+                    # Collect sortable identifiers from the KG.
+                    if isinstance(kg_data, dict) and "nodes" in kg_data:
+                        nodes = kg_data["nodes"]
+                        if isinstance(nodes, list):
+                            keys = sorted(
+                                str(n.get("id", n.get("path", "")))
+                                for n in nodes
+                                if isinstance(n, dict)
+                            )
+                        else:
+                            keys = sorted(str(k) for k in nodes)
+                    elif isinstance(kg_data, dict):
+                        keys = sorted(kg_data.keys())
+                    elif isinstance(kg_data, list):
                         keys = sorted(
-                            str(n.get("id", n.get("path", "")))
-                            for n in nodes
-                            if isinstance(n, dict)
+                            str(n.get("id", n.get("path", ""))) if isinstance(n, dict) else str(n)
+                            for n in kg_data
                         )
                     else:
-                        keys = sorted(str(k) for k in nodes)
-                elif isinstance(kg_data, dict):
-                    keys = sorted(kg_data.keys())
-                elif isinstance(kg_data, list):
-                    keys = sorted(
-                        str(n.get("id", n.get("path", ""))) if isinstance(n, dict) else str(n)
-                        for n in kg_data
+                        keys = [str(kg_data)]
+                    digest = hashlib.sha256("\n".join(keys).encode()).hexdigest()
+                    context_pack_hash = f"sha256:{digest}"
+                except Exception as exc:
+                    substrate_warnings.append(f"Failed to hash knowledge graph: {exc}")
+                    no_kg_reason = f"knowledge_graph.json unreadable: {exc}"
+                    context_pack_hash = None
+            else:
+                # NOTE: SQLite index present but no JSON KG — derive hash + tokens
+                # from the GraphDatabase nodes table using the same reader as graph.py.
+                sqlite_db = self.root / ".storage" / "opencontext" / "context_graph.db"
+                try:
+                    from opencontext_core.indexing.graph_db import GraphDatabase
+
+                    # NOTE: Keep db reference alive so _conn is not GC-closed.
+                    db = GraphDatabase(sqlite_db)
+                    conn = db._connect()
+                    rows = conn.execute("SELECT id, content FROM nodes").fetchall()
+                    sorted_ids = sorted(str(r["id"]) for r in rows)
+                    joined_content = " ".join(
+                        str(r["content"] or "") for r in rows if r["content"]
                     )
-                else:
-                    keys = [str(kg_data)]
-                digest = hashlib.sha256("\n".join(keys).encode()).hexdigest()
-                context_pack_hash = f"sha256:{digest}"
-            except Exception as exc:
-                substrate_warnings.append(f"Failed to hash knowledge graph: {exc}")
-                no_kg_reason = f"knowledge_graph.json unreadable: {exc}"
-                context_pack_hash = None
+                    digest = hashlib.sha256("\n".join(sorted_ids).encode()).hexdigest()
+                    context_pack_hash = f"sha256:{digest}"
+                    # NOTE: used_tokens estimated from word count x 1.3 token factor.
+                    used_tokens_from_sqlite = int(len(joined_content.split()) * 1.3)
+                except Exception as exc:
+                    substrate_warnings.append(f"Failed to read SQLite graph: {exc}")
+                    context_pack_hash = None
+                    used_tokens_from_sqlite = 0
 
         # NOTE: Measure baseline tokens from KG content when available.
         baseline_tokens = 0
@@ -111,12 +136,15 @@ class ContextSubstrateBuilder:
             except Exception:
                 pass
 
+        # used_tokens: prefer JSON-derived (via baseline_tokens) or SQLite fallback.
+        used_tokens = baseline_tokens if baseline_tokens > 0 else used_tokens_from_sqlite
+
         return ContextSubstrateReport(
             indexed=indexed,
             graph_status=graph_status,
             context_pack_hash=context_pack_hash,
             no_kg_reason=no_kg_reason,
-            used_tokens=0,
+            used_tokens=used_tokens,
             available_tokens=available,
             compression_enabled=False,
             compression_savings=0,
