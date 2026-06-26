@@ -128,7 +128,16 @@ class ContextSubstrateBuilder:
         )
 
     def _check_index(self) -> tuple[bool, str]:
-        """Return (is_indexed, status_message) by probing the .opencontext directory."""
+        """Return (is_indexed, status_message) by probing the .opencontext directory.
+
+        Checks both the legacy knowledge_graph.json and the SQLite context graph DB
+        that the current indexer writes to .storage/opencontext/context_graph.db.
+        """
+        # Primary: SQLite KG written by the current indexer.
+        sqlite_db = self.root / ".storage" / "opencontext" / "context_graph.db"
+        if sqlite_db.exists():
+            return True, "indexed"
+        # Fallback: legacy JSON snapshot.
         oc_dir = self.root / ".opencontext"
         if not oc_dir.exists():
             return False, "not_indexed"
