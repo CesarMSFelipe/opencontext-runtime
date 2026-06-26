@@ -1,0 +1,9 @@
+# Git export-ignore: exclude ephemeral local paths from release archives.
+# These are never part of a distributable tarball.
+.venv/ export-ignore
+venv/ export-ignore
+.ci-venv/ export-ignore
+.pytest_cache/ export-ignore
+.ruff_cache/ export-ignore
+.mypy_cache/ export-ignore
+.git-state/ export-ignore
