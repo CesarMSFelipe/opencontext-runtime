@@ -348,7 +348,7 @@ def sdd_flow(request: PreparedContextRequest) -> ScaffoldResponse:
             "safety": {
                 "test_allowed": test_decision.allowed,
                 "test_reason": test_decision.reason,
-                "security_scan_severity": scan.severity.value,
+                "security_scan_severity": "high" if scan.findings else "none",
                 "security_findings": len(scan.findings),
                 "high_risk_files": high_risk_count,
                 "review_status": "approved" if high_risk_count == 0 else "requires_review",
