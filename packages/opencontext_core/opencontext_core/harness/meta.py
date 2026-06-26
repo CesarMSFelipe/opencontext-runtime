@@ -205,8 +205,14 @@ class MetaHarnessScanner:
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 builder = ContextSubstrateBuilder(root=tmp_dir)
-                report = builder.build_for_phase(task="meta-harness-check", phase="explore", budget=4000)
-                return True, f"ContextSubstrateBuilder.build_for_phase succeeded (tokens={report.available_tokens})"
+                report = builder.build_for_phase(
+                    task="meta-harness-check", phase="explore", budget=4000
+                )
+                return (
+                    True,
+                    f"ContextSubstrateBuilder.build_for_phase succeeded"
+                    f" (tokens={report.available_tokens})",
+                )
         except Exception as exc:
             return False, f"Context substrate build failed: {exc}"
 
@@ -303,11 +309,17 @@ class MetaHarnessScanner:
         mcp_path = self._root / ".mcp.json"
         if mcp_path.exists():
             return True, f".mcp.json present at {mcp_path!s}"
-        return False, f".mcp.json not found at {mcp_path!s} (run 'opencontext install' to provision)"
+        return (
+            False,
+            f".mcp.json not found at {mcp_path!s} (run 'opencontext install' to provision)",
+        )
 
     def _check_opencontext_yaml(self) -> tuple[bool, str]:
         """Check that opencontext.yaml is present in the project root."""
         yaml_path = self._root / "opencontext.yaml"
         if yaml_path.exists():
             return True, f"opencontext.yaml present at {yaml_path!s}"
-        return False, f"opencontext.yaml not found at {yaml_path!s} (run 'opencontext init' to create)"
+        return (
+            False,
+            f"opencontext.yaml not found at {yaml_path!s} (run 'opencontext init' to create)",
+        )

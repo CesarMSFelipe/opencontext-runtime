@@ -156,7 +156,9 @@ def _offer_engram_install() -> None:
     )
     console.print(f"[dim]$ {' '.join(cmd)}[/]")
     try:
-        with Status("Installing Engram...", console=getattr(console, "_console", None), spinner="dots"):
+        with Status(
+            "Installing Engram...", console=getattr(console, "_console", None), spinner="dots"
+        ):
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     except subprocess.TimeoutExpired:
         console.print("[red]Install timed out.[/] Try [cyan]pipx install engram[/] manually.")

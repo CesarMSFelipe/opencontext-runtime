@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 
 def test_sqlite_db_triggers_indexed_true(tmp_path: Path) -> None:
     """A temp dir with only .storage/opencontext/context_graph.db → indexed=True."""
@@ -27,7 +25,7 @@ def test_no_files_triggers_not_indexed(tmp_path: Path) -> None:
     from opencontext_core.agentic.context_substrate import ContextSubstrateBuilder
 
     builder = ContextSubstrateBuilder(root=tmp_path)
-    indexed, status = builder._check_index()
+    indexed, _status = builder._check_index()
 
     assert indexed is False
 

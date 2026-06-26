@@ -51,7 +51,9 @@ def test_sdd_endpoint_returns_200_with_findings(tmp_path: Path) -> None:
         fake_firewall.check_context_export.return_value = MagicMock(allowed=True, reason="ok")
 
         with patch.object(api_main, "_runtime", return_value=fake_runtime):
-            with patch("opencontext_core.safety.firewall.ContextFirewall", return_value=fake_firewall):
+            with patch(
+                "opencontext_core.safety.firewall.ContextFirewall", return_value=fake_firewall
+            ):
                 client = TestClient(api_main.app)
                 resp = client.post(
                     "/v1/refactor/sdd",
@@ -95,7 +97,9 @@ def test_sdd_endpoint_returns_200_without_findings(tmp_path: Path) -> None:
         fake_firewall.check_context_export.return_value = MagicMock(allowed=True, reason="ok")
 
         with patch.object(api_main, "_runtime", return_value=fake_runtime):
-            with patch("opencontext_core.safety.firewall.ContextFirewall", return_value=fake_firewall):
+            with patch(
+                "opencontext_core.safety.firewall.ContextFirewall", return_value=fake_firewall
+            ):
                 client = TestClient(api_main.app)
                 resp = client.post(
                     "/v1/refactor/sdd",

@@ -27,7 +27,7 @@ class TestMetaHarnessReport:
             MetaHarnessCheck(
                 name=f"fail_{i}", passed=False, score_contribution=0, explanation="fail"
             )
-            for i in range(3)  # 3 failures × 10 = 30 lost → 100 - 30 = 70 < 90
+            for i in range(3)  # 3 failures x 10 = 30 lost -> 100 - 30 = 70 < 90
         ]
         checks += [
             MetaHarnessCheck(

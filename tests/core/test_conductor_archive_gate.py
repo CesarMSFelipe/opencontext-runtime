@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from opencontext_core.oc_new.conductor import OcNewConductor
 from opencontext_core.oc_new.archive_gate import OcNewArchiveGate
+from opencontext_core.oc_new.conductor import OcNewConductor
+from opencontext_core.oc_new.models import OcNewRunState
 from opencontext_core.workflow.phase_result import PhaseResultEnvelope
 
 
@@ -45,9 +44,10 @@ def _write_all_gate_files(run_dir: Path, *, include_harness: bool = True) -> Non
         (run_dir / name).write_text(content_map.get(name, "{}"), encoding="utf-8")
 
 
-def _drive_to_archive(conductor: OcNewConductor, run_dir: Path, run_id: str, change_id: str) -> "OcNewRunState":
+def _drive_to_archive(
+    conductor: OcNewConductor, run_dir: Path, run_id: str, change_id: str
+) -> OcNewRunState:
     """Drive an oc-new run up to (but not including) archive by marking all prior phases done."""
-    from opencontext_core.oc_new.conductor import OcNewConductor
 
     # Phases in order before archive:
     phases_to_drive = [

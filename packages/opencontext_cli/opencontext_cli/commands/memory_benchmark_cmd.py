@@ -214,8 +214,9 @@ def handle_memory_benchmark(args: Any) -> None:
     # NOTE: REQ-02c — invalid-state guard: fail loudly if store returned 0.0 recall.
     if result.recall_at_5 == 0.0:
         print(
-            f"invalid-state: seeded store returned 0.0 recall after seeding {seeded_count} record(s). "
-            "The memory backend search may not be functioning correctly.",
+            f"invalid-state: seeded store returned 0.0 recall after seeding"
+            f" {seeded_count} record(s)."
+            " The memory backend search may not be functioning correctly.",
             file=sys.stderr,
         )
         raise SystemExit(1)

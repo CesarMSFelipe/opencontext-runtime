@@ -132,8 +132,9 @@ class OcNewConductor:
                 if missing_artifacts:
                     missing_str = ", ".join(missing_artifacts)
                     status = "blocked"
-                    resolved_warnings = list(resolved_warnings or []) + [
-                        f"Required artifacts missing: {missing_str}"
+                    resolved_warnings = [
+                        *(resolved_warnings or []),
+                        f"Required artifacts missing: {missing_str}",
                     ]
 
         # NOTE: REQ-01b — fail-closed archive gate (only when still on track to pass).
@@ -145,7 +146,7 @@ class OcNewConductor:
                 OcNewArchiveGate().assert_can_archive(run_dir)
             except RuntimeError as exc:
                 status = "blocked"
-                resolved_warnings = list(resolved_warnings or []) + [str(exc)]
+                resolved_warnings = [*(resolved_warnings or []), str(exc)]
 
         updated = phase.model_copy(
             update={

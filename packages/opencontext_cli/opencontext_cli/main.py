@@ -2095,7 +2095,9 @@ def _install(args: argparse.Namespace) -> None:
                 agent_targets = installer.detect_installed_agents()
                 report = installer.install(targets=agent_targets, location="global")
                 mgr._save_state(
-                    InstallState(version=mgr.VERSION, components=["agents"], agents=list(agent_targets))
+                    InstallState(
+                        version=mgr.VERSION, components=["agents"], agents=list(agent_targets)
+                    )
                 )
                 n = report.get("agents_configured", 0)
                 summary.append(
@@ -2699,7 +2701,10 @@ def _doctor(
                 ["Files", str(graph_report.files)],
                 ["Orphan symbols", str(graph_report.orphan_symbols)],
                 ["Dangling edges", str(graph_report.dangling_edges)],
-                ["Languages", ", ".join(f"{k}:{v}" for k, v in graph_report.languages.items()) or "-"],
+                [
+                    "Languages",
+                    ", ".join(f"{k}:{v}" for k, v in graph_report.languages.items()) or "-",
+                ],
             ],
         )
         for warning in graph_report.warnings:
