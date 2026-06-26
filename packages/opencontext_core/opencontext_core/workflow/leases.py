@@ -257,6 +257,30 @@ class AgentCoordinationStore:
             payload=stored_payload,
         )
 
+    def release_by_run_phase(self, run_id: str, phase: str) -> None:
+        """Release the active lease for (run_id, phase), if one exists.
+
+        Fail-soft: if the row is missing or the query fails, the error is
+        silently ignored so callers are never blocked by a stale/absent lease.
+        """
+        try:
+            with self._connect() as conn:
+                row = conn.execute(
+                    """
+                    SELECT lease_id FROM agent_leases
+                    WHERE run_id = ? AND phase = ? AND status = 'active'
+                    LIMIT 1
+                    """,
+                    (run_id, phase),
+                ).fetchone()
+                if row is not None:
+                    conn.execute(
+                        "UPDATE agent_leases SET status = 'released' WHERE lease_id = ?",
+                        (row["lease_id"],),
+                    )
+        except Exception:  # noqa: BLE001
+            pass
+
     def get_signals(self, lease_id: str) -> list[AgentSignal]:
         """Retrieve all signals for a lease."""
         from opencontext_core.workflow.signals import AgentSignal, AgentSignalKind
