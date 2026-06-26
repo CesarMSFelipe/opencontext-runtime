@@ -55,19 +55,25 @@ class EvolutionApplier:
         )
 
     def _apply_context_weight(self, proposal: EvolutionProposal) -> EvolutionApplyResult:
-        # NOTE: context_weight proposals adjust weight config in opencontext.yaml
-        # Stub: mark applied=False until config schema exposes context weights
+        # NOTE: context_weight is not auto-applicable; OpenContext performs no automatic
+        # config-file mutation. Return an honest unsupported result.
         return EvolutionApplyResult(
             proposal_id=proposal.proposal_id,
             applied=False,
-            reason="context_weight apply not yet wired to config file",
+            reason=(
+                "context_weight is not auto-applicable: OpenContext performs no "
+                "automatic config-file mutation"
+            ),
         )
 
     def _apply_budget_profile(self, proposal: EvolutionProposal) -> EvolutionApplyResult:
-        # NOTE: budget_profile proposals adjust budget thresholds in opencontext.yaml
-        # Stub: mark applied=False until config schema exposes budget profiles
+        # NOTE: budget_profile is not auto-applicable; OpenContext performs no automatic
+        # config-file mutation. Return an honest unsupported result.
         return EvolutionApplyResult(
             proposal_id=proposal.proposal_id,
             applied=False,
-            reason="budget_profile apply not yet wired to config file",
+            reason=(
+                "budget_profile is not auto-applicable: OpenContext performs no "
+                "automatic config-file mutation"
+            ),
         )
