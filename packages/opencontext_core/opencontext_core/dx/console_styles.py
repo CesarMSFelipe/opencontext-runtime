@@ -8,6 +8,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from opencontext_core.dx.brand_mark import (
+    README_LOGO_TERMINAL,
+    README_LOGO_TERMINAL_COMPACT,
+)
+
 try:
     from rich.console import Console
     from rich.panel import Panel
@@ -50,28 +55,21 @@ else:
 
 
 # ── OpenContext logo — knowledge-graph motif in brand colors ──────────────────
-# Single source of truth so every menu, wizard and action screen renders the
-# same icon. Full form on roomy terminals, compact (3-line) form otherwise.
-LOGO = [
-    "",
-    f"  [bold {BRAND_PRIMARY}]◉[/][dim]──[/][bold {BRAND_SECONDARY}]◉[/][dim]──[/]"
-    f"[bold {BRAND_ACCENT}]◉[/]    [bold white]OpenContext Runtime[/]",
-    f"  [{BRAND_PRIMARY}]│[/]     [{BRAND_ACCENT}]│[/]    "
-    "[dim]Context Engineering for AI Agents[/]",
-    f"  [{BRAND_PRIMARY}]◉[/][dim]──[/][{BRAND_SECONDARY}]◉[/]  [{BRAND_ACCENT}]◉[/]",
-    f"  [{BRAND_PRIMARY}]│[/]  [{BRAND_SECONDARY}]│[/]       "
-    f"[bold {BRAND_PRIMARY}]*[/] [bold]87% token reduction[/]  "
-    f"[{BRAND_SECONDARY}]*[/] SDD workflow",
-    f"  [{BRAND_PRIMARY}]◉[/][dim]──[/][{BRAND_SECONDARY}]◉[/]       "
-    f"[{BRAND_ACCENT}]*[/] MCP server  [{BRAND_PRIMARY}]*[/] 13+ agents  "
-    f"[{BRAND_SECONDARY}]*[/] Zero secrets",
-    "",
+# Glyph source lives in `opencontext_core.dx.brand_mark` (single source of truth
+# shared with the TUI). Wrap each line with rich markup so the terminal renders
+# the same icon everywhere — no marketing strings, no invented alternate logos.
+_RICH_LOGO: list[str] = [
+    f"[bold {BRAND_PRIMARY}]{README_LOGO_TERMINAL[0]}[/]",
+    f"[{BRAND_DIM}]{README_LOGO_TERMINAL[1]}[/]",
+    f"[bold {BRAND_SECONDARY}]{README_LOGO_TERMINAL[2]}[/]",
+    f"[{BRAND_DIM}]{README_LOGO_TERMINAL[3]}[/]",
+    f"[bold {BRAND_ACCENT}]{README_LOGO_TERMINAL[4]}[/]",
 ]
 
-COMPACT_LOGO = [
-    f"  [bold {BRAND_PRIMARY}]◉──◉[/]  [bold white]OpenContext Runtime[/]",
-    f"  [{BRAND_PRIMARY}]│  │[/]  [dim]Context Engineering · 87% token reduction[/]",
-    f"  [bold {BRAND_PRIMARY}]◉──◉[/]  [dim]SDD · MCP · 13+ agents · Zero secrets[/]",
+_RICH_COMPACT_LOGO: list[str] = [
+    f"[bold {BRAND_PRIMARY}]{README_LOGO_TERMINAL_COMPACT[0]}[/]",
+    f"[{BRAND_DIM}]{README_LOGO_TERMINAL_COMPACT[1]}[/]",
+    f"[bold {BRAND_SECONDARY}]{README_LOGO_TERMINAL_COMPACT[2]}[/]",
 ]
 
 
@@ -122,24 +120,28 @@ class BrandConsole:
     def dim(self, message: str) -> None:
         self.print(f"[{BRAND_DIM}]{message}[/{BRAND_DIM}]")
 
-    def header(self, title: str) -> None:
-        """Print a branded header — the logo plus a titled panel — so every command
-        surface (install, status, doctor, uninstall…) carries the same brand chrome
-        as the interactive menus, not a bare title rule."""
+    def header(self, title: str = "") -> None:
+        """Print a branded header — the logo plus (optionally) a titled panel — so
+        every command surface (install, status, doctor, uninstall…) carries the
+        same brand chrome as the interactive menus, not a bare title rule."""
         if self._console:
-            for line in COMPACT_LOGO:
+            for line in _RICH_COMPACT_LOGO:
                 self._console.print(line)
-            self._console.print(
-                Panel(
-                    Text(title, justify="center", style=f"bold {BRAND_PRIMARY}"),
-                    border_style=BRAND_PRIMARY,
-                    padding=(0, 2),
+            if title:
+                self._console.print(
+                    Panel(
+                        Text(title, justify="center", style=f"bold {BRAND_PRIMARY}"),
+                        border_style=BRAND_PRIMARY,
+                        padding=(0, 2),
+                    )
                 )
-            )
         else:
-            print(f"\n{'=' * 60}")
-            print(f"  {title}")
-            print(f"{'=' * 60}\n")
+            for line in _RICH_COMPACT_LOGO:
+                print(line)
+            if title:
+                print(f"\n{'=' * 60}")
+                print(f"  {title}")
+                print(f"{'=' * 60}\n")
 
     def section(self, title: str) -> None:
         """Print a section header."""
@@ -237,18 +239,16 @@ def section(title: str) -> None:
     console.section(title)
 
 
-def show_logo(*, compact: bool = False) -> None:
-    """Print the OpenContext logo. Falls back to the compact form on small
-    terminals (or when ``compact=True``), so it fits any menu or action screen."""
-    import shutil
+def show_logo(*, compact: bool = False) -> list[str]:
+    """Print the OpenContext logo and return the rendered lines.
 
-    lines = COMPACT_LOGO
-    if not compact:
-        try:
-            size = shutil.get_terminal_size()
-            if size.columns >= 64 and size.lines >= len(LOGO) + 14:
-                lines = LOGO
-        except Exception:
-            pass
+    Glyphs are sourced from ``opencontext_core.dx.brand_mark`` (the same
+    single-source tuples the TUI uses) so README, TUI and CLI stay in lockstep.
+    ``compact=True`` returns the 3-line form; otherwise the full 5-line form is
+    used. Existing call sites that treat ``show_logo`` as a side-effecting print
+    keep working because the lines are still echoed to the brand console.
+    """
+    lines = _RICH_COMPACT_LOGO if compact else _RICH_LOGO
     for line in lines:
         console.print(line)
+    return list(lines)
