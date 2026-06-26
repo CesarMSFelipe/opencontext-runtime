@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 392" width="720" height="392" role="img" aria-label="OpenContext, all systems at a glance: it sits between your coding agent (Claude Code, Codex, OpenCode, Cursor, Copilot) and your codebase. The runtime holds six systems — Context and code graph (call-graph-traced packs, SQLite and FTS5, offline); Controlled SDD loop (explore to archive, gates, human-in-the-loop, TDD); Model per persona (pick the model per phase, sent as an MCP sampling hint); Persistent memory (five layers, local-first, Engram coexistence opt-in); Security by default (redaction, secret scan, fail-closed, offline-first); and 19 MCP tools (read, edit, run, memory, quality). The codebase is indexed once and queried offline and deterministically.">
+
+  <rect width="720" height="392" rx="14" fill="#0B0F14"/>
+  <rect x="1" y="1" width="718" height="390" rx="13" fill="none" stroke="rgba(0,201,167,0.14)" stroke-width="1"/>
+
+  <!-- Eyebrow -->
+  <text x="360" y="28" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" font-weight="600" fill="#606978" letter-spacing="1.4">OPENCONTEXT  ·  ALL SYSTEMS, AT A GLANCE</text>
+
+  <!-- Agent band (consumer above) -->
+  <rect x="24" y="44" width="672" height="40" rx="8" fill="#111821" stroke="#21262D" stroke-width="1"/>
+  <text x="360" y="69" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12">
+    <tspan font-weight="700" fill="#E6EDF3">Your coding agent</tspan><tspan fill="#606978">   —   Claude Code · Codex · OpenCode · Cursor · Copilot · Windsurf · …</tspan>
+  </text>
+
+  <!-- arrow down 1 -->
+  <text x="360" y="101" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="16" fill="#2DC4A4">&#8595;</text>
+
+  <!-- Runtime container -->
+  <rect x="24" y="104" width="672" height="224" rx="12" fill="#0E141B" stroke="rgba(0,201,167,0.30)" stroke-width="1.5"/>
+  <rect x="24" y="104" width="672" height="4" rx="2" fill="#2DC4A4"/>
+  <text x="360" y="130" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        font-size="10" font-weight="600" fill="#2DC4A4" letter-spacing="1.2">OPENCONTEXT RUNTIME  ·  THE LAYER BETWEEN YOUR AGENT AND YOUR CODEBASE</text>
+
+  <!-- Card a: Context + Code Graph -->
+  <rect x="44" y="140" width="200" height="80" rx="9" fill="#111821" stroke="rgba(0,201,167,0.30)" stroke-width="1"/>
+  <rect x="44" y="140" width="4" height="80" rx="2" fill="#2DC4A4"/>
+  <text x="62" y="170" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12.5" font-weight="700" fill="#2DC4A4">Context + Code Graph</text>
+  <text x="62" y="190" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#9DA6B0">Call-graph-traced packs</text>
+  <text x="62" y="205" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#606978">SQLite + FTS5 · offline</text>
+
+  <!-- Card b: Controlled SDD Loop -->
+  <rect x="260" y="140" width="200" height="80" rx="9" fill="#111821" stroke="rgba(0,168,232,0.30)" stroke-width="1"/>
+  <rect x="260" y="140" width="4" height="80" rx="2" fill="#35ADE5"/>
+  <text x="278" y="170" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12.5" font-weight="700" fill="#35ADE5">Controlled SDD Loop</text>
+  <text x="278" y="190" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#9DA6B0">explore &#8594; … &#8594; archive</text>
+  <text x="278" y="205" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#606978">gates · human-in-loop · TDD</text>
+
+  <!-- Card c: Model per Persona -->
+  <rect x="476" y="140" width="200" height="80" rx="9" fill="#111821" stroke="rgba(132,92,194,0.30)" stroke-width="1"/>
+  <rect x="476" y="140" width="4" height="80" rx="2" fill="#8A6BBF"/>
+  <text x="494" y="170" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12.5" font-weight="700" fill="#8A6BBF">Model per Persona</text>
+  <text x="494" y="190" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#9DA6B0">Pick the model per phase</text>
+  <text x="494" y="205" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#606978">sent as MCP sampling hint</text>
+
+  <!-- Card d: Persistent Memory -->
+  <rect x="44" y="234" width="200" height="80" rx="9" fill="#111821" stroke="rgba(0,201,167,0.30)" stroke-width="1"/>
+  <rect x="44" y="234" width="4" height="80" rx="2" fill="#2DC4A4"/>
+  <text x="62" y="264" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12.5" font-weight="700" fill="#2DC4A4">Persistent Memory</text>
+  <text x="62" y="284" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#9DA6B0">5 layers · local-first</text>
+  <text x="62" y="299" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#606978">Engram coexistence opt-in</text>
+
+  <!-- Card e: Security by Default -->
+  <rect x="260" y="234" width="200" height="80" rx="9" fill="#111821" stroke="rgba(227,179,65,0.30)" stroke-width="1"/>
+  <rect x="260" y="234" width="4" height="80" rx="2" fill="#D4A840"/>
+  <text x="278" y="264" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12.5" font-weight="700" fill="#D4A840">Security by Default</text>
+  <text x="278" y="284" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#9DA6B0">Redaction · secret scan</text>
+  <text x="278" y="299" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#606978">fail-closed · offline-first</text>
+
+  <!-- Card f: 19 MCP Tools -->
+  <rect x="476" y="234" width="200" height="80" rx="9" fill="#0D2220" stroke="rgba(0,168,232,0.35)" stroke-width="1.5"/>
+  <rect x="476" y="234" width="4" height="80" rx="2" fill="#35ADE5"/>
+  <text x="494" y="264" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12.5" font-weight="700" fill="#35ADE5">19 MCP Tools</text>
+  <text x="494" y="284" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#9DA6B0">read · edit · run</text>
+  <text x="494" y="299" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#606978">memory · quality</text>
+
+  <!-- arrow down 2 -->
+  <text x="360" y="347" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="16" fill="#35ADE5">&#8595;</text>
+
+  <!-- Codebase band (output below) -->
+  <rect x="24" y="352" width="672" height="34" rx="8" fill="#0D2220" stroke="rgba(0,201,167,0.40)" stroke-width="1"/>
+  <text x="360" y="373" text-anchor="middle"
+        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11">
+    <tspan font-weight="700" fill="#2DC4A4">Your codebase</tspan><tspan fill="#606978">   —   indexed once · queried offline · deterministic, same result every run</tspan>
+  </text>
+
+</svg>
