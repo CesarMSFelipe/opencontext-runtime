@@ -350,3 +350,60 @@ def test_full_uninstall_leaves_no_opencontext_dir(tmp_path, monkeypatch):
         "recreation must not survive the purge)."
     )
     assert verify_no_traces(str(project)) == []
+
+
+# ---------------------------------------------------------------------------
+# T4 (REQ-4): empty .claude parent is removed; non-empty .claude stays
+# ---------------------------------------------------------------------------
+
+
+def test_empty_claude_parent_removed_after_full_uninstall(tmp_path, monkeypatch):
+    """After sweeping oc-* files, the empty .claude/ dir must be removed."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    project = tmp_path / "project"
+    project.mkdir()
+
+    # Simulate OC-managed dirs with only the oc-* files we'll sweep.
+    agents_dir = project / ".claude" / "agents"
+    commands_dir = project / ".claude" / "commands"
+    agents_dir.mkdir(parents=True)
+    commands_dir.mkdir(parents=True)
+    (agents_dir / "oc-orchestrator.md").write_text("# OC agent", encoding="utf-8")
+    (commands_dir / "oc-run.md").write_text("# OC cmd", encoding="utf-8")
+
+    from opencontext_cli.commands.uninstall_cmd import _run_full_uninstall
+
+    _run_full_uninstall(str(project), "local", json_output=True)
+
+    assert not (project / ".claude").exists(), (
+        ".claude/ must be removed when empty after full uninstall"
+    )
+
+
+def test_nonempty_claude_parent_left_intact_after_full_uninstall(tmp_path, monkeypatch):
+    """When .claude/ still has user content after sweep, it must stay."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    project = tmp_path / "project"
+    project.mkdir()
+
+    # OC subdirs + user file in .claude/ root that the sweep won't touch.
+    agents_dir = project / ".claude" / "agents"
+    commands_dir = project / ".claude" / "commands"
+    agents_dir.mkdir(parents=True)
+    commands_dir.mkdir(parents=True)
+    (agents_dir / "oc-orchestrator.md").write_text("# OC agent", encoding="utf-8")
+    user_file = project / ".claude" / "settings.json"
+    user_file.write_text('{"key": "value"}', encoding="utf-8")
+
+    from opencontext_cli.commands.uninstall_cmd import _run_full_uninstall
+
+    _run_full_uninstall(str(project), "local", json_output=True)
+
+    assert (project / ".claude").exists(), (
+        ".claude/ must remain when it contains user content"
+    )
+    assert user_file.exists(), "user's settings.json must not be deleted"

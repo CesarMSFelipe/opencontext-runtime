@@ -203,6 +203,13 @@ def _run_full_uninstall(root: str | Path, scope: str, json_output: bool) -> None
         except OSError:
             pass
 
+    # 4c. Remove the parent .claude/ dir if now empty (e.g. both subdirs were
+    # the only children). Non-empty parent (user content present) is left intact.
+    try:
+        (base / ".claude").rmdir()
+    except OSError:
+        pass
+
     # 5. Purge known project artifacts — MUST be the last filesystem mutation so
     #    nothing recreates .opencontext after it is removed.
     purged = _purge_project_artifacts(root)
