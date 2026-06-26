@@ -1917,7 +1917,14 @@ def _print_agent_instructions(agents: list[Any], console: Any) -> None:
 
 def _install_dry_run(args: argparse.Namespace) -> None:
     """Print the agentic install plan without making any changes."""
-    from opencontext_core.agentic.config import AgenticFlowConfig, PresetId
+    from opencontext_core.agentic.config import (
+        AgenticFlowConfig,
+        BudgetMode,
+        GitMode,
+        MemoryMode,
+        OpenSpecMode,
+        PresetId,
+    )
     from opencontext_core.agentic.install_plan import build_install_plan, render_dry_run
     from opencontext_core.agentic.presets import preset_config
 
@@ -1926,6 +1933,20 @@ def _install_dry_run(args: argparse.Namespace) -> None:
         cfg = preset_config(PresetId(preset_str))
     else:
         cfg = AgenticFlowConfig()
+
+    # NOTE: Explicit flags take precedence over preset/default (flag > preset > default).
+    overlay: dict[str, object] = {}
+    if getattr(args, "memory_mode", None):
+        overlay["memory_mode"] = MemoryMode(args.memory_mode)
+    if getattr(args, "budget_mode", None):
+        overlay["budget_mode"] = BudgetMode(args.budget_mode)
+    if getattr(args, "git", None):
+        overlay["git_mode"] = GitMode(args.git)
+    if getattr(args, "openspec", None):
+        overlay["openspec_mode"] = OpenSpecMode(args.openspec)
+    if overlay:
+        cfg = cfg.model_copy(update=overlay)
+
     plan = build_install_plan(cfg)
     print(render_dry_run(plan))
 
