@@ -116,6 +116,37 @@ class OcNewConductor:
             status = "failed" if env.status == "failed" else "blocked"
         if env.risks:
             resolved_warnings = list(resolved_warnings or []) + env.risks
+
+        # NOTE: REQ-05 — validate declared artifacts exist on disk before marking passed.
+        if status == "passed":
+            phase_def = next(
+                (p for p in OC_NEW_FLOW if p.name == phase_name), None
+            )
+            if phase_def is not None:
+                run_dir = self.store.run_dir(run_id)
+                missing_artifacts = [
+                    a
+                    for a in phase_def.required_artifacts
+                    if not (run_dir / a).exists()
+                ]
+                if missing_artifacts:
+                    missing_str = ", ".join(missing_artifacts)
+                    status = "blocked"
+                    resolved_warnings = list(resolved_warnings or []) + [
+                        f"Required artifacts missing: {missing_str}"
+                    ]
+
+        # NOTE: REQ-01b — fail-closed archive gate (only when still on track to pass).
+        if phase_name == "archive" and status == "passed":
+            from opencontext_core.oc_new.archive_gate import OcNewArchiveGate
+
+            run_dir = self.store.run_dir(run_id)
+            try:
+                OcNewArchiveGate().assert_can_archive(run_dir)
+            except RuntimeError as exc:
+                status = "blocked"
+                resolved_warnings = list(resolved_warnings or []) + [str(exc)]
+
         updated = phase.model_copy(
             update={
                 "status": status,

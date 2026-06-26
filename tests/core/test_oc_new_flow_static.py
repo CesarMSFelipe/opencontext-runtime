@@ -39,7 +39,9 @@ def test_verify_phase_expected_artifacts_include_evidence() -> None:
     assert "harness-report.json" in artifacts
 
 
-# Artifacts that each phase needs from the previous phase
+# Artifacts that each phase needs from the previous phase.
+# NOTE: verify phase must include compliance-matrix.json and harness-report.json
+# because archive phase requires them (REQ-01a, REQ-05).
 _PHASE_ARTIFACTS: dict[str, list[str]] = {
     "explore": ["explore.artifact.json", "context-pack.json"],
     "propose": ["proposal.md", "proposal.json", "propose.artifact.json"],
@@ -48,9 +50,24 @@ _PHASE_ARTIFACTS: dict[str, list[str]] = {
     "tasks": ["tasks.md", "tasks.json", "tasks.artifact.json"],
     "approval": ["approval.json"],
     "apply": ["apply-manifest.json", "apply.artifact.json"],
-    "verify": ["verify-report.json", "verify.artifact.json"],
+    "verify": [
+        "verify-report.json",
+        "verify.artifact.json",
+        "compliance-matrix.json",
+        "harness-report.json",
+        "tdd-evidence.json",
+        "quality-gate.json",
+    ],
     "review": ["review-report.json", "review.artifact.json"],
     "archive": ["archive-report.json", "archive.artifact.json", "receipt.json"],
+}
+
+# Artifact contents that require specific JSON values for gate validation.
+_ARTIFACT_CONTENT: dict[str, str] = {
+    "approval.json": '{"status": "approved"}',
+    "verify-report.json": '{"verdict": "PASS"}',
+    "compliance-matrix.json": '{"passed": true}',
+    "harness-report.json": '{"passed": true, "failures": []}',
 }
 
 
@@ -70,10 +87,11 @@ def test_full_10_phase_static_flow(tmp_path):
             f"Expected {phase_name}, got {state.current_phase}"
         )
 
-        # Create all artifacts this phase produces
+        # Create all artifacts this phase produces (with valid JSON content for gated files).
         artifacts = _PHASE_ARTIFACTS.get(phase_name, [])
         for artifact in artifacts:
-            (run_dir / artifact).write_text("{}", encoding="utf-8")
+            content = _ARTIFACT_CONTENT.get(artifact, "{}")
+            (run_dir / artifact).write_text(content, encoding="utf-8")
 
         # Write phase-result envelope (required by conductor.mark_done)
         _write_envelope(
