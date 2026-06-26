@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -25,6 +26,26 @@ if TYPE_CHECKING:
     from opencontext_core.agentic.config import AgenticFlowConfig
     from opencontext_core.memory.capture import MemoryCaptureService
     from opencontext_core.memory.phase_policy import PhaseMemoryPolicy
+    from opencontext_core.workflow.leases import AgentCoordinationStore
+
+_logger = logging.getLogger(__name__)
+
+
+class _NoopCoordStore:
+    """Drop-in stub returned when the real AgentCoordinationStore cannot be constructed.
+
+    Every method is a silent no-op so callers never see an exception even if the
+    underlying SQLite database is unavailable.
+    """
+
+    def acquire(self, *args: object, **kwargs: object) -> object:  # noqa: ANN401
+        return type("_Lease", (), {"lease_id": "noop"})()
+
+    def signal(self, *args: object, **kwargs: object) -> None:
+        pass
+
+    def release_by_run_phase(self, *args: object, **kwargs: object) -> None:
+        pass
 
 
 class OcNewConductor:
@@ -36,6 +57,27 @@ class OcNewConductor:
         self.root = Path(root)
         self.store = OcNewStore(self.root)
         self._capture_service = capture_service
+        self.__coord_store: object | None = None  # backing attr for lazy property
+
+    @property
+    def _coord_store(self) -> "AgentCoordinationStore":
+        """Lazy-initialized AgentCoordinationStore backed by .opencontext/coordination.db.
+
+        Construction is guarded so absence of the db directory never raises into
+        the conductor flow — failure is deferred to the first operation and is
+        caught there.
+        """
+        from opencontext_core.workflow.leases import AgentCoordinationStore
+
+        if self.__coord_store is None:
+            try:
+                self.__coord_store = AgentCoordinationStore(
+                    self.root / ".opencontext" / "coordination.db"
+                )
+            except Exception:  # noqa: BLE001
+                # Return a no-op fallback object so callers can proceed.
+                self.__coord_store = _NoopCoordStore()
+        return self.__coord_store  # type: ignore[return-value]
 
     def start(self, task: str, config: AgenticFlowConfig | None = None) -> OcNewRunState:
         """Start a new oc-new run, optionally with an AgenticFlowConfig.
@@ -179,6 +221,19 @@ class OcNewConductor:
             used_input_tokens=input_tokens,
             used_output_tokens=output_tokens,
         )
+
+        # NOTE: REQ-2 — release the lease for this (run_id, phase) pair.
+        # Fail-soft: any exception is logged and swallowed.
+        try:
+            self._coord_store.release_by_run_phase(run_id, phase_name)
+        except Exception as _e:  # noqa: BLE001
+            _logger.warning(
+                "Lease release failed for phase %s (run %s): %s",
+                phase_name,
+                run_id,
+                _e,
+            )
+
         # NOTE: After tasks phase completes, produce a git work plan.
         if phase_name == "tasks" and state.config is not None:
             self._write_git_plan(state)
@@ -350,6 +405,26 @@ class OcNewConductor:
                 phase_name=phase_def.name,
                 run_id=state.identity.run_id,
             )
+
+            # NOTE: REQ-2 — acquire a lease and emit STARTED for this phase.
+            # Fail-soft: any exception is logged and swallowed; it must NEVER
+            # propagate into the flow.
+            try:
+                from opencontext_core.workflow.signals import AgentSignalKind
+
+                _lease = self._coord_store.acquire(
+                    state.identity.run_id,
+                    state.identity.run_id,
+                    phase_def.name,
+                )
+                self._coord_store.signal(_lease.lease_id, AgentSignalKind.STARTED)
+            except Exception as _e:  # noqa: BLE001
+                _logger.warning(
+                    "Lease acquire/signal failed for phase %s (run %s): %s",
+                    phase_def.name,
+                    state.identity.run_id,
+                    _e,
+                )
 
             # NOTE: D3 — build deterministic context_report_ref and full AgentHandoff.
             context_report_ref = (
