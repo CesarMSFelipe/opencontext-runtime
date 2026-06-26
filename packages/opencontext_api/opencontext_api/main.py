@@ -312,13 +312,22 @@ def sdd_flow(request: PreparedContextRequest) -> ScaffoldResponse:
     safe_context, _ = SinkGuard().redact(prepared.context)
 
     # Test - validate context pack safety
+    from opencontext_core.models.context import ContextItem, ContextPriority
     from opencontext_core.safety.firewall import ContextFirewall
 
     firewall = ContextFirewall(runtime.config)
-    test_decision = firewall.check_context_export(
-        prepared.included_sources,
-        sink="sdd_test",
+    # The firewall guards content, not paths: wrap the prepared (already-redacted)
+    # context as one item so the export gate inspects real text, not source names.
+    export_item = ContextItem(
+        id="sdd-test-context",
+        content=prepared.context,
+        source="prepared_context",
+        source_type="aggregate",
+        priority=ContextPriority.P2,
+        tokens=0,
+        score=0.0,
     )
+    test_decision = firewall.check_context_export([export_item], sink="sdd_test")
 
     # Verify - security scan
     scan = scan_project(request.root)
