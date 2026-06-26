@@ -197,7 +197,7 @@ def test_t5_default_suite_resolves() -> None:
 
 
 def test_t6_conductor_metadata_no_lease_id() -> None:
-    """NextAction.metadata must not contain 'lease_id'."""
+    """NextAction.metadata must contain handoff block + non-null context_report_ref."""
     from opencontext_core.oc_new.conductor import OcNewConductor
 
     conductor = OcNewConductor()
@@ -215,9 +215,22 @@ def test_t6_conductor_metadata_no_lease_id() -> None:
             assert "context_report_ref" in metadata, (
                 f"'context_report_ref' missing from metadata: {metadata}"
             )
+            assert metadata["context_report_ref"] is not None, (
+                f"'context_report_ref' must be non-null, got: {metadata}"
+            )
             assert "result_schema" in metadata, (
                 f"'result_schema' missing from metadata: {metadata}"
             )
+            # T6 extension: handoff block must be present with identity fields.
+            assert "handoff" in metadata, (
+                f"'handoff' missing from metadata: {metadata}"
+            )
+            h = metadata["handoff"]
+            assert isinstance(h, dict), f"'handoff' must be a dict, got: {type(h)}"
+            assert h.get("run_id"), f"handoff.run_id must be non-null: {h}"
+            assert h.get("change_id"), f"handoff.change_id must be non-null: {h}"
+            assert h.get("phase"), f"handoff.phase must be non-null: {h}"
+            assert h.get("task") is not None, f"handoff.task must be present: {h}"
             return
         if state.next_action.kind == "done":
             break

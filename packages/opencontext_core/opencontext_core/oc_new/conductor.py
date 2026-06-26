@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from opencontext_core.compat import UTC
 from opencontext_core.oc_new.flow import OC_NEW_FLOW
 from opencontext_core.oc_new.models import (
+    AgentHandoff,
     ChangeIdentity,
     NextAction,
     OcNewRunState,
@@ -350,6 +351,24 @@ class OcNewConductor:
                 run_id=state.identity.run_id,
             )
 
+            # NOTE: D3 — build deterministic context_report_ref and full AgentHandoff.
+            context_report_ref = (
+                f".opencontext/runs/{state.identity.run_id}/{phase_def.name}.context.json"
+            )
+            handoff = AgentHandoff(
+                run_id=state.identity.run_id,
+                change_id=state.identity.change_id,
+                trace_id=state.identity.trace_id,
+                memory_key=state.identity.memory_key,
+                task=state.task or "",
+                phase=phase_def.name,  # type: ignore[arg-type]
+                persona=phase_def.persona or "",
+                skill=phase_def.skill or "",
+                expected_outputs=list(phase_def.expected_artifacts),
+                allowed_tools=list(phase_def.required_tools),
+                context_report_ref=context_report_ref,
+            )
+
             return state.model_copy(
                 update={
                     "current_phase": phase_def.name,
@@ -366,10 +385,11 @@ class OcNewConductor:
                         required_tools=phase_def.required_tools,
                         expected_artifacts=phase_def.expected_artifacts,
                         metadata={
-                        "memory": mem_metadata,
-                        "context_report_ref": None,
-                        "result_schema": "opencontext.phase_result.v1",
-                    },
+                            "memory": mem_metadata,
+                            "context_report_ref": context_report_ref,
+                            "result_schema": "opencontext.phase_result.v1",
+                            "handoff": handoff.model_dump(mode="json"),
+                        },
                     ),
                     "updated_at": datetime.now(tz=UTC),
                 }
