@@ -199,6 +199,11 @@ def _run_full_uninstall(root: str | Path, scope: str, json_output: bool) -> None
     purged = _purge_project_artifacts(root)
     report["purged"] = purged
 
+    # 5b. Strip project-level managed blocks (.gitignore storage block, AGENTS.md
+    #     stack block). Full uninstall always targets the project root, so force
+    #     "local" scope regardless of the agent-config scope.
+    _strip_project_managed_blocks(root, "local")
+
     # 6. Verify traces
     residue = verify_no_traces(root)
     report["verify"] = {"passed": len(residue) == 0, "residue": residue}
@@ -250,6 +255,15 @@ def verify_no_traces(root: object) -> list[str]:
                     residue.append(str(p))
             except OSError:
                 pass
+
+    # The .gitignore managed storage block must be stripped by --full.
+    gitignore = base / ".gitignore"
+    if gitignore.exists():
+        try:
+            if "opencontext:storage" in gitignore.read_text(encoding="utf-8"):
+                residue.append(str(gitignore))
+        except OSError:
+            pass
 
     return residue
 
