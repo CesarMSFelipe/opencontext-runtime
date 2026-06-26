@@ -1163,8 +1163,10 @@ def _path_is_forbidden(rel_posix: str, patterns: list[str]) -> bool:
 class FileEdit:
     """A single concrete file edit produced by an executor.
 
-    ``content`` is the full intended file content after the edit (whole-file
-    replacement / create). ``path`` is an absolute or root-relative path.
+    Surgical edits (targeting only changed lines/blocks) are preferred; whole-file
+    replacement is accepted as an explicit fallback when surgical edit is not
+    possible (e.g. new file or heavy restructure). ``path`` is an absolute or
+    root-relative path.
     """
 
     path: str

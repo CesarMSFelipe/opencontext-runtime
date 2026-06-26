@@ -163,9 +163,12 @@ def _phase_handler(gateway: LLMGateway, phase: str, provider: str, model: str) -
 
 _APPLY_INSTRUCTION = (
     "Implement the task below as concrete file edits. Output ONLY a JSON array — "
-    'each element an object with "path" (repository-relative) and "content" (the '
-    "FULL intended file contents after the edit, i.e. whole-file replacement or "
-    "create). No prose, no Markdown fences, nothing outside the array."
+    'each element an object with "path" (repository-relative) and "content". '
+    "Prefer surgical ApplyEdit operations: target only the changed lines or blocks "
+    "(anchored find/replace) rather than rewriting unchanged sections. "
+    "Returning the complete file content is a valid fallback when a surgical edit "
+    "is not possible (e.g. new file, heavily restructured content). "
+    "No prose, no Markdown fences, nothing outside the array."
 )
 
 
