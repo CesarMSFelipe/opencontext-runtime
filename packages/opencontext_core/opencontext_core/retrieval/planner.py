@@ -74,6 +74,48 @@ def _is_oc_generated(path: str) -> bool:
     return False
 
 
+_OC_GITIGNORE_SENTINEL_START = "# opencontext:storage:start"
+_OC_GITIGNORE_SENTINEL_END = "# opencontext:storage:end"
+
+
+def _is_oc_only_gitignore(root: Path, source: str) -> bool:
+    """Return True if *source* is .gitignore and its non-blank content is solely
+    the OC managed storage sentinel block.
+
+    A .gitignore that has user-authored lines beyond the OC block returns False
+    so that it remains eligible for context retrieval.
+    """
+    # Check if source refers to a .gitignore file (root-level or nested).
+    src_path = Path(source)
+    if src_path.name != ".gitignore":
+        return False
+    # Resolve the actual filesystem path relative to root.
+    try:
+        gitignore_path = (root / src_path).resolve()
+        text = gitignore_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    # Collect all non-blank lines.
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        # Empty .gitignore — treat as OC-only (nothing meaningful for the user).
+        return True
+    # Find the OC managed block boundaries.
+    try:
+        start_idx = next(
+            i for i, ln in enumerate(lines) if ln.strip() == _OC_GITIGNORE_SENTINEL_START
+        )
+        end_idx = next(
+            i for i, ln in enumerate(lines) if ln.strip() == _OC_GITIGNORE_SENTINEL_END
+        )
+    except StopIteration:
+        # No OC sentinel block present — user-only content; include in context.
+        return False
+    # All lines must fall within the sentinel block (inclusive).
+    oc_block = set(range(start_idx, end_idx + 1))
+    return all(i in oc_block for i in range(len(lines)))
+
+
 # The 9 v2 ``RankingConfig`` weight fields map 1:1 onto identically-named
 # ``RetrievalWeights`` fields (B1-REQ-3). The four non-mapped ``RetrievalWeights``
 # fields (personalization + the three penalties) are deliberately absent and keep
@@ -574,7 +616,13 @@ class RetrievalPlanner:
 
         # Drop OC-generated / OC-configuration files from context results so
         # that OpenContext's own config never appears as context for user tasks.
-        context_items = [item for item in context_items if not _is_oc_generated(item.source)]
+        # Also drop .gitignore when its content is solely the OC managed storage block.
+        context_items = [
+            item
+            for item in context_items
+            if not _is_oc_generated(item.source)
+            and not _is_oc_only_gitignore(request.root, item.source)
+        ]
 
         evidence = [_context_item_to_evidence(item, request.surface) for item in context_items]
         fallback_actions = _fallback_actions_for(request, evidence)
