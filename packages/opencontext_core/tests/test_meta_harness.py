@@ -129,6 +129,56 @@ class TestMetaHarnessScanner:
         assert len(_WEIGHTS) == 11
 
 
+class TestKgSubstrateCheckIsBehavioral:
+    """_check_context_substrate must exercise the real SQLite read path and verify
+    context_pack_hash is not None — not just check available_tokens in an empty tempdir."""
+
+    @staticmethod
+    def _provision_real_schema_db(root: Path) -> None:
+        """Create context_graph.db with the real NOT NULL schema + ≥1 row."""
+        import sqlite3
+
+        db_dir = root / ".storage" / "opencontext"
+        db_dir.mkdir(parents=True, exist_ok=True)
+        db_path = db_dir / "context_graph.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "CREATE TABLE nodes ("
+            "id TEXT PRIMARY KEY NOT NULL, "
+            "name TEXT NOT NULL, "
+            "kind TEXT NOT NULL, "
+            "file_path TEXT NOT NULL, "
+            "language TEXT NOT NULL, "
+            "content_snippet TEXT"
+            ")"
+        )
+        conn.execute(
+            "INSERT INTO nodes (id, name, kind, file_path, language, content_snippet) "
+            "VALUES ('n1', 'n1', 'file', 'foo.py', 'python', 'hello world')"
+        )
+        conn.commit()
+        conn.close()
+
+    def test_substrate_check_passes_with_real_schema_db(self, tmp_path: Path) -> None:
+        """_check_context_substrate must pass and report non-null hash when DB is populated."""
+        self._provision_real_schema_db(tmp_path)
+        scanner = MetaHarnessScanner(root=tmp_path)
+        passed, explanation = scanner._check_context_substrate()
+        assert passed is True, f"Expected passed=True, got explanation: {explanation}"
+        assert "hash" in explanation or "tokens" in explanation, (
+            f"Explanation must mention hash or tokens: {explanation}"
+        )
+
+    def test_substrate_check_fails_on_empty_dir(self, tmp_path: Path) -> None:
+        """_check_context_substrate must return passed=False when no DB is provisioned."""
+        # No DB provisioned — empty tmpdir.
+        scanner = MetaHarnessScanner(root=tmp_path)
+        passed, _explanation = scanner._check_context_substrate()
+        assert passed is False, (
+            "Empty tmpdir should return passed=False — check was false-green before fix"
+        )
+
+
 class TestKgSnapshotCheckIsBehavioral:
     """The KG check must require a POPULATED graph, not just a present (possibly
     side-effect-created, empty) context_graph.db — else it false-greens."""

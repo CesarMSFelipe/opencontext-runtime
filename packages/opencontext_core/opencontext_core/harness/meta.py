@@ -194,25 +194,29 @@ class MetaHarnessScanner:
         )
 
     def _check_context_substrate(self) -> tuple[bool, str]:
-        """Instantiate ContextSubstrateBuilder in a temp dir and call build_for_phase.
+        """Call build_for_phase against self._root and assert context_pack_hash is not None.
 
-        A successful build (even with no KG present) proves the substrate is functional.
+        D2: the check must exercise the real SQLite read path (not just report
+        available_tokens on an empty dir which was a false-green before this fix).
+        If self._root has no populated KG, the hash will be None → failed.
         """
-        import tempfile
-
         try:
             from opencontext_core.agentic.context_substrate import ContextSubstrateBuilder
 
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                builder = ContextSubstrateBuilder(root=tmp_dir)
-                report = builder.build_for_phase(
-                    task="meta-harness-check", phase="explore", budget=4000
-                )
-                return (
-                    True,
-                    f"ContextSubstrateBuilder.build_for_phase succeeded"
-                    f" (tokens={report.available_tokens})",
-                )
+            builder = ContextSubstrateBuilder(root=self._root)
+            report = builder.build_for_phase(
+                task="meta-harness-check", phase="explore", budget=4000
+            )
+            if report.context_pack_hash is None:
+                reason = "; ".join(report.warnings) if report.warnings else "hash is None"
+                return False, f"Context substrate degraded: {reason}"
+            if report.warnings:
+                return False, f"Context substrate warnings: {'; '.join(report.warnings)}"
+            return (
+                True,
+                f"substrate ok: hash={report.context_pack_hash},"
+                f" tokens={report.used_tokens}",
+            )
         except Exception as exc:
             return False, f"Context substrate build failed: {exc}"
 
