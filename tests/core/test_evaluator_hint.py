@@ -43,6 +43,19 @@ def test_coverage_hint_present_for_non_oc_project(tmp_path: Path) -> None:
     assert "--root" in full_reason, f"Expected '--root' in reasons: {result.reasons}"
 
 
+def test_efficiency_hint_present_for_non_oc_project(tmp_path: Path) -> None:
+    evaluator = _make_evaluator(tmp_path)
+    case = ContextBenchCase(
+        id="c3",
+        query="test",
+        expected_sources=["some/module.py"],
+        min_source_coverage=1.0,
+    )
+    result = evaluator.evaluate_efficiency_case(case)
+    full_reason = " ".join(result.reasons)
+    assert "--suite your-suite.yaml" in full_reason
+
+
 def test_coverage_hint_absent_for_oc_project() -> None:
     """OC repo root: coverage failure should NOT include the suite-mismatch hint."""
     import os

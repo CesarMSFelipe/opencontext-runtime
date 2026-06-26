@@ -32,6 +32,43 @@ def test_conductor_start_points_to_explore(tmp_path):
     assert state.next_action.kind == "spawn_subagent"
     assert state.next_action.phase == "explore"
     assert state.blocked_reason is None
+    metadata = state.next_action.metadata
+    handoff = metadata["handoff"]
+    assert isinstance(handoff, dict)
+    assert handoff["budget"]["phase_budget"] == 0
+    assert "lease" in metadata
+    lease = metadata["lease"]
+    assert isinstance(lease, dict)
+    assert lease["lease_id"]
+    assert lease["expires_at"]
+
+
+def test_conductor_handoff_budget_uses_config_and_ledger(tmp_path):
+    from opencontext_core.agentic.budget import BudgetLedger, PhaseBudget
+    from opencontext_core.agentic.config import AgenticFlowConfig, BudgetMode
+    from opencontext_core.oc_new.models import ChangeIdentity, OcNewRunState, PhaseState
+
+    conductor = OcNewConductor(tmp_path)
+    identity = ChangeIdentity.from_task("budget metadata")
+    state = OcNewRunState(
+        identity=identity,
+        task="budget metadata",
+        phases=[PhaseState(name="explore")],
+        config=AgenticFlowConfig(phase_budget=6000, budget_mode=BudgetMode.STRICT),
+    )
+    run_dir = tmp_path / ".opencontext" / "runs" / identity.run_id
+    run_dir.mkdir(parents=True)
+    ledger = BudgetLedger(mode="strict").add_phase(
+        PhaseBudget(phase="previous", used_input_tokens=100, used_output_tokens=25)
+    )
+    (run_dir / "budget_ledger.json").write_text(ledger.model_dump_json(), encoding="utf-8")
+
+    budget = conductor._handoff_budget(state, "explore")
+
+    assert budget.phase_budget == 6000
+    assert budget.used_before_phase == 125
+    assert budget.max_output_tokens == 3000
+    assert budget.budget_mode == "strict"
 
 
 def test_conductor_advances_after_phase_done(tmp_path):

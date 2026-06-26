@@ -43,7 +43,7 @@ where = ["."]
 include = ["opencontext_cli*"]
 
 [project.optional-dependencies]
-dev = ["types-pyperclip"]
+dev = ["types-PyYAML", "types-requests", "types-pyperclip"]
 
 [tool.setuptools.package-data]
 opencontext_cli = ["fixtures/memory/*.json", "data/*.yaml"]

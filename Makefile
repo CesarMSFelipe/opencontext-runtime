@@ -33,7 +33,7 @@ install:
 
 dev:
 	$(PIP) install -e packages/opencontext_core -e packages/opencontext_cli -e packages/opencontext_api
-	$(PIP) install pytest ruff mypy rich prompt-toolkit
+	$(PIP) install -r requirements-ci.txt
 
 test:
 	$(PYTEST) -q

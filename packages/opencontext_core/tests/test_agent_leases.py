@@ -53,6 +53,23 @@ class TestAgentCoordinationStoreRoundTrip:
             final = store.get_lease(lease.lease_id)
             assert final.status == AgentLeaseStatus.RELEASED
 
+    def test_get_signals_for_run_and_active_leases(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AgentCoordinationStore(Path(tmp) / "coord.db")
+            lease1 = store.acquire("agent-a", "run-a", "explore")
+            lease2 = store.acquire("agent-b", "run-b", "explore")
+            store.signal(lease1.lease_id, AgentSignalKind.STARTED)
+            store.signal(lease2.lease_id, AgentSignalKind.STARTED)
+
+            assert [s.lease_id for s in store.get_signals_for_run("run-a")] == [lease1.lease_id]
+            assert {lease.lease_id for lease in store.get_active_leases("run-a")} == {
+                lease1.lease_id
+            }
+            assert {lease.lease_id for lease in store.get_active_leases()} == {
+                lease1.lease_id,
+                lease2.lease_id,
+            }
+
     def test_lease_survives_store_restart(self) -> None:
         """Lease written to SQLite must be readable after re-opening the store."""
         with tempfile.TemporaryDirectory() as tmp:

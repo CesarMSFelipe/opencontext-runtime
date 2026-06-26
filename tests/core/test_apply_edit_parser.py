@@ -88,6 +88,14 @@ class TestParseFileEditsLegacyArray:
         assert isinstance(result[1], dict)
 
 
+def test_apply_instruction_names_applyedit_as_primary_protocol() -> None:
+    from opencontext_core.agents.executor import _APPLY_INSTRUCTION
+
+    assert "primary shape is ApplyEdit" in _APPLY_INSTRUCTION
+    assert "Legacy whole-file" in _APPLY_INSTRUCTION
+    assert '"operation"' in _APPLY_INSTRUCTION
+
+
 class TestCollectEdits:
     """T6-3: ApplyPhase._collect_edits materializes ApplyEdit→FileEdit."""
 

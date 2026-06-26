@@ -13,6 +13,7 @@ from opencontext_core.oc_new.flow import OC_NEW_FLOW
 from opencontext_core.oc_new.models import (
     AgentHandoff,
     ChangeIdentity,
+    HandoffBudget,
     NextAction,
     OcNewRunState,
     PhaseDefinition,
@@ -429,6 +430,7 @@ class OcNewConductor:
             # NOTE: REQ-2 — acquire a lease and emit STARTED for this phase.
             # Fail-soft: any exception is logged and swallowed; it must NEVER
             # propagate into the flow.
+            lease_metadata: dict[str, str] | None = None
             try:
                 from opencontext_core.workflow.signals import AgentSignalKind
 
@@ -438,6 +440,10 @@ class OcNewConductor:
                     phase_def.name,
                 )
                 self._coord_store.signal(_lease.lease_id, AgentSignalKind.STARTED)
+                lease_metadata = {
+                    "lease_id": _lease.lease_id,
+                    "expires_at": _lease.expires_at.isoformat(),
+                }
             except Exception as _e:
                 _logger.warning(
                     "Lease acquire/signal failed for phase %s (run %s): %s",
@@ -462,7 +468,16 @@ class OcNewConductor:
                 expected_outputs=list(phase_def.expected_artifacts),
                 allowed_tools=list(phase_def.required_tools),
                 context_report_ref=context_report_ref,
+                budget=self._handoff_budget(state, phase_def.name),
             )
+            metadata: dict[str, object] = {
+                "memory": mem_metadata,
+                "context_report_ref": context_report_ref,
+                "result_schema": "opencontext.phase_result.v1",
+                "handoff": handoff.model_dump(mode="json"),
+            }
+            if lease_metadata is not None:
+                metadata["lease"] = lease_metadata
 
             return state.model_copy(
                 update={
@@ -479,12 +494,7 @@ class OcNewConductor:
                         ),
                         required_tools=phase_def.required_tools,
                         expected_artifacts=phase_def.expected_artifacts,
-                        metadata={
-                            "memory": mem_metadata,
-                            "context_report_ref": context_report_ref,
-                            "result_schema": "opencontext.phase_result.v1",
-                            "handoff": handoff.model_dump(mode="json"),
-                        },
+                        metadata=metadata,
                     ),
                     "updated_at": datetime.now(tz=UTC),
                 }
@@ -588,6 +598,28 @@ class OcNewConductor:
             ledger = BudgetLedger(mode=str(mode))
 
         return BudgetController().decide(state.config, ledger, phase_name)
+
+    def _handoff_budget(self, state: OcNewRunState, phase_name: str) -> HandoffBudget:
+        """Build budget metadata for agent handoff."""
+        phase_budget = int(getattr(state.config, "phase_budget", 0) or 0)
+        used_before = 0
+        ledger_path = (
+            self.root / ".opencontext" / "runs" / state.identity.run_id / "budget_ledger.json"
+        )
+        if ledger_path.exists():
+            try:
+                from opencontext_core.agentic.budget import BudgetLedger
+
+                used_before = BudgetLedger.model_validate_json(ledger_path.read_text()).used_total
+            except Exception:
+                used_before = 0
+        budget_mode = str(getattr(getattr(state.config, "budget_mode", "warn"), "value", "warn"))
+        return HandoffBudget(
+            phase_budget=phase_budget,
+            used_before_phase=used_before,
+            max_output_tokens=phase_budget // 2 if phase_budget else 0,
+            budget_mode=budget_mode,
+        )
 
     def _memory_policy_for(self, phase: str) -> PhaseMemoryPolicy | None:
         """Return the memory read/write policy for *phase*, or None if unknown."""
