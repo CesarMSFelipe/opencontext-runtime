@@ -27,4 +27,4 @@ class AgentSignal:
     lease_id: str
     kind: AgentSignalKind
     created_at: datetime = field(default_factory=lambda: datetime.now())
-    payload: str | None = None
+    payload: str | dict | list | None = None

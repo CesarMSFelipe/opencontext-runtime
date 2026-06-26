@@ -9,13 +9,14 @@ Lazy expiry: ``EXPIRED`` status is computed on read when ``expires_at < now()``.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from opencontext_core.compat import UTC, StrEnum
 
@@ -218,13 +219,26 @@ class AgentCoordinationStore:
         self,
         lease_id: str,
         kind: AgentSignalKind,
-        payload: str | None = None,
+        payload: str | dict[str, Any] | list[Any] | None = None,
     ) -> AgentSignal:
-        """Append a signal record for *lease_id*. INSERT-only."""
+        """Append a signal record for *lease_id*. INSERT-only.
+
+        *payload* may be a ``str``, ``dict``, ``list``, or ``None``.
+        Non-string values are serialized to a JSON string before storage.
+        The read path returns the raw stored string; callers that need the
+        original structure must call ``json.loads()`` themselves.
+        """
         from opencontext_core.workflow.signals import AgentSignal
 
         now = datetime.now(tz=UTC)
         signal_id = str(uuid.uuid4())
+
+        # Serialize structured payloads to JSON string before SQLite bind.
+        stored_payload: str | None
+        if isinstance(payload, (dict, list)):
+            stored_payload = json.dumps(payload, sort_keys=True)
+        else:
+            stored_payload = payload
 
         with self._connect() as conn:
             conn.execute(
@@ -232,7 +246,7 @@ class AgentCoordinationStore:
                 INSERT INTO agent_signals (signal_id, lease_id, kind, created_at, payload)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (signal_id, lease_id, str(kind), now.isoformat(), payload),
+                (signal_id, lease_id, str(kind), now.isoformat(), stored_payload),
             )
 
         return AgentSignal(
@@ -240,7 +254,7 @@ class AgentCoordinationStore:
             lease_id=lease_id,
             kind=kind,
             created_at=now,
-            payload=payload,
+            payload=stored_payload,
         )
 
     def get_signals(self, lease_id: str) -> list[AgentSignal]:

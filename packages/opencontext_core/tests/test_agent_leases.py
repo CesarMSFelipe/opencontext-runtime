@@ -116,3 +116,42 @@ class TestCoordinatorPolicyUnchanged:
         # A synthetic non-main thread_id should raise.
         with pytest.raises((RuntimeError, ValueError, AssertionError)):
             policy.assert_allowed(thread_id=-1)
+
+
+class TestSignalStructuredPayloads:
+    """T1: signal() must accept dict and list payloads (round-trip via JSON string)."""
+
+    def test_signal_dict_payload_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AgentCoordinationStore(Path(tmp) / "coord.db")
+            lease = store.acquire("agent-d1", "run-d1", "apply")
+            sig = store.signal(lease.lease_id, AgentSignalKind.STARTED, {"step": 1})
+            assert sig.payload == '{"step": 1}'
+            sigs = store.get_signals(lease.lease_id)
+            assert len(sigs) == 1
+            import json
+            assert json.loads(sigs[0].payload) == {"step": 1}
+
+    def test_signal_list_payload_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AgentCoordinationStore(Path(tmp) / "coord.db")
+            lease = store.acquire("agent-l1", "run-l1", "explore")
+            sig = store.signal(lease.lease_id, AgentSignalKind.PROGRESS, [1, 2, 3])
+            assert sig.payload == "[1, 2, 3]"
+            sigs = store.get_signals(lease.lease_id)
+            import json
+            assert json.loads(sigs[0].payload) == [1, 2, 3]
+
+    def test_signal_str_payload_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AgentCoordinationStore(Path(tmp) / "coord.db")
+            lease = store.acquire("agent-s1", "run-s1", "spec")
+            sig = store.signal(lease.lease_id, AgentSignalKind.COMPLETED, "plain-string")
+            assert sig.payload == "plain-string"
+
+    def test_signal_none_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = AgentCoordinationStore(Path(tmp) / "coord.db")
+            lease = store.acquire("agent-n1", "run-n1", "verify")
+            sig = store.signal(lease.lease_id, AgentSignalKind.HEARTBEAT, None)
+            assert sig.payload is None
