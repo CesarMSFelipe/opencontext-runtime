@@ -194,6 +194,15 @@ def _run_full_uninstall(root: str | Path, scope: str, json_output: bool) -> None
             except Exception:
                 pass
 
+    # 4b. Remove .claude/agents and .claude/commands if empty after sweep.
+    # rmdir only removes empty dirs; OSError is silently ignored when non-empty
+    # or absent so user content is always left intact.
+    for _claude_subdir in (base / ".claude" / "agents", base / ".claude" / "commands"):
+        try:
+            _claude_subdir.rmdir()
+        except OSError:
+            pass
+
     # 5. Purge known project artifacts — MUST be the last filesystem mutation so
     #    nothing recreates .opencontext after it is removed.
     purged = _purge_project_artifacts(root)
