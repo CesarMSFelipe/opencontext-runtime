@@ -42,3 +42,6 @@ Source = "https://github.com/CesarMSFelipe/OpenContext-Runtime"
 where = ["."]
 include = ["opencontext_core*"]
 exclude = []
+
+[project.optional-dependencies]
+dev = ["types-PyYAML", "types-requests"]

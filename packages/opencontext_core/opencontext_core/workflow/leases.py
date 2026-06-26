@@ -301,3 +301,62 @@ class AgentCoordinationStore:
             )
             for row in rows
         ]
+
+    def get_signals_for_run(self, run_id: str) -> list[AgentSignal]:
+        """Retrieve signals for all leases in a run, ordered by creation time."""
+        from opencontext_core.workflow.signals import AgentSignal, AgentSignalKind
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT s.* FROM agent_signals s
+                JOIN agent_leases l ON l.lease_id = s.lease_id
+                WHERE l.run_id = ?
+                ORDER BY s.created_at
+                """,
+                (run_id,),
+            ).fetchall()
+
+        return [
+            AgentSignal(
+                signal_id=row["signal_id"],
+                lease_id=row["lease_id"],
+                kind=AgentSignalKind(row["kind"]),
+                created_at=datetime.fromisoformat(row["created_at"]),
+                payload=row["payload"],
+            )
+            for row in rows
+        ]
+
+    def get_active_leases(self, run_id: str | None = None) -> list[AgentLease]:
+        """Return active non-expired leases, optionally scoped to *run_id*."""
+        now = datetime.now(tz=UTC)
+        query = "SELECT * FROM agent_leases WHERE status = 'active'"
+        params: tuple[str, ...] = ()
+        if run_id is not None:
+            query += " AND run_id = ?"
+            params = (run_id,)
+
+        leases: list[AgentLease] = []
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            for row in rows:
+                exp = datetime.fromisoformat(row["expires_at"])
+                if exp < now:
+                    conn.execute(
+                        "UPDATE agent_leases SET status = 'expired' WHERE lease_id = ?",
+                        (row["lease_id"],),
+                    )
+                    continue
+                leases.append(
+                    AgentLease(
+                        lease_id=row["lease_id"],
+                        agent_id=row["agent_id"],
+                        run_id=row["run_id"],
+                        phase=row["phase"],
+                        acquired_at=datetime.fromisoformat(row["acquired_at"]),
+                        expires_at=exp,
+                        status=AgentLeaseStatus.ACTIVE,
+                    )
+                )
+        return leases

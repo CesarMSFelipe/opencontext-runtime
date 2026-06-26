@@ -225,10 +225,16 @@ class ContextBenchEvaluator:
         con_sufficient = source_coverage >= case.min_source_coverage and not forbidden_hits
         reasons: list[str] = []
         if source_coverage < case.min_source_coverage:
-            reasons.append(
+            reason = (
                 f"source coverage {source_coverage:.2f} below required "
                 f"{case.min_source_coverage:.2f}"
             )
+            if not (self.root / "packages" / "opencontext_core").exists():
+                reason += (
+                    " (hint: the default benchmark suite targets OpenContext internals; "
+                    "use --suite your-suite.yaml for this project)"
+                )
+            reasons.append(reason)
         if forbidden_hits:
             reasons.append(f"forbidden sources included: {', '.join(forbidden_hits)}")
         if not reasons:
