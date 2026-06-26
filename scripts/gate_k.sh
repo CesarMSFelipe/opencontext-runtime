@@ -56,17 +56,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# K-2  mypy strict clean on core + api + profiles
+# K-2  mypy strict clean on core + api + cli + profiles
 # ---------------------------------------------------------------------------
-LABEL="K-2: mypy strict (core + api + profiles)"
+LABEL="K-2: mypy strict (core + api + cli + profiles)"
 if mypy \
     "$REPO_ROOT/packages/opencontext_core" \
     "$REPO_ROOT/packages/opencontext_api" \
+    "$REPO_ROOT/packages/opencontext_cli" \
     "$REPO_ROOT/packages/opencontext_profiles" \
     2>&1 | grep -q "^Success:"; then
     check_pass "$LABEL"
 else
-    check_fail "$LABEL" "mypy reported type errors — run 'mypy packages/opencontext_core packages/opencontext_api packages/opencontext_profiles'"
+    check_fail "$LABEL" "mypy reported type errors — run 'mypy packages/opencontext_core packages/opencontext_api packages/opencontext_cli packages/opencontext_profiles'"
 fi
 
 # ---------------------------------------------------------------------------
