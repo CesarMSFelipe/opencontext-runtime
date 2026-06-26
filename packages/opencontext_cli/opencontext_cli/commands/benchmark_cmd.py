@@ -168,7 +168,18 @@ def _runtime(args: Any) -> OpenContextRuntime:
 
 
 def _select_cases(args: Any) -> list[Any]:
-    cases = load_context_bench_cases(getattr(args, "suite", DEFAULT_SUITE))
+    suite_path = getattr(args, "suite", DEFAULT_SUITE)
+    # NOTE: REQ-07 — fail loudly when the suite path doesn't exist and the caller
+    # is relying on the default (i.e. not in the development repository).
+    if not Path(suite_path).exists():
+        print(
+            f"Error: --suite is required outside the development repository. "
+            f"Provide a contextbench.yaml path with --suite.\n"
+            f"(Resolved suite path does not exist: {suite_path})",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    cases = load_context_bench_cases(suite_path)
     case_id = getattr(args, "case", None)
     category = getattr(args, "category", None)
     if case_id:
