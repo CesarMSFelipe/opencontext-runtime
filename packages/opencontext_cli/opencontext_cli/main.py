@@ -1552,9 +1552,9 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command == "mutation":
         sys.exit(handle_mutation(args))
     if command == "loop":
-        return sys.exit(handle_loop(args, config=None))
+        sys.exit(handle_loop(args, config=None))
     if command == "bytecode":
-        return sys.exit(handle_bytecode(args))
+        sys.exit(handle_bytecode(args))
     if command == "evolve":
         handle_evolve(args)
         return
@@ -1795,8 +1795,8 @@ def _install_wizard(args: Any, console: Any) -> None:
         from opencontext_core.i18n import t as _t
     except Exception:
 
-        def _t(k, **kw):
-            return k  # type: ignore[misc]
+        def _t(k: str, **kw: str) -> str:  # type: ignore[misc]
+            return k
 
     _c.print()
     _EDITORS = [
@@ -1876,7 +1876,7 @@ def _install_wizard(args: Any, console: Any) -> None:
         pass
 
 
-def _print_agent_instructions(agents: list, console: Any) -> None:
+def _print_agent_instructions(agents: list[Any], console: Any) -> None:
     """Print client-specific usage instructions after install."""
     from rich.panel import Panel
 
@@ -2092,10 +2092,10 @@ def _install(args: argparse.Namespace) -> None:
         else:
             try:
                 installer = _AgentInstaller(project_root=root)
-                detected = installer.detect_installed_agents()
-                report = installer.install(targets=detected, location="global")
+                agent_targets = installer.detect_installed_agents()
+                report = installer.install(targets=agent_targets, location="global")
                 mgr._save_state(
-                    InstallState(version=mgr.VERSION, components=["agents"], agents=list(detected))
+                    InstallState(version=mgr.VERSION, components=["agents"], agents=list(agent_targets))
                 )
                 n = report.get("agents_configured", 0)
                 summary.append(
@@ -2675,12 +2675,12 @@ def _doctor(
     if scope == "graph":
         from opencontext_core.indexing.graph_health import compute_graph_health
 
-        report = compute_graph_health(".storage/opencontext/context_graph.db")
+        graph_report = compute_graph_health(".storage/opencontext/context_graph.db")
 
         if json_output:
-            json.dump(report.model_dump(), sys.stdout, indent=2)
+            json.dump(graph_report.model_dump(), sys.stdout, indent=2)
             sys.stdout.write("\n")
-            sys.exit(0 if report.ok() else 1)
+            sys.exit(0 if graph_report.ok() else 1)
 
         console.header("Graph Health")
         style = {
@@ -2688,23 +2688,23 @@ def _doctor(
             "degraded": "yellow",
             "empty": "yellow",
             "unavailable": "red",
-        }.get(report.status, "white")
-        console.print(f"Status: [{style}]{report.status}[/]")
+        }.get(graph_report.status, "white")
+        console.print(f"Status: [{style}]{graph_report.status}[/]")
         console.table(
             "Graph Metrics",
             ["Metric", "Value"],
             [
-                ["Nodes", str(report.nodes)],
-                ["Edges", str(report.edges)],
-                ["Files", str(report.files)],
-                ["Orphan symbols", str(report.orphan_symbols)],
-                ["Dangling edges", str(report.dangling_edges)],
-                ["Languages", ", ".join(f"{k}:{v}" for k, v in report.languages.items()) or "-"],
+                ["Nodes", str(graph_report.nodes)],
+                ["Edges", str(graph_report.edges)],
+                ["Files", str(graph_report.files)],
+                ["Orphan symbols", str(graph_report.orphan_symbols)],
+                ["Dangling edges", str(graph_report.dangling_edges)],
+                ["Languages", ", ".join(f"{k}:{v}" for k, v in graph_report.languages.items()) or "-"],
             ],
         )
-        for warning in report.warnings:
+        for warning in graph_report.warnings:
             console.warning(warning)
-        if strict and not report.ok():
+        if strict and not graph_report.ok():
             sys.exit(1)
         return
 
@@ -4159,7 +4159,8 @@ def _eval(
 def _agent_memory_store(args: argparse.Namespace) -> Any:
     """The canonical SQLite AgentMemoryStore (source of truth), or None."""
     try:
-        return _runtime(getattr(args, "config", None))._v2_memory_store
+        cfg: str = getattr(args, "config", None) or ""
+        return _runtime(cfg)._v2_memory_store
     except Exception:
         return None
 
@@ -4500,7 +4501,7 @@ def _render_data(data: Any, output_format: str = "json") -> str:
     return ContextSerializer().serialize(data, SerializationFormat(output_format))
 
 
-def _unreachable(value: str) -> NoReturn:
+def _unreachable(value: object) -> NoReturn:
     raise SystemExit(f"Unsupported command: {value}")
 
 

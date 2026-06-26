@@ -42,5 +42,8 @@ opencontext = "opencontext_cli.main:main"
 where = ["."]
 include = ["opencontext_cli*"]
 
+[project.optional-dependencies]
+dev = ["types-pyperclip"]
+
 [tool.setuptools.package-data]
 opencontext_cli = ["fixtures/memory/*.json"]
