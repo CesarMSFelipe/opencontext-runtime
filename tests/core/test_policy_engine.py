@@ -162,7 +162,9 @@ def test_command_classifier_categories(command: str, expected: CommandCategory) 
 
 
 def test_unknown_command_defers_to_balanced_ask() -> None:
-    decision = PolicyEngine(preset=PolicyPreset.BALANCED).evaluate(
+    # ci_mode=False pins the interactive posture; under CI the fail-closed
+    # finalizer (CONV.4) downgrades ask->deny, which test_ci_mode_downgrades_ask_to_deny covers.
+    decision = PolicyEngine(preset=PolicyPreset.BALANCED, ci_mode=False).evaluate(
         PolicyOperation(kind="command", command="frobnicate --xyz")
     )
     assert decision.decision == "ask"
