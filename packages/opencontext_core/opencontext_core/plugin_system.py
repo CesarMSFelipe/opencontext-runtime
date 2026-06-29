@@ -59,6 +59,10 @@ class PluginInfo:
     installed_at: str = ""
     updated_at: str = ""
 
+    # PR-015: compatibility verdict annotated by discover(). Empty = compatible;
+    # otherwise the reason the plugin is discovered-but-disabled (book §12).
+    incompatible: str = ""
+
 
 @dataclass
 class RegistryPlugin:
@@ -1061,12 +1065,34 @@ class PluginRegistry:
         """The validated PluginPermissions a loaded plugin declared, or None."""
         return self._permissions.get(name)
 
+    def register_declared_permissions(self, name: str, perms: Any) -> None:
+        """Register a plugin's validated permissions so ``is_allowed`` resolves.
+
+        The lifecycle's permission-check stage calls this so the capability broker
+        gates against the declared (deny-by-default) allowlist before activation,
+        without first executing the plugin via ``load()``.
+        """
+        self._permissions[name] = perms
+
+    def activate(self, name: str, **kwargs: Any) -> Any:
+        """Run a plugin through the full lifecycle (PR-015).
+
+        Delegates to ``plugins.lifecycle.activate_plugin``. A plugin with no typed
+        ``contributes`` block (or when ``contracts_enabled`` is off) falls back to
+        the legacy ``load()`` path. Returns a ``LifecycleResult``.
+        """
+        from opencontext_core.plugins.lifecycle import activate_plugin
+
+        return activate_plugin(self, name, **kwargs)
+
     def is_allowed(self, name: str, capability: str, value: str) -> bool:
         """Deny-by-default check against a plugin's declared allowlist.
 
-        capability: one of "read"/"write"/"network"/"mcp". Returns False when the
-        plugin is unknown/unmanaged or the value is not in its declared allowlist —
-        callers that broker a capability to a plugin gate on this.
+        capability: one of "read"/"write"/"network"/"mcp"/"command"/"provider"/
+        "kg_write"/"memory_write" (book §12 Security — the full restricted set).
+        Returns False when the plugin is unknown/unmanaged, the capability is
+        unknown, or the value is not in its declared allowlist — callers that
+        broker a capability to a plugin gate on this.
         """
         perms = self._permissions.get(name)
         if perms is None:
@@ -1076,8 +1102,16 @@ class PluginRegistry:
             "write": perms.write_paths,
             "network": perms.network_hosts,
             "mcp": perms.mcp_servers,
-        }.get(capability, [])
-        return value in allow
+            "command": getattr(perms, "command", []),
+            "provider": getattr(perms, "provider", []),
+            "kg_write": getattr(perms, "kg_write", []),
+            "memory_write": getattr(perms, "memory_write", []),
+        }.get(capability)
+        if allow is None:
+            return False
+        # A literal "*" grants the capability broadly; an empty list stays
+        # deny-by-default (no "*", value not listed -> False).
+        return "*" in allow or value in allow
 
     def enable(self, name: str) -> bool:
         """Enable a plugin."""
@@ -1197,12 +1231,40 @@ class PluginRegistry:
                 source_url=info.get("source_url", ""),
                 installed_at=info.get("installed_at", ""),
                 updated_at=info.get("updated_at", ""),
+                incompatible=_compat_reason(info),
             )
         except (json.JSONDecodeError, KeyError, OSError):
             return None
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
+
+
+def _compat_reason(info: dict[str, Any]) -> str:
+    """Compatibility verdict for a discovered plugin (PR-015, book §12).
+
+    Reads ``requires.runtime`` (book manifest) and the legacy ``min_core_version``
+    from the on-disk manifest and compares against the running runtime. Returns an
+    empty string when compatible, otherwise the reason the plugin is discovered-
+    but-disabled. Best-effort: any parse failure is treated as compatible so a
+    malformed compat hint never silently hides a plugin.
+    """
+    try:
+        from opencontext_core.plugins.compatibility import (
+            check_compatibility,
+            runtime_version,
+        )
+        from opencontext_core.plugins.manifest import PluginManifest
+
+        manifest = PluginManifest.from_plugin_json(info)
+        result = check_compatibility(
+            manifest,
+            runtime_version(),
+            min_core_version=info.get("min_core_version"),
+        )
+        return "" if result.ok else result.reason
+    except Exception:
+        return ""
 
 
 def _get_top_level_dir(members: list[str]) -> str | None:
