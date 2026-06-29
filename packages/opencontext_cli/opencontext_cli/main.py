@@ -45,7 +45,6 @@ from opencontext_cli.commands.metaharness_cmd import (
 )
 from opencontext_cli.commands.migration_cmd import (
     add_migrate_subparser,
-    handle_memory_audit,
     handle_migrate,
     handle_version,
 )
@@ -1683,7 +1682,13 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command == "learn":
         handle_learn(args)
         return
-    runtime = _runtime(args.config)
+    # `index` persists the graph/manifest under the *root* argument, so it needs a
+    # runtime whose storage is anchored there rather than to cwd (BUG: graph wrote
+    # to cwd/.storage when index ran from outside the project).
+    if command == "index":
+        runtime = _runtime_for_root(args.config, args.root)
+    else:
+        runtime = _runtime(args.config)
     if command == "index":
         _index(runtime, args.root, args.incremental, json_output=getattr(args, "json", False))
     elif command == "watch":
@@ -1867,6 +1872,25 @@ def _runtime(config_path: str) -> OpenContextRuntime:
     return OpenContextRuntime(
         config_path=str(resolved) if resolved.exists() else None,
         technology_profiles=first_party_profiles(),
+    )
+
+
+def _runtime_for_root(config_path: str, root: str | Path) -> OpenContextRuntime:
+    """Build a runtime whose storage resolves under the indexed *root*, not cwd.
+
+    ``index <root>`` must persist the knowledge graph + manifest under
+    ``<root>/.storage/opencontext``. The default runtime storage path is relative
+    (``.storage/opencontext``), so when ``index`` runs from a different cwd the
+    graph lands under that cwd instead of the project, and a later
+    ``knowledge-graph status`` run from the project finds nothing. Anchoring the
+    storage path to the resolved root fixes that; ``index .`` is unchanged because
+    cwd == root there.
+    """
+    resolved = Path(config_path)
+    return OpenContextRuntime(
+        config_path=str(resolved) if resolved.exists() else None,
+        technology_profiles=first_party_profiles(),
+        storage_path=Path(root).resolve() / ".storage" / "opencontext",
     )
 
 
@@ -2457,9 +2481,10 @@ def _watch(
     # Use a mutable container so the closure can update it
     runtime_holder: list[OpenContextRuntime | None] = [None]
 
-    # Index once at startup
+    # Index once at startup. Anchor storage to the watched root (same root-relative
+    # fix as `index`) so the graph is persisted under the project, not under cwd.
     try:
-        runtime_holder[0] = _runtime(config_path)
+        runtime_holder[0] = _runtime_for_root(config_path, project_root)
         rt = runtime_holder[0]
         assert rt is not None, "runtime failed to initialize"
         manifest = rt.index_project(project_root)
@@ -2472,7 +2497,7 @@ def _watch(
         rt = runtime_holder[0]
         if rt is None:
             try:
-                rt = _runtime(config_path)
+                rt = _runtime_for_root(config_path, project_root)
                 runtime_holder[0] = rt
             except Exception as exc:
                 print(f"  Re-index failed (runtime init error): {exc}", file=sys.stderr)
@@ -4493,7 +4518,7 @@ def _memory(args: argparse.Namespace) -> None:
     if command == "migrate":
         raise SystemExit(handle_migrate("memory", args))
     if command == "audit":
-        raise SystemExit(handle_memory_audit(args))
+        raise SystemExit(_memory_audit(args))
     repo = ContextRepository(Path("."))
     if command == "init":
         created = repo.init_layout()
@@ -4827,6 +4852,35 @@ def _memory_doctor() -> None:
         print("\nmemory doctor: all checks passed.")
     else:
         print("\nmemory doctor: some checks failed. Review above.")
+
+
+def _memory_audit(args: argparse.Namespace) -> int:
+    """Audit the LIVE memory store (counts, stale, duplicates, conflicts, quality).
+
+    Reads the same canonical AgentMemoryStore that ``memory list``/``memory doctor``
+    use, plus the markdown context repository. With no store yet it reports a clean
+    empty state and exits 0 — it never assumes a legacy ``memory.json`` migration.
+    """
+    from opencontext_core.memory.stale_audit import audit_live_memory
+
+    store = _agent_memory_store(args)
+    report = audit_live_memory(store)
+
+    repo = ContextRepository(Path("."))
+    try:
+        markdown_items = len(repo.list_items(include_archive=True))
+    except Exception:
+        markdown_items = 0
+    report["markdown_items"] = markdown_items
+
+    if report["total"] == 0 and markdown_items == 0:
+        print(
+            "No memory store yet. Run 'opencontext memory harvest' or an agentic "
+            "loop to populate it, then audit."
+        )
+        return 0
+    print(json.dumps(report, indent=2))
+    return 0
 
 
 def _render_data(data: Any, output_format: str = "json") -> str:
