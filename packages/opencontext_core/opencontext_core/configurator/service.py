@@ -25,6 +25,7 @@ from opencontext_core.configurator.filemerge import (
     write_text_atomic,
 )
 from opencontext_core.configurator.mcp_strategy import (
+    McpShape,
     plan_mcp_servers,
     remove_mcp_server,
 )
@@ -224,16 +225,20 @@ class Configurator:
                     else:
                         instructions_path.unlink()  # file held only our block
                     changed.append(str(instructions_path))
-            # 2. Remove our MCP server entry in the agent's native shape.
+            # 2. Remove our MCP server entry in the agent's native shape. If the
+            #    file is now empty (it only ever held our entry), unlink it so
+            #    install leaves no `{}` orphan — mirrors the instructions unlink.
             if remove_mcp_server(
                 adapter.mcp_config_path, constants.MCP_LABEL, shape=adapter.mcp_shape
             ):
                 changed.append(str(adapter.mcp_config_path))
+                _unlink_if_empty_mcp(adapter.mcp_config_path, adapter.mcp_shape)
             # 2b. Remove the project-scoped MCP entry (e.g. repo-root .mcp.json).
             if project_mcp_path is not None and remove_mcp_server(
                 project_mcp_path, constants.MCP_LABEL, shape=adapter.mcp_shape
             ):
                 changed.append(str(project_mcp_path))
+                _unlink_if_empty_mcp(project_mcp_path, adapter.mcp_shape)
             # 3. Reverse agent-specific extras.
             changed.extend(self._remove_extras(adapter))
         except Exception:
@@ -266,7 +271,16 @@ class Configurator:
                             data["permissions"]["allow"] = kept
                         else:
                             data["permissions"].pop("allow", None)
-                        write_text_atomic(path, json.dumps(data, indent=2) + "\n")
+                        # Drop an emptied permissions block, then unlink a
+                        # settings.json that now holds nothing — install created it
+                        # for our allow-list, so a leftover {"permissions": {}} is
+                        # an orphan. User keys (theme, other perms) keep the file.
+                        if isinstance(data.get("permissions"), dict) and not data["permissions"]:
+                            data.pop("permissions", None)
+                        if not data:
+                            path.unlink()
+                        else:
+                            write_text_atomic(path, json.dumps(data, indent=2) + "\n")
                         changed.append(str(path))
         if adapter.agent_id == "opencode":
             path = adapter.config_dir / "agents" / "sdd-orchestrator.json"
@@ -277,11 +291,19 @@ class Configurator:
         if subdir:
             from opencontext_core.personas import public_personas
 
+            agents_dir = adapter.config_dir / subdir
             for persona in public_personas():
-                path = adapter.config_dir / subdir / f"{persona.id}.md"
+                path = agents_dir / f"{persona.id}.md"
                 if path.exists():
                     path.unlink()
                     changed.append(str(path))
+            # Remove the global agents dir if our personas were its only contents —
+            # install created it, so an empty leftover is an orphan. rmdir only
+            # succeeds when empty, so any user-authored file always keeps it.
+            try:
+                agents_dir.rmdir()
+            except OSError:
+                pass
         ignore_name = constants.ignore_filename(adapter.agent_id)
         if ignore_name:
             path = self.project_root / ignore_name
@@ -507,6 +529,51 @@ class Configurator:
         path = adapter.config_dir / "agents" / "sdd-orchestrator.json"
         content = json.dumps(profile, indent=2) + "\n"
         return path, _content_if_changed(path, content)
+
+
+def _mcp_config_is_empty(path: Path, shape: McpShape) -> bool:
+    """True when an MCP config holds no remaining configuration of its declared shape.
+
+    Only consulted right after our own server entry was removed, so an empty result
+    means OpenContext created the file (or it has nothing left worth keeping) and it
+    is safe to unlink — the same "file held only our block" rule used for CLAUDE.md.
+    A file with any other server or top-level key is reported non-empty and kept.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    if not text.strip():
+        return True
+    if shape in (McpShape.JSON_MCP_SERVERS, McpShape.JSON_SERVERS):
+        try:
+            return json.loads(text) == {}
+        except json.JSONDecodeError:
+            return False
+    if shape is McpShape.YAML_MCP_SERVERS:
+        import yaml
+
+        try:
+            return yaml.safe_load(text) in (None, {})
+        except yaml.YAMLError:
+            return False
+    if shape is McpShape.TOML_MCP_SERVERS:
+        import tomllib
+
+        try:
+            return tomllib.loads(text) == {}
+        except tomllib.TOMLDecodeError:
+            return False
+    return False
+
+
+def _unlink_if_empty_mcp(path: Path, shape: McpShape) -> None:
+    """Unlink an MCP config file that holds nothing after our server was removed."""
+    if path.exists() and _mcp_config_is_empty(path, shape):
+        try:
+            path.unlink()
+        except OSError:
+            pass
 
 
 def _content_if_changed(path: Path, content: str) -> str | None:
