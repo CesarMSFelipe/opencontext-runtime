@@ -81,7 +81,7 @@ def _direct_provider_sites() -> dict[str, list[int]]:
     for py in ROOT.rglob("*.py"):
         if "__pycache__" in py.parts:
             continue
-        rel = str(py.relative_to(ROOT))
+        rel = py.relative_to(ROOT).as_posix()  # posix keys match GATEWAY_DIRS + ratchet on Windows
         if rel.startswith(GATEWAY_DIRS):
             continue
         try:

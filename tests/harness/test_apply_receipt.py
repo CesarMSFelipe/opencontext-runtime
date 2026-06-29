@@ -38,7 +38,9 @@ def test_modified_file_records_distinct_before_after(tmp_path: Path) -> None:
 
 def test_noop_write_records_unchanged(tmp_path: Path) -> None:
     target = tmp_path / "f.py"
-    target.write_text("SAME\n", encoding="utf-8")
+    # newline="" writes LF byte-exact (no CRLF translation on Windows) so the
+    # pre-existing file matches ApplyPhase's byte-exact write and the no-op is detected.
+    target.write_text("SAME\n", encoding="utf-8", newline="")
 
     run_dir = _run_apply(tmp_path, [{"path": str(target), "content": "SAME\n"}])
     receipts = ReceiptStore(run_dir).list_apply_receipts()
