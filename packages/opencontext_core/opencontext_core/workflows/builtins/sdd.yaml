@@ -1,0 +1,133 @@
+# Built-in SDD workflow — declarative mirror of WORKFLOW_TRACKS["full"].
+#
+# Source of truth parity: node ids == agents.sdd_orchestrator.PHASE_ORDER, edges ==
+# forward form of PHASE_DEPENDENCIES, node roles == personas.PHASE_PERSONAS, and
+# required_outputs == oc_new.flow.OC_NEW_FLOW expected_artifacts. A parity test
+# asserts this template never drifts from the live scheduler graph (spec SDD1).
+schema_version: opencontext.workflow.v1
+id: sdd
+version: "1"
+label: Spec-Driven Development
+kind: sdd
+
+start_node: explore
+terminal_nodes:
+  - archive
+
+strategy: careful
+expected_cost: medium
+risk_level: medium
+default_profile: full
+compatible_profiles:
+  - full
+  - standard
+  - quick
+required_capabilities: []
+
+metadata:
+  runner: HarnessRunner
+  event_store: events.json
+  receipt_store: workflow-selection.json
+
+nodes:
+  - id: explore
+    label: Explore
+    role: oc-explorer
+    action: run_phase
+    required_outputs:
+      - explore.artifact.json
+      - context-pack.json
+  - id: propose
+    label: Propose
+    role: oc-orchestrator
+    action: run_phase
+    required_outputs:
+      - proposal.md
+      - proposal.json
+  - id: spec
+    label: Specify
+    role: oc-requirements
+    action: run_phase
+    required_outputs:
+      - spec.md
+      - spec.json
+  - id: design
+    label: Design
+    role: oc-architect
+    action: run_phase
+    required_outputs:
+      - design.md
+      - design.json
+  - id: tasks
+    label: Tasks
+    role: oc-planner
+    action: run_phase
+    required_outputs:
+      - tasks.md
+      - tasks.json
+  - id: apply
+    label: Apply
+    role: oc-builder
+    action: run_phase
+    required_harnesses:
+      - mutation
+    required_outputs:
+      - apply-manifest.json
+  - id: verify
+    label: Verify
+    role: oc-harness-verifier
+    action: run_phase
+    required_harnesses:
+      - quality_gate
+      - security_scan
+    required_outputs:
+      - verify-report.json
+      - compliance-matrix.json
+      - harness-report.json
+  - id: review
+    label: Review
+    role: oc-reviewer
+    action: run_phase
+    required_outputs:
+      - review-report.json
+  - id: archive
+    label: Archive
+    role: oc-archivist
+    action: run_phase
+    required_outputs:
+      - archive-report.json
+      - receipt.json
+
+edges:
+  - {from_node: explore, to_node: propose}
+  - {from_node: propose, to_node: spec}
+  - {from_node: propose, to_node: design}
+  - {from_node: spec, to_node: tasks}
+  - {from_node: design, to_node: tasks}
+  - {from_node: tasks, to_node: apply}
+  - {from_node: apply, to_node: verify}
+  - {from_node: verify, to_node: review}
+  - {from_node: review, to_node: archive}
+
+profiles:
+  full:
+    - explore
+    - propose
+    - spec
+    - design
+    - tasks
+    - apply
+    - verify
+    - review
+    - archive
+  standard:
+    - explore
+    - propose
+    - spec
+    - design
+    - apply
+    - verify
+  quick:
+    - explore
+    - apply
+    - verify
