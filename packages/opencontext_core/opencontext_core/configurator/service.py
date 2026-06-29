@@ -547,7 +547,7 @@ def _mcp_config_is_empty(path: Path, shape: McpShape) -> bool:
         return True
     if shape in (McpShape.JSON_MCP_SERVERS, McpShape.JSON_SERVERS):
         try:
-            return json.loads(text) == {}
+            return bool(json.loads(text) == {})
         except json.JSONDecodeError:
             return False
     if shape is McpShape.YAML_MCP_SERVERS:

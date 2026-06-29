@@ -112,11 +112,11 @@ def handle_decisions(args: Any) -> None:
         return
 
     if action == "show":
-        run_dir = next((d for d in _run_dirs(store) if d.name == args.run_id), None)
-        if run_dir is None:
+        show_dir = next((d for d in _run_dirs(store) if d.name == args.run_id), None)
+        if show_dir is None:
             eprint(f"Run not found: {args.run_id}")
             sys.exit(1)
-        decision_rows = _decisions_for(run_dir) or []
+        decision_rows = _decisions_for(show_dir) or []
         if getattr(args, "json", False):
             print(json.dumps(decision_rows, indent=2))
         else:
