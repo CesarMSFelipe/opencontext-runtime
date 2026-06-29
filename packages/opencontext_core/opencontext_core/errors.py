@@ -27,3 +27,7 @@ class LLMGatewayError(OpenContextError):
 
 class ProviderError(LLMGatewayError):
     """Raised when a provider adapter fails."""
+
+
+class StructuredOutputError(LLMGatewayError):
+    """Raised when a provider response violates the requested output schema."""
