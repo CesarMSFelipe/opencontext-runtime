@@ -88,27 +88,95 @@ def test_flag_off_uses_legacy_path(tmp_path: Path) -> None:
     ).exists()
 
 
+# Every legacy workflow name the legacy HarnessRunner scheduled
+# (WORKFLOW_TRACKS + the explore-only/apply-only custom subsets). With
+# registry_enabled on, each MUST resolve to the same phase order as the legacy
+# scheduler and MUST NOT emit a workflow.validation.failed event (spec VDM-004).
+_LEGACY_TRACKS = (
+    "full",
+    "standard",
+    "quick",
+    "sdd",
+    "explore-only",
+    "apply-only",
+    "full+judgment",
+    "full+gga",
+    "full+quality",
+)
+
+
 def test_flag_on_off_produce_identical_phase_order(tmp_path: Path) -> None:
     """FLAG1/BAK1: flag-on resolved order equals the flag-off legacy order."""
     (tmp_path / "on").mkdir(exist_ok=True)
     (tmp_path / "off").mkdir(exist_ok=True)
     on = _runner(tmp_path / "on", registry_enabled=True)
     off = _runner(tmp_path / "off", registry_enabled=False)
-    for name in ("full", "standard", "quick"):
+    for name in _LEGACY_TRACKS:
         on_order, _ = on._resolve_workflow(name, on.create_run(name, "t"))
         off_order, _ = off._resolve_workflow(name, off.create_run(name, "t"))
-        assert on_order == off_order
+        assert on_order == off_order, name
 
 
-def test_unknown_workflow_falls_back_to_legacy(tmp_path: Path) -> None:
-    """task 3.2: a name the registry cannot resolve falls back to the legacy path."""
+def test_known_legacy_tracks_emit_no_validation_failed(tmp_path: Path) -> None:
+    """VDM-004: every known legacy track resolves cleanly under registry-on.
+
+    The spurious ``workflow.validation.failed`` event (which auto-reverted the
+    registry flip) is gone for known legacy tracks; the executed-phase ledger is
+    unchanged from the legacy path.
+    """
     runner = _runner(tmp_path, registry_enabled=True)
-    # 'full+judgment' is a legacy track with no registry alias -> graceful fallback.
+    for name in _LEGACY_TRACKS:
+        phase_ids, events = runner._resolve_workflow(name, runner.create_run(name, "t"))
+        actions = [e.action for e in events]
+        assert "workflow.validation.failed" not in actions, name
+        # Phase order is byte-identical to the legacy scheduler (parity).
+        assert phase_ids == runner.schedule_phases(name), name
+
+
+def test_unknown_workflow_still_emits_validation_failed(tmp_path: Path) -> None:
+    """task 3.2 / VDM-004: validation.failed is reserved for genuinely unknown names.
+
+    A name that is neither a registry alias nor a registered definition falls back
+    to the legacy path WITH a ``workflow.validation.failed`` event — the event keeps
+    its meaning (a real, unexpected resolution miss) now that every known legacy
+    track resolves cleanly.
+    """
+    runner = _runner(tmp_path, registry_enabled=True)
     phase_ids, events = runner._resolve_workflow(
-        "full+judgment", runner.create_run("full+judgment", "t")
+        "totally-bogus-workflow", runner.create_run("totally-bogus-workflow", "t")
     )
-    assert phase_ids == runner.schedule_phases("full+judgment")
+    assert phase_ids == runner.schedule_phases("totally-bogus-workflow")
     assert [e.action for e in events] == ["workflow.validation.failed"]
+
+
+def _phase_ledger(actions: list[str]) -> list[str]:
+    """The executed-phase actions only (drop the registry's workflow.* audit events)."""
+    return [a for a in actions if not a.startswith("workflow.")]
+
+
+def test_event_ledger_phase_parity_under_registry_on(tmp_path: Path) -> None:
+    """VDM-004: registry-on legacy runs keep the SAME executed-phase ledger as legacy.
+
+    Mirrors ``tests/harness/test_event_ledger.py`` scenarios with
+    ``registry_enabled`` forced True. The spurious ``workflow.validation.failed``
+    event is gone; the executed-phase ledger (the ``run_phase``/phase events) is
+    byte-identical to the legacy flag-off run. The registry additionally records its
+    auditable resolution events (alias_resolved/validation.passed/resolved) by
+    design (spec EVT1) — those are not failures and not part of the phase ledger.
+    """
+    for name in ("explore-only", "apply-only", "sdd"):
+        (tmp_path / f"on-{name}").mkdir(exist_ok=True)
+        (tmp_path / f"off-{name}").mkdir(exist_ok=True)
+        on = _runner(tmp_path / f"on-{name}", registry_enabled=True)
+        off = _runner(tmp_path / f"off-{name}", registry_enabled=False)
+
+        on_actions = _ledger_actions(tmp_path / f"on-{name}", on.run(name, "t").run_id)
+        off_actions = _ledger_actions(tmp_path / f"off-{name}", off.run(name, "t").run_id)
+
+        # No spurious validation failure under registry-on.
+        assert "workflow.validation.failed" not in on_actions, name
+        # Executed-phase ledger is identical to the legacy run (parity).
+        assert _phase_ledger(on_actions) == _phase_ledger(off_actions) == off_actions, name
 
 
 def test_no_generic_workflow_runner_introduced(tmp_path: Path) -> None:

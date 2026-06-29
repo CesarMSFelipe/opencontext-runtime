@@ -79,3 +79,47 @@ def test_full_resolves_to_nine_phase_order(tmp_path: Path) -> None:
 def test_quick_resolves_to_reduced_track() -> None:
     """BAK1: quick resolves to the reduced explore/apply/verify track."""
     assert _resolver().resolve("quick").phase_order == ["explore", "apply", "verify"]
+
+
+def test_resolve_alias_legacy_subset_and_quality_tracks() -> None:
+    """WR2/VDM-004: the explore-only/apply-only subsets and the quality tracks alias."""
+    assert resolve_alias("explore-only") == ("sdd", "explore-only")
+    assert resolve_alias("apply-only") == ("sdd", "apply-only")
+    assert resolve_alias("full+judgment") == ("sdd-quality", "full+judgment")
+    assert resolve_alias("full+gga") == ("sdd-quality", "full+gga")
+    assert resolve_alias("full+quality") == ("sdd-quality", "full+quality")
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("explore-only", ["explore"]),
+        ("apply-only", ["apply", "verify", "archive"]),
+        (
+            "full+judgment",
+            ["explore", "propose", "spec", "design", "tasks", "apply", "verify",
+             "review", "archive", "judgment"],
+        ),
+        (
+            "full+gga",
+            ["explore", "propose", "spec", "design", "tasks", "apply", "verify",
+             "review", "archive", "gga"],
+        ),
+        (
+            "full+quality",
+            ["explore", "propose", "spec", "design", "tasks", "apply", "verify",
+             "review", "archive", "gga", "judgment"],
+        ),
+    ],
+)
+def test_legacy_tracks_resolve_to_expected_phase_order(name: str, expected: list[str]) -> None:
+    """BAK1/VDM-004: every known legacy track resolves to its legacy phase order."""
+    resolved = _resolver().resolve(name)
+    assert resolved.phase_order == expected
+    assert resolved.alias_used == name
+
+
+def test_quality_tracks_back_onto_sdd_quality_definition() -> None:
+    """VDM-004: the +judgment/+gga/+quality tracks resolve onto sdd-quality."""
+    for name in ("full+judgment", "full+gga", "full+quality"):
+        assert _resolver().resolve(name).definition.id == "sdd-quality"

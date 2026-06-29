@@ -52,17 +52,29 @@ class MemoryProvider(Protocol):
 class MemoryStoreProvider:
     """Concrete :class:`MemoryProvider` over a local store + Memory Harness.
 
-    Durable promotion of candidates AND record-level ``write`` both route through
-    the harness (the sole writer): ``promote`` runs the full 8-step lifecycle and
-    ``write`` runs the durable tail (conflict-check → store.write → KG-link →
-    receipt). Only ``supersede`` still composes the store's deterministic
-    supersession path directly (ratcheted for a follow-up; AVH-002).
+    Durable record-level ``write`` is routed on ``memory_v2_enabled`` (VDM-004):
+    when the flag is on, ``write`` runs the harness durable tail (the sole writer —
+    conflict-check → store.write → KG-link → receipt) so AVH-002 holds; when off
+    (the legacy default), it writes the record directly to the store verbatim.
+    Candidate ``promote`` always runs the full 8-step harness lifecycle. Only
+    ``supersede`` still composes the store's deterministic supersession path
+    directly (ratcheted for a follow-up; AVH-002).
+
+    ``memory_v2_enabled`` mirrors ``config.runtime.memory_v2_enabled``; the
+    composition point that builds the provider is expected to pass the live flag.
     """
 
-    def __init__(self, store: Any, *, harness: MemoryHarness | None = None) -> None:
+    def __init__(
+        self,
+        store: Any,
+        *,
+        harness: MemoryHarness | None = None,
+        memory_v2_enabled: bool = False,
+    ) -> None:
         self._store = store
         self._harness = harness or MemoryHarness(store)
         self._detector = ContradictionDetector()
+        self._memory_v2_enabled = memory_v2_enabled
 
     # -- book surface -------------------------------------------------------
 
@@ -77,10 +89,27 @@ class MemoryStoreProvider:
         return getter(memory_id) if callable(getter) else None
 
     def write(self, record: MemoryRecord) -> MemoryReceipt:
-        # AVH-002: route durable writes through the MemoryHarness (the sole writer);
-        # the harness runs conflict-check → the one sanctioned store.write → KG-link
-        # → receipt. Never call ``self._store.write`` here (no-direct-memory-writes guard).
+        # VDM-004: route on memory_v2_enabled.
+        if not self._memory_v2_enabled:
+            # Legacy direct-store path (default-off): the record is written to the
+            # store verbatim, bypassing the harness lifecycle. Kept until the
+            # memory_v2_enabled flip; ratcheted in tests/architecture/
+            # test_no_direct_memory_writes.py (provider.py:write).
+            return self._legacy_write(record)
+        # AVH-002 (flag on): route durable writes through the MemoryHarness (the
+        # sole writer); the harness runs conflict-check → the one sanctioned
+        # store.write → KG-link → receipt.
         return self._harness.write(record)
+
+    def _legacy_write(self, record: MemoryRecord) -> MemoryReceipt:
+        """Pre-harness direct store write (memory_v2_enabled off). Legacy verbatim."""
+        memory_id = self._store.write(record)
+        return MemoryReceipt(
+            memory_id=memory_id,
+            action="create",
+            reason="write",
+            evidence_refs=list(record.source_refs),
+        )
 
     def supersede(self, old_id: str, new: MemoryRecord) -> MemoryReceipt:
         memory_id = self._store.supersede(old_id, new)

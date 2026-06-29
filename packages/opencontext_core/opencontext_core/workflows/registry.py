@@ -140,7 +140,19 @@ class WorkflowRegistry:
         return validate_coexistence(self.list())
 
     def _load_builtins(self) -> None:
-        """Load and register every built-in YAML workflow under ``builtins/``."""
+        """Load and register every built-in workflow under ``builtins/``.
+
+        Registers the declarative SDD definition (``sdd.yaml``) and the derived
+        ``sdd-quality`` definition that backs the legacy ``full+judgment`` /
+        ``full+gga`` / ``full+quality`` tracks (built from the SDD graph so it never
+        drifts). The alias table maps every legacy track name onto one of these, so
+        registry resolution succeeds for all known legacy tracks and
+        ``workflow.validation.failed`` is reserved for genuinely unknown workflows.
+        """
+        from opencontext_core.workflows.builtins.legacy import build_sdd_quality
+
         sdd_path = builtins_dir() / "sdd.yaml"
         if sdd_path.exists():
-            self.register(load_definition_from_yaml(sdd_path))
+            sdd = load_definition_from_yaml(sdd_path)
+            self.register(sdd)
+            self.register(build_sdd_quality(sdd))

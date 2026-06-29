@@ -126,6 +126,7 @@ from opencontext_core.runtime.run import (
 )
 from opencontext_core.runtime.scheduler import (
     HarnessScheduler,
+    PlanCostEstimator,
     RuntimeScheduler,
     Scheduler,
 )
@@ -382,6 +383,25 @@ class OpenContextRuntime:
                 budget_manager=self.budget_manager,
                 quality_gate=self.quality_gate,
             )
+
+        # PR-011: Runtime Intelligence advisory seam. The live RuntimeScheduler
+        # CONSULTS the RI cost model (SchedulerPlanEstimator) inside simulate()
+        # when runtime_intelligence_enabled (Scheduler -> Runtime Intelligence ->
+        # workflow forecast); off, simulate() returns the typed stub forecast and
+        # the path is byte-for-byte unchanged. RI is advisory only — the
+        # StateMachine inside the scheduler still governs every transition
+        # (RB-007/§23.1: it recommends, never overrides).
+        # NOTE: no production RuntimeScheduler execution root drives decide_next
+        # yet — simulate() is the sole live consumer of the estimator; the typed
+        # PlanCostEstimator seam stays stable either way.
+        estimator: PlanCostEstimator | None = None
+        if self.config.runtime_intelligence_enabled:
+            from opencontext_core.runtime_intelligence.simulator import (
+                SchedulerPlanEstimator,
+            )
+
+            estimator = SchedulerPlanEstimator()
+        self.runtime_scheduler = RuntimeScheduler(RuntimeBrain(), estimator=estimator)
 
         self._validate_security_mode_guards()
 
