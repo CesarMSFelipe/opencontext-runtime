@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from opencontext_core.errors import ProviderError
+from opencontext_core.providers.capabilities import ProviderCapability, capabilities_for
 
 
 @dataclass
@@ -65,6 +66,32 @@ class ProviderAdapter(ABC):
     def list_models(self) -> list[str]:
         """List available models."""
         pass
+
+    def capabilities(self) -> frozenset[ProviderCapability]:
+        """Return the capability set this provider advertises (book §25)."""
+
+        return capabilities_for(self.config.name)
+
+    def chat_with_retries(
+        self, messages: list[dict[str, str]], **kwargs: Any
+    ) -> ModelResponse:
+        """Call :meth:`chat`, retrying a transient ``ProviderError`` up to ``max_retries``.
+
+        Honors ``ProviderConfig.max_retries`` (previously unused) so a flaky
+        provider is retried a bounded number of times before the gateway falls
+        back to another provider. ``max_retries`` is the number of *retries* after
+        the first attempt; ``0`` means a single attempt.
+        """
+
+        attempts = max(0, self.config.max_retries) + 1
+        last: ProviderError | None = None
+        for _ in range(attempts):
+            try:
+                return self.chat(messages, **kwargs)
+            except ProviderError as exc:
+                last = exc
+        assert last is not None  # the loop runs at least once
+        raise last
 
 
 class MockAdapter(ProviderAdapter):
