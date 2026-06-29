@@ -43,6 +43,9 @@ class ApplyEdit(BaseModel):
     reason: str = ""
     requirement_refs: list[str] = Field(default_factory=list)
     task_refs: list[str] = Field(default_factory=list)
+    # Additive risk marker for the OC Flow productive executor (AVH-015). Default
+    # "low" keeps every existing call-site valid; the field is purely descriptive.
+    risk: str = "low"
 
 
 class AppliedEditReceipt(BaseModel):

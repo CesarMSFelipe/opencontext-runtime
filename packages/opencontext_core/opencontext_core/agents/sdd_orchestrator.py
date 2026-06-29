@@ -103,6 +103,51 @@ WORKFLOW_TRACKS: dict[str, dict[str, object]] = {
 }
 
 
+def phase_required_harnesses(phase: str) -> list[str]:
+    """Return the first-class ``required_harnesses`` declared for ``phase``.
+
+    Sourced from the declarative ``OC_NEW_FLOW`` (spec PR-004 REQ-05). Imported
+    lazily so this module's import graph is unchanged. Unknown phases yield ``[]``.
+    """
+    from opencontext_core.oc_new.flow import OC_NEW_FLOW
+
+    for phase_def in OC_NEW_FLOW:
+        if phase_def.name == phase:
+            return list(phase_def.required_harnesses)
+    return []
+
+
+def resolve_phase_harness_modes(
+    phase: str, profile: str | None = None
+) -> dict[str, str]:
+    """Resolve each of ``phase``'s required harnesses to its effective mode.
+
+    Consumes the PR-006 SDD harness matrix (``harness/matrix.py``) **read-only**
+    via :func:`resolve_harness_mode` — strictness is profile-driven, not
+    hardcoded here (REG-CONV). Returns a ``{harness_id: mode}`` digest a phase
+    can attach to its receipt or use to decide blocking. Best-effort: an unknown
+    harness resolves to the matrix's ``"warn"`` fallback. This module never edits
+    the matrix; it only reads it.
+    """
+    from opencontext_core.harness.matrix import resolve_harness_mode
+
+    return {h: resolve_harness_mode(h, profile) for h in phase_required_harnesses(phase)}
+
+
+def sdd_definition_source() -> tuple[list[str], dict[str, list[str]], dict[str, str]]:
+    """Return the SDD graph's source-of-truth data for the built-in definition.
+
+    Exposes ``(PHASE_ORDER, PHASE_DEPENDENCIES, PHASE_PERSONAS)`` so the PR-003
+    workflow registry's parity check can assert that ``builtins/sdd.yaml`` never
+    drifts from the live scheduler graph (spec SDD1). No behavior change — this is a
+    read-only accessor over existing module data. ``PHASE_PERSONAS`` is imported
+    lazily to keep this module's import graph unchanged.
+    """
+    from opencontext_core.personas import PHASE_PERSONAS
+
+    return list(PHASE_ORDER), dict(PHASE_DEPENDENCIES), dict(PHASE_PERSONAS)
+
+
 class SDDOrchestrator:
     """Orchestrates the full SDD lifecycle."""
 
