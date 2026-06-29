@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from opencontext_core.graph.edges import EdgeKind
 from opencontext_core.graph.nodes import NodeKind
-from opencontext_core.memory.agent import AgentMemoryStore
 from opencontext_core.models.agent_memory import MemoryRecord
+
+if TYPE_CHECKING:
+    # doc-58: KG (L4) and Memory (L4) are siblings that meet in L5, never import
+    # each other at runtime. AgentMemoryStore is used only as a type annotation
+    # here (the store is duck-typed via ``self._memory.search``), so the import is
+    # TYPE_CHECKING-only — no runtime sibling cycle.
+    from opencontext_core.memory.agent import AgentMemoryStore
 
 
 def stable_symbol_id(symbol: str) -> str:

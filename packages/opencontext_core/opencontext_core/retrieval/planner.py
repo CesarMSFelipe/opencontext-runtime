@@ -378,6 +378,19 @@ class RetrievalPlanner:
         self._weights = weights
         self.omissions: list[str] = []
 
+    def retrieve_memory(self, query: Any, *, emitter: Any | None = None) -> list[Any]:
+        """Budgeted, ordered memory retrieval keyed by a ``MemoryQuery`` (PR-009).
+
+        Delegates to ``memory.retrieval`` (which owns the per-node budget table and
+        the book retrieval order) over this planner's memory store. Returns [] when
+        no memory store is wired so the default retrieval path is unaffected.
+        """
+        if self._memory_store is None:
+            return []
+        from opencontext_core.memory.retrieval import retrieve_memory as _retrieve
+
+        return _retrieve(self._memory_store, query, emitter=emitter)
+
     @classmethod
     def from_config(
         cls,
@@ -709,6 +722,33 @@ class RetrievalPlanner:
 def _looks_like_test(source: str) -> bool:
     base = source.rsplit("/", 1)[-1].lower()
     return base.startswith("test_") or base.endswith("_test.py") or "/tests/" in source.lower()
+
+
+def full_file_reason_required(item: ContextItem) -> bool:
+    """Whether ``item`` is a whole-file load that must carry a reason (book §8).
+
+    A ``file`` item with no narrower symbol/line/span anchor is a whole-file read;
+    the book forbids reasonless whole-file inclusions (PR-010 CTX-CONV).
+    """
+    if item.source_type != "file":
+        return False
+    md = item.metadata
+    return not (md.get("line_start") or md.get("symbol_kind") or md.get("span"))
+
+
+def ensure_full_file_reason(item: ContextItem, reason: str = "") -> ContextItem:
+    """Stamp a ``full_file_reason`` on a reasonless whole-file inclusion.
+
+    No-op for non-whole-file items or items already carrying a reason, so it is safe
+    to apply over an entire selection.
+    """
+    if not full_file_reason_required(item) or item.metadata.get("full_file_reason"):
+        return item
+    metadata = dict(item.metadata)
+    metadata["full_file_reason"] = (
+        reason or "whole-file load: no narrower symbol or snippet was available"
+    )
+    return item.model_copy(update={"metadata": metadata})
 
 
 # Symbol kinds that constitute a DEFINITION a developer would open to "add/modify X".

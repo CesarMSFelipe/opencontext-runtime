@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 from opencontext_core.compat import StrEnum
 from opencontext_core.config import KnowledgeGraphConfig
 from opencontext_core.indexing.graph_db import Edge, FileRecord, GraphDatabase, Node
+from opencontext_core.indexing.graph_delta import CacheInvalidationRegistry, GraphDelta
 from opencontext_core.indexing.tree_sitter_parser import (
     LANGUAGE_EXTENSIONS,
     TreeSitterParser,
@@ -20,6 +22,17 @@ def _stable_symbol_id(project_id: str, file_path: str, qualified_name: str, kind
     """Return a 16-char deterministic hex ID for a symbol, unique across files."""
     payload = f"{project_id}:{file_path}:{qualified_name}:{kind}"
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _kg_fts_rowid(node_id: str) -> int:
+    """Deterministic int64 fts_rowid for a content-addressed ``kg_<hex>`` node id.
+
+    The nodes table requires a unique integer ``fts_rowid``; KG v2 ids carry a
+    ``kg_`` prefix (not valid hex), so we hash the id to a stable 60-bit int rather
+    than parse the prefixed string as hex. Used for owner/framework-fact nodes whose
+    ids are ``kg_<hash>`` instead of the legacy 16-hex symbol id.
+    """
+    return int(hashlib.sha256(node_id.encode()).hexdigest()[:15], 16)
 
 
 @dataclass(frozen=True)
@@ -53,6 +66,12 @@ class KnowledgeGraph:
         # Stable node ids are scoped per project so the same file path in two
         # different projects/DBs never collides. Default to the db parent name.
         self.project_id = project_id or Path(db_path).resolve().parent.name
+        # KG v2 (KG-CONV): dependent caches register invalidation hooks here; the
+        # KG fires them on every delta-producing mutation (reindex/apply/supersede).
+        self.cache_invalidation = CacheInvalidationRegistry()
+        # KG v2 (KG-14): an optional observer collects kg.* events / receipts. None
+        # (default) means no events are emitted — the legacy path is unchanged.
+        self.observer: Any | None = None
         self.db.init_schema()
 
     def index_file(self, file_path: str, content: str) -> dict[str, Any]:
@@ -551,6 +570,276 @@ class KnowledgeGraph:
         )
         conn.commit()
         return len(cross_edges)
+
+    # --- KG v2: typed incremental delta (KG-08) --------------------------------
+
+    def _node_ids_for_files(self, file_paths: set[str]) -> dict[str, set[str]]:
+        """Map each file path to the set of node ids the store currently holds for it."""
+        result: dict[str, set[str]] = {}
+        conn = self.db._connect()
+        for path in file_paths:
+            rows = conn.execute(
+                "SELECT id FROM nodes WHERE file_path = ?", (path,)
+            ).fetchall()
+            result[path] = {row["id"] for row in rows}
+        return result
+
+    def _edge_sigs_for_files(self, file_paths: set[str]) -> set[str]:
+        """Signatures (``src->kind->tgt``) of edges whose call site is in ``file_paths``."""
+        if not file_paths:
+            return set()
+        conn = self.db._connect()
+        placeholders = ",".join("?" * len(file_paths))
+        rows = conn.execute(
+            "SELECT source_node_id, target_node_id, kind FROM edges "
+            f"WHERE call_site_file IN ({placeholders})",
+            list(file_paths),
+        ).fetchall()
+        return {f"{r['source_node_id']}->{r['kind']}->{r['target_node_id']}" for r in rows}
+
+    def reindex_delta(self, file_paths: set[str], root: Path) -> GraphDelta:
+        """Incrementally reindex ``file_paths`` and return a typed :class:`GraphDelta`.
+
+        Additive over :meth:`reindex_files` (whose dict return is unchanged): this
+        diffs the per-file node/edge sets before and after the reindex so the caller
+        gets the exact ids added/updated/deleted (OC-KG-001 §13). Fires registered
+        cache-invalidation hooks (KG-CONV) before returning.
+        """
+        before_nodes = self._node_ids_for_files(file_paths)
+        before_edges = self._edge_sigs_for_files(file_paths)
+
+        self.reindex_files(file_paths, root)
+
+        after_nodes = self._node_ids_for_files(file_paths)
+        after_edges = self._edge_sigs_for_files(file_paths)
+
+        added_nodes: list[str] = []
+        deleted_nodes: list[str] = []
+        updated_nodes: list[str] = []
+        for path in file_paths:
+            before = before_nodes.get(path, set())
+            after = after_nodes.get(path, set())
+            added_nodes.extend(sorted(after - before))
+            deleted_nodes.extend(sorted(before - after))
+            updated_nodes.extend(sorted(before & after))
+
+        added_edges = sorted(after_edges - before_edges)
+        deleted_edges = sorted(before_edges - after_edges)
+        affected_symbols = sorted({*added_nodes, *deleted_nodes, *updated_nodes})
+
+        delta = GraphDelta(
+            added_nodes=added_nodes,
+            updated_nodes=updated_nodes,
+            deleted_nodes=deleted_nodes,
+            added_edges=added_edges,
+            deleted_edges=deleted_edges,
+            affected_symbols=affected_symbols,
+            affected_files=sorted(file_paths),
+        )
+        self.cache_invalidation.fire(delta)
+        if self.observer is not None:
+            from opencontext_core.models.trace import KG_DELTA_CREATED
+
+            self.observer.emit(
+                KG_DELTA_CREATED,
+                added=len(added_nodes),
+                deleted=len(deleted_nodes),
+                files=len(file_paths),
+            )
+        return delta
+
+    def index_with_receipt(
+        self, root: str | Path, *, storage_dir: str | Path | None = None
+    ) -> Any:
+        """Index ``root`` while emitting kg.index.* events and writing a receipt (KG-14).
+
+        Additive over :meth:`index_project` (whose return is unchanged): this brackets
+        the index run with ``kg.index.started`` / ``kg.index.completed`` (or
+        ``kg.index.failed``) and persists an index :class:`KgReceipt`. Returns the
+        receipt; ``receipt.details['stats']`` carries the index stats.
+        """
+        from opencontext_core.indexing.kg_receipts import KgObserver
+        from opencontext_core.models.kg_v2 import now_iso
+        from opencontext_core.models.trace import (
+            KG_INDEX_COMPLETED,
+            KG_INDEX_FAILED,
+            KG_INDEX_STARTED,
+        )
+
+        observer = self.observer if self.observer is not None else KgObserver(storage_dir)
+        if self.observer is None:
+            self.observer = observer
+        started = now_iso()
+        observer.emit(KG_INDEX_STARTED, root=str(root))
+        try:
+            stats = self.index_project(root)
+        except Exception as exc:
+            observer.emit(KG_INDEX_FAILED, error=str(exc))
+            observer.write_receipt("index", status="failed", started_at=started, error=str(exc))
+            raise
+        observer.emit(KG_INDEX_COMPLETED, **stats)
+        return observer.write_receipt("index", started_at=started, stats=stats)
+
+    def apply_delta(self, delta: GraphDelta) -> None:
+        """Replay a :class:`GraphDelta`'s deletions against the store (KG-08, §23).
+
+        Removes the delta's ``deleted_nodes`` (and their edges) so a delta computed
+        elsewhere — e.g. by a plugin provider — converges the native index, then
+        fires cache-invalidation hooks. Added/updated ids are already materialised by
+        the index pass that produced the delta, so applying them is a no-op here.
+        """
+        conn = self.db._connect()
+        for node_id in delta.deleted_nodes:
+            conn.execute(
+                "DELETE FROM edges WHERE source_node_id = ? OR target_node_id = ?",
+                (node_id, node_id),
+            )
+            conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
+        conn.commit()
+        self.cache_invalidation.fire(delta)
+
+    def supersede_node(self, old_id: str, new_id: str) -> bool:
+        """Mark ``old_id`` superseded by ``new_id`` and fire cache invalidation (KG-06)."""
+        ok = self.db.supersede_node(old_id, new_id)
+        if ok:
+            self.cache_invalidation.fire(
+                GraphDelta(updated_nodes=[old_id], affected_symbols=[old_id])
+            )
+            if self.observer is not None:
+                from opencontext_core.models.trace import KG_NODE_SUPERSEDED
+
+                self.observer.emit(KG_NODE_SUPERSEDED, old_id=old_id, new_id=new_id)
+        return ok
+
+    # --- KG v2: framework / config / doc extraction (KG-13) --------------------
+
+    def index_framework_facts(self, root: str | Path, *, include_docs: bool = False) -> int:
+        """Extract + persist detected-framework and config/doc facts (KG-13).
+
+        Detects the project framework and writes its routes/services/config/tests as
+        typed graph nodes/edges with evidence; when ``include_docs`` is set, also
+        emits ``config`` nodes for YAML/JSON/Markdown files. Opt-in and additive — the
+        default tree-sitter index path is unchanged. Returns the number of nodes
+        persisted. Framework-fact node ids are ``kg_<hash>`` (content-addressed).
+        """
+        from opencontext_core.indexing.framework_profiles import (
+            extract_doc_config_facts,
+            extract_framework_facts,
+        )
+
+        root_path = Path(root)
+        extraction = extract_framework_facts(root_path)
+        if include_docs:
+            extraction.merge(extract_doc_config_facts(root_path))
+        if not extraction.nodes and not extraction.edges:
+            return 0
+
+        conn = self.db._connect()
+        for node in extraction.nodes:
+            evidence_json = (
+                json.dumps([e.model_dump() for e in node.evidence]) if node.evidence else None
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO nodes "
+                "(id, fts_rowid, name, kind, file_path, line, column, end_line, "
+                " language, container, docstring, signature, is_exported, "
+                " observed_at, status, evidence_json) "
+                "VALUES (?, ?, ?, ?, ?, 0, 0, 0, ?, NULL, NULL, NULL, 0, ?, 'active', ?)",
+                (
+                    node.id,
+                    _kg_fts_rowid(node.id),
+                    node.name,
+                    node.type.value,
+                    node.path or "",
+                    node.language or "",
+                    node.temporal.observed_at,
+                    evidence_json,
+                ),
+            )
+        for edge in extraction.edges:
+            existing = conn.execute(
+                "SELECT 1 FROM edges WHERE source_node_id = ? AND target_node_id = ? "
+                "AND kind = ?",
+                (edge.source_id, edge.target_id, edge.type.value),
+            ).fetchone()
+            if existing is None:
+                conn.execute(
+                    "INSERT INTO edges "
+                    "(source_node_id, target_node_id, kind, call_site_file, call_site_line) "
+                    "VALUES (?, ?, ?, ?, 0)",
+                    (edge.source_id, edge.target_id, edge.type.value, ""),
+                )
+        conn.commit()
+        self.db.rebuild_fts()
+        return len(extraction.nodes)
+
+    # --- KG v2: owner extraction + resolution (KG-13 stage, KG-CONV) -----------
+
+    def extract_owners(self, root: Path, file_paths: set[str] | None = None) -> int:
+        """Create ``OWNER`` nodes and ``OWNS`` edges from git/CODEOWNERS provenance.
+
+        For each indexed file (optionally scoped to ``file_paths``) the top git
+        author becomes an ``owner`` node; an ``owns`` edge links the file's owner to
+        the file path. Owner facts are inferred, so each carries a `TemporalMetadata`
+        and an `EvidenceRef`. Returns the number of ``OWNS`` edges written. Degrades
+        to 0 when git is unavailable.
+        """
+        from opencontext_core.indexing.git_context import GitContextProvider
+        from opencontext_core.models.kg_v2 import kg_node_id
+
+        provider = GitContextProvider(root)
+        if not provider.available:
+            return 0
+
+        scope = file_paths or {rec.path for rec in self.db.all_files()}
+        conn = self.db._connect()
+        written = 0
+        for rel_path in sorted(scope):
+            info = provider.get_file_info(root / rel_path)
+            owner = None
+            if info is not None:
+                owner = (info.top_authors[0] if info.top_authors else None) or info.last_author
+            if not owner:
+                continue
+            owner_id = kg_node_id("owner", owner)
+            # Upsert the owner node (idempotent on its content-addressed id).
+            conn.execute(
+                "INSERT OR IGNORE INTO nodes "
+                "(id, fts_rowid, name, kind, file_path, line, column, end_line, "
+                " language, container, docstring, signature, is_exported) "
+                "VALUES (?, ?, ?, 'owner', ?, 0, 0, 0, '', NULL, NULL, NULL, 0)",
+                (owner_id, _kg_fts_rowid(owner_id), owner, rel_path),
+            )
+            # Link owner -> file via an OWNS edge (inferred fact, recorded once).
+            existing = conn.execute(
+                "SELECT 1 FROM edges WHERE source_node_id = ? AND kind = 'owns' "
+                "AND call_site_file = ?",
+                (owner_id, rel_path),
+            ).fetchone()
+            if existing is None:
+                conn.execute(
+                    "INSERT INTO edges "
+                    "(source_node_id, target_node_id, kind, call_site_file, call_site_line) "
+                    "VALUES (?, NULL, 'owns', ?, 0)",
+                    (owner_id, rel_path),
+                )
+                written += 1
+        conn.commit()
+        return written
+
+    def resolve_owner(self, file_path: str) -> str | None:
+        """Resolve the owner of ``file_path`` by traversing ``OWNS`` edges (KG-CONV).
+
+        Reads the graph, NOT git — owner extraction populated the edges, so this is
+        a pure graph lookup. Returns the owner name, or None when no owner is linked.
+        """
+        conn = self.db._connect()
+        row = conn.execute(
+            "SELECT n.name FROM edges e JOIN nodes n ON n.id = e.source_node_id "
+            "WHERE e.kind = 'owns' AND e.call_site_file = ? LIMIT 1",
+            (file_path,),
+        ).fetchone()
+        return str(row["name"]) if row is not None else None
 
     def search(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         """Search for symbols by name using FTS5."""

@@ -131,7 +131,15 @@ class GraphDatabase:
         docstring TEXT,
         signature TEXT,
         is_exported INTEGER DEFAULT 0,
-        content_snippet TEXT
+        content_snippet TEXT,
+        -- KG v2 (OC-KG-001 §10-11): nullable temporal/evidence columns. A legacy
+        -- reader ignores them; a v2-written DB reads cleanly under a reverted binary.
+        observed_at TEXT,
+        valid_from TEXT,
+        valid_to TEXT,
+        status TEXT,
+        superseded_by TEXT,
+        evidence_json TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_nodes_name ON nodes(name);
@@ -257,7 +265,33 @@ class GraphDatabase:
         self._migrate_legacy_schema(conn)
         self._migrate_fts_schema(conn)
         conn.executescript(self.SCHEMA)
+        self._migrate_v2_columns(conn)
         conn.commit()
+
+    # KG v2 nullable columns added to the existing nodes table (OC-KG-001 §10-11).
+    _V2_NODE_COLUMNS = (
+        "observed_at",
+        "valid_from",
+        "valid_to",
+        "status",
+        "superseded_by",
+        "evidence_json",
+    )
+
+    def _migrate_v2_columns(self, conn: sqlite3.Connection) -> None:
+        """Add KG v2 temporal/evidence columns to an existing nodes table if absent.
+
+        ``CREATE TABLE IF NOT EXISTS`` never adds columns to a table that already
+        exists, so a pre-v2 DB needs an explicit ``ALTER TABLE ADD COLUMN`` per
+        missing column. Each column is nullable TEXT, so the ALTER is safe and the
+        legacy read path stays valid unchanged. Idempotent.
+        """
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(nodes)")}
+        if not existing:
+            return  # fresh DB; SCHEMA already created the columns
+        for column in self._V2_NODE_COLUMNS:
+            if column not in existing:
+                conn.execute(f"ALTER TABLE nodes ADD COLUMN {column} TEXT")
 
     def _migrate_fts_schema(self, conn: sqlite3.Connection) -> None:
         """Upgrade the FTS5 index if it is missing file_path / content_snippet columns.
@@ -501,6 +535,106 @@ class GraphDatabase:
             )
             for row in rows
         ]
+
+    # KG v2 node mapping + temporal operations (OC-KG-001 §8, §10)
+
+    def to_kg_node(self, node: Node, *, structural: bool = True) -> Any:
+        """Map a stored ``Node`` row to a KG v2 :class:`KgNode`.
+
+        Reuses the persisted temporal/evidence columns when present, else defaults
+        to an ``active`` fact observed now with no evidence. Structural code nodes
+        (the default) carry no mandatory-evidence requirement. Imported lazily so a
+        legacy caller of ``graph_db`` never pays the model import cost.
+        """
+        from opencontext_core.models.kg_v2 import KgNode, KgNodeType, TemporalMetadata
+
+        node_id = node.id or ""
+        # Resolve the stored kind string against the unified enum; unknown legacy
+        # strings fall back to SYMBOL so mapping never raises on old data.
+        try:
+            kind = KgNodeType(node.kind)
+        except ValueError:
+            kind = KgNodeType.SYMBOL
+        temporal = self.get_node_temporal(node_id) or TemporalMetadata()
+        return KgNode(
+            id=node_id,
+            type=kind,
+            name=node.name,
+            path=node.file_path,
+            language=node.language,
+            properties={
+                "line": node.line,
+                "end_line": node.end_line,
+                "container": node.container,
+                "signature": node.signature,
+            },
+            temporal=temporal,
+            evidence=[],
+            structural=structural,
+        )
+
+    def get_node_temporal(self, node_id: str) -> Any | None:
+        """Return the persisted :class:`TemporalMetadata` for a node, or None.
+
+        None means the node has no v2 temporal columns set (a pre-v2 / structural
+        row); callers default to a fresh ``active`` metadata.
+        """
+        from opencontext_core.models.kg_v2 import TemporalMetadata
+
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT observed_at, valid_from, valid_to, status, superseded_by "
+            "FROM nodes WHERE id = ?",
+            (node_id,),
+        ).fetchone()
+        if row is None or row["observed_at"] is None:
+            return None
+        return TemporalMetadata(
+            observed_at=row["observed_at"],
+            valid_from=row["valid_from"],
+            valid_to=row["valid_to"],
+            status=row["status"] or "active",
+            superseded_by=row["superseded_by"],
+        )
+
+    def set_node_temporal(self, node_id: str, temporal: Any, evidence: Any = None) -> None:
+        """Persist a node's KG v2 temporal metadata (and optional evidence JSON)."""
+        conn = self._connect()
+        evidence_json = None
+        if evidence:
+            evidence_json = json.dumps([e.model_dump() for e in evidence])
+        conn.execute(
+            "UPDATE nodes SET observed_at = ?, valid_from = ?, valid_to = ?, "
+            "status = ?, superseded_by = ?, evidence_json = COALESCE(?, evidence_json) "
+            "WHERE id = ?",
+            (
+                temporal.observed_at,
+                temporal.valid_from,
+                temporal.valid_to,
+                temporal.status,
+                temporal.superseded_by,
+                evidence_json,
+                node_id,
+            ),
+        )
+        conn.commit()
+
+    def supersede_node(self, old_id: str, new_id: str) -> bool:
+        """Mark ``old_id`` superseded by ``new_id`` (OC-KG-001 §10).
+
+        Returns True when the old node existed and was transitioned to
+        ``status='superseded'`` with ``superseded_by`` pointing at the new node.
+        Deterministic; the caller emits ``kg.node.superseded``.
+        """
+        from opencontext_core.models.kg_v2 import TemporalMetadata
+
+        conn = self._connect()
+        row = conn.execute("SELECT id FROM nodes WHERE id = ?", (old_id,)).fetchone()
+        if row is None:
+            return False
+        current = self.get_node_temporal(old_id) or TemporalMetadata()
+        self.set_node_temporal(old_id, current.supersede(new_id))
+        return True
 
     # Edge operations
 

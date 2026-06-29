@@ -100,6 +100,21 @@ class FileWatcher:
                 stacklevel=2,
             )
 
+    def add_callback(self, callback: Callable[[str, str], None]) -> None:
+        """Register an additional change consumer (e.g. a cache invalidator).
+
+        Composes with the existing callback so both fire on every change, without
+        rewriting the watcher's dispatch. Used by ``cache/invalidation.py`` to drop
+        cache entries whose source files changed (book doc 58 — Cache leaf seam).
+        """
+        existing = self.callback
+
+        def _combined(rel_path: str, change: str) -> None:
+            existing(rel_path, change)
+            callback(rel_path, change)
+
+        self.callback = _combined
+
     def start(self) -> None:
         """Start watching files."""
         self._running = True
