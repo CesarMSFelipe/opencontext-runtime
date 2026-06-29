@@ -80,11 +80,16 @@ def run_oc_flow_cli(
         selected = decision.workflow
         selection_reason = decision.reason
     if selected == "sdd":
+        # OC Flow hands off broad/high-risk tasks to SDD. Emit a STRUCTURED handoff so
+        # `--json` consumers can branch on `workflow`/`recommended_command` rather than
+        # parsing the human message (GAP 3).
+        recommended_command = "opencontext harness run --workflow sdd"
         summary = {
             "status": "recommend_sdd",
-            "message": "task looks broad/high-risk; use SDD: opencontext harness run "
-            "--workflow sdd",
+            "workflow": "sdd",
+            "message": f"task looks broad/high-risk; use SDD: {recommended_command}",
             "selection_reason": selection_reason,
+            "recommended_command": recommended_command,
             "task": task,
         }
         _maybe_print(summary, as_json)
