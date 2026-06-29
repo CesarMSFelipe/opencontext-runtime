@@ -49,6 +49,26 @@ class EvolutionProposal(BaseModel):
     payload: dict[str, object] = Field(default_factory=dict)
     auto_applicable: bool = False
     requires_approval: bool = True
+    # PR-000.4 honesty gate (SPEC DL-009): a benchmark-result reference. A proposal
+    # is NOT promotable until this is set — improvement must be measured, not
+    # self-asserted ([[oc-value-eval-2026-06]]). Defaulted so every existing
+    # constructor and the EvolutionStore round-trip are unchanged. Lives on the
+    # base model (not a subclass) precisely so EvolutionStore.load — which
+    # validates as EvolutionProposal with ``extra="forbid"`` — preserves it.
+    benchmark_evidence_ref: str | None = None
 
 
-__all__ = ["EvolutionKind", "EvolutionProposal", "EvolutionStatus"]
+# PR-000.4 reconciliation (collision CL-009, ``alias``; SPEC DL-005): the book's
+# ``ImprovementProposal`` IS the existing propose-only ``EvolutionProposal`` — its
+# persisted form. Aliasing (rather than forking a parallel model) keeps
+# ``EvolutionStore``/``EvolutionApplier`` as the single persistence + approval +
+# rollback path. The honesty field above is what the book adds.
+ImprovementProposal = EvolutionProposal
+
+
+__all__ = [
+    "EvolutionKind",
+    "EvolutionProposal",
+    "EvolutionStatus",
+    "ImprovementProposal",
+]
