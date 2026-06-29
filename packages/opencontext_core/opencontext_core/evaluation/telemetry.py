@@ -9,6 +9,14 @@ from pathlib import Path
 
 TELEMETRY_FILE = ".opencontext/telemetry.json"
 
+# Canonical OC-OBS telemetry layout (mirrored to, in addition to the legacy
+# single file kept for back-compat reads). Declared locally so this lower layer
+# does not import the upper runtime_intelligence package (doc 58 dependency
+# direction); the value matches
+# ``runtime_intelligence.telemetry_layout.{TELEMETRY_DIR,EVENTS_FILE}``.
+CANONICAL_TELEMETRY_DIR = ".opencontext/telemetry"
+CANONICAL_EVENTS_FILE = "events.jsonl"
+
 _NAIVE_TEXT_EXTS = {
     ".py",
     ".ts",
@@ -124,6 +132,33 @@ def record_event(event: TelemetryEvent, root: str | Path = ".") -> None:
     path.write_text(
         json.dumps({"events": [asdict(e) for e in store.events]}, indent=2), encoding="utf-8"
     )
+    _mirror_to_canonical(event, root)
+
+
+def _mirror_to_canonical(event: TelemetryEvent, root: str | Path = ".") -> None:
+    """Also append the savings event to the canonical telemetry events ledger.
+
+    Routes token-savings telemetry through the OC-OBS ``.opencontext/telemetry/``
+    layout (append-only) while the legacy single file above stays readable. Best
+    effort: a telemetry-write failure never breaks the caller.
+    """
+    try:
+        events_dir = Path(root) / CANONICAL_TELEMETRY_DIR
+        events_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "timestamp": event.timestamp,
+            "family": "runtime",
+            "event": "telemetry.savings.recorded",
+            "task": event.task,
+            "naive_tokens": event.naive_tokens,
+            "optimized_tokens": event.optimized_tokens,
+            "reduction_pct": event.reduction_pct,
+            "scenario": event.scenario,
+        }
+        with (events_dir / CANONICAL_EVENTS_FILE).open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, default=str) + "\n")
+    except OSError:
+        pass
 
 
 def record_from_benchmark(report: object, root: str | Path = ".") -> None:

@@ -8,10 +8,31 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from opencontext_core.compat import StrEnum
 from opencontext_core.context.budgeting import estimate_tokens
 from opencontext_core.context.prompt_cache import PromptPrefixCachePlanner
 from opencontext_core.models.context import PromptSection
 from opencontext_core.operating_model.call_budget import _LOCAL_DEFAULT_MODELS
+from opencontext_core.providers.capabilities import (
+    ProviderCapability,
+    capabilities_for,
+    providers_with,
+)
+
+
+class RoutingStrategy(StrEnum):
+    """Named provider-selection strategy (book §25 "Routing Strategies").
+
+    ``BALANCED`` (the default) reproduces the existing budget-first routing
+    byte-for-byte; the other strategies are additive selection biases.
+    """
+
+    CHEAPEST = "cheapest"
+    FASTEST = "fastest"
+    BALANCED = "balanced"
+    HIGHEST_QUALITY = "highest_quality"
+    LOCAL_FIRST = "local_first"
+    ENTERPRISE = "enterprise"
 
 
 class CachePlan(BaseModel):
@@ -122,6 +143,12 @@ class CostEntry(BaseModel):
     estimated_cost: float = Field(default=0.0, ge=0.0)
     estimated_latency: float = Field(default=0.0, ge=0.0)
     actual_latency: float | None = Field(default=None, ge=0.0)
+    # Provider-call attribution (PR-012 — SPEC-PROV-012-12). All defaulted so the
+    # existing run-level CostEntry usages are unaffected.
+    provider: str = Field(default="", description="Provider that served the call.")
+    model: str = Field(default="", description="Model that served the call.")
+    routing_reason: str = Field(default="", description="Why this provider/model was routed.")
+    retries: int = Field(default=0, ge=0, description="Fallback/retry count for the call.")
 
 
 class CostReport(BaseModel):
@@ -183,11 +210,72 @@ class ModelRoleRouter:
         budget_manager: Any = None,
         local_providers: list[str] | None = None,
         free_registry: Any = None,
+        strategy: RoutingStrategy | str = RoutingStrategy.BALANCED,
+        required: frozenset[ProviderCapability] | None = None,
     ) -> None:
         self.roles = dict(roles or {})
         self.budget_manager = budget_manager
         self.local_providers = local_providers or ["ollama", "lmstudio", "localai", "mock"]
         self.free_registry = free_registry
+        # Strategy + capability requirement are additive; BALANCED with no
+        # required capabilities reproduces the original budget-first routing.
+        self.strategy = RoutingStrategy(strategy) if strategy else RoutingStrategy.BALANCED
+        self.required: frozenset[ProviderCapability] = required or frozenset()
+
+    def _has_caps(self, provider: str) -> bool:
+        """Whether *provider* advertises every required capability."""
+
+        if not self.required:
+            return True
+        return self.required <= capabilities_for(provider)
+
+    def _budget_ok(self, provider: str, model: str) -> bool:
+        if self.budget_manager is None:
+            return True
+        available, _ = self.budget_manager.check_budget(provider, model)
+        return bool(available)
+
+    def _local_candidate(self, model: str) -> dict[str, str] | None:
+        """First working, capable, budget-available local provider (if any)."""
+
+        for local in self.local_providers:
+            if self.free_registry and hasattr(self.free_registry, "is_working"):
+                if not self.free_registry.is_working(local):
+                    continue
+            if not self._has_caps(local):
+                continue
+            if self._budget_ok(local, model):
+                return {"provider": local, "model": _LOCAL_DEFAULT_MODELS.get(local, model)}
+        return None
+
+    def _strategy_route(self, preferred: dict[str, str]) -> dict[str, str] | None:
+        """Apply the active strategy / capability filter; ``None`` falls through.
+
+        Returning ``None`` means "use the default budget-first body", which keeps
+        BALANCED with no required capabilities byte-identical to the legacy path.
+        """
+
+        provider = preferred["provider"]
+        model = preferred["model"]
+        # local_first / cheapest: prefer an available local backend up front.
+        if self.strategy in (RoutingStrategy.LOCAL_FIRST, RoutingStrategy.CHEAPEST):
+            local = self._local_candidate(model)
+            if local is not None:
+                return local
+        # highest_quality: never downgrade to local; keep the preferred provider
+        # when it satisfies the required capabilities.
+        if self.strategy is RoutingStrategy.HIGHEST_QUALITY and self._has_caps(provider):
+            return preferred
+        # Capability requirement: if the preferred provider can't satisfy it, pick
+        # a capable provider (preferring local) that advertises the requirement.
+        if self.required and not self._has_caps(provider):
+            local = self._local_candidate(model)
+            if local is not None:
+                return local
+            for candidate in providers_with(self.required):
+                if self._budget_ok(candidate, model):
+                    return {"provider": candidate, "model": model}
+        return None
 
     def route(self, role: str) -> dict[str, str]:
         """Return provider/model for a role."""
@@ -203,6 +291,13 @@ class ModelRoleRouter:
         """Route considering call budget and task complexity."""
 
         preferred = self.route(role)
+
+        # Strategy / capability hooks are additive: BALANCED with no required
+        # capabilities falls through to the legacy budget-first body below.
+        if self.strategy is not RoutingStrategy.BALANCED or self.required:
+            adjusted = self._strategy_route(preferred)
+            if adjusted is not None:
+                return adjusted
 
         if self.budget_manager is None:
             return preferred

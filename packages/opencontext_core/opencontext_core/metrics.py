@@ -148,6 +148,21 @@ class MetricsCollector:
         recent = sorted(self._history, key=lambda m: m.start_time, reverse=True)
         return [m.to_dict() for m in recent[:limit]]
 
+    def cost_by_component(self) -> dict[str, float]:
+        """Attribute recorded cost to components for the Runtime Intelligence Cost Engine.
+
+        Buckets each tracked operation's ``cost_usd`` by its ``metadata["component"]``
+        (falling back to the operation name when no component was tagged). Returns an
+        empty mapping when nothing has been tracked — never an invented attribution.
+        Consumed by ``runtime_intelligence.cost.CostEngine`` (book §6 ``cost_by_component``).
+        """
+
+        by_component: dict[str, float] = {}
+        for metrics in self._history:
+            component = str(metrics.metadata.get("component") or metrics.operation)
+            by_component[component] = round(by_component.get(component, 0.0) + metrics.cost_usd, 6)
+        return by_component
+
     def _persist(self, metrics: OperationMetrics) -> None:
         """Persist metrics to disk."""
 

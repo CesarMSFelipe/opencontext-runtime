@@ -21,6 +21,11 @@ from opencontext_core.operating_model.call_budget import (
     FreeProviderRegistry,
     ProviderType,
 )
+from opencontext_core.operating_model.events import (
+    PROVIDER_EVENT_FAMILY,
+    ProviderEvent,
+    ProviderEventEmitter,
+)
 from opencontext_core.operating_model.evidence import (
     FileEvidence,
     PromptContextSBOM,
@@ -43,6 +48,7 @@ from opencontext_core.operating_model.performance import (
     ModelRoleRouter,
     OfflinePrecomputer,
     ProviderContextCacheAdapter,
+    RoutingStrategy,
 )
 from opencontext_core.operating_model.quality import (
     CriticStep,
@@ -54,6 +60,7 @@ from opencontext_core.operating_model.quality import (
     ToolChainAnalyzer,
     VerifierStep,
 )
+from opencontext_core.operating_model.receipts import ProviderReceipt, RunReceiptStore
 from opencontext_core.operating_model.team import (
     ApprovalDecision,
     ApprovalInbox,
@@ -70,6 +77,7 @@ from opencontext_core.operating_model.team import (
 )
 
 __all__ = [
+    "PROVIDER_EVENT_FAMILY",
     "AIConfigLeakScanner",
     "ApprovalDecision",
     "ApprovalInbox",
@@ -110,6 +118,9 @@ __all__ = [
     "PromptContract",
     "PromptSecretLinter",
     "ProviderContextCacheAdapter",
+    "ProviderEvent",
+    "ProviderEventEmitter",
+    "ProviderReceipt",
     "ProviderType",
     "PublicSafePromptExporter",
     "QualityGateReport",
@@ -117,8 +128,10 @@ __all__ = [
     "ReleaseEvidence",
     "ReleaseEvidenceBuilder",
     "ReleaseLeakScanner",
+    "RoutingStrategy",
     "RunReceipt",
     "RunReceiptGenerator",
+    "RunReceiptStore",
     "SourceMapDetector",
     "SpecialistWorkflowRouter",
     "TeamCommandRegistry",

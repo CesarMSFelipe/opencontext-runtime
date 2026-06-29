@@ -1,12 +1,56 @@
-"""RunReceiptStore — file-backed store for RunReceipt records."""
+"""RunReceiptStore — file-backed store for RunReceipt records.
+
+Also hosts the PR-012 provider receipts (book §25 "Receipts"):
+``provider-selection`` / ``provider-call`` / ``fallback`` / ``cost``. These are
+persisted to a sibling ``provider_receipts.jsonl`` so they never collide with the
+run-id-keyed ``receipts.jsonl`` lookups.
+"""
 
 from __future__ import annotations
 
+import builtins
+import json
+from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from opencontext_core.compat import UTC
 from opencontext_core.operating_model.team import RunReceipt
+from opencontext_core.runtime.ids import new_id
 
 # NOTE: pruning strategy not yet implemented (Phase 2+)
+
+
+def _now_iso() -> str:
+    return datetime.now(tz=UTC).isoformat()
+
+
+class ProviderReceipt(BaseModel):
+    """A provider lifecycle receipt (book §25 "Receipts").
+
+    ``receipt_id`` uses the ``pcall_<ulid>`` provider-call id scheme (doc 59
+    §Global IDs). One model covers the four receipt kinds; unused numeric fields
+    default to ``0``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str = "opencontext.provider_receipt.v1"
+    receipt_id: str = Field(default_factory=lambda: new_id("pcall"))
+    kind: Literal["provider-selection", "provider-call", "fallback", "cost"]
+    provider: str
+    model: str = ""
+    routing_reason: str = ""
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    latency_s: float = Field(default=0.0, ge=0.0)
+    retries: int = Field(default=0, ge=0)
+    estimated_cost: float = Field(default=0.0, ge=0.0)
+    cache_hit: bool = False
+    error: str | None = None
+    created_at: str = Field(default_factory=_now_iso)
 
 
 class RunReceiptStore:
@@ -78,3 +122,37 @@ class RunReceiptStore:
                 "trace_id_present": bool(receipt.trace_id),
             },
         }
+
+    # --- PR-012 provider receipts (book §25 "Receipts") -------------------- #
+
+    @property
+    def _provider_store(self) -> Path:
+        return self.base_path / "provider_receipts.jsonl"
+
+    def save_provider_receipt(self, receipt: ProviderReceipt) -> Path:
+        """Append one provider receipt (append-only JSONL)."""
+
+        store = self._provider_store
+        with store.open("a", encoding="utf-8") as fh:
+            fh.write(receipt.model_dump_json() + "\n")
+        return store
+
+    # NOTE: the return annotation uses ``builtins.list`` because this class
+    # defines a method named ``list`` that shadows the builtin in class scope.
+    def list_provider_receipts(self) -> builtins.list[ProviderReceipt]:
+        """Return every persisted provider receipt, in append order."""
+
+        store = self._provider_store
+        if not store.exists():
+            return []
+        receipts: list[ProviderReceipt] = []
+        with store.open(encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    receipts.append(ProviderReceipt.model_validate(json.loads(line)))
+                except Exception:
+                    continue
+        return receipts

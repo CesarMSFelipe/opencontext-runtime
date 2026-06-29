@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from statistics import median
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from opencontext_core.models.contract import StabilityLevel, VersionedContract
+
+
+class GateStatus(StrEnum):
+    """The honest three-state verdict for any benchmark suite or release gate.
+
+    HONESTY (binding, book §10 / build-rule #1): a suite that cannot run
+    end-to-end yet is ``NOT_MEASURED`` — never a fabricated ``MET``. Only a real,
+    passing measurement is ``MET``; a real, failing one is ``FAILED``.
+    """
+
+    MET = "met"
+    NOT_MEASURED = "not-measured"
+    FAILED = "failed"
 
 
 class EvalCase(BaseModel):
@@ -216,3 +232,67 @@ def _latency_p(values: list[float], pct: float) -> float:
     ordered = sorted(values)
     idx = min(len(ordered) - 1, int(pct / 100 * len(ordered)))
     return ordered[idx]
+
+
+# ── Unified benchmark-runner report (REL-08/REL-09) ──────────────────────────
+
+
+class BenchmarkSuiteReport(VersionedContract):
+    """One named cognitive suite's outcome, stamped with a versioned methodology.
+
+    Carries the book §19 ``benchmark_suite`` + ``version`` so cross-release
+    comparisons are only made within the same suite version (REL-09). ``status`` is
+    the honest :class:`GateStatus`: a suite without a runnable end-to-end harness
+    yet reports ``NOT_MEASURED`` with a ``notes`` reason, never a fake ``MET``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str = "opencontext.benchmark_suite_report.v1"
+    suite: str = Field(description="Named cognitive suite, e.g. 'context-token-efficiency'.")
+    version: str = Field(description="Semver of the benchmark methodology, e.g. '1.0.0'.")
+    status: GateStatus = Field(description="Honest MET / NOT_MEASURED / FAILED verdict.")
+    measured: bool = Field(
+        default=False,
+        description="True only when the suite ran end-to-end (status MET or FAILED).",
+    )
+    success: bool = Field(default=False, description="True only when status is MET.")
+    duration_ms: int = Field(default=0, ge=0)
+    tokens: int = Field(default=0, ge=0)
+    tool_calls: int = Field(default=0, ge=0)
+    changed_files: int = Field(default=0, ge=0)
+    changed_lines: int = Field(default=0, ge=0)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    receipts: int = Field(default=0, ge=0)
+    notes: str = Field(default="", description="Human-readable detail; required when NOT_MEASURED.")
+
+
+class EvaluationRecord(VersionedContract):
+    """Immutable AI-evaluation artifact for a persona / skill / harness run (book §88).
+
+    Frozen audit record carrying the book metric set so ``eval compare`` can diff
+    two releases per-metric and flag regressions (REL-14). Persisted via the
+    existing receipt/artifact infra — this is evidence, never control.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: str = "opencontext.evaluation_record.v1"
+    stability: StabilityLevel = StabilityLevel.BETA
+    target_kind: str = Field(description="What was evaluated: persona | skill | harness.")
+    target_id: str = Field(description="Registry id of the evaluated definition.")
+    task: str = ""
+    repository: str = ""
+    workflow: str = ""
+    runtime_version: str = ""
+    provider: str = ""
+    profile: str = ""
+    success_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    token_count: int = Field(default=0, ge=0)
+    latency_ms: int = Field(default=0, ge=0)
+    retries: int = Field(default=0, ge=0)
+    escalation_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    patch_size: int = Field(default=0, ge=0)
+    local_validation_pass_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    benchmark_version: str = Field(default="1.0.0", description="Eval methodology semver.")
+    receipts: list[str] = Field(default_factory=list)
