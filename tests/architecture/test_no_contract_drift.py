@@ -19,6 +19,7 @@ Same baseline/ratchet philosophy as ``ALLOWED_UPWARD`` in
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 
 ROOT = (
@@ -26,64 +27,16 @@ ROOT = (
     / "packages/opencontext_core/opencontext_core"
 )
 
-#: Frozen snapshot of every VersionedContract subclass: keyed ``"relpath:ClassName"``
-#: with its ``schema_version`` literal and sorted declared field names (excluding
-#: ``schema_version`` itself, which is tracked as the version). Regenerate when a
-#: contract is intentionally changed AND its schema_version is bumped.
-BASELINE: dict[str, dict[str, object]] = {
-    "evaluation/models.py:BenchmarkSuiteReport": {
-        "schema_version": "opencontext.benchmark_suite_report.v1",
-        "fields": [
-            "changed_files",
-            "changed_lines",
-            "confidence",
-            "duration_ms",
-            "measured",
-            "notes",
-            "receipts",
-            "status",
-            "success",
-            "suite",
-            "tokens",
-            "tool_calls",
-            "version",
-        ],
-    },
-    "evaluation/models.py:EvaluationRecord": {
-        "schema_version": "opencontext.evaluation_record.v1",
-        "fields": [
-            "benchmark_version",
-            "escalation_rate",
-            "latency_ms",
-            "local_validation_pass_rate",
-            "patch_size",
-            "profile",
-            "provider",
-            "receipts",
-            "repository",
-            "retries",
-            "runtime_version",
-            "stability",
-            "success_rate",
-            "target_id",
-            "target_kind",
-            "task",
-            "token_count",
-            "workflow",
-        ],
-    },
-    "operating_model/release_gate.py:AcceptanceVerdict": {
-        "schema_version": "opencontext.acceptance_verdict.v1",
-        "fields": [
-            "failed",
-            "gates",
-            "met",
-            "methodology_version",
-            "not_measured",
-            "ready",
-        ],
-    },
-}
+#: Externalized, source-controlled baseline shared by this drift guard AND the
+#: ``opencontext architecture diff`` command (PROD-005 / B5). The ``contracts`` map
+#: is the frozen snapshot of every VersionedContract subclass — keyed
+#: ``"relpath:ClassName"`` with its ``schema_version`` literal and sorted declared
+#: field names (excluding ``schema_version`` itself, tracked as the version).
+#: Regenerate ``architecture-baseline.json`` when a contract is intentionally changed
+#: AND its schema_version is bumped (``opencontext architecture diff`` reports drift).
+BASELINE: dict[str, dict[str, object]] = json.loads(
+    (Path(__file__).parent / "architecture-baseline.json").read_text(encoding="utf-8")
+)["contracts"]
 
 
 def _base_names(cd: ast.ClassDef) -> set[str]:

@@ -13,6 +13,10 @@ from typing import Any, NoReturn
 import yaml
 
 from opencontext_cli.commands.aicx_cmd import add_aicx_parser, handle_aicx
+from opencontext_cli.commands.architecture_cmd import (
+    add_architecture_parser,
+    handle_architecture,
+)
 from opencontext_cli.commands.benchmark_cmd import add_benchmark_parser, handle_benchmark
 from opencontext_cli.commands.bridges_cmd import add_bridges_parser, handle_bridges
 from opencontext_cli.commands.bytecode_cmd import add_bytecode_commands, handle_bytecode
@@ -1326,6 +1330,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_telemetry_parser(subparsers)
     add_health_parser(subparsers)
     add_contract_commands(subparsers)
+    add_architecture_parser(subparsers)
     add_mutation_commands(subparsers)
     add_bytecode_commands(subparsers)
     add_evolve_parser(subparsers)
@@ -1709,6 +1714,8 @@ def _dispatch(args: argparse.Namespace) -> None:
         sys.exit(handle_engram(args))
     if command == "contract":
         sys.exit(handle_contract(args))
+    if command == "architecture":
+        sys.exit(handle_architecture(args))
     if command == "mutation":
         sys.exit(handle_mutation(args))
     if command == "loop":
