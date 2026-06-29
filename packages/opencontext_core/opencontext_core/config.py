@@ -1078,11 +1078,12 @@ class RuntimeMigrationConfig(BaseModel):
         default=True, description="Bracket legacy runs with a RuntimeApi session."
     )
     registry_enabled: bool = Field(
-        default=False,
+        default=True,
         description=(
-            "Resolve workflows through the PR-003 WorkflowRegistry. Default legacy: not yet "
-            "parity-safe — legacy tracks (explore-only, full+judgment) emit a spurious "
-            "workflow.validation.failed event until registered as declarative WorkflowDefinitions."
+            "Resolve workflows through the PR-003 WorkflowRegistry. Flipped to vNext "
+            "(VDM-003/004): the legacy-track parity gap is closed (no spurious "
+            "workflow.validation.failed); the registry emits resolution AUDIT events on "
+            "success (EVT1) while the EXECUTED-PHASE ledger stays identical to legacy."
         ),
     )
     persona_registry_enabled: bool = Field(
@@ -2113,7 +2114,7 @@ def default_config_data() -> dict[str, Any]:
         "ui_language": "en",
         "runtime": {
             "session_wrapper": True,
-            "registry_enabled": False,
+            "registry_enabled": True,
             "persona_registry_enabled": True,
             "skill_registry_enabled": True,
             "harness_registry_enabled": True,

@@ -48,13 +48,19 @@ class TestRunResultLedger:
         result = runner.run("explore-only", "ledger task")
 
         assert isinstance(result, HarnessRunResult)
-        # explore-only resolves to a single executed phase -> exactly one event.
-        assert len(result.events) == 1
-        event = result.events[0]
+        # explore-only resolves to a single EXECUTED phase -> exactly one run_phase event.
+        # When registry_enabled is on, workflow resolution prepends workflow.* AUDIT
+        # events on success (EVT1); the EXECUTED-PHASE ledger is identical to legacy
+        # (Phase-4 D), so the invariant is counted over the executed-phase subset.
+        executed = [e for e in result.events if e.action == "run_phase"]
+        assert len(executed) == 1
+        event = executed[0]
         assert event.phase == "explore"
-        assert event.action
+        assert event.action == "run_phase"
         assert event.status
-        assert event.index == 0
+        # Ledger indices are contiguous from 0; the executed event sits after any audits.
+        assert [e.index for e in result.events] == list(range(len(result.events)))
+        assert event.index == result.events.index(event)
 
     def test_events_recorded_in_phase_order_with_status(self, tmp_path: Path) -> None:
         _write_config(tmp_path, "ledger-order")
@@ -77,11 +83,15 @@ class TestRunResultLedger:
         events_path = tmp_path / ".opencontext" / "runs" / result.run_id / "events.json"
         assert events_path.exists()
         persisted = json.loads(events_path.read_text(encoding="utf-8"))["events"]
-        assert len(persisted) == len(result.events) == 1
-        assert persisted[0]["phase"] == "explore"
-        assert persisted[0]["action"] == "run_phase"
-        assert "status" in persisted[0]
-        assert "observation" in persisted[0]
+        assert len(persisted) == len(result.events)
+        # Exactly one EXECUTED-PHASE (run_phase) event for explore-only; registry audit
+        # events (EVT1) may also be persisted but do not change the executed-phase ledger.
+        executed = [e for e in persisted if e["action"] == "run_phase"]
+        assert len(executed) == 1
+        assert executed[0]["phase"] == "explore"
+        assert executed[0]["action"] == "run_phase"
+        assert "status" in executed[0]
+        assert "observation" in executed[0]
 
 
 class TestBlockedApplyEvent:
