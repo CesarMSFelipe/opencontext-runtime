@@ -18,6 +18,8 @@ from rich.panel import Panel
 
 from opencontext_core import prompts
 from opencontext_core.configurator import KNOWN_AGENTS, Configurator
+from opencontext_core.configurator.constants import MCP_LABEL
+from opencontext_core.configurator.mcp_strategy import McpShape
 
 
 def _strip_project_managed_blocks(root: object, scope: str) -> None:
@@ -40,14 +42,22 @@ def _strip_project_managed_blocks(root: object, scope: str) -> None:
     if agents.exists():
         try:
             text = agents.read_text(encoding="utf-8")
-            write_text_atomic(agents, inject_managed_section(text, "stack", ""))
+            stripped = inject_managed_section(text, "stack", "")
+            if stripped.strip():
+                write_text_atomic(agents, stripped)
+            elif stripped != text:
+                agents.unlink()  # file held only our managed block — install created it
         except Exception:
             pass
     gitignore = base / ".gitignore"
     if gitignore.exists():
         try:
             text = gitignore.read_text(encoding="utf-8")
-            write_text_atomic(gitignore, inject_managed_lines(text, "storage", []))
+            stripped = inject_managed_lines(text, "storage", [])
+            if stripped.strip():
+                write_text_atomic(gitignore, stripped)
+            elif stripped != text:
+                gitignore.unlink()  # file held only our managed block — install created it
         except Exception:
             pass
 
@@ -157,7 +167,12 @@ def _global_state_targets() -> list[Path]:
 
 
 def _purge_global_state() -> list[str]:
-    """Delete OpenContext HOME state. Best-effort and scoped to known OC dirs."""
+    """Delete OpenContext HOME state. Best-effort and scoped to known OC dirs.
+
+    NOTE: a system-level Engram provisioned by ``install --install-engram`` (pipx/npm)
+    is intentionally NOT reversed here — that is a separate system install the user
+    owns, so uninstall never touches it. Only OpenContext's own HOME state is removed.
+    """
     import shutil
 
     removed: list[str] = []
@@ -263,12 +278,16 @@ def _run_full_uninstall(
     #     "local" scope regardless of the agent-config scope.
     _strip_project_managed_blocks(root, "local")
 
-    # 6. Verify traces
-    residue = verify_no_traces(root)
+    # 6. Verify traces. With --global-state, purge HOME state first, then scan both
+    #    project and global so the report is honest (a later --verify must agree).
     if global_state:
         report["global_removed"] = _purge_global_state()
-        report["global_residue"] = [str(p) for p in _global_state_targets() if p.exists()]
-    report["verify"] = {"passed": len(residue) == 0, "residue": residue}
+    residue = verify_no_traces(root)
+    global_residue = verify_no_global_traces([]) if global_state else []
+    if global_state:
+        report["global_residue"] = global_residue
+    all_residue = [*residue, *global_residue]
+    report["verify"] = {"passed": len(all_residue) == 0, "residue": residue}
 
     if json_output:
         print(json.dumps(report, indent=2))
@@ -283,9 +302,9 @@ def _run_full_uninstall(
         console.print(f"  [dim]purged: {', '.join(report['purged'])}[/]")
     if report.get("global_removed"):
         console.print(f"  [dim]global removed: {', '.join(report['global_removed'])}[/]")
-    if residue:
+    if all_residue:
         console.print("[yellow]Traces remain:[/]")
-        for trace in residue:
+        for trace in all_residue:
             console.print(f"  [dim]{trace}[/]")
     else:
         console.print("[green]verify passed[/]: no traces remain.")
@@ -332,12 +351,55 @@ def verify_no_traces(root: object) -> list[str]:
     return residue
 
 
-def verify_no_global_traces(agents: list[str]) -> list[str]:
-    """Check global agent config dirs for OpenContext residue.
+def _mcp_config_has_oc(path: Path, shape: McpShape) -> bool:
+    """Parse a (home) MCP config and report whether the opencontext server remains.
 
-    Returns list of paths with residue. MUST NOT delete any files — report only.
+    A text/regex scan misses the home MCP entry: the server is a nested object keyed
+    ``opencontext`` with a generic ``command``/``args``, so only parsing the declared
+    shape reliably detects it. Returns ``False`` on a missing or unparseable file.
+    """
+    if not path.exists():
+        return False
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    try:
+        if shape in (McpShape.JSON_MCP_SERVERS, McpShape.JSON_SERVERS):
+            data = json.loads(text)
+            key = "mcpServers" if shape is McpShape.JSON_MCP_SERVERS else "servers"
+            servers = data.get(key) if isinstance(data, dict) else None
+            return isinstance(servers, dict) and MCP_LABEL in servers
+        if shape is McpShape.YAML_MCP_SERVERS:
+            import yaml
+
+            data = yaml.safe_load(text)
+            servers = data.get("mcpServers") if isinstance(data, dict) else None
+            return isinstance(servers, dict) and MCP_LABEL in servers
+        if shape is McpShape.TOML_MCP_SERVERS:
+            import tomllib
+
+            data = tomllib.loads(text)
+            servers = data.get("mcp_servers") if isinstance(data, dict) else None
+            return isinstance(servers, dict) and MCP_LABEL in servers
+    except Exception:
+        return False
+    return False
+
+
+def verify_no_global_traces(agents: list[str]) -> list[str]:
+    """Check global (HOME) agent config + OpenContext state for residue.
+
+    Returns paths with residue. MUST NOT delete anything — report only. Detects each
+    installed agent's home MCP config still advertising an ``opencontext`` server
+    (parsed per shape), each agent's home persona dir for ``oc-*.md``, Claude Code's
+    settings.json allow-list, and OpenContext HOME state (``~/.config/opencontext``,
+    ``~/.opencontext/backups``). When ``agents`` is empty, installed agents are detected.
     """
     import re
+
+    from opencontext_core.configurator import constants
+    from opencontext_core.configurator.adapter import get_adapter
 
     _OC_PATTERN = re.compile(
         r"opencontext|oc-orchestrator|oc-explorer|oc-requirements", re.IGNORECASE
@@ -352,6 +414,22 @@ def verify_no_global_traces(agents: list[str]) -> list[str]:
     residue: list[str] = []
     home = Path.home()
 
+    detected = agents or Configurator().detect_installed()
+    for agent_id in detected:
+        try:
+            adapter = get_adapter(agent_id)
+        except Exception:
+            continue
+        # Home MCP config still carrying the opencontext server (invisible to regex).
+        if _mcp_config_has_oc(adapter.mcp_config_path, adapter.mcp_shape):
+            residue.append(str(adapter.mcp_config_path))
+        # Home persona dir (e.g. ~/.config/opencode/agents/oc-*.md).
+        subdir = constants.global_agents_subdir(agent_id)
+        if subdir:
+            persona_dir = adapter.config_dir / subdir
+            if persona_dir.exists():
+                residue.extend(str(p) for p in persona_dir.glob("oc-*.md") if p.is_file())
+
     # Claude Code global agents dir
     claude_global_agents = home / ".claude" / "agents"
     if claude_global_agents.exists():
@@ -360,7 +438,7 @@ def verify_no_global_traces(agents: list[str]) -> list[str]:
                 residue.append(str(child))
 
     # Claude Code hidden delegates dir
-    claude_delegates = home / ".claude" / "agents" / ".opencontext-delegates"
+    claude_delegates = claude_global_agents / ".opencontext-delegates"
     if claude_delegates.exists():
         for child in claude_delegates.glob("oc-*.md"):
             if child.is_file():
@@ -371,7 +449,12 @@ def verify_no_global_traces(agents: list[str]) -> list[str]:
     if claude_settings.exists() and _contains_oc(claude_settings):
         residue.append(str(claude_settings))
 
-    return residue
+    # OpenContext HOME state (config profiles + home backups).
+    for state_path in _global_state_targets():
+        if state_path.exists():
+            residue.append(str(state_path))
+
+    return list(dict.fromkeys(residue))
 
 
 def handle_uninstall(args: Any) -> None:
@@ -388,7 +471,7 @@ def handle_uninstall(args: Any) -> None:
     if getattr(args, "verify", False):
         residue = verify_no_traces(root)
         global_residue = verify_no_global_traces([])
-        passed = len(residue) == 0  # global_residue is report-only, not a failure
+        passed = len(residue) == 0 and len(global_residue) == 0
         if json_output:
             print(
                 json.dumps(
@@ -405,13 +488,12 @@ def handle_uninstall(args: Any) -> None:
                     for p in residue:
                         console.print(f"  [dim]{p}[/]")
                 if global_residue:
-                    console.print(
-                        "[yellow]verify[/]: global agent config residue (report only, not purged):"
-                    )
+                    console.print("[yellow]verify failed[/]: global traces remain:")
                     for p in global_residue:
                         console.print(f"  [dim]{p}[/]")
-                if residue or global_residue:
-                    console.print("[dim]Run 'opencontext uninstall --full --yes' to clean up.[/]")
+                console.print(
+                    "[dim]Run 'opencontext uninstall --full --global-state --yes' to clean up.[/]"
+                )
         sys.exit(0 if passed else 1)
 
     # --full: complete trace removal
