@@ -1099,10 +1099,10 @@ class RuntimeMigrationConfig(BaseModel):
         description="Resolve harnesses through the PR-006 HarnessRegistry.",
     )
     gateway_enabled: bool = Field(
-        default=False, description="Route provider calls through the unified gateway."
+        default=True, description="Route provider calls through the unified gateway."
     )
     context_engine_enabled: bool = Field(
-        default=False, description="Build context through the PR-010 ContextEngine."
+        default=True, description="Build context through the PR-010 ContextEngine."
     )
     execution_profile: str = Field(
         default="balanced",
@@ -1115,7 +1115,7 @@ class RuntimeMigrationConfig(BaseModel):
         ),
     )
     durable_artifacts: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Persist the PR-002 durable evidence layer "
             "(.opencontext/sessions/<id>/runs/<id>/{artifacts,receipts,checkpoints,patches}"
@@ -1144,7 +1144,7 @@ class RuntimeMigrationConfig(BaseModel):
         ),
     )
     kg_v2_enabled: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Enable the PR-008 Knowledge Graph v2 retrieval path (task-aware "
             "KgQueryPlanner -> budgeted ContextSubgraph consulted before broad file "
@@ -1153,7 +1153,7 @@ class RuntimeMigrationConfig(BaseModel):
         ),
     )
     memory_v2_enabled: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Enable the PR-009 Memory v2 governance path: route all durable memory "
             "promotion through the single MemoryHarness (8-step write lifecycle, "
@@ -1583,7 +1583,7 @@ class OpenContextConfig(BaseModel):
         description="Per-subsystem dual-run migration flags (legacy <-> Runtime vNext).",
     )
     runtime_intelligence_enabled: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Enable the Runtime Intelligence layer (PR-011): cost/confidence/"
             "simulation/profiler/benchmark/health/evolution reports. Optional and "
@@ -2118,12 +2118,13 @@ def default_config_data() -> dict[str, Any]:
             "persona_registry_enabled": True,
             "skill_registry_enabled": True,
             "harness_registry_enabled": True,
-            "gateway_enabled": False,
-            "context_engine_enabled": False,
+            "gateway_enabled": True,
+            "context_engine_enabled": True,
             "execution_profile": "balanced",
-            "durable_artifacts": False,
+            "durable_artifacts": True,
             "oc_flow_enabled": True,
-            "memory_v2_enabled": False,
+            "kg_v2_enabled": True,
+            "memory_v2_enabled": True,
             "retention": {
                 "summaries": "always",
                 "receipts": "always",
@@ -2134,6 +2135,10 @@ def default_config_data() -> dict[str, Any]:
             },
             "sdd_strict": False,
         },
+        # Runtime Intelligence layer (PR-011): vNext-default (parity-gated flip,
+        # tests/compat/flip_baseline/runtime_intelligence.json). Advisory — recommends,
+        # never overrides. Top-level flag (not under ``runtime``).
+        "runtime_intelligence_enabled": True,
         # Studio surface (PR-014). Optional + default off: the runtime/CLI/MCP run
         # headless with no Studio (SPEC-STU-014-12). The local read-only web shell
         # is launched explicitly via ``opencontext studio``; this flag records

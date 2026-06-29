@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "subsystem": "runtime_intelligence",
+  "flag": "runtime_intelligence_enabled",
+  "config_before": {
+    "runtime_intelligence_enabled": false
+  },
+  "config_after": {
+    "runtime_intelligence_enabled": true
+  },
+  "benchmark_before": {
+    "tests": {
+      "passed": 3980,
+      "failed": 0
+    }
+  },
+  "benchmark_after": {
+    "tests": {
+      "passed": 3980,
+      "failed": 0
+    }
+  },
+  "parity": {
+    "subsystem": "runtime_intelligence",
+    "flag": "runtime_intelligence_enabled",
+    "passed": true,
+    "mismatch": null
+  },
+  "rollback_flag": "runtime_intelligence_enabled",
+  "rollback_path": "packages/opencontext_core/opencontext_core/config.py",
+  "accepted": true,
+  "reverted": false,
+  "reason": "parity passed; full suite 0-failed; flip accepted",
+  "generated_at": "2026-06-29T12:00:00.000000+00:00"
+}

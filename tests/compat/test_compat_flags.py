@@ -33,6 +33,10 @@ def test_catalog_covers_the_runtime_flags() -> None:
 def test_catalog_includes_vnext_subsystem_flags() -> None:
     # AVH-003: the four previously-missing vNext flags must be catalogued, each with
     # a mapped subsystem (not "(unmapped)") and a migration_state (migration-visible).
+    # CL-005 (ledger-driven): a subsystem with an ACCEPTED flip-evidence bundle is EXEMPT
+    # from the default-False assertion (its vNext default is recorded migration evidence);
+    # an un-migrated flag must still default legacy-off.
+    accepted = _accepted_subsystems(Path(__file__).resolve().parents[2])
     by_name = {s.name: s for s in flag_catalog()}
     for name, subsystem in {
         "runtime.kg_v2_enabled": "knowledge_graph",
@@ -44,7 +48,8 @@ def test_catalog_includes_vnext_subsystem_flags() -> None:
         assert spec is not None, f"{name} missing from flag_catalog()"
         assert spec.subsystem == subsystem
         assert spec.migration_state in set(MigrationState)
-        assert spec.default is False
+        if subsystem not in accepted:
+            assert spec.default is False
 
 
 def test_session_wrapper_defaults_on() -> None:
@@ -151,11 +156,22 @@ def test_pending_subsystems_report_legacy_state() -> None:
 
 
 def test_one_flip_is_isolated() -> None:
-    # CL-005: flipping registry_enabled leaves gateway/context flags legacy.
+    # CL-005 (ledger-driven): setting ONE flag explicitly must not cascade — every other
+    # flag keeps its LIVE field default. A subsystem WITHOUT an accepted flip bundle must
+    # still default legacy-off (regression guard intact); a flipped subsystem (accepted
+    # bundle) is exempt and legitimately keeps its vNext default.
+    accepted = _accepted_subsystems(Path(__file__).resolve().parents[2])
     cfg = RuntimeMigrationConfig(registry_enabled=True)
     assert cfg.registry_enabled is True
-    assert cfg.gateway_enabled is False
-    assert cfg.context_engine_enabled is False
+    fields = RuntimeMigrationConfig.model_fields
+    for field, subsystem in (
+        ("gateway_enabled", "provider_gateway"),
+        ("context_engine_enabled", "context_engine"),
+    ):
+        live_default = fields[field].default
+        assert getattr(cfg, field) == live_default  # no cascade from the registry flip
+        if subsystem not in accepted:
+            assert live_default is False
 
 
 def test_retention_nested_block_is_not_a_flag() -> None:

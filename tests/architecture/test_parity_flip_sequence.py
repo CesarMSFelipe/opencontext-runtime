@@ -172,12 +172,26 @@ def test_release_acceptance_rejects_incomplete_bundle(tmp_path: Path) -> None:
 
 
 def test_release_acceptance_accepts_reverted_bundle_as_honest(tmp_path: Path) -> None:
-    """An auto-reverted flip whose ACTIVE flag is the legacy default is MET (honest)."""
+    """An auto-reverted flip whose ACTIVE flag matches its recorded legacy state is MET.
+
+    Ledger-driven: a revert is HONEST when the ACTIVE flag equals the bundle's
+    ``config_before`` (the pre-flip/legacy value the runtime actually carries). We read
+    the LIVE default so the test holds whether or not 'memory' has since been flipped
+    vNext-default on this branch — the mechanism under test is the honest-revert gate,
+    not the subsystem's current default.
+    """
     flag = SUBSYSTEM_FLAGS["memory"]
+    legacy = active_flag_value(flag)  # the live default the runtime actually carries
     parity = check_parity("memory", flag, legacy=0, vnext=5, equals=lambda a, b: b <= a)
-    bundle = _bundle(tmp_path, "memory", parity=parity)
+    bundle = _bundle(
+        tmp_path,
+        "memory",
+        parity=parity,
+        config_before={flag: legacy},
+        config_after={flag: not legacy},
+    )
     assert bundle.reverted is True
-    # ACTIVE default for memory_v2 is legacy/off, matching config_before.
+    # A reverted bundle's ACTIVE flag must match config_before (the legacy state) -> honest.
     assert active_flag_value(flag) == bundle.config_before[flag]
     verdict = AcceptanceEvaluator(repo_root=tmp_path).evaluate()
     flip_gate = next(g for g in verdict.gates if g.gate == "flip-memory")

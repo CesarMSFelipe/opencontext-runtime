@@ -71,14 +71,31 @@ def test_runner_reads_flags_from_config(tmp_path: Path, monkeypatch: Any) -> Non
 
 
 def test_runner_flags_default_legacy_off(tmp_path: Path, monkeypatch: Any) -> None:
+    # Ledger-driven: with no config file / explicit flags the runner adopts the LIVE
+    # config defaults and propagates them faithfully into the context. A subsystem WITHOUT
+    # an accepted flip bundle MUST default legacy-off (regression guard); a flipped one
+    # (accepted bundle) legitimately defaults vNext-on.
+    from opencontext_core.compat.flip_evidence import read_flip_bundles
+    from opencontext_core.config import RuntimeMigrationConfig
+
+    repo = Path(__file__).resolve().parents[2]
+    accepted = {b.subsystem for b in read_flip_bundles(repo) if b.accepted}
+    fields = RuntimeMigrationConfig.model_fields
+    exp_ce = bool(fields["context_engine_enabled"].default)
+    exp_kg = bool(fields["kg_v2_enabled"].default)
+    if "context_engine" not in accepted:
+        assert exp_ce is False
+    if "knowledge_graph" not in accepted:
+        assert exp_kg is False
+
     captured = _spy_context(monkeypatch)
     runner = OCFlowRunner(root=tmp_path)  # no config file, no explicit flags
-    assert runner._context_engine_enabled is False
-    assert runner._kg_v2_enabled is False
+    assert runner._context_engine_enabled is exp_ce
+    assert runner._kg_v2_enabled is exp_kg
     runner.run("Fix failing test", lane=Lane.FAST)
-    assert captured["context_engine_enabled"] is False
-    assert captured["kg_v2_enabled"] is False
-    assert captured["graph_db_path"] is None
+    assert captured["context_engine_enabled"] is exp_ce
+    assert captured["kg_v2_enabled"] is exp_kg
+    assert captured["graph_db_path"] is None  # no KG index under tmp_path
 
 
 def test_runner_explicit_false_overrides_config(tmp_path: Path) -> None:

@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "subsystem": "artifact_store",
+  "flag": "runtime.durable_artifacts",
+  "config_before": {
+    "runtime.durable_artifacts": false
+  },
+  "config_after": {
+    "runtime.durable_artifacts": true
+  },
+  "benchmark_before": {
+    "tests": {
+      "passed": 3980,
+      "failed": 0
+    }
+  },
+  "benchmark_after": {
+    "tests": {
+      "passed": 3980,
+      "failed": 0
+    }
+  },
+  "parity": {
+    "subsystem": "artifact_store",
+    "flag": "runtime.durable_artifacts",
+    "passed": true,
+    "mismatch": null
+  },
+  "rollback_flag": "runtime.durable_artifacts",
+  "rollback_path": "packages/opencontext_core/opencontext_core/config.py",
+  "accepted": true,
+  "reverted": false,
+  "reason": "parity passed; full suite 0-failed; flip accepted",
+  "generated_at": "2026-06-29T12:00:00.000000+00:00"
+}

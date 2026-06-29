@@ -51,7 +51,8 @@ def test_flag_off_writes_no_session_files(tmp_path: Path) -> None:
     target = tmp_path / "f.py"
     target.write_text("A\n", encoding="utf-8")
 
-    runner = HarnessRunner(root=tmp_path)  # durable_artifacts default False
+    runner = HarnessRunner(root=tmp_path)
+    runner._durable_artifacts = False  # exercise the OFF behaviour explicitly, not the default
     state = runner.create_run("sdd", "flag off")
     assert state.durable_artifacts is False
     state.apply_edits = [{"path": str(target), "content": "B\n"}]
