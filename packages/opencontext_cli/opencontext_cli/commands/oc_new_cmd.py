@@ -219,8 +219,7 @@ def handle_oc_new(args: Any) -> None:
                 console.info("No oc-new runs yet.")
                 return
             rows = [
-                [run.identity.run_id, run.current_phase or "done", run.task[:60]]
-                for run in runs
+                [run.identity.run_id, run.current_phase or "done", run.task[:60]] for run in runs
             ]
             console.table("Runs", ["Run ID", "Phase", "Task"], rows)
     else:

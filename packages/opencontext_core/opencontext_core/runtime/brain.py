@@ -242,8 +242,11 @@ class RuntimeBrain:
         reason = "; ".join(strategy.notes)
         return (
             strategy.profile,
-            sorted(p for p in ("low-cost", "balanced", "enterprise", "research", "performance")
-                   if p != strategy.profile),
+            sorted(
+                p
+                for p in ("low-cost", "balanced", "enterprise", "research", "performance")
+                if p != strategy.profile
+            ),
             reason,
             0.9,
             {"execution_strategy": strategy.model_dump()},

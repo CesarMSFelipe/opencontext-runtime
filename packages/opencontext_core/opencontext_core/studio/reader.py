@@ -249,9 +249,7 @@ class StudioReader:
                     getattr(state, "blocked_reason", None) is not None
                     and state.current_phase == p.name
                 ),
-                gate_reason=(
-                    state.blocked_reason if state.current_phase == p.name else None
-                ),
+                gate_reason=(state.blocked_reason if state.current_phase == p.name else None),
                 warnings=list(p.warnings),
                 started_at=str(p.started_at) if p.started_at else None,
                 completed_at=str(p.completed_at) if p.completed_at else None,
@@ -670,9 +668,7 @@ class StudioReader:
                     evidence=[str(e) for e in data.get("evidence", [])],
                 )
             )
-        return StudioLearningView(
-            session_id=sid, available=bool(candidates), candidates=candidates
-        )
+        return StudioLearningView(session_id=sid, available=bool(candidates), candidates=candidates)
 
     @staticmethod
     def _load_json_str(line: str) -> Any | None:
@@ -802,11 +798,7 @@ class StudioReader:
         """Benchmark coverage from the last recorded run (``benchmark-history.json``)."""
         from opencontext_core.runtime_intelligence import telemetry_layout
 
-        path = (
-            self._root
-            / telemetry_layout.TELEMETRY_DIR
-            / telemetry_layout.BENCHMARK_HISTORY_FILE
-        )
+        path = self._root / telemetry_layout.TELEMETRY_DIR / telemetry_layout.BENCHMARK_HISTORY_FILE
         history = self._load_json(path) if path.exists() else None
         if not isinstance(history, list) or not history:
             return StudioBenchmarkCoverageView(available=False)

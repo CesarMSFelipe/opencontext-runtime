@@ -99,8 +99,13 @@ def test_owner_resolves_from_graph(tmp_path: Path) -> None:
     subprocess.run(
         ["git", "-C", str(tmp_path), "commit", "-qm", "init"],
         check=True,
-        env={"GIT_AUTHOR_NAME": "Ada Owner", "GIT_AUTHOR_EMAIL": "a@b.c",
-             "GIT_COMMITTER_NAME": "Ada Owner", "GIT_COMMITTER_EMAIL": "a@b.c", "PATH": _path()},
+        env={
+            "GIT_AUTHOR_NAME": "Ada Owner",
+            "GIT_AUTHOR_EMAIL": "a@b.c",
+            "GIT_COMMITTER_NAME": "Ada Owner",
+            "GIT_COMMITTER_EMAIL": "a@b.c",
+            "PATH": _path(),
+        },
     )
     kg = _kg(tmp_path)
     try:

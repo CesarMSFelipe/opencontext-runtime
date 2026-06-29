@@ -31,6 +31,7 @@ def _decorator_names(source: str) -> set[str]:
                     names.add(target.attr)
     return names
 
+
 # The new cross-run cache modules added by PR-000.3.
 _NEW_MODULES = (
     "store.py",

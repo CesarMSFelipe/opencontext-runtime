@@ -51,9 +51,7 @@ def test_provider_write_delegates_to_harness_not_store() -> None:
 
         def write(self, record: MemoryRecord) -> MemoryReceipt:
             self.records.append(record)
-            return MemoryReceipt(
-                memory_id="m1", action="create", reason="write", evidence_refs=[]
-            )
+            return MemoryReceipt(memory_id="m1", action="create", reason="write", evidence_refs=[])
 
     spy = _SpyHarness()
     provider = MemoryStoreProvider(_ExplodingStore(), harness=spy, memory_v2_enabled=True)

@@ -71,9 +71,7 @@ class ProvidesBlock(BaseModel):
     def items(self) -> list[tuple[str, list[str]]]:
         """Yield ``(asset_kind, ids)`` pairs for every non-empty asset list."""
         return [
-            (name, getattr(self, name))
-            for name in type(self).model_fields
-            if getattr(self, name)
+            (name, getattr(self, name)) for name in type(self).model_fields if getattr(self, name)
         ]
 
 
@@ -117,9 +115,7 @@ class MarketplacePackage(BaseModel):
     )
     description: str = Field(default="", description="Human-readable description.")
 
-    requires: Requires = Field(
-        default_factory=Requires, description="Compatibility requirements."
-    )
+    requires: Requires = Field(default_factory=Requires, description="Compatibility requirements.")
     provides: ProvidesBlock = Field(
         default_factory=ProvidesBlock, description="Multi-asset contribution bundle."
     )

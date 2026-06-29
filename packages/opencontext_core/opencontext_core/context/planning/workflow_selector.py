@@ -54,9 +54,7 @@ def select_workflow(
     critical. Otherwise OC Flow — the fast operational default — is chosen.
     """
     classification = (classifier or TaskClassifier()).classify(task)
-    tier = (risk or RiskClassifier()).classify(
-        classification.task_type, classification.risk_level
-    )
+    tier = (risk or RiskClassifier()).classify(classification.task_type, classification.risk_level)
 
     high_risk = classification.risk_level in ("high", "critical")
     sdd_class = classification.task_type in _SDD_TASK_TYPES

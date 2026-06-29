@@ -115,9 +115,7 @@ class PluginContributions(BaseModel):
     def items(self) -> list[tuple[str, list[str]]]:
         """Yield ``(extension_point, ids)`` pairs for every non-empty point."""
         return [
-            (name, getattr(self, name))
-            for name in type(self).model_fields
-            if getattr(self, name)
+            (name, getattr(self, name)) for name in type(self).model_fields if getattr(self, name)
         ]
 
 

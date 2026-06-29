@@ -51,9 +51,7 @@ def load_manifest(pkg_root: Path | str) -> MarketplacePackage:
     manifest_path = Path(pkg_root) / PACKAGE_MANIFEST_NAME
     if not manifest_path.exists():
         raise FileNotFoundError(f"No {PACKAGE_MANIFEST_NAME} in {pkg_root}")
-    return MarketplacePackage.model_validate_json(
-        manifest_path.read_text(encoding="utf-8")
-    )
+    return MarketplacePackage.model_validate_json(manifest_path.read_text(encoding="utf-8"))
 
 
 def stage_package(src_dir: Path | str) -> Path:

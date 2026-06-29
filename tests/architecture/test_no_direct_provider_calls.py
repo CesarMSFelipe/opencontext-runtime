@@ -20,10 +20,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-ROOT = (
-    Path(__file__).resolve().parents[2]
-    / "packages/opencontext_core/opencontext_core"
-)
+ROOT = Path(__file__).resolve().parents[2] / "packages/opencontext_core/opencontext_core"
 
 #: The gateway seam itself — exempt from the direct-provider-call rule.
 GATEWAY_DIRS: tuple[str, ...] = ("llm/", "providers/")

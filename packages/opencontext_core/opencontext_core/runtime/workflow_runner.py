@@ -158,9 +158,7 @@ class WorkflowRunner:
         # Step 2: load workflow + node definition.
         node = self._workflow.get(node_id)
         if node is None:
-            return self._fail(
-                session_id, run_id, node_id, error="workflow_not_found: unknown node"
-            )
+            return self._fail(session_id, run_id, node_id, error="workflow_not_found: unknown node")
 
         ctx = ExecutionContext(
             session_id=session_id,

@@ -134,9 +134,7 @@ class ProviderGateway:
         # 4. Provider response cache (book §25) ----------------------------
         cached = self._cache_get(routed)
         if cached is not None:
-            self._emit(
-                ProviderEvent.COMPLETED, provider=provider, model=model, cache_hit=True
-            )
+            self._emit(ProviderEvent.COMPLETED, provider=provider, model=model, cache_hit=True)
             self._save_receipt(
                 "cost", provider=provider, model=model, reason=reason, cache_hit=True
             )
@@ -158,9 +156,7 @@ class ProviderGateway:
                 latency = perf_counter() - t0
                 resp = self._validate_structured(resp, request)
                 self._record_cost(routed, resp, latency, retries, reason)
-                self._emit(
-                    ProviderEvent.COMPLETED, provider=routed.provider, model=routed.model
-                )
+                self._emit(ProviderEvent.COMPLETED, provider=routed.provider, model=routed.model)
                 self._save_receipt(
                     "provider-call",
                     provider=routed.provider,

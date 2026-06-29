@@ -61,9 +61,7 @@ def test_declared_command_still_routes_through_policy(tmp_path: Path) -> None:
 
 def test_write_outside_sandbox_boundary_denied() -> None:
     """AC-SB1 scenario 2: a write with sandbox disabled is denied by policy."""
-    decision = evaluate_action(
-        ActionRequest(action=ActionType.WRITE_FILE, sandbox_enabled=False)
-    )
+    decision = evaluate_action(ActionRequest(action=ActionType.WRITE_FILE, sandbox_enabled=False))
     assert decision.allowed is False
     assert decision.reason == "write_requires_explicit_sandbox"
 
@@ -119,8 +117,12 @@ def test_verify_entry_checksum_helper(tmp_path: Path) -> None:
 def test_tampered_entry_refused_via_lifecycle(tmp_path: Path) -> None:
     d, _ = _make_plugin(tmp_path, "evil")
     manifest = {
-        "name": "evil", "version": "1.0.0", "entry_point": "plugin.py", "enabled": True,
-        "schema_version": "opencontext.plugin.v1", "id": "x.evil",
+        "name": "evil",
+        "version": "1.0.0",
+        "entry_point": "plugin.py",
+        "enabled": True,
+        "schema_version": "opencontext.plugin.v1",
+        "id": "x.evil",
         "contributes": {"personas": ["p"]},
         "entry_checksum": "sha256:" + "0" * 64,  # wrong
     }
@@ -136,9 +138,14 @@ def test_crashing_plugin_is_isolated(tmp_path: Path) -> None:
     body = "raise RuntimeError('boom at import')\n"
     d, checksum = _make_plugin(tmp_path, "boom", body=body)
     manifest = {
-        "name": "boom", "version": "1.0.0", "entry_point": "plugin.py", "enabled": True,
-        "schema_version": "opencontext.plugin.v1", "id": "x.boom",
-        "contributes": {"personas": ["p"]}, "entry_checksum": checksum,
+        "name": "boom",
+        "version": "1.0.0",
+        "entry_point": "plugin.py",
+        "enabled": True,
+        "schema_version": "opencontext.plugin.v1",
+        "id": "x.boom",
+        "contributes": {"personas": ["p"]},
+        "entry_checksum": checksum,
     }
     (d / "plugin.json").write_text(json.dumps(manifest), encoding="utf-8")
     # Must not raise out of the lifecycle.
@@ -151,8 +158,12 @@ def test_crashing_plugin_is_isolated(tmp_path: Path) -> None:
 # ── Benchmark gate (AC-BM1) ──────────────────────────────────────────────────
 def _manifest_with_suite(suites: list[str]) -> PluginManifest:
     return PluginManifest.model_validate(
-        {"name": "b", "version": "1.0.0", "entrypoint": "plugin.py",
-         "contributes": {"benchmark_suites": suites}}
+        {
+            "name": "b",
+            "version": "1.0.0",
+            "entrypoint": "plugin.py",
+            "contributes": {"benchmark_suites": suites},
+        }
     )
 
 
@@ -184,8 +195,12 @@ def test_failing_benchmark_blocks_activation(tmp_path: Path) -> None:
     body = _HEALTHY
     d, checksum = _make_plugin(tmp_path, "bench", body=body)
     manifest = {
-        "name": "bench", "version": "1.0.0", "entry_point": "plugin.py", "enabled": True,
-        "schema_version": "opencontext.plugin.v1", "id": "x.bench",
+        "name": "bench",
+        "version": "1.0.0",
+        "entry_point": "plugin.py",
+        "enabled": True,
+        "schema_version": "opencontext.plugin.v1",
+        "id": "x.bench",
         "contributes": {"benchmark_suites": ["s1"], "personas": ["p"]},
         "entry_checksum": checksum,
     }

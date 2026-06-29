@@ -73,9 +73,7 @@ def _check_capability_graph() -> DoctorCheck:
         return DoctorCheck(
             name="capabilities.graph",
             ok=bool(ready),
-            details=(
-                f"Capability graph: {len(ready)}/{total} ready — {listed}."
-            ),
+            details=(f"Capability graph: {len(ready)}/{total} ready — {listed}."),
         )
     except Exception as exc:
         return DoctorCheck(

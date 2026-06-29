@@ -29,9 +29,7 @@ class TestFacadeSurface:
     def test_exactly_eight_public_methods(self, tmp_path: Path) -> None:
         api = RuntimeApi(tmp_path)
         public = sorted(
-            name
-            for name in dir(api)
-            if not name.startswith("_") and callable(getattr(api, name))
+            name for name in dir(api) if not name.startswith("_") and callable(getattr(api, name))
         )
         assert public == sorted(
             [

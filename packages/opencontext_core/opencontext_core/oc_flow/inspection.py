@@ -140,18 +140,14 @@ def run_local_inspection(
 
     if not changed_files:
         if mutation_required:
-            gates.append(
-                _gate("scope", _BLOCKING, "mutation task produced no changed files")
-            )
+            gates.append(_gate("scope", _BLOCKING, "mutation task produced no changed files"))
         else:
             gates.append(_gate("scope", _PASSED, "no changed files to inspect"))
 
     outcome = _worst(gates)
     failure = ""
     if outcome != _PASSED:
-        failure = "; ".join(
-            str(g["message"]) for g in gates if str(g["status"]) != _PASSED
-        )
+        failure = "; ".join(str(g["message"]) for g in gates if str(g["status"]) != _PASSED)
 
     return InspectionReport(
         outcome=outcome,  # type: ignore[arg-type]

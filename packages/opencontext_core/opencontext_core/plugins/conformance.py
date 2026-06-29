@@ -95,9 +95,7 @@ def run_conformance(
     # CONF-4: Studio panels are read-only — a panel-only plugin must not require a
     # mutation permission (book §37: panels cannot execute Runtime operations).
     panels = manifest.contributes.studio_panels
-    mutation_perms = bool(
-        manifest.permissions.kg_write or manifest.permissions.memory_write
-    )
+    mutation_perms = bool(manifest.permissions.kg_write or manifest.permissions.memory_write)
     panel_only = bool(panels) and not _has_non_panel_contributions(manifest)
     panel_ok = not (panel_only and mutation_perms)
     checks.append(

@@ -33,7 +33,5 @@ def test_whatif_has_no_fabricated_reduction_field() -> None:
 
 def test_whatif_high_risk_prefers_sdd() -> None:
     engine = CostEngine()
-    comparison = engine.whatif(
-        "fix a critical production security vulnerability", emit=False
-    )
+    comparison = engine.whatif("fix a critical production security vulnerability", emit=False)
     assert comparison.chosen == "sdd"

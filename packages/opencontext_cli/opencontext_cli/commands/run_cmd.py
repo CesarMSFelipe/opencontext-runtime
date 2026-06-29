@@ -175,7 +175,7 @@ def handle_simulate(args: Any) -> None:
 
     task = getattr(args, "task", None)
     if not task:
-        print("Usage: opencontext simulate \"<task>\"", file=sys.stderr)
+        print('Usage: opencontext simulate "<task>"', file=sys.stderr)
         sys.exit(2)
     root = getattr(args, "root", ".")
 

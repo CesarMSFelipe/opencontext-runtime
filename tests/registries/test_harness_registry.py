@@ -196,8 +196,9 @@ def test_dangling_reference_fails_validation() -> None:
     )
     from opencontext_core.skills.definition import SkillDefinition
 
-    bad_skill = SkillDefinition(id="oc-bad", tier="T2", category="Mutation",
-                                required_harnesses=["nonexistent-harness"])
+    bad_skill = SkillDefinition(
+        id="oc-bad", tier="T2", category="Mutation", required_harnesses=["nonexistent-harness"]
+    )
     with pytest.raises(CrossReferenceError):
         ensure_cross_references([], [bad_skill], HarnessRegistry.with_builtins().list())
 

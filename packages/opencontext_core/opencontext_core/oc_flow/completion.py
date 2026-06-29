@@ -36,17 +36,60 @@ class CompletionStatus(StrEnum):
 
 # Verbs that imply a code/file mutation (OC Flow's reason to exist).
 _MUTATION_VERBS: tuple[str, ...] = (
-    "fix", "implement", "refactor", "edit", "add", "create", "build", "introduce",
-    "rename", "patch", "correct", "repair", "change", "modify", "update", "remove",
-    "delete", "migrate", "rewrite", "resolve", "make", "optimize", "improve",
-    "replace", "apply", "convert", "wire", "hook",
+    "fix",
+    "implement",
+    "refactor",
+    "edit",
+    "add",
+    "create",
+    "build",
+    "introduce",
+    "rename",
+    "patch",
+    "correct",
+    "repair",
+    "change",
+    "modify",
+    "update",
+    "remove",
+    "delete",
+    "migrate",
+    "rewrite",
+    "resolve",
+    "make",
+    "optimize",
+    "improve",
+    "replace",
+    "apply",
+    "convert",
+    "wire",
+    "hook",
 )
 
 # Verbs that imply a read-only / analysis / documentation task — a no-op is honest.
 _READONLY_VERBS: tuple[str, ...] = (
-    "explain", "review", "analyze", "analyse", "describe", "summarize", "summarise",
-    "audit", "investigate", "understand", "inspect", "report", "document", "docs",
-    "readme", "comment", "outline", "list", "show", "what", "why", "how",
+    "explain",
+    "review",
+    "analyze",
+    "analyse",
+    "describe",
+    "summarize",
+    "summarise",
+    "audit",
+    "investigate",
+    "understand",
+    "inspect",
+    "report",
+    "document",
+    "docs",
+    "readme",
+    "comment",
+    "outline",
+    "list",
+    "show",
+    "what",
+    "why",
+    "how",
 )
 
 
@@ -136,7 +179,5 @@ def completion_reason(status: CompletionStatus, *, mutation_required: bool) -> s
         CompletionStatus.escalated: (
             "could not converge within OC Flow bounds; escalated for a deeper fix"
         ),
-        CompletionStatus.blocked: (
-            "mutation task could not be verified as successful"
-        ),
+        CompletionStatus.blocked: ("mutation task could not be verified as successful"),
     }[status]

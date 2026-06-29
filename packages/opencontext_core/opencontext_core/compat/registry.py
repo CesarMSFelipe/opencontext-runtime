@@ -73,8 +73,7 @@ class AdapterRegistry:
         if flag_enabled:
             if not parity_passed:
                 raise ParityGateError(
-                    f"cannot route {subsystem} to vNext: parity not proven "
-                    f"(flag {adapter.flag})"
+                    f"cannot route {subsystem} to vNext: parity not proven (flag {adapter.flag})"
                 )
             return adapter.adapt
         return adapter.legacy

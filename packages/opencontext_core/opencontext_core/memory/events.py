@@ -71,9 +71,7 @@ class MemoryEventEmitter:
         **metadata: Any,
     ) -> MemoryEventRecord:
         """Record and broadcast an event; returns the recorded event."""
-        record = MemoryEventRecord(
-            type=str(event), memory_id=memory_id, metadata=dict(metadata)
-        )
+        record = MemoryEventRecord(type=str(event), memory_id=memory_id, metadata=dict(metadata))
         self.events.append(record)
         for sink in self._sinks:
             try:

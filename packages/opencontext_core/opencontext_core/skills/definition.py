@@ -35,14 +35,14 @@ class SkillDefinition(BaseModel):
     name: str = ""
     version: str = "1.0"
     tier: SkillTier = Field(description="T0 always-on | T1 per-phase | T2 conditional.")
-    category: str = Field(description="Context|Planning|Mutation|Inspection|Diagnosis|Review|Consolidation.")  # noqa: E501
+    category: str = Field(
+        description="Context|Planning|Mutation|Inspection|Diagnosis|Review|Consolidation."
+    )
 
     workflow_nodes: list[str] = Field(
         default_factory=list, description="Workflow nodes that trigger this skill."
     )
-    triggers: list[str] = Field(
-        default_factory=list, description="Free-form trigger keywords."
-    )
+    triggers: list[str] = Field(default_factory=list, description="Free-form trigger keywords.")
 
     inputs: list[str] = Field(default_factory=list, description="Declared typed inputs.")
     outputs: list[str] = Field(default_factory=list, description="Declared typed outputs.")

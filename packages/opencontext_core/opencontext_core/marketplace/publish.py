@@ -33,8 +33,24 @@ from opencontext_core.safety.secrets import SecretFinding, SecretScanner
 # Files scanned for leaked secrets. Binary/asset extensions are skipped — the
 # scanner operates on text.
 _TEXT_SUFFIXES = {
-    ".py", ".json", ".yaml", ".yml", ".toml", ".md", ".txt", ".cfg", ".ini",
-    ".env", ".sh", ".ts", ".js", ".html", ".css", ".xml", ".rst", "",
+    ".py",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".md",
+    ".txt",
+    ".cfg",
+    ".ini",
+    ".env",
+    ".sh",
+    ".ts",
+    ".js",
+    ".html",
+    ".css",
+    ".xml",
+    ".rst",
+    "",
 }
 
 
@@ -80,9 +96,7 @@ def validate_manifest(src_dir: Path | str) -> tuple[MarketplacePackage | None, l
     except Exception as exc:  # schema / permission validation failure
         return None, [f"invalid manifest: {exc}"]
     if not is_valid_semver(manifest.version):
-        errors.append(
-            f"version '{manifest.version}' is not semantic (MAJOR.MINOR.PATCH required)"
-        )
+        errors.append(f"version '{manifest.version}' is not semantic (MAJOR.MINOR.PATCH required)")
     if not manifest.id:
         errors.append("package id is required")
     return manifest, errors

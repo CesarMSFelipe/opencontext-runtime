@@ -27,9 +27,7 @@ def test_canonical_harness_seam_metadata() -> None:
 
 
 @pytest.mark.parametrize("cls, subsystem, flag, pr", DEFERRED)
-def test_deferred_seam_advertises_metadata(
-    cls: type, subsystem: str, flag: str, pr: str
-) -> None:
+def test_deferred_seam_advertises_metadata(cls: type, subsystem: str, flag: str, pr: str) -> None:
     adapter = cls()
     assert isinstance(adapter, LegacyAdapter)
     assert adapter.subsystem == subsystem

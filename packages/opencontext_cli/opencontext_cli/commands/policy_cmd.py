@@ -71,8 +71,7 @@ def handle_policy(args: Any) -> None:
 
 def _handle_presets(args: Any) -> None:
     rows = [
-        {"preset": preset.value, **posture.model_dump()}
-        for preset, posture in PRESET_TABLE.items()
+        {"preset": preset.value, **posture.model_dump()} for preset, posture in PRESET_TABLE.items()
     ]
     if getattr(args, "json", False):
         print(json.dumps(rows, indent=2))  # pure JSON to stdout

@@ -62,4 +62,3 @@ def test_store_get_returns_base_entry_with_type() -> None:
     # The store round-trips a base CacheEntry carrying the cache type.
     key = ToolCache._key("read", "")
     assert store.get(key) is None  # different args_hash -> different key
-

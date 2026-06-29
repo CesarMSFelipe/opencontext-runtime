@@ -44,8 +44,7 @@ def test_zero_disagreements_across_matrix() -> None:
     disagreements = [
         task
         for task, _ in _MATRIX
-        if RuntimeSimulator().simulate(task).recommended_workflow
-        != run_select_workflow(task)
+        if RuntimeSimulator().simulate(task).recommended_workflow != run_select_workflow(task)
     ]
     assert disagreements == []
 

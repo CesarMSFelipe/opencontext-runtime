@@ -13,9 +13,7 @@ def _no_linter_graph() -> CapabilityGraph:
 
 
 def test_missing_linter_downgrades_not_fails() -> None:
-    bridge = CapabilityAwareSelection(
-        WorkflowRegistry(), graph=_no_linter_graph(), enabled=True
-    )
+    bridge = CapabilityAwareSelection(WorkflowRegistry(), graph=_no_linter_graph(), enabled=True)
 
     plan = {d.gate: d for d in bridge.degrade_gates({"lint": "ruff-check", "tests": "pytest"})}
 
@@ -28,17 +26,13 @@ def test_missing_linter_downgrades_not_fails() -> None:
 
 
 def test_available_capabilities_feed_selection_when_enabled() -> None:
-    bridge = CapabilityAwareSelection(
-        WorkflowRegistry(), graph=_no_linter_graph(), enabled=True
-    )
+    bridge = CapabilityAwareSelection(WorkflowRegistry(), graph=_no_linter_graph(), enabled=True)
     assert bridge.available_capabilities() == {"pytest"}
 
 
 def test_flag_disabled_restores_legacy_behaviour() -> None:
     # enabled=False (runtime.execution_profile == "") -> no capability influence.
-    bridge = CapabilityAwareSelection(
-        WorkflowRegistry(), graph=_no_linter_graph(), enabled=False
-    )
+    bridge = CapabilityAwareSelection(WorkflowRegistry(), graph=_no_linter_graph(), enabled=False)
     assert bridge.enabled is False
     assert bridge.available_capabilities() == set()
     plan = bridge.degrade_gates({"lint": "ruff-check"})
@@ -46,9 +40,7 @@ def test_flag_disabled_restores_legacy_behaviour() -> None:
 
 
 def test_from_config_empty_profile_disables_bridge() -> None:
-    bridge = CapabilityAwareSelection.from_config(
-        WorkflowRegistry(), "", graph=_no_linter_graph()
-    )
+    bridge = CapabilityAwareSelection.from_config(WorkflowRegistry(), "", graph=_no_linter_graph())
     assert bridge.enabled is False
 
     enabled = CapabilityAwareSelection.from_config(

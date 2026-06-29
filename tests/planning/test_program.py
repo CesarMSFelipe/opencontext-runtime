@@ -21,9 +21,28 @@ from opencontext_core.planning.program import (
 
 # The _INDEX-refined-runtime-vnext.md program: 17 main PRs + 5 foundational = 22.
 PROGRAM_22_PRS: list[str] = [
-    "001", "002", "003", "004", "005", "006", "007", "008", "009",
-    "010", "011", "012", "013", "014", "015", "016", "017",
-    "000", "000.1", "000.2", "000.3", "000.4",
+    "001",
+    "002",
+    "003",
+    "004",
+    "005",
+    "006",
+    "007",
+    "008",
+    "009",
+    "010",
+    "011",
+    "012",
+    "013",
+    "014",
+    "015",
+    "016",
+    "017",
+    "000",
+    "000.1",
+    "000.2",
+    "000.3",
+    "000.4",
 ]
 
 
@@ -73,18 +92,13 @@ def test_22_pr_program_has_zero_orphans() -> None:
     )
     assert plan.convergence.orphans(PROGRAM_22_PRS) == []
     assert len(plan.convergence.entries) == len(PROGRAM_22_PRS)
-    assert all(
-        e.disposition is Disposition.assigned and e.pr_id
-        for e in plan.convergence.entries
-    )
+    assert all(e.disposition is Disposition.assigned and e.pr_id for e in plan.convergence.entries)
 
 
 def test_orphan_requirement_fails_the_build_and_is_named() -> None:
     # The blank requirement is dropped by decompose and is not deferred/rejected.
     with pytest.raises(PlanningError) as excinfo:
-        MetaPlanner().build(
-            intent="leak one", requirements=["R1", "   "], persist=False
-        )
+        MetaPlanner().build(intent="leak one", requirements=["R1", "   "], persist=False)
     assert "orphan" in str(excinfo.value).lower()
 
 

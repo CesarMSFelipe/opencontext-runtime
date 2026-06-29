@@ -14,9 +14,10 @@ def test_enterprise_is_stricter_than_low_cost() -> None:
     assert isinstance(enterprise, ExecutionStrategy)
 
     # Harness strictness and retry budget are strictly tighter for enterprise.
-    assert _STRICTNESS_RANK[enterprise.harness_strictness] > _STRICTNESS_RANK[
-        low_cost.harness_strictness
-    ]
+    assert (
+        _STRICTNESS_RANK[enterprise.harness_strictness]
+        > _STRICTNESS_RANK[low_cost.harness_strictness]
+    )
     assert enterprise.retry_budget > low_cost.retry_budget
     assert enterprise.budget_mode == "strict"
     assert low_cost.budget_mode == "off"

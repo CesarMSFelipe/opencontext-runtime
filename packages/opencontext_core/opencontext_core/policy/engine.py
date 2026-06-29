@@ -243,7 +243,10 @@ class PolicyEngine:
         )
         if result.allowed:
             return self._decision(
-                "provider", "allow", result.reason, "policy.provider",
+                "provider",
+                "allow",
+                result.reason,
+                "policy.provider",
                 evidence=[f"provider:{operation.provider}"],
             )
         return self._decision(
@@ -286,7 +289,10 @@ class PolicyEngine:
         capability = operation.requested_capability or ""
         if capability and capability in operation.plugin_allowlist:
             return self._decision(
-                "plugin", "allow", "capability_allowlisted", "policy.plugin",
+                "plugin",
+                "allow",
+                "capability_allowlisted",
+                "policy.plugin",
                 evidence=[f"capability:{capability}"],
             )
         return self._decision(

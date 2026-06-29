@@ -16,9 +16,7 @@ def test_rollback_produces_full_evidence(tmp_path: Path) -> None:
     target.write_text("ORIG\n", encoding="utf-8")
     run_dir = ensure_layout(tmp_path, "sess_1", "run_1")
 
-    checkpoint = CheckpointManager(tmp_path).create(
-        [target], session_id="sess_1", run_id="run_1"
-    )
+    checkpoint = CheckpointManager(tmp_path).create([target], session_id="sess_1", run_id="run_1")
     assert checkpoint is not None
     # Simulate a mutation that must be rolled back.
     target.write_text("CHANGED\n", encoding="utf-8")

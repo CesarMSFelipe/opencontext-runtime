@@ -23,7 +23,5 @@ def test_write_snapshot_persists_resolved_config(tmp_path: Path) -> None:
 
 def test_snapshot_written_under_session_dir(tmp_path: Path) -> None:
     write_snapshot(default_config_data(), "sess-xyz", tmp_path)
-    expected = (
-        tmp_path / ".opencontext" / "sessions" / "sess-xyz" / "config-snapshot.yaml"
-    )
+    expected = tmp_path / ".opencontext" / "sessions" / "sess-xyz" / "config-snapshot.yaml"
     assert expected.exists()

@@ -445,8 +445,7 @@ class RuntimeApi:
         raw_edits = mutation.payload.get("edits", [])
         try:
             edits = [
-                e if isinstance(e, ApplyEdit) else ApplyEdit.model_validate(e)
-                for e in raw_edits
+                e if isinstance(e, ApplyEdit) else ApplyEdit.model_validate(e) for e in raw_edits
             ]
         except (ValueError, TypeError) as exc:
             raise RuntimeFailure(
@@ -493,9 +492,7 @@ class RuntimeApi:
                 "checkpoint store rejected the mutation (no target files)",
                 recoverable=False,
             )
-        cp_model = CheckpointManager(root).model(
-            checkpoint, session_id=session_id, run_id=run_id
-        )
+        cp_model = CheckpointManager(root).model(checkpoint, session_id=session_id, run_id=run_id)
         checkpoint_path = run_dir / "checkpoints" / f"{cp_model.checkpoint_id}.json"
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         checkpoint_path.write_text(cp_model.model_dump_json(indent=2), encoding="utf-8")

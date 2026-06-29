@@ -44,9 +44,7 @@ def _boom(*_a: Any, **_k: Any) -> Any:
 
 
 # --------------------------------------------------------------- runner flag plumbing
-def test_runner_propagates_explicit_flags_into_context(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_runner_propagates_explicit_flags_into_context(tmp_path: Path, monkeypatch: Any) -> None:
     captured = _spy_context(monkeypatch)
     runner = OCFlowRunner(root=tmp_path, context_engine_enabled=True, kg_v2_enabled=True)
     runner.run("Fix failing test", lane=Lane.FAST)
@@ -56,8 +54,7 @@ def test_runner_propagates_explicit_flags_into_context(
 
 def test_runner_reads_flags_from_config(tmp_path: Path, monkeypatch: Any) -> None:
     (tmp_path / "opencontext.yaml").write_text(
-        "project:\n  name: x\n"
-        "runtime:\n  context_engine_enabled: true\n  kg_v2_enabled: true\n",
+        "project:\n  name: x\nruntime:\n  context_engine_enabled: true\n  kg_v2_enabled: true\n",
         encoding="utf-8",
     )
     runner = OCFlowRunner(root=tmp_path)
@@ -101,13 +98,10 @@ def test_runner_flags_default_legacy_off(tmp_path: Path, monkeypatch: Any) -> No
 def test_runner_explicit_false_overrides_config(tmp_path: Path) -> None:
     # Config says ON; an explicit ctor False must win (cli/test override path).
     (tmp_path / "opencontext.yaml").write_text(
-        "project:\n  name: x\n"
-        "runtime:\n  context_engine_enabled: true\n  kg_v2_enabled: true\n",
+        "project:\n  name: x\nruntime:\n  context_engine_enabled: true\n  kg_v2_enabled: true\n",
         encoding="utf-8",
     )
-    runner = OCFlowRunner(
-        root=tmp_path, context_engine_enabled=False, kg_v2_enabled=False
-    )
+    runner = OCFlowRunner(root=tmp_path, context_engine_enabled=False, kg_v2_enabled=False)
     assert runner._context_engine_enabled is False
     assert runner._kg_v2_enabled is False
 
@@ -129,9 +123,7 @@ def _ctx(root: Path, **flags: Any) -> OCFlowContext:
     )
 
 
-def test_gather_context_uses_context_engine_when_enabled(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_gather_context_uses_context_engine_when_enabled(tmp_path: Path, monkeypatch: Any) -> None:
     marker = ContextEnvelope(
         task="Fix failing test",
         items=[ContextEnvelopeItem(source="engine", ref="ce", summary="ce", tokens=10)],
@@ -150,9 +142,7 @@ def test_gather_context_uses_context_engine_when_enabled(
     assert [i.source for i in ctx.envelope.items] == ["engine"]
 
 
-def test_gather_context_uses_kg_subgraph_when_enabled(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_gather_context_uses_kg_subgraph_when_enabled(tmp_path: Path, monkeypatch: Any) -> None:
     kg_items = [ContextEnvelopeItem(source="kg", ref="m.py", summary="fn", tokens=80)]
     monkeypatch.setattr(nodes_mod, "_kg_v2_seed_items", lambda ctx: kg_items)
     # KG items win: the ContextEngine path must NOT be reached even when also enabled.

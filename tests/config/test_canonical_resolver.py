@@ -136,9 +136,7 @@ def test_missing_config_falls_back_and_hint_is_actionable(tmp_path: Path) -> Non
     assert "--config" in hint
 
 
-def test_run_emits_actionable_hint_when_config_missing(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_run_emits_actionable_hint_when_config_missing(tmp_path: Path, monkeypatch, capsys) -> None:
     project = tmp_path / "empty"
     project.mkdir()
     monkeypatch.setattr("opencontext_core.oc_flow.cli.run_oc_flow_cli", lambda *a, **k: None)

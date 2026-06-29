@@ -58,9 +58,7 @@ def test_flag_on_writes_selection_receipt(tmp_path: Path) -> None:
     """RCPT1: a flag-on run records the selection receipt with alias metadata."""
     runner = _runner(tmp_path, registry_enabled=True)
     result = runner.run("standard", "demo task")
-    receipt_path = (
-        tmp_path / ".opencontext" / "runs" / result.run_id / "workflow-selection.json"
-    )
+    receipt_path = tmp_path / ".opencontext" / "runs" / result.run_id / "workflow-selection.json"
     assert receipt_path.exists()
     receipt = json.loads(receipt_path.read_text())
     assert receipt["requested"] == "standard"

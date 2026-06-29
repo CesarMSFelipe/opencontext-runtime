@@ -128,8 +128,7 @@ def handle_decisions(args: Any) -> None:
             # The run exists; it simply has no decisions (RI/decision-log off
             # or the run produced none). Honest, not "Run not found".
             console.info(
-                f"Run {args.run_id}: no decisions recorded "
-                "(runtime decision-log produced none)."
+                f"Run {args.run_id}: no decisions recorded (runtime decision-log produced none)."
             )
             return
         for drow in decision_rows:

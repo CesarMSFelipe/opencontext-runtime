@@ -75,8 +75,10 @@ def test_audit_reports_live_records(
 
     class _Store:
         def list_records(self, *, limit: int = 200) -> list[MemoryRecord]:
-            return [_rec("fresh", confidence=0.9, age_days=0),
-                    _rec("old", confidence=0.2, age_days=200)]
+            return [
+                _rec("fresh", confidence=0.9, age_days=0),
+                _rec("old", confidence=0.2, age_days=200),
+            ]
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "_agent_memory_store", lambda args: _Store())

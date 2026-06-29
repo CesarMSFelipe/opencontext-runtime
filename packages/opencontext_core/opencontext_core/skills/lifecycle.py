@@ -83,9 +83,7 @@ def run_skill(
 
     missing_in = defn.missing_inputs(inputs)
     if missing_in:
-        raise SkillInputError(
-            f"skill {defn.id!r} missing required inputs: {', '.join(missing_in)}"
-        )
+        raise SkillInputError(f"skill {defn.id!r} missing required inputs: {', '.join(missing_in)}")
 
     produced = executor(defn, inputs)
     missing_out = defn.missing_outputs(produced)
@@ -111,9 +109,7 @@ def run_skill(
     )
 
 
-def _resolve(
-    skill: SkillDefinition | str, registry: SkillRegistryV2 | None
-) -> SkillDefinition:
+def _resolve(skill: SkillDefinition | str, registry: SkillRegistryV2 | None) -> SkillDefinition:
     if isinstance(skill, SkillDefinition):
         return skill
     reg = registry or SkillRegistryV2.with_builtins()

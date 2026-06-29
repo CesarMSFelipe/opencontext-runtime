@@ -34,16 +34,12 @@ def test_session_tools_registered(server: MCPServer) -> None:
 
 
 def test_start_then_next_advances(server: MCPServer, tmp_path: Path) -> None:
-    start = server._call_tool(
-        "opencontext_session_start", {"task": "x", "root": str(tmp_path)}
-    )
+    start = server._call_tool("opencontext_session_start", {"task": "x", "root": str(tmp_path)})
     assert start["status"] == "passed"
     sid = start["data"]["session_id"]
     assert sid.startswith("sess-")
 
-    nxt = server._call_tool(
-        "opencontext_session_next", {"session_id": sid, "root": str(tmp_path)}
-    )
+    nxt = server._call_tool("opencontext_session_next", {"session_id": sid, "root": str(tmp_path)})
     assert nxt["status"] == "passed"
     assert "kind" in nxt["data"]
 

@@ -106,8 +106,11 @@ class _StubGateway:
 
         self.calls.append(request)
         return LLMResponse(
-            content=self._content, provider="mock", model="golden-stub",
-            input_tokens=1, output_tokens=1,
+            content=self._content,
+            provider="mock",
+            model="golden-stub",
+            input_tokens=1,
+            output_tokens=1,
         )
 
 
@@ -135,22 +138,30 @@ def _copy_fixture(fixture_dir: Path) -> tuple[Path, Path]:
 
 def _met(name: str, version: str, notes: str, **fields: Any) -> BenchmarkSuiteReport:
     return BenchmarkSuiteReport(
-        suite=name, version=version, status=GateStatus.MET,
-        measured=True, success=True, notes=notes, **fields,
+        suite=name,
+        version=version,
+        status=GateStatus.MET,
+        measured=True,
+        success=True,
+        notes=notes,
+        **fields,
     )
 
 
 def _failed(name: str, version: str, notes: str, **fields: Any) -> BenchmarkSuiteReport:
     return BenchmarkSuiteReport(
-        suite=name, version=version, status=GateStatus.FAILED,
-        measured=True, success=False, notes=notes, **fields,
+        suite=name,
+        version=version,
+        status=GateStatus.FAILED,
+        measured=True,
+        success=False,
+        notes=notes,
+        **fields,
     )
 
 
 # ------------------------------------------------------------------- per-suite runners
-def _run_oc_flow_bugfix(
-    suite: GoldenSuite, fixture_dir: Path, smoke: bool
-) -> BenchmarkSuiteReport:
+def _run_oc_flow_bugfix(suite: GoldenSuite, fixture_dir: Path, smoke: bool) -> BenchmarkSuiteReport:
     """DoD bugfix: stub-driven OC Flow applies the fix; ``pytest`` must pass."""
     from opencontext_core.oc_flow.models import Lane
     from opencontext_core.oc_flow.nodes import ProviderBackedNodeExecutor
@@ -165,7 +176,8 @@ def _run_oc_flow_bugfix(
     try:
         executor = ProviderBackedNodeExecutor(
             gateway=_StubGateway(stub_path.read_text(encoding="utf-8")),
-            root=work, provider="mock",
+            root=work,
+            provider="mock",
         )
         t0 = time.perf_counter()
         result = OCFlowRunner(root=work, executor=executor).run(task, lane=Lane.FAST)
@@ -197,13 +209,18 @@ def _run_oc_flow_bugfix(
         if elapsed > max_t:
             problems.append(f"elapsed {elapsed:.1f}s > {max_t}s")
 
-        fields = {"duration_ms": int(elapsed * 1000), "changed_files": changed,
-                  "tokens": result.total_tokens}
+        fields = {
+            "duration_ms": int(elapsed * 1000),
+            "changed_files": changed,
+            "tokens": result.total_tokens,
+        }
         if problems:
             return _failed(suite.name, suite.version, "; ".join(problems), **fields)
         return _met(
-            suite.name, suite.version,
-            f"bug fixed via stub ApplyEdit, pytest passed, {changed} file(s) changed", **fields,
+            suite.name,
+            suite.version,
+            f"bug fixed via stub ApplyEdit, pytest passed, {changed} file(s) changed",
+            **fields,
         )
     finally:
         shutil.rmtree(base, ignore_errors=True)
@@ -242,7 +259,8 @@ def _run_first_run(suite: GoldenSuite, fixture_dir: Path, smoke: bool) -> Benchm
         if problems:
             return _failed(suite.name, suite.version, "; ".join(problems), **fields)
         return _met(
-            suite.name, suite.version,
+            suite.name,
+            suite.version,
             "install+doctor+index exited 0 with a usable config and index artifact",
             **fields,
         )
@@ -273,10 +291,13 @@ def _run_policy_security(
     work, base = _copy_fixture(fixture_dir)
     try:
         executor = ProviderBackedNodeExecutor(
-            gateway=_StubGateway(forbidden_json), root=work, provider="mock",
+            gateway=_StubGateway(forbidden_json),
+            root=work,
+            provider="mock",
         )
         result = OCFlowRunner(root=work, executor=executor).run(
-            "Write a credentials helper", lane=Lane.FAST,
+            "Write a credentials helper",
+            lane=Lane.FAST,
         )
         if result.status == "completed":
             problems.append("forbidden-path run reported completed")
@@ -292,13 +313,17 @@ def _run_policy_security(
     work, base = _copy_fixture(fixture_dir)
     try:
         secret_edit = ApplyEdit(
-            path="leak.py", operation=ApplyOperation.CREATE_FILE, content=secret_text,
-            reason="write credentials (must be blocked)", requirement_refs=["no secret output"],
+            path="leak.py",
+            operation=ApplyOperation.CREATE_FILE,
+            content=secret_text,
+            reason="write credentials (must be blocked)",
+            requirement_refs=["no secret output"],
         )
         stub = _StubGateway(json.dumps([secret_edit.model_dump()]))
         executor = ProviderBackedNodeExecutor(gateway=stub, root=work, provider="mock")
         result = OCFlowRunner(root=work, executor=executor).run(
-            "Write a credentials helper", lane=Lane.FAST,
+            "Write a credentials helper",
+            lane=Lane.FAST,
         )
         if result.status == "completed":
             problems.append("secret-output run reported completed")
@@ -315,7 +340,8 @@ def _run_policy_security(
     if problems:
         return _failed(suite.name, suite.version, "; ".join(problems))
     return _met(
-        suite.name, suite.version,
+        suite.name,
+        suite.version,
         "secret detected; forbidden write denied + run blocked; no secret in artifacts",
     )
 
@@ -338,7 +364,8 @@ def _run_resume_rollback(
         problems: list[str] = []
         executor = ProviderBackedNodeExecutor(
             gateway=_StubGateway(stub_path.read_text(encoding="utf-8")),
-            root=work, provider="mock",
+            root=work,
+            provider="mock",
         )
         runner = OCFlowRunner(root=work, executor=executor)
         result = runner.run("Fix failing test", lane=Lane.FAST)
@@ -368,7 +395,8 @@ def _run_resume_rollback(
         if problems:
             return _failed(suite.name, suite.version, "; ".join(problems))
         return _met(
-            suite.name, suite.version,
+            suite.name,
+            suite.version,
             "checkpointed run resumed (manifest+artifacts validated); rollback restored files",
         )
     finally:
@@ -392,6 +420,7 @@ def _run_provider_fallback(
     kind = str(fault.get("fault", "error"))
     work, base = _copy_fixture(fixture_dir)
     try:
+
         class _FaultyBase:
             def generate(self, request: Any) -> Any:
                 if kind == "timeout":
@@ -401,20 +430,33 @@ def _run_provider_fallback(
         class _MockAdapter:
             def chat_with_retries(self, messages: Any, model: str, max_tokens: int) -> Any:
                 return SimpleNamespace(
-                    content="fallback ok", provider=fallback_provider, model=model,
-                    input_tokens=1, output_tokens=1, metadata={},
+                    content="fallback ok",
+                    provider=fallback_provider,
+                    model=model,
+                    input_tokens=1,
+                    output_tokens=1,
+                    metadata={},
                 )
 
         receipts = RunReceiptStore(work)
         gateway = ProviderGateway(
-            _FaultyBase(), receipts=receipts, fallback=True,
+            _FaultyBase(),
+            receipts=receipts,
+            fallback=True,
             fallback_providers=(fallback_provider,),
-            adapter_factory=lambda _provider: _MockAdapter(), retry_limit=2,
+            adapter_factory=lambda _provider: _MockAdapter(),
+            retry_limit=2,
         )
-        resp = gateway.generate(LLMRequest(
-            prompt="hello", system_prompt="", provider=primary, model="m",
-            max_output_tokens=16, metadata={"role": "generate"},
-        ))
+        resp = gateway.generate(
+            LLMRequest(
+                prompt="hello",
+                system_prompt="",
+                provider=primary,
+                model="m",
+                max_output_tokens=16,
+                metadata={"role": "generate"},
+            )
+        )
         problems: list[str] = []
         if resp.provider != fallback_provider:
             problems.append(f"fallback provider was {resp.provider} (expected {fallback_provider})")
@@ -425,7 +467,8 @@ def _run_provider_fallback(
         if problems:
             return _failed(suite.name, suite.version, "; ".join(problems))
         return _met(
-            suite.name, suite.version,
+            suite.name,
+            suite.version,
             f"{kind} on {primary} -> fell back to {fallback_provider}; fallback receipt recorded",
         )
     finally:
@@ -489,7 +532,8 @@ def _run_sdd_formal_feature(
     if problems:
         return _failed(suite.name, suite.version, "; ".join(problems))
     return _met(
-        suite.name, suite.version,
+        suite.name,
+        suite.version,
         f"formal task routed to {selection.workflow}; {len(producing)} SDD phases produce "
         "artifacts; phase outputs present",
     )
@@ -531,9 +575,7 @@ def _run_plugin_compatibility(
         problems.append(f"conformance failed: {fails}")
 
     # plugin_loads: the sandbox loader activates the declared entry point.
-    sandbox = run_sandboxed(
-        plugin_dir, entry_point=manifest.entrypoint, plugin_name=manifest.name
-    )
+    sandbox = run_sandboxed(plugin_dir, entry_point=manifest.entrypoint, plugin_name=manifest.name)
     plugin_loads = sandbox.ok
     if expected.get("plugin_loads", True) and not plugin_loads:
         problems.append(f"plugin did not load: {sandbox.reason}")
@@ -541,7 +583,8 @@ def _run_plugin_compatibility(
     if problems:
         return _failed(suite.name, suite.version, "; ".join(problems))
     return _met(
-        suite.name, suite.version,
+        suite.name,
+        suite.version,
         f"sample plugin loaded ({sandbox.reason}) and passed {len(report.checks)} "
         "conformance checks against the public contracts",
     )
@@ -564,13 +607,23 @@ def _run_cli(
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "opencontext_cli.main", *argv],
-        cwd=str(cwd), env=env, capture_output=True, text=True, timeout=180, check=False,
+        cwd=str(cwd),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
     )
 
 
 def _run_subprocess(argv: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        argv, cwd=str(cwd), capture_output=True, text=True, timeout=180, check=False,
+        argv,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
     )
 
 

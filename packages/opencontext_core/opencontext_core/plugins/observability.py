@@ -74,12 +74,8 @@ class PluginObserver:
     def emit(self, event: PluginEvent) -> None:
         self.events.append(event)
 
-    def emit_stage(
-        self, stage: str, plugin_id: str, *, status: str = "", detail: str = ""
-    ) -> None:
-        self.emit(
-            PluginEvent(type=stage, plugin_id=plugin_id, status=status, detail=detail)
-        )
+    def emit_stage(self, stage: str, plugin_id: str, *, status: str = "", detail: str = "") -> None:
+        self.emit(PluginEvent(type=stage, plugin_id=plugin_id, status=status, detail=detail))
 
     def emit_contribution(self, record: ContributionRecord) -> None:
         self.emit(

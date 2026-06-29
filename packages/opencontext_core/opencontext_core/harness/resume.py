@@ -104,9 +104,7 @@ class ResumeManager:
         """Rehydrate the prior Decision Log; a missing log warns, never aborts."""
         log_refs = [r for r in rehydrated if r.kind == "decision-log"]
         if not log_refs:
-            warnings.append(
-                "no decision-log artifact — resuming without prior decision context"
-            )
+            warnings.append("no decision-log artifact — resuming without prior decision context")
             return []
         ref = log_refs[-1]  # already checksum-verified (it is in rehydrated)
         entries: list[dict[str, Any]] = []
@@ -120,19 +118,13 @@ class ResumeManager:
                 continue
         return entries
 
-    def _validate_profile_snapshot(
-        self, manifest: RunManifest, warnings: list[str]
-    ) -> None:
+    def _validate_profile_snapshot(self, manifest: RunManifest, warnings: list[str]) -> None:
         """Validate the profile/capability snapshot; absent warns, corrupt aborts."""
         snaps = [
-            r
-            for r in manifest.artifacts
-            if r.metadata.get("snapshot") == PROFILE_SNAPSHOT_MARKER
+            r for r in manifest.artifacts if r.metadata.get("snapshot") == PROFILE_SNAPSHOT_MARKER
         ]
         if not snaps:
-            warnings.append(
-                "no profile/capability snapshot — resuming without profile validation"
-            )
+            warnings.append("no profile/capability snapshot — resuming without profile validation")
             return
         ref = snaps[-1]
         content_path = self.run_dir / ref.path
@@ -143,9 +135,7 @@ class ResumeManager:
         try:
             json.loads(content_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            raise ResumeIntegrityError(
-                "profile/capability snapshot is unparseable"
-            ) from exc
+            raise ResumeIntegrityError("profile/capability snapshot is unparseable") from exc
 
 
 __all__ = [

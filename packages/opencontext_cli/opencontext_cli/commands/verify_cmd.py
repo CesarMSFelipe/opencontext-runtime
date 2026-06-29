@@ -81,8 +81,6 @@ def handle_verify(args: Any) -> None:
     if report.is_healthy:
         console.success("All checks passed")
     else:
-        console.error(
-            f"{report.failures} check(s) failed — run 'opencontext doctor' for details"
-        )
+        console.error(f"{report.failures} check(s) failed — run 'opencontext doctor' for details")
         # Honest exit code so CI can gate on `opencontext verify`.
         sys.exit(1)

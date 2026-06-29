@@ -40,9 +40,7 @@ class RiskAssessment(BaseModel):
     mitigations: list[str] = Field(default_factory=list)
 
 
-def assess(
-    slice: ImplementationSlice, *, task_type: str, risk_level: str
-) -> RiskAssessment:
+def assess(slice: ImplementationSlice, *, task_type: str, risk_level: str) -> RiskAssessment:
     """Build a ``RiskAssessment`` for *slice*, deriving ``level`` via ``RiskClassifier``."""
     level = RiskClassifier().classify(task_type, risk_level)
     factors = [

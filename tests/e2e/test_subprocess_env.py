@@ -18,7 +18,8 @@ from conftest import _PACKAGE_DIRS, _subprocess_env  # type: ignore[import-not-f
 
 
 def test_subprocess_env_resolves_relative_pythonpath_to_absolute(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path,
+    monkeypatch,
 ) -> None:
     # A host PYTHONPATH made of RELATIVE entries (the fragility B7 fixes).
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join(["packages/opencontext_core", "."]))
@@ -35,7 +36,8 @@ def test_subprocess_env_resolves_relative_pythonpath_to_absolute(
 
 
 def test_subprocess_env_guarantees_both_package_dirs(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path,
+    monkeypatch,
 ) -> None:
     monkeypatch.delenv("PYTHONPATH", raising=False)
     env = _subprocess_env(tmp_path / "home")

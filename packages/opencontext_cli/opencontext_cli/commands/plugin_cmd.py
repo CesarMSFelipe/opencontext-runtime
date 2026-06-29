@@ -233,8 +233,7 @@ def _plugin_search(args: Any) -> None:
         console.dim("Planned plugins — not yet published.")
 
     rows = [
-        [p.name, f"v{p.versions[0].version}" if p.versions else "—", p.description]
-        for p in results
+        [p.name, f"v{p.versions[0].version}" if p.versions else "—", p.description] for p in results
     ]
     console.table("Available", ["Name", "Version", "Description"], rows)
 

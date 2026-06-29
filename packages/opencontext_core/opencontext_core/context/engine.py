@@ -149,9 +149,7 @@ class ContextEngine:
         if self._cache is not None and cache_key is not None:
             cached = self._cache.lookup(cache_key, task)
             if cached is not None:
-                return self._cache_result(
-                    workflow, node, task, cached, strategy, budget, settings
-                )
+                return self._cache_result(workflow, node, task, cached, strategy, budget, settings)
 
         # 2) Candidates: caller-supplied, else the retriever, else empty.
         retrieval_omissions: list[str] = []
@@ -266,9 +264,7 @@ class ContextEngine:
             return envelope, decision, ledger.status.value, "", []
 
         # Overflow: run incremental GC over L1, then re-evaluate.
-        compacted_l1, gc_output = collect(
-            envelope.l1, GcTrigger.BUDGET_EXCEEDED, attempts or []
-        )
+        compacted_l1, gc_output = collect(envelope.l1, GcTrigger.BUDGET_EXCEEDED, attempts or [])
         gc_meta = compacted_l1.get("_gc", {})
         discarded = list(gc_meta.get("discarded_keys", [])) if isinstance(gc_meta, dict) else []
         new_estimate = (
@@ -443,9 +439,7 @@ def _compression_receipt(
 ) -> CompressionReceipt:
     tokens_before = sum(i.tokens for i in before)
     tokens_after = sum(i.tokens for i in after)
-    strategy = (
-        engine.config.strategy if engine is not None else CompressionStrategy.NONE
-    )
+    strategy = engine.config.strategy if engine is not None else CompressionStrategy.NONE
     return CompressionReceipt(
         strategy=strategy,
         tokens_before=tokens_before,

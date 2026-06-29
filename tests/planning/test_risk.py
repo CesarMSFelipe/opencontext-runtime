@@ -8,9 +8,7 @@ from opencontext_core.planning.risk import RiskAssessment, assess
 
 
 def _slice() -> ImplementationSlice:
-    return ImplementationSlice(
-        slice_id="slice-x", title="X", requirement_ids=["R1", "R2"]
-    )
+    return ImplementationSlice(slice_id="slice-x", title="X", requirement_ids=["R1", "R2"])
 
 
 def test_schema_version_is_risk_v1() -> None:

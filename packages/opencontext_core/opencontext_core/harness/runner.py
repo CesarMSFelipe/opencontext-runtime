@@ -2315,9 +2315,7 @@ class HarnessRunner:
                     encoding="utf-8",
                 )
                 status_str = (
-                    result.status.value
-                    if hasattr(result.status, "value")
-                    else str(result.status)
+                    result.status.value if hasattr(result.status, "value") else str(result.status)
                 )
                 manifest = build_run_manifest(
                     durable_dir,

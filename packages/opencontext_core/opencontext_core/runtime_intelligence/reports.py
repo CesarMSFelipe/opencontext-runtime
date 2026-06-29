@@ -121,8 +121,7 @@ def render_benchmark_results(results: list[BenchmarkResult]) -> str:
         status = "measured" if res.measured else "NOT MEASURED"
         verdict = "pass" if res.success else "fail"
         lines.append(
-            f"  - [{res.suite}] {res.task_id}: {status}/{verdict} "
-            f"({res.tokens} tok) — {res.notes}"
+            f"  - [{res.suite}] {res.task_id}: {status}/{verdict} ({res.tokens} tok) — {res.notes}"
         )
     return "\n".join(lines)
 

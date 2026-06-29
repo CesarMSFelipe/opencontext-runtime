@@ -205,9 +205,7 @@ class PersonaDefinition(BaseModel):
             visibility=vis,
         )
 
-    def tool_policy(
-        self, *, security_mode: Any = None, mode: Any = None
-    ) -> ToolPermissionPolicy:
+    def tool_policy(self, *, security_mode: Any = None, mode: Any = None) -> ToolPermissionPolicy:
         """Build a ``ToolPermissionPolicy`` enforcing this persona's tool grants.
 
         ``allowed_tools`` = ``default_tools``; ``denied_tools`` = ``disallowed_tools``

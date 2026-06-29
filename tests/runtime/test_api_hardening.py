@@ -94,9 +94,7 @@ class TestApplyDurable:
         api = _durable_api(tmp_path)
         sid = _start(api, tmp_path)
 
-        result = api.apply(
-            sid, MutationRequest(kind="edit", payload={"edits": [_create_edit()]})
-        )
+        result = api.apply(sid, MutationRequest(kind="edit", payload={"edits": [_create_edit()]}))
 
         # applied=True only when all three stores accept the artifacts.
         assert result.applied is True
@@ -107,9 +105,7 @@ class TestApplyDurable:
         assert result.changed_files == ["pkg/newmod.py"]
 
         # The edit really landed on disk.
-        assert (tmp_path / "pkg" / "newmod.py").read_text(encoding="utf-8").startswith(
-            "def add"
-        )
+        assert (tmp_path / "pkg" / "newmod.py").read_text(encoding="utf-8").startswith("def add")
 
         # Durable evidence exists in the stores.
         run_dir = run_root(tmp_path, sid, result.run_id)
@@ -124,9 +120,7 @@ class TestApplyDurable:
         assert apply_receipts[0].path == "pkg/newmod.py"
         assert apply_receipts[0].changed is True
 
-    def test_apply_failure_raises_structured_error_not_silent_false(
-        self, tmp_path: Path
-    ) -> None:
+    def test_apply_failure_raises_structured_error_not_silent_false(self, tmp_path: Path) -> None:
         api = _durable_api(tmp_path)
         sid = _start(api, tmp_path)
 
@@ -157,17 +151,13 @@ class TestApplyDurable:
 
 # -------------------------------------------------------------------- resume
 class TestResumeDurable:
-    def test_resume_validates_manifest_and_continues_from_checkpoint(
-        self, tmp_path: Path
-    ) -> None:
+    def test_resume_validates_manifest_and_continues_from_checkpoint(self, tmp_path: Path) -> None:
         harness = _ResumeHarness()
         api = _durable_api(tmp_path, harness=harness)
         sid = _start(api, tmp_path)
 
         # Produce a durable run (manifest + checkpoint + patch) to resume from.
-        applied = api.apply(
-            sid, MutationRequest(kind="edit", payload={"edits": [_create_edit()]})
-        )
+        applied = api.apply(sid, MutationRequest(kind="edit", payload={"edits": [_create_edit()]}))
         prior_run_id = applied.run_id
         prior_dir = run_root(tmp_path, sid, prior_run_id)
         patch_path = next(iter((prior_dir / "patches").glob("*.diff")))
@@ -181,9 +171,7 @@ class TestResumeDurable:
         # Existing artifacts are not overwritten (continuation mints a fresh run).
         assert patch_path.read_bytes() == before
 
-    def test_resume_fails_safe_on_missing_required_artifact(
-        self, tmp_path: Path
-    ) -> None:
+    def test_resume_fails_safe_on_missing_required_artifact(self, tmp_path: Path) -> None:
         harness = _ResumeHarness()
         api = _durable_api(tmp_path, harness=harness)
         sid = _start(api, tmp_path)
@@ -238,14 +226,10 @@ class TestResumeDurable:
 
 # ------------------------------------------------------------------- inspect
 class TestInspectDurable:
-    def test_inspect_surfaces_artifacts_receipts_and_decision_log(
-        self, tmp_path: Path
-    ) -> None:
+    def test_inspect_surfaces_artifacts_receipts_and_decision_log(self, tmp_path: Path) -> None:
         api = _durable_api(tmp_path)
         sid = _start(api, tmp_path)
-        result = api.apply(
-            sid, MutationRequest(kind="edit", payload={"edits": [_create_edit()]})
-        )
+        result = api.apply(sid, MutationRequest(kind="edit", payload={"edits": [_create_edit()]}))
 
         # Attach a decision-log entry to the run.
         store = SessionStore(tmp_path)

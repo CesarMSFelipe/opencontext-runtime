@@ -55,6 +55,5 @@ def assert_parity(report: ParityReport) -> None:
     """Raise ``ParityGateError`` if *report* did not pass (gate is red)."""
     if not report.passed:
         raise ParityGateError(
-            f"parity gate failed for {report.subsystem} (flag {report.flag}): "
-            f"{report.mismatch}"
+            f"parity gate failed for {report.subsystem} (flag {report.flag}): {report.mismatch}"
         )

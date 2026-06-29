@@ -62,9 +62,7 @@ class RuntimeSimulator:
 
         # Workflow selection goes through the ONE shared selector so `simulate` and
         # `run --workflow auto` cannot disagree (B6 / AVH-013).
-        workflow = select_workflow(
-            task, classifier=self._classifier, risk=self._risk
-        ).workflow
+        workflow = select_workflow(task, classifier=self._classifier, risk=self._risk).workflow
 
         expected_files: list[str] = []
         expected_symbols: list[str] = []

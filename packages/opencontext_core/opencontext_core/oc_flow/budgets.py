@@ -83,9 +83,7 @@ def lane_config(lane: Lane | str) -> LaneConfig:
     return _LANES[resolved]
 
 
-def resolve_max_attempts(
-    *, profile: str | None = None, lane: Lane | str | None = None
-) -> int:
+def resolve_max_attempts(*, profile: str | None = None, lane: Lane | str | None = None) -> int:
     """Resolve the diagnosis attempt budget (FLOW-6, profile + lane aware).
 
     Base comes from the active execution profile's ``max_retries`` (balanced=2,
@@ -164,9 +162,7 @@ class BudgetGuard:
             )
         elif total > self.warn_total:
             new.append(
-                BudgetViolation(
-                    scope="total", spent=total, limit=self.warn_total, severity="warn"
-                )
+                BudgetViolation(scope="total", spent=total, limit=self.warn_total, severity="warn")
             )
 
         self.violations.extend(new)

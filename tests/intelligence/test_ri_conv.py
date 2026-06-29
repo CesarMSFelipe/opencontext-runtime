@@ -18,9 +18,7 @@ from opencontext_core.runtime_intelligence.optimizer import (
 
 def test_optimizer_recommendation_is_propose_only_and_benchmark_gated() -> None:
     optimizer = LearningRuntimeOptimizer()
-    budget = SimpleNamespace(
-        operation_type="retrieval", recommended_budget=4000, confidence=0.8
-    )
+    budget = SimpleNamespace(operation_type="retrieval", recommended_budget=4000, confidence=0.8)
     recs = optimizer.recommend(optimized_budgets=[budget])
     assert recs and all(isinstance(r, RuntimeOptimizationRecommendation) for r in recs)
     for rec in recs:
@@ -47,9 +45,7 @@ def test_selector_accuracy_from_decision_log() -> None:
     log = DecisionLog()
     log.append(RuntimeDecision(kind="next_node", chosen="apply", reason="ok"))
     log.append(
-        RuntimeDecision(
-            kind="next_node", chosen="verify", reason="x", governed_by="state_machine"
-        )
+        RuntimeDecision(kind="next_node", chosen="verify", reason="x", governed_by="state_machine")
     )
     metrics = decision_quality_metrics(log)
     # One of two next_node recommendations was overridden → 0.5 acceptance.

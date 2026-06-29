@@ -26,9 +26,7 @@ def _registry(tmp_path: Path) -> PluginRegistry:
     return PluginRegistry(tmp_path)
 
 
-def _make(
-    tmp_path: Path, name: str, manifest: dict, *, body: str = _HEALTHY
-) -> None:
+def _make(tmp_path: Path, name: str, manifest: dict, *, body: str = _HEALTHY) -> None:
     d = tmp_path / name
     d.mkdir(exist_ok=True)
     (d / "plugin.py").write_text(body, encoding="utf-8", newline="")
@@ -43,8 +41,11 @@ def _make(
 
 # ── Compatibility (AC-CP1) ───────────────────────────────────────────────────
 def test_incompatible_plugin_disabled_not_activated(tmp_path: Path) -> None:
-    _make(tmp_path, "toonew", {"id": "x.toonew", "requires": {"runtime": ">=99.0"},
-                               "contributes": {"personas": ["p"]}})
+    _make(
+        tmp_path,
+        "toonew",
+        {"id": "x.toonew", "requires": {"runtime": ">=99.0"}, "contributes": {"personas": ["p"]}},
+    )
     res = activate_plugin(_registry(tmp_path), "toonew", core_version="1.5.0")
     assert res.status is LifecycleStatus.INCOMPATIBLE
     assert res.stage is LifecycleStage.COMPATIBILITY
@@ -54,8 +55,12 @@ def test_incompatible_plugin_disabled_not_activated(tmp_path: Path) -> None:
 
 def test_compatible_plugin_proceeds() -> None:
     m = PluginManifest.model_validate(
-        {"name": "ok", "version": "1.0.0", "entrypoint": "plugin.py",
-         "requires": {"runtime": ">=1.0"}}
+        {
+            "name": "ok",
+            "version": "1.0.0",
+            "entrypoint": "plugin.py",
+            "requires": {"runtime": ">=1.0"},
+        }
     )
     assert check_compatibility(m, "1.5.0").ok
 
@@ -69,9 +74,15 @@ def test_discover_annotates_incompatibility(tmp_path: Path) -> None:
 
 # ── Lifecycle pipeline (AC-RG2) ──────────────────────────────────────────────
 def test_dependency_resolution_precedes_activation(tmp_path: Path) -> None:
-    _make(tmp_path, "needs", {"id": "x.needs",
-                              "requires": {"runtime": ">=1.0", "plugins": ["absent-dep"]},
-                              "contributes": {"personas": ["p"]}})
+    _make(
+        tmp_path,
+        "needs",
+        {
+            "id": "x.needs",
+            "requires": {"runtime": ">=1.0", "plugins": ["absent-dep"]},
+            "contributes": {"personas": ["p"]},
+        },
+    )
     res = activate_plugin(_registry(tmp_path), "needs", core_version="1.5.0")
     assert res.status is LifecycleStatus.FAILED
     assert res.stage is LifecycleStage.RESOLVE_DEPENDENCIES
@@ -79,11 +90,18 @@ def test_dependency_resolution_precedes_activation(tmp_path: Path) -> None:
 
 
 def test_missing_capability_halts_at_resolve(tmp_path: Path) -> None:
-    _make(tmp_path, "capreq", {"id": "x.capreq",
-                               "requires": {"runtime": ">=1.0", "capabilities": ["gpu"]},
-                               "contributes": {"personas": ["p"]}})
-    res = activate_plugin(_registry(tmp_path), "capreq", core_version="1.5.0",
-                          available_capabilities=set())
+    _make(
+        tmp_path,
+        "capreq",
+        {
+            "id": "x.capreq",
+            "requires": {"runtime": ">=1.0", "capabilities": ["gpu"]},
+            "contributes": {"personas": ["p"]},
+        },
+    )
+    res = activate_plugin(
+        _registry(tmp_path), "capreq", core_version="1.5.0", available_capabilities=set()
+    )
     assert res.status is LifecycleStatus.FAILED
     assert res.stage is LifecycleStage.RESOLVE_DEPENDENCIES
 
@@ -96,11 +114,15 @@ def test_health_check_gates_active_status(tmp_path: Path) -> None:
 
 
 def test_contribution_routes_into_target_registry(tmp_path: Path) -> None:
-    _make(tmp_path, "demo", {"id": "opencontext.demo",
-                             "contributes": {"personas": ["oc-demo-engineer"]}})
+    _make(
+        tmp_path,
+        "demo",
+        {"id": "opencontext.demo", "contributes": {"personas": ["oc-demo-engineer"]}},
+    )
     pr = PersonaRegistry()
-    res = activate_plugin(_registry(tmp_path), "demo", core_version="1.5.0",
-                          sinks={ExtensionPoint.PERSONAS: pr})
+    res = activate_plugin(
+        _registry(tmp_path), "demo", core_version="1.5.0", sinks={ExtensionPoint.PERSONAS: pr}
+    )
     assert res.status is LifecycleStatus.ACTIVE
     assert pr.has("oc-demo-engineer")
     persona = pr.get("oc-demo-engineer")
@@ -119,19 +141,27 @@ def test_no_contributes_falls_back_to_legacy_load(tmp_path: Path) -> None:
 
 def test_contracts_disabled_routes_legacy(tmp_path: Path) -> None:
     _make(tmp_path, "demo", {"id": "x.demo", "contributes": {"personas": ["p"]}})
-    res = activate_plugin(_registry(tmp_path), "demo", core_version="1.5.0",
-                          host_config=PluginHostConfig(contracts_enabled=False))
+    res = activate_plugin(
+        _registry(tmp_path),
+        "demo",
+        core_version="1.5.0",
+        host_config=PluginHostConfig(contracts_enabled=False),
+    )
     assert res.status is LifecycleStatus.ACTIVE
     assert res.reason == "legacy_path"
 
 
 # ── Observability (AC-OB1) ───────────────────────────────────────────────────
 def test_activation_emits_receipt_and_contribution_event(tmp_path: Path) -> None:
-    _make(tmp_path, "demo", {"id": "opencontext.demo",
-                             "contributes": {"personas": ["oc-demo-engineer"]}})
+    _make(
+        tmp_path,
+        "demo",
+        {"id": "opencontext.demo", "contributes": {"personas": ["oc-demo-engineer"]}},
+    )
     pr = PersonaRegistry()
-    res = activate_plugin(_registry(tmp_path), "demo", core_version="1.5.0",
-                          sinks={ExtensionPoint.PERSONAS: pr})
+    res = activate_plugin(
+        _registry(tmp_path), "demo", core_version="1.5.0", sinks={ExtensionPoint.PERSONAS: pr}
+    )
     # Receipt references the plugin and its contributions.
     assert res.receipt is not None
     assert res.receipt.plugin_id == "demo"

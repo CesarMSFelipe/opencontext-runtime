@@ -155,7 +155,10 @@ def test_acceptance_ready_only_when_every_gate_met() -> None:
         )
     ]
     verdict = AcceptanceEvaluator(repo_root=PROJECT_ROOT, runner=runner).evaluate(
-        functional=functional, regression=regression, governance=governance, dod_gates=dod,
+        functional=functional,
+        regression=regression,
+        governance=governance,
+        dod_gates=dod,
         # AVH-010: the mandatory e2e-dod gate is MET when the DoD journey is proven.
         e2e_proof={"passed": True, "steps": [{"step": "all", "ok": True}]},
     )

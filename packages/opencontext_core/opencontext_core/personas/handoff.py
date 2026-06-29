@@ -33,9 +33,7 @@ class PersonaHandoff(BaseModel):
     next_expected_output: str = ""
 
     @classmethod
-    def from_agent_handoff(
-        cls, handoff: AgentHandoff, *, from_persona: str = ""
-    ) -> PersonaHandoff:
+    def from_agent_handoff(cls, handoff: AgentHandoff, *, from_persona: str = "") -> PersonaHandoff:
         """Project an :class:`AgentHandoff` onto the book's ``PersonaHandoff`` view.
 
         ``constraints`` are surfaced from the handoff's ``denied_tools`` (tool grants

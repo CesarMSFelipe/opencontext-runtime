@@ -116,9 +116,7 @@ def test_fresh_checkout_has_no_accepted_bundles_enforces_legacy(tmp_path: Path) 
     assert read_flip_bundles(tmp_path) == []
     rogue = _enabled_spec("kg_v2_enabled", "knowledge_graph", default=True)
     with pytest.raises(AssertionError):
-        _assert_enabled_flags_legacy_unless_flipped(
-            _accepted_subsystems(tmp_path), catalog=[rogue]
-        )
+        _assert_enabled_flags_legacy_unless_flipped(_accepted_subsystems(tmp_path), catalog=[rogue])
 
 
 def test_accepted_bundle_exempts_its_subsystem_only() -> None:

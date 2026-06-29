@@ -154,9 +154,7 @@ class RuntimeHealth:
         for name in critical:
             recommendations.append(f"critical: '{name}' is low ({dims[name]:.2f})")
         if unmeasured:
-            recommendations.append(
-                "unmeasured (no evidence source): " + ", ".join(unmeasured)
-            )
+            recommendations.append("unmeasured (no evidence source): " + ", ".join(unmeasured))
 
         report = RuntimeHealthReport(
             overall_score=overall,

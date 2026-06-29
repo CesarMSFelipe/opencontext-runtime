@@ -89,8 +89,10 @@ class _StubBrain:
     ) -> RuntimeDecision | None:
         self.calls.append(dict(runtime_context or {}))
         return RuntimeDecision(
-            kind="next_node", chosen=str((runtime_context or {}).get("proposed_node", "")),
-            reason="advisory", confidence=0.5,
+            kind="next_node",
+            chosen=str((runtime_context or {}).get("proposed_node", "")),
+            reason="advisory",
+            confidence=0.5,
         )
 
 

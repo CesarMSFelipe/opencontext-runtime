@@ -238,8 +238,15 @@ def _maybe_print(summary: dict[str, Any], as_json: bool) -> None:
         print(json.dumps(summary, indent=2))
     else:
         print(f"OC Flow: {summary.get('status')}")
-        for key in ("workflow", "run_id", "final_node", "total_tokens",
-                    "diagnosis_attempts", "selection_reason", "completion_reason",
-                    "message"):
+        for key in (
+            "workflow",
+            "run_id",
+            "final_node",
+            "total_tokens",
+            "diagnosis_attempts",
+            "selection_reason",
+            "completion_reason",
+            "message",
+        ):
             if key in summary and summary[key] is not None:
                 print(f"  {key}: {summary[key]}")

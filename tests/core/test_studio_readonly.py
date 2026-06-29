@@ -18,7 +18,15 @@ from opencontext_core.studio.app import create_app
 from opencontext_core.studio.reader import StudioReader
 
 _WRITE_VERBS = (
-    "save", "write", "delete", "mutate", "update", "create", "set_", "persist", "remove",
+    "save",
+    "write",
+    "delete",
+    "mutate",
+    "update",
+    "create",
+    "set_",
+    "persist",
+    "remove",
 )
 _MUTATING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 

@@ -79,9 +79,7 @@ def test_cli_run_workflow_oc_flow_needs_executor_on_noop_mutation(tmp_path: Path
 
 
 def test_cli_run_disabled_when_flag_off(tmp_path: Path) -> None:
-    summary = run_oc_flow_cli(
-        "Fix failing test", root=tmp_path, workflow="oc-flow", enabled=False
-    )
+    summary = run_oc_flow_cli("Fix failing test", root=tmp_path, workflow="oc-flow", enabled=False)
     assert summary["status"] == "disabled"
 
 

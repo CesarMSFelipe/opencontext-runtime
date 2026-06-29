@@ -53,8 +53,6 @@ def test_provenance_records_winning_layer(tmp_path: Path) -> None:
 
 def test_cli_override_beats_project(tmp_path: Path) -> None:
     _write(tmp_path, "version: 2\nprofile: balanced\nproject:\n  name: demo\n")
-    resolved = resolve(
-        tmp_path, env={}, global_config={}, cli_overrides={"profile": "performance"}
-    )
+    resolved = resolve(tmp_path, env={}, global_config={}, cli_overrides={"profile": "performance"})
     assert resolved.profile == "performance"
     assert resolved.provenance.profile_layer == "overrides"

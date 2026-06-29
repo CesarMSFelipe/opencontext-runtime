@@ -27,14 +27,20 @@ def test_decision_log_and_program_plan_kinds_writable(tmp_path: Path) -> None:
     store = ArtifactStore(run_dir)
     dl = store.write(
         ArtifactWriteRequest(
-            run_id="run_1", session_id="sess_1", kind="decision-log",
-            content='{"a":1}\n', media_type="application/json",
+            run_id="run_1",
+            session_id="sess_1",
+            kind="decision-log",
+            content='{"a":1}\n',
+            media_type="application/json",
         )
     )
     pp = store.write(
         ArtifactWriteRequest(
-            run_id="run_1", session_id="sess_1", kind="program-plan",
-            content="{}", media_type="application/json",
+            run_id="run_1",
+            session_id="sess_1",
+            kind="program-plan",
+            content="{}",
+            media_type="application/json",
         )
     )
     assert store.verify_checksum(dl.artifact_id)
@@ -63,8 +69,11 @@ def test_decision_context_rehydrated(tmp_path: Path) -> None:
         tmp_path,
         [
             ArtifactWriteRequest(
-                run_id="run_1", session_id="sess_1", kind="decision-log",
-                content=dl_content, media_type="application/json",
+                run_id="run_1",
+                session_id="sess_1",
+                kind="decision-log",
+                content=dl_content,
+                media_type="application/json",
             )
         ],
     )
@@ -77,8 +86,11 @@ def test_profile_snapshot_present_validates_clean(tmp_path: Path) -> None:
         tmp_path,
         [
             ArtifactWriteRequest(
-                run_id="run_1", session_id="sess_1", kind="confidence-report",
-                content='{"profile":"balanced"}', media_type="application/json",
+                run_id="run_1",
+                session_id="sess_1",
+                kind="confidence-report",
+                content='{"profile":"balanced"}',
+                media_type="application/json",
                 metadata={"snapshot": "profile_capability"},
             )
         ],
@@ -92,8 +104,11 @@ def test_profile_snapshot_corrupt_aborts(tmp_path: Path) -> None:
         tmp_path,
         [
             ArtifactWriteRequest(
-                run_id="run_1", session_id="sess_1", kind="confidence-report",
-                content='{"profile":"balanced"}', media_type="application/json",
+                run_id="run_1",
+                session_id="sess_1",
+                kind="confidence-report",
+                content='{"profile":"balanced"}',
+                media_type="application/json",
                 metadata={"snapshot": "profile_capability"},
             )
         ],

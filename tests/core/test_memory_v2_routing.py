@@ -67,9 +67,7 @@ def test_flag_off_uses_legacy_store_path_not_harness() -> None:
     """memory_v2_enabled=False → record written directly to the store, harness untouched."""
     with tempfile.TemporaryDirectory() as tmp:
         store = LocalMemoryStore(Path(tmp) / "mem.db")
-        provider = MemoryStoreProvider(
-            store, harness=_ExplodingHarness(), memory_v2_enabled=False
-        )
+        provider = MemoryStoreProvider(store, harness=_ExplodingHarness(), memory_v2_enabled=False)
 
         receipt = provider.write(_record())
 

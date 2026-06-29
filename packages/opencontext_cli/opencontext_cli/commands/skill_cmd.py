@@ -250,10 +250,7 @@ def _handle_lint(args: Any) -> None:
     console.table(
         str(report.path),
         ["Severity", "Code", "Message"],
-        [
-            [_labels.get(f.severity, f.severity), f.code, f.message]
-            for f in report.findings
-        ],
+        [[_labels.get(f.severity, f.severity), f.code, f.message] for f in report.findings],
     )
     raise SystemExit(0 if report.ok() else 1)
 

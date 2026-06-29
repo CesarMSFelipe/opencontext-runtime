@@ -43,8 +43,7 @@ def build_learning_candidates(
                 layer=record.layer.value,
                 content=record.content,
                 task=task,
-                is_failure=record.layer
-                in (MemoryLayer.FAILURE, MemoryLayer.HARNESS_EXPERIENCE),
+                is_failure=record.layer in (MemoryLayer.FAILURE, MemoryLayer.HARNESS_EXPERIENCE),
             )
         )
     return candidates

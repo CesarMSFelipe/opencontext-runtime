@@ -17,9 +17,7 @@ from opencontext_core.models.evidence import EvidenceRef
 
 
 def _candidate(content: str, *, evidence: bool = True) -> MemoryCandidate:
-    refs = (
-        [EvidenceRef(source="auth.py", source_type="file", confidence=0.9)] if evidence else []
-    )
+    refs = [EvidenceRef(source="auth.py", source_type="file", confidence=0.9)] if evidence else []
     return MemoryCandidate(
         content=content,
         source="trace:1",
@@ -42,9 +40,7 @@ def store() -> LocalMemoryStore:
 
 def test_create_receipt_and_persisted_record(store: LocalMemoryStore) -> None:
     harness = MemoryHarness(store)
-    receipt = harness.promote(
-        _candidate("The gateway service refreshes auth tokens every hour.")
-    )
+    receipt = harness.promote(_candidate("The gateway service refreshes auth tokens every hour."))
     assert receipt.action == "create"
     assert receipt.memory_id
     persisted = store.get(receipt.memory_id)

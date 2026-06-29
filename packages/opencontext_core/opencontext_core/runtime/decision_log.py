@@ -66,9 +66,7 @@ def redact_chain_of_thought(text: str) -> str:
     stripped = _THINKING_TAG.sub(" ", _THINKING_BLOCK.sub(" ", text))
     segments = re.split(r"[\n.;]+", stripped)
     kept = [
-        seg.strip()
-        for seg in segments
-        if seg.strip() and forbidden_memory_content(seg) is None
+        seg.strip() for seg in segments if seg.strip() and forbidden_memory_content(seg) is None
     ]
     summary = re.sub(r"\s+", " ", ". ".join(kept)).strip()[:_MAX_RATIONALE_CHARS].strip()
     if not summary or forbidden_memory_content(summary) is not None:

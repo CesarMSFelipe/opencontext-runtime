@@ -83,8 +83,7 @@ class ExecutionProfileResolver:
             profile = BUILTIN_PROFILES[DEFAULT_PROFILE_ID]
             requested = profile_id or "<empty>"
             fallbacks.append(
-                f"unknown execution profile {requested!r}; using default "
-                f"{DEFAULT_PROFILE_ID!r}."
+                f"unknown execution profile {requested!r}; using default {DEFAULT_PROFILE_ID!r}."
             )
 
         fallbacks.extend(self._environment_fallbacks(profile, graph))
@@ -104,19 +103,13 @@ class ExecutionProfileResolver:
         return resolved
 
     @staticmethod
-    def _environment_fallbacks(
-        profile: ExecutionProfile, graph: CapabilityGraph
-    ) -> list[str]:
+    def _environment_fallbacks(profile: ExecutionProfile, graph: CapabilityGraph) -> list[str]:
         """Record where the live environment cannot fully honour the profile posture."""
         notes: list[str] = []
 
         provider_nodes = [n for n in graph.nodes if n.kind == "provider"]
-        real_provider = any(
-            n.available and n.id != "provider.mock" for n in provider_nodes
-        )
-        local_provider = any(
-            n.available and n.id in {"provider.ollama"} for n in provider_nodes
-        )
+        real_provider = any(n.available and n.id != "provider.mock" for n in provider_nodes)
+        local_provider = any(n.available and n.id in {"provider.ollama"} for n in provider_nodes)
 
         if not real_provider:
             notes.append(
@@ -128,9 +121,7 @@ class ExecutionProfileResolver:
                 "local_first routing requested but no local provider detected; "
                 "calls fall back to a remote provider."
             )
-        if profile.harness_strictness == HarnessStrictness.strict and not graph.is_ready(
-            "pytest"
-        ):
+        if profile.harness_strictness == HarnessStrictness.strict and not graph.is_ready("pytest"):
             notes.append(
                 "strict harness requested but no test runner detected; gates will run "
                 "advisory until a test runner is installed."

@@ -1,4 +1,5 @@
 """Anti-regression for the CLI brand mark single-source contract."""
+
 from __future__ import annotations
 
 from pathlib import Path

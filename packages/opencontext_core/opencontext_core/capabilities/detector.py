@@ -90,9 +90,7 @@ _IGNORE_DIRS = frozenset(
 )
 
 
-def _source_evidence_nodes(
-    root: Path | str, existing_ids: set[str]
-) -> list[CapabilityNode]:
+def _source_evidence_nodes(root: Path | str, existing_ids: set[str]) -> list[CapabilityNode]:
     """Detect capabilities from source-file evidence the manifest scan misses.
 
     Honest by construction: a node is added only when a matching file/marker
@@ -132,9 +130,7 @@ def _source_evidence_nodes(
     return nodes
 
 
-def _scan_python_evidence(
-    base: Path, *, file_limit: int = 5000
-) -> tuple[str | None, str | None]:
+def _scan_python_evidence(base: Path, *, file_limit: int = 5000) -> tuple[str | None, str | None]:
     """Return (first ``.py`` file, first pytest-style test file), relative to ``base``.
 
     Walks the tree, pruning vendored/cache directories, and stops early once both

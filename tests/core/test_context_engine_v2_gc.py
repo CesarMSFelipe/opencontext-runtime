@@ -39,9 +39,7 @@ def test_second_failed_diagnosis_emits_book_output_format() -> None:
 
 
 def test_gc_output_is_redacted() -> None:
-    attempts = [
-        GcAttempt(attempt=1, strategy="s", reason="leaked AKIAIOSFODNN7EXAMPLE in config")
-    ]
+    attempts = [GcAttempt(attempt=1, strategy="s", reason="leaked AKIAIOSFODNN7EXAMPLE in config")]
     _compacted, output = collect({}, GcTrigger.CONSOLIDATION, attempts)
     assert "AKIAIOSFODNN7EXAMPLE" not in output  # secret redacted via SinkGuard
 

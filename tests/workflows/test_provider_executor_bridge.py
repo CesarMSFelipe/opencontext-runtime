@@ -35,9 +35,7 @@ _VALID_EDIT_JSON = (
 
 _BUGGY = "def add(a, b):\n    return a - b\n"
 _FIXED = "def add(a, b):\n    return a + b\n"
-_SEED_TEST = (
-    "from calc import add\n\n\ndef test_add_returns_sum():\n    assert add(2, 3) == 5\n"
-)
+_SEED_TEST = "from calc import add\n\n\ndef test_add_returns_sum():\n    assert add(2, 3) == 5\n"
 
 
 class _StubGateway:
@@ -54,8 +52,11 @@ class _StubGateway:
     def generate(self, request: object) -> LLMResponse:
         self.calls.append(request)
         return LLMResponse(
-            content=self._content, provider="mock", model="stub",
-            input_tokens=1, output_tokens=1,
+            content=self._content,
+            provider="mock",
+            model="stub",
+            input_tokens=1,
+            output_tokens=1,
         )
 
 
@@ -71,9 +72,21 @@ def _run_seeded_test(root: Path) -> subprocess.CompletedProcess[str]:
     # would mask the fix. No bytecode is written, so each run recompiles from source.
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     return subprocess.run(
-        [sys.executable, "-m", "pytest", "test_calc.py", "-q",
-         "-p", "no:cacheprovider", "-o", "addopts="],
-        cwd=str(root), capture_output=True, text=True, env=env,
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "test_calc.py",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-o",
+            "addopts=",
+        ],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        env=env,
     )
 
 
@@ -81,9 +94,12 @@ def _run_seeded_test(root: Path) -> subprocess.CompletedProcess[str]:
 def test_real_provider_detected_builds_provider_backed_executor(tmp_path, monkeypatch):
     """A non-mock detected provider constructs a productive ProviderBackedNodeExecutor."""
     monkeypatch.setattr(
-        oc_flow_cli, "detect_provider",
+        oc_flow_cli,
+        "detect_provider",
         lambda: DetectedProvider(
-            name="anthropic", api_key="sk-test", model="claude-sonnet-4-6",
+            name="anthropic",
+            api_key="sk-test",
+            model="claude-sonnet-4-6",
             source="ANTHROPIC_API_KEY",
         ),
     )
@@ -96,7 +112,8 @@ def test_real_provider_detected_builds_provider_backed_executor(tmp_path, monkey
 def test_no_provider_resolves_to_none(tmp_path, monkeypatch):
     """A mock detection (no creds, no local server) leaves the executor absent."""
     monkeypatch.setattr(
-        oc_flow_cli, "detect_provider",
+        oc_flow_cli,
+        "detect_provider",
         lambda: DetectedProvider(name="mock", api_key="", model="mock", source="fallback"),
     )
     assert _resolve_executor(tmp_path) is None
@@ -105,9 +122,12 @@ def test_no_provider_resolves_to_none(tmp_path, monkeypatch):
 def test_provider_without_adapter_stays_honest(tmp_path, monkeypatch):
     """A detected provider with no buildable adapter (google/mistral) stays None."""
     monkeypatch.setattr(
-        oc_flow_cli, "detect_provider",
+        oc_flow_cli,
+        "detect_provider",
         lambda: DetectedProvider(
-            name="google", api_key="g-test", model="gemini-2.0-flash",
+            name="google",
+            api_key="g-test",
+            model="gemini-2.0-flash",
             source="GEMINI_API_KEY",
         ),
     )
@@ -118,12 +138,16 @@ def test_provider_without_adapter_stays_honest(tmp_path, monkeypatch):
 def test_no_provider_mutation_task_needs_executor(tmp_path, monkeypatch):
     """Through the real CLI path, a mutation task with no provider never completes."""
     monkeypatch.setattr(
-        oc_flow_cli, "detect_provider",
+        oc_flow_cli,
+        "detect_provider",
         lambda: DetectedProvider(name="mock", api_key="", model="mock", source="fallback"),
     )
     _seed_buggy_calc(tmp_path)
     summary = run_oc_flow_cli(
-        "Fix failing test", root=tmp_path, workflow="auto", lane="fast",
+        "Fix failing test",
+        root=tmp_path,
+        workflow="auto",
+        lane="fast",
     )
     assert summary["status"] == "needs_executor"
     assert summary["status"] != "completed"
@@ -135,12 +159,16 @@ def test_no_provider_mutation_task_needs_executor(tmp_path, monkeypatch):
 def test_read_only_task_completes_without_provider(tmp_path, monkeypatch):
     """A read-only analysis task still completes on the provider-free path (no regression)."""
     monkeypatch.setattr(
-        oc_flow_cli, "detect_provider",
+        oc_flow_cli,
+        "detect_provider",
         lambda: DetectedProvider(name="mock", api_key="", model="mock", source="fallback"),
     )
     _seed_buggy_calc(tmp_path)
     summary = run_oc_flow_cli(
-        "Summarize the calc module", root=tmp_path, workflow="auto", lane="fast",
+        "Summarize the calc module",
+        root=tmp_path,
+        workflow="auto",
+        lane="fast",
     )
     assert summary["status"] == "completed"
     # Read-only: the source is untouched.
@@ -157,7 +185,10 @@ def test_stub_provider_through_cli_fixes_bug_and_test_passes(tmp_path):
     gateway = _StubGateway(_VALID_EDIT_JSON)
     executor = ProviderBackedNodeExecutor(gateway=gateway, root=tmp_path, provider="mock")
     summary = run_oc_flow_cli(
-        "Fix failing test", root=tmp_path, workflow="auto", lane="fast",
+        "Fix failing test",
+        root=tmp_path,
+        workflow="auto",
+        lane="fast",
         executor=executor,  # explicit hook wins over detection (injectable)
     )
 
@@ -185,19 +216,26 @@ def test_detected_provider_autowires_full_pipeline(tmp_path, monkeypatch):
     ``ProviderBackedNodeExecutor`` exactly as it would with live credentials.
     """
     monkeypatch.setattr(
-        oc_flow_cli, "detect_provider",
+        oc_flow_cli,
+        "detect_provider",
         lambda: DetectedProvider(
-            name="anthropic", api_key="sk-test", model="claude-sonnet-4-6",
+            name="anthropic",
+            api_key="sk-test",
+            model="claude-sonnet-4-6",
             source="ANTHROPIC_API_KEY",
         ),
     )
     monkeypatch.setattr(
-        oc_flow_cli, "build_provider_gateway",
+        oc_flow_cli,
+        "build_provider_gateway",
         lambda name, model: _StubGateway(_VALID_EDIT_JSON),
     )
     _seed_buggy_calc(tmp_path)
     summary = run_oc_flow_cli(
-        "Fix failing test", root=tmp_path, workflow="auto", lane="fast",
+        "Fix failing test",
+        root=tmp_path,
+        workflow="auto",
+        lane="fast",
     )
     assert summary["status"] == "completed"
     assert (tmp_path / "calc.py").read_text(encoding="utf-8") == _FIXED

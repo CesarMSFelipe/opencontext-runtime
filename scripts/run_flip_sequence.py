@@ -69,8 +69,8 @@ SUBSETS: dict[str, list[str]] = {
 }
 
 _RT_BRAIN_OLD = (
-    '    enabled: bool = Field(\n        default=False,\n'
-    '        description=(\n'
+    "    enabled: bool = Field(\n        default=False,\n"
+    "        description=(\n"
     '            "Enable advisory Runtime Brain decision recording.'
 )
 
@@ -109,12 +109,29 @@ def _run_targeted(subsystem: str) -> dict[str, int]:
     paths = [str(REPO / p) for p in SUBSETS[subsystem]]
     xml_path = Path(tempfile.mkdtemp(prefix="flip_")) / "j.xml"
     proc = subprocess.run(
-        [sys.executable, "-m", "pytest", "-p", "no:randomly", "--tb=no",
-         f"--junitxml={xml_path}", *paths],
-        cwd=str(REPO), capture_output=True, text=True, check=False,
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "no:randomly",
+            "--tb=no",
+            f"--junitxml={xml_path}",
+            *paths,
+        ],
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    counts = {"tests": 0, "passed": 0, "failed": 0, "errors": 0, "skipped": 0,
-              "returncode": proc.returncode}
+    counts = {
+        "tests": 0,
+        "passed": 0,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "returncode": proc.returncode,
+    }
     try:
         root = ET.parse(xml_path).getroot()
         suites = root.findall("testsuite") or ([root] if root.tag == "testsuite" else [])
@@ -123,9 +140,7 @@ def _run_targeted(subsystem: str) -> dict[str, int]:
             counts["failed"] += int(s.get("failures", 0))
             counts["errors"] += int(s.get("errors", 0))
             counts["skipped"] += int(s.get("skipped", 0))
-        counts["passed"] = (
-            counts["tests"] - counts["failed"] - counts["errors"] - counts["skipped"]
-        )
+        counts["passed"] = counts["tests"] - counts["failed"] - counts["errors"] - counts["skipped"]
     except (OSError, ET.ParseError):
         counts["errors"] = max(counts["errors"], 1)  # no XML -> crash -> count as failure
     return counts
@@ -176,8 +191,10 @@ def main() -> int:
     if violation:
         print(f"\nSEQUENCE VIOLATION: {violation}")
     print(f"\nACCEPTED ({len(accepted)}): {accepted or '(none)'}")
-    print(f"REVERTED ({len(FLIP_SEQUENCE) - len(accepted)}): "
-          f"{[s for s in FLIP_SEQUENCE if s not in accepted]}")
+    print(
+        f"REVERTED ({len(FLIP_SEQUENCE) - len(accepted)}): "
+        f"{[s for s in FLIP_SEQUENCE if s not in accepted]}"
+    )
     return 0
 
 

@@ -22,10 +22,7 @@ import ast
 import json
 from pathlib import Path
 
-ROOT = (
-    Path(__file__).resolve().parents[2]
-    / "packages/opencontext_core/opencontext_core"
-)
+ROOT = Path(__file__).resolve().parents[2] / "packages/opencontext_core/opencontext_core"
 
 #: Externalized, source-controlled baseline shared by this drift guard AND the
 #: ``opencontext architecture diff`` command (PROD-005 / B5). The ``contracts`` map

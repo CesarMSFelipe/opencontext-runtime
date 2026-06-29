@@ -122,9 +122,7 @@ def phase_required_harnesses(phase: str) -> list[str]:
     return []
 
 
-def resolve_phase_harness_modes(
-    phase: str, profile: str | None = None
-) -> dict[str, str]:
+def resolve_phase_harness_modes(phase: str, profile: str | None = None) -> dict[str, str]:
     """Resolve each of ``phase``'s required harnesses to its effective mode.
 
     Consumes the PR-006 SDD harness matrix (``harness/matrix.py``) **read-only**

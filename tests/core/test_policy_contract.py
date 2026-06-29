@@ -14,9 +14,10 @@ from opencontext_core.runtime.events import EventCategory
 def test_policy_contract_version_pinned() -> None:
     # Bump deliberately on a breaking change; this guard catches accidental drift.
     assert POLICY_CONTRACT_VERSION == 1
-    assert PolicyDecision(
-        operation="x", decision="allow", reason="r", policy_id="p"
-    ).contract_version == 1
+    assert (
+        PolicyDecision(operation="x", decision="allow", reason="r", policy_id="p").contract_version
+        == 1
+    )
 
 
 def test_policy_event_family_is_a_known_category() -> None:

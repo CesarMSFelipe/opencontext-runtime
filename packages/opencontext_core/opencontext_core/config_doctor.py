@@ -118,9 +118,7 @@ def validate(root: str | Path = ".") -> list[DeepDiagnostic]:
                     name="config.profile",
                     status="failed",
                     message=f"Unknown profile: '{profile}'",
-                    recommendation=(
-                        "Choose one of: " + ", ".join(sorted(BUILTIN_PROFILES)) + "."
-                    ),
+                    recommendation=("Choose one of: " + ", ".join(sorted(BUILTIN_PROFILES)) + "."),
                 )
             )
 

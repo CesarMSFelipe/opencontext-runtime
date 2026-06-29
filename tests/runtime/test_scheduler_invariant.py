@@ -19,9 +19,7 @@ def _scheduler() -> RuntimeScheduler:
 
 def test_schedule_proposes_brain_recommended_successor() -> None:
     scheduler = _scheduler()
-    scheduling = scheduler.schedule(
-        "run-x", {"current_node": "design", "proposed_node": "apply"}
-    )
+    scheduling = scheduler.schedule("run-x", {"current_node": "design", "proposed_node": "apply"})
     assert isinstance(scheduling, SchedulingDecision)
     assert scheduling.next_node.proposed_node == "apply"
     assert scheduling.decision.kind == "next_node"
@@ -29,9 +27,7 @@ def test_schedule_proposes_brain_recommended_successor() -> None:
 
 def test_rejected_recommendation_does_not_transition_and_is_recorded() -> None:
     scheduler = _scheduler()
-    scheduling = scheduler.schedule(
-        "run-x", {"current_node": "design", "proposed_node": "apply"}
-    )
+    scheduling = scheduler.schedule("run-x", {"current_node": "design", "proposed_node": "apply"})
     scheduling, transition = scheduler.govern(
         scheduling,
         required_gates=["spec_approved"],
@@ -48,9 +44,7 @@ def test_rejected_recommendation_does_not_transition_and_is_recorded() -> None:
 
 def test_allowed_recommendation_keeps_brain_authorship() -> None:
     scheduler = _scheduler()
-    scheduling = scheduler.schedule(
-        "run-x", {"current_node": "design", "proposed_node": "apply"}
-    )
+    scheduling = scheduler.schedule("run-x", {"current_node": "design", "proposed_node": "apply"})
     scheduling, transition = scheduler.govern(
         scheduling, required_gates=[], runtime_context={"gates": {}}
     )

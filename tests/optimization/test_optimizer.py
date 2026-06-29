@@ -10,9 +10,7 @@ from opencontext_core.optimization.recommendations import RecommendationTarget
 
 
 def test_low_hit_rate_yields_cache_recommendation() -> None:
-    stats = CacheStats(
-        by_type={str(CacheType.tool_output): {"stored": 1, "hits": 1, "misses": 19}}
-    )
+    stats = CacheStats(by_type={str(CacheType.tool_output): {"stored": 1, "hits": 1, "misses": 19}})
     optimizer = RuntimeOptimizer(cache_stats=stats, enabled=True)
     recs = optimizer.recommend()
 

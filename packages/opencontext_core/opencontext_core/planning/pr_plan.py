@@ -76,9 +76,7 @@ def assign_prs(slices: Sequence[ImplementationSlice]) -> PrPlan:
     slice_to_pr = {s.slice_id: _pr_id_for(s.slice_id) for s in slices}
     prs: list[PrEntry] = []
     for s in slices:
-        depends_on = [
-            slice_to_pr[dep] for dep in s.depends_on if dep in slice_to_pr
-        ]
+        depends_on = [slice_to_pr[dep] for dep in s.depends_on if dep in slice_to_pr]
         prs.append(
             PrEntry(
                 pr_id=slice_to_pr[s.slice_id],

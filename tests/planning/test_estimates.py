@@ -8,9 +8,7 @@ from opencontext_core.planning.program import MetaPlanner
 
 
 def _slice(requirement_ids: list[str]) -> ImplementationSlice:
-    return ImplementationSlice(
-        slice_id="slice-x", title="X", requirement_ids=requirement_ids
-    )
+    return ImplementationSlice(slice_id="slice-x", title="X", requirement_ids=requirement_ids)
 
 
 def test_low_risk_bugfix_single_requirement_recommends_oc_flow() -> None:

@@ -64,8 +64,7 @@ class RuntimeProfiler:
         recs: list[str] = []
         if top_share >= 0.5:
             recs.append(
-                f"'{top_name}' dominates this run ({top_share:.0%} of time) — "
-                "investigate it first"
+                f"'{top_name}' dominates this run ({top_share:.0%} of time) — investigate it first"
             )
         else:
             recs.append(f"top component is '{top_name}' ({top_share:.0%} of time)")

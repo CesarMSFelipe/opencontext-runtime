@@ -51,6 +51,4 @@ def benchmark_gate(
         ok = bool(runner(manifest))
     except Exception as exc:  # a crashing runner blocks activation, fail-closed
         return GateResult(passed=False, ran=True, reason=f"benchmark_error: {exc}")
-    return GateResult(
-        passed=ok, ran=True, reason="benchmark_passed" if ok else "benchmark_failed"
-    )
+    return GateResult(passed=ok, ran=True, reason="benchmark_passed" if ok else "benchmark_failed")

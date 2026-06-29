@@ -120,9 +120,7 @@ class CcrBackedCacheStore:
             return None
         return read[1]
 
-    def invalidate_paths(
-        self, paths: list[str], *, cache_types: list[str] | None = None
-    ) -> int:
+    def invalidate_paths(self, paths: list[str], *, cache_types: list[str] | None = None) -> int:
         """Drop every entry whose provenance references any of ``paths``.
 
         ``cache_types`` (optional) narrows invalidation to those cache types;

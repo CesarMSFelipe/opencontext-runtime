@@ -49,8 +49,11 @@ class _StubGateway:
 
     def generate(self, request: object) -> LLMResponse:
         return LLMResponse(
-            content=self._content, provider="mock", model="stub",
-            input_tokens=1, output_tokens=1,
+            content=self._content,
+            provider="mock",
+            model="stub",
+            input_tokens=1,
+            output_tokens=1,
         )
 
 
@@ -83,9 +86,7 @@ def test_mutate_catches_provider_error_returns_empty_and_blocks(tmp_path: Path) 
 def test_mutate_block_reason_redacts_secrets_and_urls(tmp_path: Path) -> None:
     secret = "sk-ant-abcdefghijklmnopqrstuvwxyz0123456789"
     url = "https://api.example-provider.com/v1/messages"
-    gateway = _RaisingGateway(
-        f"provider_fallback_exhausted: 401 from {url} using key {secret}"
-    )
+    gateway = _RaisingGateway(f"provider_fallback_exhausted: 401 from {url} using key {secret}")
     executor = ProviderBackedNodeExecutor(gateway=gateway, root=tmp_path, provider="mock")
     contract, env = _contract_and_envelope()
 
@@ -126,7 +127,8 @@ def test_provider_error_run_yields_needs_provider_not_exception(tmp_path: Path) 
 
     # No unhandled exception escapes the run; a structured status is returned instead.
     result = OCFlowRunner(root=tmp_path, executor=executor).run(
-        "Fix failing test", lane=Lane.FAST,
+        "Fix failing test",
+        lane=Lane.FAST,
     )
 
     assert result.status == "needs_provider"
@@ -142,7 +144,8 @@ def test_provider_error_run_reason_is_redacted(tmp_path: Path) -> None:
     executor = ProviderBackedNodeExecutor(gateway=gateway, root=tmp_path, provider="mock")
 
     result = OCFlowRunner(root=tmp_path, executor=executor).run(
-        "Fix failing test", lane=Lane.FAST,
+        "Fix failing test",
+        lane=Lane.FAST,
     )
 
     assert result.status == "needs_provider"
@@ -157,7 +160,8 @@ def test_invalid_apply_edit_blocks_and_does_not_leak_raw_response(tmp_path: Path
     executor = ProviderBackedNodeExecutor(gateway=gateway, root=tmp_path, provider="mock")
 
     result = OCFlowRunner(root=tmp_path, executor=executor).run(
-        "Fix failing test", lane=Lane.FAST,
+        "Fix failing test",
+        lane=Lane.FAST,
     )
 
     assert result.status == "blocked"
@@ -179,7 +183,8 @@ def test_schema_invalid_edit_blocks_run(tmp_path: Path, bad: str) -> None:
     executor = ProviderBackedNodeExecutor(gateway=gateway, root=tmp_path, provider="mock")
 
     result = OCFlowRunner(root=tmp_path, executor=executor).run(
-        "Fix failing test", lane=Lane.FAST,
+        "Fix failing test",
+        lane=Lane.FAST,
     )
 
     assert result.status == "blocked"

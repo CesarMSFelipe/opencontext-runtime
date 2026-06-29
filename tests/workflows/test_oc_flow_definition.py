@@ -58,18 +58,12 @@ def test_passed_inspection_routes_to_consolidation() -> None:
 
 def test_recoverable_failure_routes_to_diagnose() -> None:
     defn = oc_flow_definition()
-    assert (
-        resolve_next_node(defn, "local_inspection", NodeOutcome.FAILED_RECOVERABLE)
-        == "diagnose"
-    )
+    assert resolve_next_node(defn, "local_inspection", NodeOutcome.FAILED_RECOVERABLE) == "diagnose"
 
 
 def test_blocking_failure_routes_to_escalation() -> None:
     defn = oc_flow_definition()
-    assert (
-        resolve_next_node(defn, "local_inspection", NodeOutcome.FAILED_BLOCKING)
-        == "escalation"
-    )
+    assert resolve_next_node(defn, "local_inspection", NodeOutcome.FAILED_BLOCKING) == "escalation"
 
 
 def test_fix_ready_routes_back_to_mutate() -> None:
@@ -79,9 +73,7 @@ def test_fix_ready_routes_back_to_mutate() -> None:
 
 def test_attempts_exhausted_routes_to_escalation() -> None:
     defn = oc_flow_definition()
-    assert (
-        resolve_next_node(defn, "diagnose", NodeOutcome.ATTEMPTS_EXHAUSTED) == "escalation"
-    )
+    assert resolve_next_node(defn, "diagnose", NodeOutcome.ATTEMPTS_EXHAUSTED) == "escalation"
 
 
 def test_linear_edges_are_unconditional() -> None:

@@ -149,9 +149,7 @@ def oc_flow_skill_registry() -> SkillRegistryV2:
     return registry
 
 
-def skills_for_node(
-    node: str, registry: SkillRegistryV2 | None = None
-) -> list[SkillDefinition]:
+def skills_for_node(node: str, registry: SkillRegistryV2 | None = None) -> list[SkillDefinition]:
     """Return only the bundle skills scoped to ``node`` (node loader, FLOW-12).
 
     A skill belongs to a node when ``node`` is in its ``workflow_nodes``.

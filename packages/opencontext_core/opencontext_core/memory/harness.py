@@ -188,9 +188,7 @@ class MemoryHarness:
         )
 
     def _reject(self, candidate: MemoryCandidate, reason: str) -> MemoryReceipt:
-        self.emitter.emit(
-            MemoryEvent.CANDIDATE_REJECTED, reason=reason, source=candidate.source
-        )
+        self.emitter.emit(MemoryEvent.CANDIDATE_REJECTED, reason=reason, source=candidate.source)
         return MemoryReceipt(
             memory_id="",
             action="reject",

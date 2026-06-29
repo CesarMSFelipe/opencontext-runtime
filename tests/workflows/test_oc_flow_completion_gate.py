@@ -23,9 +23,13 @@ from opencontext_core.oc_flow.nodes import (
 from opencontext_core.oc_flow.runner import OCFlowRunner
 
 
-def _ctx(tmp_path: Path, *, changed: list[str] | None = None,
-         inspection: InspectionReport | None = None,
-         executor: object | None = None) -> OCFlowContext:
+def _ctx(
+    tmp_path: Path,
+    *,
+    changed: list[str] | None = None,
+    inspection: InspectionReport | None = None,
+    executor: object | None = None,
+) -> OCFlowContext:
     artifacts = tmp_path / "artifacts" / "oc-flow"
     artifacts.mkdir(parents=True, exist_ok=True)
     ctx = OCFlowContext(
@@ -60,17 +64,13 @@ def test_readonly_task_is_not_mutation_required() -> None:
 # --------------------------------------------------------------- resolve_completion unit
 def test_readonly_noop_completes(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
-    status = resolve_completion(
-        "completed", ctx, mutation_required=False, provider_available=False
-    )
+    status = resolve_completion("completed", ctx, mutation_required=False, provider_available=False)
     assert status is CompletionStatus.completed
 
 
 def test_mutation_noop_deterministic_needs_executor(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path, executor=DeterministicNodeExecutor())
-    status = resolve_completion(
-        "completed", ctx, mutation_required=True, provider_available=False
-    )
+    status = resolve_completion("completed", ctx, mutation_required=True, provider_available=False)
     assert status is CompletionStatus.needs_executor
 
 
@@ -81,26 +81,20 @@ def test_mutation_noop_provider_backed_but_empty_is_blocked(tmp_path: Path) -> N
         provider_available = True
 
     ctx = _ctx(tmp_path, executor=_Stub())
-    status = resolve_completion(
-        "completed", ctx, mutation_required=True, provider_available=True
-    )
+    status = resolve_completion("completed", ctx, mutation_required=True, provider_available=True)
     assert status is CompletionStatus.blocked
 
 
 def test_mutation_verified_change_completes(tmp_path: Path) -> None:
     passed = InspectionReport(outcome="passed", gate_results=[], failure_summary="")
     ctx = _ctx(tmp_path, changed=["fix.py"], inspection=passed)
-    status = resolve_completion(
-        "completed", ctx, mutation_required=True, provider_available=False
-    )
+    status = resolve_completion("completed", ctx, mutation_required=True, provider_available=False)
     assert status is CompletionStatus.completed
 
 
 def test_escalated_graph_maps_to_escalated_for_readonly(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
-    status = resolve_completion(
-        "escalated", ctx, mutation_required=False, provider_available=False
-    )
+    status = resolve_completion("escalated", ctx, mutation_required=False, provider_available=False)
     assert status is CompletionStatus.escalated
 
 
@@ -127,9 +121,7 @@ def test_empty_changed_files_mutation_blocked_with_reason(tmp_path: Path) -> Non
 
 
 def test_readonly_task_completes_with_no_edits(tmp_path: Path) -> None:
-    result = OCFlowRunner(root=tmp_path).run(
-        "Explain the runtime architecture", lane=Lane.FAST
-    )
+    result = OCFlowRunner(root=tmp_path).run("Explain the runtime architecture", lane=Lane.FAST)
     assert result.status == "completed"
     assert result.mutation_required is False
     assert result.graph_status == "completed"

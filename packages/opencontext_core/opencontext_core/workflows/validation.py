@@ -61,24 +61,18 @@ def validate(defn: WorkflowDefinition) -> None:
     # Node id/key consistency + role typing.
     for key, node in nodes.items():
         if node.id != key:
-            raise WorkflowValidationError(
-                f"node key {key!r} disagrees with node id {node.id!r}"
-            )
+            raise WorkflowValidationError(f"node key {key!r} disagrees with node id {node.id!r}")
         if not isinstance(node.role, str) or not node.role:
             raise WorkflowValidationError(f"node {key!r} role must be a non-empty string")
 
     if defn.start_node not in nodes:
-        raise WorkflowValidationError(
-            f"start_node {defn.start_node!r} is not a declared node"
-        )
+        raise WorkflowValidationError(f"start_node {defn.start_node!r} is not a declared node")
 
     if not defn.terminal_nodes:
         raise WorkflowValidationError(f"workflow {defn.id!r} declares no terminal_nodes")
     for terminal in defn.terminal_nodes:
         if terminal not in nodes:
-            raise WorkflowValidationError(
-                f"terminal_node {terminal!r} is not a declared node"
-            )
+            raise WorkflowValidationError(f"terminal_node {terminal!r} is not a declared node")
 
     # Edge endpoint references.
     for edge in defn.edges:

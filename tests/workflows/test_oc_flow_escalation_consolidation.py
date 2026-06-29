@@ -91,9 +91,7 @@ def test_consolidation_reindexes_changed_file(tmp_path: Path) -> None:
     node_local_inspection(ctx)
     node_consolidation(ctx)
 
-    graph_delta = json.loads(
-        (ctx.artifacts_dir / "consolidation" / "graph-delta.json").read_text()
-    )
+    graph_delta = json.loads((ctx.artifacts_dir / "consolidation" / "graph-delta.json").read_text())
     assert "reindexed.py" in graph_delta["reindexed_files"]
 
 

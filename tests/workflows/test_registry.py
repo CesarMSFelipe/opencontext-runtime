@@ -86,9 +86,7 @@ def test_builtin_sdd_edges_mirror_dependencies() -> None:
     """SDD1: YAML edges are the forward form of PHASE_DEPENDENCIES (no drift)."""
     sdd = WorkflowRegistry.with_builtins().get("sdd")
     yaml_edges = {(e.from_node, e.to_node) for e in sdd.edges}
-    expected = {
-        (dep, node) for node, deps in PHASE_DEPENDENCIES.items() for dep in deps
-    }
+    expected = {(dep, node) for node, deps in PHASE_DEPENDENCIES.items() for dep in deps}
     assert yaml_edges == expected
 
 

@@ -61,9 +61,7 @@ def _classify_group(key: str) -> tuple[str, str]:
     return ("feature", "medium")
 
 
-def decompose(
-    intent: IntentRecord, requirements: Sequence[str]
-) -> list[ImplementationSlice]:
+def decompose(intent: IntentRecord, requirements: Sequence[str]) -> list[ImplementationSlice]:
     """Decompose *requirements* into an ordered list of ``ImplementationSlice``s.
 
     Blank requirement ids are dropped (so ``build`` can surface them as orphans),

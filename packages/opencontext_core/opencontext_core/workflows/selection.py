@@ -101,9 +101,7 @@ class SelectionPolicy:
         return SelectionDecision(
             workflow_id="",
             profile=profile,
-            reason=(
-                f"no workflow satisfies the available capabilities for intent {intent!r}"
-            ),
+            reason=(f"no workflow satisfies the available capabilities for intent {intent!r}"),
             denied=True,
             candidates=candidates,
         )

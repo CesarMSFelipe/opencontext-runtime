@@ -243,9 +243,7 @@ def test_provider_branch_parity_with_firewall() -> None:
     config = _provider_config(external_enabled=False)
     engine = PolicyEngine(config=config)
     items = [_ctx("just some safe text")]
-    decision = engine.evaluate(
-        PolicyOperation(kind="provider", provider="anthropic", items=items)
-    )
+    decision = engine.evaluate(PolicyOperation(kind="provider", provider="anthropic", items=items))
     direct = ContextFirewall(config).check_provider_call("anthropic", items)
     assert decision.allowed == direct.allowed
     assert decision.decision == "deny"  # external providers disabled by default

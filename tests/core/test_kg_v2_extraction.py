@@ -63,9 +63,7 @@ def test_symfony_detected_and_routes_extracted(tmp_path: Path) -> None:
 
     assert SymfonyProfile().detect(tmp_path) is True
     extraction = extract_framework_facts(tmp_path)
-    assert any(
-        n.type == KgNodeType.ROUTE and n.name == "app_home" for n in extraction.nodes
-    )
+    assert any(n.type == KgNodeType.ROUTE and n.name == "app_home" for n in extraction.nodes)
 
 
 def test_no_framework_yields_empty(tmp_path: Path) -> None:

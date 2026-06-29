@@ -31,9 +31,9 @@ class _FakeHarness:
 
 
 def _events_text(tmp_path: Path, session_id: str) -> str:
-    return (
-        tmp_path / ".opencontext" / "sessions" / session_id / "events.jsonl"
-    ).read_text(encoding="utf-8")
+    return (tmp_path / ".opencontext" / "sessions" / session_id / "events.jsonl").read_text(
+        encoding="utf-8"
+    )
 
 
 class TestWrapperOn:

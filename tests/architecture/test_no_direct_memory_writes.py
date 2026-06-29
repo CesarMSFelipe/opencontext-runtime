@@ -18,10 +18,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-MEMORY = (
-    Path(__file__).resolve().parents[2]
-    / "packages/opencontext_core/opencontext_core/memory"
-)
+MEMORY = Path(__file__).resolve().parents[2] / "packages/opencontext_core/opencontext_core/memory"
 
 #: The single sanctioned durable writer (book OC-MEMORY-001 §8/§10).
 ALLOWED_WRITERS: frozenset[str] = frozenset({"harness.py"})
@@ -109,9 +106,7 @@ def test_memory_harness_is_sole_writer() -> None:
 def test_guard_flags_a_seeded_bypass() -> None:
     """The detector itself must FAIL on the AVH-002 bug shape (direct store.write)."""
     seeded = (
-        "class Bypass:\n"
-        "    def write(self, record):\n"
-        "        return self._store.write(record)\n"
+        "class Bypass:\n    def write(self, record):\n        return self._store.write(record)\n"
     )
     tree = ast.parse(seeded)
     hits = [n for n in ast.walk(tree) if _is_store_write(n) is not None]

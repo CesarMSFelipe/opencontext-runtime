@@ -56,9 +56,7 @@ def _select(records: list[MemoryRecord], filename: str) -> list[MemoryRecord]:
         return [r for r in records if r.layer == MemoryLayer.PROCEDURAL]
     if filename == "failure-patterns.md":
         return [
-            r
-            for r in records
-            if r.layer in (MemoryLayer.FAILURE, MemoryLayer.HARNESS_EXPERIENCE)
+            r for r in records if r.layer in (MemoryLayer.FAILURE, MemoryLayer.HARNESS_EXPERIENCE)
         ]
     if filename == "owners.md":
         return [r for r in records if _has_tag(r, "owner") or r.scope == "team"]

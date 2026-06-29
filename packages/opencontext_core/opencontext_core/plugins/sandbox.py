@@ -157,9 +157,7 @@ def restricted_import() -> Iterator[None]:
     class _PrivateImportBlocker:
         def find_spec(self, name: str, path: Any = None, target: Any = None) -> None:
             if name == "opencontext_core" or name.startswith("opencontext_core."):
-                if not any(
-                    name == p or name.startswith(p + ".") for p in _ALLOWED_IMPORT_PREFIXES
-                ):
+                if not any(name == p or name.startswith(p + ".") for p in _ALLOWED_IMPORT_PREFIXES):
                     raise PluginSandboxViolation(
                         f"plugin import of private runtime module blocked: {name}"
                     )

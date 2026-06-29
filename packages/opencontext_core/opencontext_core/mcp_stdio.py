@@ -1031,15 +1031,11 @@ class MCPServer:
 
         resolved = self._resolve_config(root)
         api = RuntimeApi(root=root, config=resolved.config)
-        ref = api.start_session(
-            StartSessionRequest(task=task, root=str(root), profile=profile)
-        )
+        ref = api.start_session(StartSessionRequest(task=task, root=str(root), profile=profile))
         self._write_snapshot(resolved, ref.session_id, root)
 
         try:
-            result = api.run(
-                RunRequest(session_id=ref.session_id, workflow_id=workflow, task=task)
-            )
+            result = api.run(RunRequest(session_id=ref.session_id, workflow_id=workflow, task=task))
         except RuntimeFailure as exc:
             return {
                 "error": exc.message,

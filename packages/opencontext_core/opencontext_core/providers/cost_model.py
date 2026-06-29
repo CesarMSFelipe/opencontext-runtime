@@ -11,9 +11,7 @@ from __future__ import annotations
 from opencontext_core.metrics import MetricsCollector
 
 # Local / host-routed backends bill as the free "local" tier (no external spend).
-_LOCAL_ALIASES = frozenset(
-    {"ollama", "lmstudio", "localai", "llamacpp", "gpt4all", "host"}
-)
+_LOCAL_ALIASES = frozenset({"ollama", "lmstudio", "localai", "llamacpp", "gpt4all", "host"})
 
 
 def pricing_for(provider: str) -> dict[str, float]:

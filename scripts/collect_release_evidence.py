@@ -65,9 +65,7 @@ def main() -> int:
         functional, governance = _collect_functional_governance(work, steps, summary)
 
         proof_path = write_dod_proof(root, passed=passed, steps=steps)
-        evidence_path = write_release_evidence(
-            root, functional=functional, governance=governance
-        )
+        evidence_path = write_release_evidence(root, functional=functional, governance=governance)
     finally:
         shutil.rmtree(base, ignore_errors=True)
 

@@ -158,15 +158,11 @@ def explain_profile(profile_id: str) -> dict[str, Any]:
             "policy": policy,
             "providers": providers,
             "approvals": {
-                "approval_required_for_writes": harness.get(
-                    "approval_required_for_writes", False
-                ),
+                "approval_required_for_writes": harness.get("approval_required_for_writes", False),
                 "tdd_mode": harness.get("tdd_mode", "ask"),
             },
             "observability": {
-                "runtime_intelligence_enabled": overlay.get(
-                    "runtime_intelligence_enabled", False
-                )
+                "runtime_intelligence_enabled": overlay.get("runtime_intelligence_enabled", False)
             },
             "budget": {"provider_strategy": providers.get("strategy", "balanced")},
         }

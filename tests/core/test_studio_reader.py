@@ -77,8 +77,9 @@ def _write_run_artifacts(root: Path, run_id: str) -> None:
     (rdir / "context-report.json").write_text(
         json.dumps(
             {
-                "layers": [{"name": "L1", "token_budget": 1000, "tokens_used": 800,
-                            "sources": ["a.py"]}],
+                "layers": [
+                    {"name": "L1", "token_budget": 1000, "tokens_used": 800, "sources": ["a.py"]}
+                ],
                 "evidence_refs": ["evidence-1"],
                 "omissions": ["dropped large_file.py"],
                 "token_budget": 12000,
@@ -91,8 +92,12 @@ def _write_run_artifacts(root: Path, run_id: str) -> None:
         json.dumps(
             {
                 "records": [
-                    {"id": "m1", "content": "old belief", "status": "superseded",
-                     "superseded_by": "m2"}
+                    {
+                        "id": "m1",
+                        "content": "old belief",
+                        "status": "superseded",
+                        "superseded_by": "m2",
+                    }
                 ],
                 "conflicts": ["conflict-1"],
             }
@@ -183,12 +188,25 @@ def test_cost_and_cache_from_provider_receipts(tmp_path: Path) -> None:
     rid = _legacy_run(tmp_path)
     store = RunReceiptStore(tmp_path)
     store.save_provider_receipt(
-        ProviderReceipt(kind="cost", provider="anthropic", model="m",
-                        input_tokens=100, output_tokens=50, estimated_cost=0.01)
+        ProviderReceipt(
+            kind="cost",
+            provider="anthropic",
+            model="m",
+            input_tokens=100,
+            output_tokens=50,
+            estimated_cost=0.01,
+        )
     )
     store.save_provider_receipt(
-        ProviderReceipt(kind="provider-call", provider="anthropic", model="m",
-                        input_tokens=80, output_tokens=10, estimated_cost=0.0, cache_hit=True)
+        ProviderReceipt(
+            kind="provider-call",
+            provider="anthropic",
+            model="m",
+            input_tokens=80,
+            output_tokens=10,
+            estimated_cost=0.0,
+            cache_hit=True,
+        )
     )
     reader = StudioReader(tmp_path)
     cost = reader.cost(rid)
@@ -215,8 +233,9 @@ def test_capabilities_view_has_remediation(tmp_path: Path) -> None:
 def test_modern_session_event_timelines_and_decisions(tmp_path: Path) -> None:
     store = SessionStore(tmp_path)
     store.create_session(
-        RuntimeSession(session_id="sess-1", root=str(tmp_path), task="modern task",
-                       profile="balanced")
+        RuntimeSession(
+            session_id="sess-1", root=str(tmp_path), task="modern task", profile="balanced"
+        )
     )
     bus = store.event_bus("sess-1")
     for ev in (
@@ -327,8 +346,12 @@ def test_release_gate_panel_from_persisted_verdict(tmp_path: Path) -> None:
                 "failed": 0,
                 "gates": [
                     {"gate": "first-run", "category": "A", "status": "MET", "detail": "ok"},
-                    {"gate": "kg-retrieval", "category": "A", "status": "NOT_MEASURED",
-                     "detail": "no fixture"},
+                    {
+                        "gate": "kg-retrieval",
+                        "category": "A",
+                        "status": "NOT_MEASURED",
+                        "detail": "no fixture",
+                    },
                 ],
             }
         ),
@@ -359,8 +382,12 @@ def test_benchmark_coverage_summary(tmp_path: Path) -> None:
                     "timestamp": "2026-06-29T00:00:00Z",
                     "results": [
                         {"suite": "oc-flow", "task_id": "t1", "measured": True, "success": True},
-                        {"suite": "kg-retrieval", "task_id": "t2", "measured": False,
-                         "success": False},
+                        {
+                            "suite": "kg-retrieval",
+                            "task_id": "t2",
+                            "measured": False,
+                            "success": False,
+                        },
                     ],
                 }
             ]

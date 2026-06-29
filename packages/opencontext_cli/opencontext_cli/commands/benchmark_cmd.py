@@ -222,9 +222,7 @@ def _handle_head2head(args: Any) -> None:
             flags = (
                 "".join("1" if (m and getattr(m, f)) else "0" for f in _CAP_FIELDS) if m else "-"
             )
-            rows.append(
-                [a.arm, str(a.tokens), str(a.tool_calls), f"{a.latency_ms:.0f}", flags]
-            )
+            rows.append([a.arm, str(a.tokens), str(a.tool_calls), f"{a.latency_ms:.0f}", flags])
         console.table("Arms", ["Arm", "Tokens", "Calls", "ms", "Capabilities"], rows)
         oc = next((a for a in r.arms if a.arm == "OC-SURGICAL"), None)
         if oc is not None:

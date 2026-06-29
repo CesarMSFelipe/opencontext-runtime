@@ -151,8 +151,9 @@ def _keyed(rid: str, key: str, *, content: str, confidence: float, age_days: int
 def test_audit_live_memory_reports_counts_stale_dups_conflicts_and_cot() -> None:
     records = [
         _keyed("good", "k:good", content="run pytest in the activated venv", confidence=0.9),
-        _keyed("stale", "k:stale", content="an old note nobody refreshed", confidence=0.2,
-               age_days=200),
+        _keyed(
+            "stale", "k:stale", content="an old note nobody refreshed", confidence=0.2, age_days=200
+        ),
         _keyed("d1", "k:dup", content="the cache lives under storage opencontext", confidence=0.7),
         _keyed("d2", "k:dup", content="the cache lives under storage opencontext", confidence=0.7),
         _keyed("c1", "k:conf", content="provider defaults to ollama", confidence=0.2),

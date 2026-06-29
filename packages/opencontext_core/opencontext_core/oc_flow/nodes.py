@@ -123,9 +123,7 @@ class NodeExecutor(Protocol):
 
     def plan(self, task: str, envelope: ContextEnvelope) -> TaskContract: ...
 
-    def mutate(
-        self, contract: TaskContract, envelope: ContextEnvelope
-    ) -> list[ApplyEdit]: ...
+    def mutate(self, contract: TaskContract, envelope: ContextEnvelope) -> list[ApplyEdit]: ...
 
     def diagnose(
         self,
@@ -147,9 +145,7 @@ class DeterministicNodeExecutor:
     def __init__(self, requested_edits: list[ApplyEdit] | None = None) -> None:
         self._requested_edits = list(requested_edits or [])
 
-    def gather_context(
-        self, task: str, seed_paths: Sequence[str], depth: int
-    ) -> ContextEnvelope:
+    def gather_context(self, task: str, seed_paths: Sequence[str], depth: int) -> ContextEnvelope:
         items: list[ContextEnvelopeItem] = []
         omissions: list[str] = []
         for rel in list(seed_paths)[: max(1, depth) * 4]:
@@ -162,9 +158,7 @@ class DeterministicNodeExecutor:
             # No seeds resolved — still produce a usable, minimal envelope so the
             # run can proceed, and record the omission (book §8).
             items.append(
-                ContextEnvelopeItem(
-                    source="memory", ref="task", summary=task[:120], tokens=120
-                )
+                ContextEnvelopeItem(source="memory", ref="task", summary=task[:120], tokens=120)
             )
             omissions.append("no source files seeded; planning from task statement only")
         return ContextEnvelope(
@@ -187,9 +181,7 @@ class DeterministicNodeExecutor:
             stop_conditions=["scope grows beyond OC Flow bounds"],
         )
 
-    def mutate(
-        self, contract: TaskContract, envelope: ContextEnvelope
-    ) -> list[ApplyEdit]:
+    def mutate(self, contract: TaskContract, envelope: ContextEnvelope) -> list[ApplyEdit]:
         edits: list[ApplyEdit] = []
         for edit in self._requested_edits:
             # Ensure every edit carries a reason + acceptance-criterion ref (FLOW-7).
@@ -348,9 +340,7 @@ class ProviderBackedNodeExecutor:
         self.block_reason: str | None = None
 
     # gather / plan / diagnose: honest, model-free artifacts (mutation is the model job)
-    def gather_context(
-        self, task: str, seed_paths: Sequence[str], depth: int
-    ) -> ContextEnvelope:
+    def gather_context(self, task: str, seed_paths: Sequence[str], depth: int) -> ContextEnvelope:
         return self._fallback.gather_context(task, seed_paths, depth)
 
     def plan(self, task: str, envelope: ContextEnvelope) -> TaskContract:
@@ -366,9 +356,7 @@ class ProviderBackedNodeExecutor:
         return self._fallback.diagnose(attempt, contract, inspection, failed_strategies)
 
     # mutate: provider -> schema-validate -> policy (the productive path)
-    def mutate(
-        self, contract: TaskContract, envelope: ContextEnvelope
-    ) -> list[ApplyEdit]:
+    def mutate(self, contract: TaskContract, envelope: ContextEnvelope) -> list[ApplyEdit]:
         self.block_reason = None
         self.provider_available = True
         prompt = (
@@ -392,9 +380,7 @@ class ProviderBackedNodeExecutor:
             # in user-visible output. The redacted detail is honest about the failure
             # mode; the raw exception is reserved for --strict.
             detail = (
-                _redact_provider_error(exc)
-                .removeprefix("provider_fallback_exhausted:")
-                .strip()
+                _redact_provider_error(exc).removeprefix("provider_fallback_exhausted:").strip()
             )
             self.block_reason = (
                 f"provider_fallback_exhausted: {detail}"
@@ -418,9 +404,7 @@ class ProviderBackedNodeExecutor:
         for edit in edits:
             decision = self._policy_decision(edit)
             if not decision.allowed:
-                self.block_reason = (
-                    f"policy denied write to {edit.path}: {decision.reason}"
-                )
+                self.block_reason = f"policy denied write to {edit.path}: {decision.reason}"
                 return []
         # Carry a reason + acceptance-criterion ref on every edit (FLOW-7).
         prepared: list[ApplyEdit] = []
@@ -563,13 +547,23 @@ def node_gather_context(ctx: OCFlowContext) -> NodeResult:
     envelope = envelope.model_copy(update={"cache_hit": cache_hit})
     ctx.envelope = envelope
     name = _write_json(ctx.artifacts_dir / "context-envelope.json", envelope.model_dump())
-    tokens = 0 if cache_hit else min(envelope.token_estimate or _budget_for("gather_context"),
-                                     OC_FLOW_BUDGETS["gather_context"][1])
+    tokens = (
+        0
+        if cache_hit
+        else min(
+            envelope.token_estimate or _budget_for("gather_context"),
+            OC_FLOW_BUDGETS["gather_context"][1],
+        )
+    )
     return NodeResult(
         node="gather_context",
         outcome=NodeOutcome.OK,
-        outputs={"items": len(envelope.items), "omissions": len(envelope.omissions),
-                 "cache_hit": cache_hit, "kg_consulted": kg_consulted},
+        outputs={
+            "items": len(envelope.items),
+            "omissions": len(envelope.omissions),
+            "cache_hit": cache_hit,
+            "kg_consulted": kg_consulted,
+        },
         llm_tokens=tokens,
         artifacts=[name],
     )
@@ -661,8 +655,10 @@ def node_plan(ctx: OCFlowContext) -> NodeResult:
     return NodeResult(
         node="plan",
         outcome=NodeOutcome.OK,
-        outputs={"acceptance_criteria": len(contract.acceptance_criteria),
-                 "changed_areas": list(contract.changed_areas)},
+        outputs={
+            "acceptance_criteria": len(contract.acceptance_criteria),
+            "changed_areas": list(contract.changed_areas),
+        },
         llm_tokens=_budget_for("plan"),
         artifacts=[name],
     )
@@ -699,10 +695,10 @@ def node_mutate(ctx: OCFlowContext) -> NodeResult:
         if edit.path not in ctx.changed_files:
             ctx.changed_files.append(edit.path)
 
-    patch_lines = [
-        f"# {e.operation.value} {e.path} :: {e.reason}" for e in edits
-    ] or ["# no edits proposed (honest no-op mutation)"]
-    patch_name = (ctx.artifacts_dir / "patch.diff")
+    patch_lines = [f"# {e.operation.value} {e.path} :: {e.reason}" for e in edits] or [
+        "# no edits proposed (honest no-op mutation)"
+    ]
+    patch_name = ctx.artifacts_dir / "patch.diff"
     patch_name.parent.mkdir(parents=True, exist_ok=True)
     patch_name.write_text("\n".join(patch_lines) + "\n", encoding="utf-8")
     rec_name = _write_json(
@@ -712,8 +708,11 @@ def node_mutate(ctx: OCFlowContext) -> NodeResult:
     return NodeResult(
         node="mutate",
         outcome=NodeOutcome.OK,
-        outputs={"edits": len(edits), "checkpoint_id": ctx.checkpoint_id,
-                 "changed_files": list(ctx.changed_files)},
+        outputs={
+            "edits": len(edits),
+            "checkpoint_id": ctx.checkpoint_id,
+            "changed_files": list(ctx.changed_files),
+        },
         llm_tokens=_budget_for("mutate"),
         artifacts=["patch.diff", rec_name],
     )
@@ -760,9 +759,7 @@ def node_diagnose(ctx: OCFlowContext) -> NodeResult:
         raise OCFlowError("diagnose requires a contract and a failed inspection")
 
     attempt_no = len(ctx.diagnosis_attempts) + 1
-    attempt = ctx.executor.diagnose(
-        attempt_no, ctx.contract, ctx.inspection, ctx.failed_strategies
-    )
+    attempt = ctx.executor.diagnose(attempt_no, ctx.contract, ctx.inspection, ctx.failed_strategies)
     # Never repeat a failed strategy (book §12).
     if attempt.fix_strategy in ctx.failed_strategies:
         return NodeResult(
@@ -780,8 +777,11 @@ def node_diagnose(ctx: OCFlowContext) -> NodeResult:
     return NodeResult(
         node="diagnose",
         outcome=NodeOutcome.FIX_READY,
-        outputs={"attempt": attempt_no, "selected": attempt.selected_hypothesis,
-                 "fix_strategy": attempt.fix_strategy},
+        outputs={
+            "attempt": attempt_no,
+            "selected": attempt.selected_hypothesis,
+            "fix_strategy": attempt.fix_strategy,
+        },
         llm_tokens=_budget_for("diagnose"),
         artifacts=[name],
     )
@@ -843,9 +843,7 @@ def node_consolidation(ctx: OCFlowContext) -> NodeResult:
         "changed_files": len(ctx.changed_files),
     }
     mem_name = _write_json(ctx.artifacts_dir / "consolidation" / "memory-delta.json", memory_delta)
-    graph_name = _write_json(
-        ctx.artifacts_dir / "consolidation" / "graph-delta.json", graph_delta
-    )
+    graph_name = _write_json(ctx.artifacts_dir / "consolidation" / "graph-delta.json", graph_delta)
     summary = (
         f"# OC Flow Summary\n\n"
         f"Task: {ctx.task}\n\n"

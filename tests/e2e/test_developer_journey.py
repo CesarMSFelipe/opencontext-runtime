@@ -64,8 +64,11 @@ class _StubGateway:
     def generate(self, request: object) -> LLMResponse:
         self.calls.append(request)
         return LLMResponse(
-            content=self._content, provider="mock", model="e2e-stub",
-            input_tokens=1, output_tokens=1,
+            content=self._content,
+            provider="mock",
+            model="e2e-stub",
+            input_tokens=1,
+            output_tokens=1,
         )
 
 
@@ -82,7 +85,12 @@ _MATRIX_STATUS_LEGEND = {"MET", "PROPOSED", "DEFERRED", "REJECTED"}
 def _cli(argv: list[str], cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "opencontext_cli.main", *argv],
-        cwd=str(cwd), env=env, capture_output=True, text=True, timeout=240, check=False,
+        cwd=str(cwd),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=240,
+        check=False,
     )
 
 
@@ -188,8 +196,12 @@ def _collect_functional_governance(
                 "from m import f\n\n\ndef test_f():\n    assert f() == 1\n", encoding="utf-8"
             )
             free = run_oc_flow_cli(
-                "Fix failing test", root=pl, workflow="oc-flow", enabled=True,
-                as_json=False, executor=None,
+                "Fix failing test",
+                root=pl,
+                workflow="oc-flow",
+                enabled=True,
+                as_json=False,
+                executor=None,
             )
         if free.get("status") in {"needs_executor", "blocked", "escalated"}:
             functional["diagnose-bounded-failures"] = _met(
@@ -283,7 +295,11 @@ def run_dod_journey(
 
     p = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "test_buggy_add.py"],
-        cwd=str(work), capture_output=True, text=True, timeout=180, check=False,
+        cwd=str(work),
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
     )
     steps.append({"step": "pytest", "exit_code": p.returncode, "ok": p.returncode == 0})
     return steps, summary
@@ -317,8 +333,14 @@ def test_dod_journey_proves_and_meets_e2e_gate(
     golden = {
         g.gate: g.status
         for g in verdict.gates
-        if g.gate in {"first-run", "oc-flow-localized-bugfix", "policy-security",
-                      "resume-rollback", "provider-fallback"}
+        if g.gate
+        in {
+            "first-run",
+            "oc-flow-localized-bugfix",
+            "policy-security",
+            "resume-rollback",
+            "provider-fallback",
+        }
     }
     assert all(s is GateStatus.MET for s in golden.values()), golden
 
@@ -333,12 +355,12 @@ def test_dod_journey_proves_and_meets_e2e_gate(
     assert set(functional) == set(FUNCTIONAL_BEHAVIOURS), sorted(
         set(FUNCTIONAL_BEHAVIOURS) - set(functional)
     )
-    assert set(governance) == set(GOVERNANCE_GATES), sorted(
-        set(GOVERNANCE_GATES) - set(governance)
-    )
+    assert set(governance) == set(GOVERNANCE_GATES), sorted(set(GOVERNANCE_GATES) - set(governance))
 
     injected = AcceptanceEvaluator(repo_root=work).evaluate(
-        bench_root=str(work), functional=read_functional, governance=read_governance,
+        bench_root=str(work),
+        functional=read_functional,
+        governance=read_governance,
     )
     measured = {g.gate: g.status for g in injected.gates}
     for gate in functional:

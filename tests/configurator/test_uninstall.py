@@ -147,9 +147,7 @@ def test_uninstall_keeps_home_mcp_with_user_server(
     claude.mkdir(parents=True)
     home_mcp = mcp_config_path("claude-code")
     home_mcp.parent.mkdir(parents=True, exist_ok=True)
-    home_mcp.write_text(
-        json.dumps({"mcpServers": {"mine": {"command": "x"}}}), encoding="utf-8"
-    )
+    home_mcp.write_text(json.dumps({"mcpServers": {"mine": {"command": "x"}}}), encoding="utf-8")
     cfg = Configurator(project_root=tmp_path / "proj")
     cfg.configure(["claude-code"], scope="global")
     cfg.deconfigure(["claude-code"], scope="global")

@@ -189,17 +189,13 @@ class MetaPlanner:
         intent_record = self.parse_intent(intent)
 
         if slices is None:
-            assignable = [
-                r for r in requirements if r not in deferred and r not in rejected
-            ]
+            assignable = [r for r in requirements if r not in deferred and r not in rejected]
             built_slices = self.decompose(intent_record, assignable)
         else:
             built_slices = list(slices)
 
         for slice in built_slices:
-            self.assess(
-                slice, task_type=slice.task_type, risk_level=slice.risk_level
-            )
+            self.assess(slice, task_type=slice.task_type, risk_level=slice.risk_level)
             self.estimate(slice)
 
         pr_plan = self.assign_prs(built_slices)
@@ -284,9 +280,7 @@ class MetaPlanner:
             raise PlanningError(
                 "persist=True requires an ArtifactStore; pass store= or use persist=False"
             )
-        self._store.save(
-            CHANGE_ID, ARTIFACT_KIND_PROGRAM_PLAN, plan.model_dump_json(indent=2)
-        )
+        self._store.save(CHANGE_ID, ARTIFACT_KIND_PROGRAM_PLAN, plan.model_dump_json(indent=2))
         self._store.save(
             CHANGE_ID,
             ARTIFACT_KIND_CONVERGENCE_MAP,
@@ -311,9 +305,7 @@ class MetaPlanner:
                 "build",
             ],
         )
-        self._store.save(
-            CHANGE_ID, "program-plan-receipt", receipt.model_dump_json(indent=2)
-        )
+        self._store.save(CHANGE_ID, "program-plan-receipt", receipt.model_dump_json(indent=2))
         self.last_receipt = receipt
         return receipt
 

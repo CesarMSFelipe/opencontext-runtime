@@ -1139,7 +1139,7 @@ class RuntimeMigrationConfig(BaseModel):
         default=True,
         description=(
             "Enable the PR-007 OC Flow operational workflow "
-            "(`opencontext run \"<task>\" --workflow oc-flow`). Off (default-legacy) "
+            '(`opencontext run "<task>" --workflow oc-flow`). Off (default-legacy) '
             "until the localized-bugfix benchmark passes; flip one flag to enable."
         ),
     )
@@ -1616,9 +1616,7 @@ class OpenContextConfig(BaseModel):
         default_factory=dict,
         description="v2 workflow-defaults section (selection/lane defaults).",
     )
-    personas: dict[str, Any] = Field(
-        default_factory=dict, description="v2 personas section."
-    )
+    personas: dict[str, Any] = Field(default_factory=dict, description="v2 personas section.")
     harnesses: dict[str, Any] = Field(
         default_factory=dict, description="v2 harnesses section (registry overlay)."
     )

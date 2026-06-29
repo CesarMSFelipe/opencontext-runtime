@@ -46,7 +46,5 @@ class TestRunStoreUntouched:
         assert index_path.read_bytes() == before
         assert run_store.list_run_ids() == ["run-legacy"]
         # SessionStore writes only under .opencontext/sessions/.
-        session_index = (
-            tmp_path / ".opencontext" / "sessions" / "sess-1" / "runs" / "index.json"
-        )
+        session_index = tmp_path / ".opencontext" / "sessions" / "sess-1" / "runs" / "index.json"
         assert not session_index.exists()

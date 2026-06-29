@@ -120,9 +120,7 @@ def test_role_resolves_to_default_persona() -> None:
 def test_profile_overrides_default_mapping() -> None:
     reg = PersonaRegistry.with_builtins()
     reg.register(PersonaDefinition(id="oc-custom-builder", name="Custom"))
-    resolver = PersonaResolver(
-        registry=reg, overrides={"team-x": {"builder": "oc-custom-builder"}}
-    )
+    resolver = PersonaResolver(registry=reg, overrides={"team-x": {"builder": "oc-custom-builder"}})
     assert resolver.resolve_id("builder") == "oc-builder"
     assert resolver.resolve_id("builder", profile="team-x") == "oc-custom-builder"
 

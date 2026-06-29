@@ -69,9 +69,7 @@ def test_resume_carries_proposal_forward_and_runs_spec(tmp_path: Path) -> None:
     _seed_prior_run(tmp_path, prior_id)
 
     runner = HarnessRunner(root=tmp_path)
-    result = runner.run(
-        "sdd", "carryover task", budget_mode=BudgetMode.OFF, resume_from=prior_id
-    )
+    result = runner.run("sdd", "carryover task", budget_mode=BudgetMode.OFF, resume_from=prior_id)
 
     new_dir = tmp_path / ".opencontext" / "runs" / result.run_id
     # The prior proposal.json was rehydrated into the resumed run dir...

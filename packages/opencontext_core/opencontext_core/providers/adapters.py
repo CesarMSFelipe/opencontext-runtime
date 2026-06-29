@@ -72,9 +72,7 @@ class ProviderAdapter(ABC):
 
         return capabilities_for(self.config.name)
 
-    def chat_with_retries(
-        self, messages: list[dict[str, str]], **kwargs: Any
-    ) -> ModelResponse:
+    def chat_with_retries(self, messages: list[dict[str, str]], **kwargs: Any) -> ModelResponse:
         """Call :meth:`chat`, retrying a transient ``ProviderError`` up to ``max_retries``.
 
         Honors ``ProviderConfig.max_retries`` (previously unused) so a flaky

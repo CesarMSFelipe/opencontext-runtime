@@ -202,9 +202,7 @@ def resolve(
         merged = _deep_merge(merged, data)
 
     config = OpenContextConfig.model_validate(merged)
-    return ResolvedConfig(
-        config=config, provenance=provenance, profile=profile_name, data=merged
-    )
+    return ResolvedConfig(config=config, provenance=provenance, profile=profile_name, data=merged)
 
 
 def resolve_config_path(root: str | Path, explicit: str | Path | None = None) -> Path:

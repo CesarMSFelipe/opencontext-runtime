@@ -87,9 +87,7 @@ def test_ingest_consumes_runtime_decision() -> None:
     from opencontext_core.runtime.decisions import RuntimeDecision
 
     recorder = DecisionRecorder()
-    entry = recorder.ingest(
-        RuntimeDecision(kind="provider", chosen="anthropic", run_id="run-2")
-    )
+    entry = recorder.ingest(RuntimeDecision(kind="provider", chosen="anthropic", run_id="run-2"))
     assert entry.decision_kind == "provider"
     assert entry.selected == "anthropic"
     assert recorder.log_for_run("run-2")[0].selected == "anthropic"

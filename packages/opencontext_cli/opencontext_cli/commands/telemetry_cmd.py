@@ -59,9 +59,7 @@ def _handle_show(root: str, last: int | None = None) -> None:
     store = load_telemetry(root)
     console.header("Token Savings")
     if not store.events:
-        console.info(
-            "No telemetry yet. Run 'opencontext pack . --query <task>' to start tracking."
-        )
+        console.info("No telemetry yet. Run 'opencontext pack . --query <task>' to start tracking.")
         return
 
     events = store.events[-last:] if last else store.events
@@ -118,9 +116,7 @@ def _handle_clear(root: str) -> None:
                 continue
             kept.append(line)
         if cleared:
-            events_path.write_text(
-                "".join(f"{line}\n" for line in kept), encoding="utf-8"
-            )
+            events_path.write_text("".join(f"{line}\n" for line in kept), encoding="utf-8")
 
     # Remove any pre-canonical legacy single file outright.
     legacy_path = Path(root) / TELEMETRY_FILE

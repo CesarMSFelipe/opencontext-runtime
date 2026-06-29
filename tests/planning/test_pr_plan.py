@@ -10,9 +10,7 @@ from opencontext_core.planning.pr_plan import PrCycleError, PrPlan, assign_prs
 
 
 def _slices() -> list[ImplementationSlice]:
-    return decompose(
-        parse_intent("plan it"), ["MP-001", "MP-002", "PR-003", "PR-004"]
-    )
+    return decompose(parse_intent("plan it"), ["MP-001", "MP-002", "PR-003", "PR-004"])
 
 
 def test_schema_version_is_pr_plan_v1() -> None:

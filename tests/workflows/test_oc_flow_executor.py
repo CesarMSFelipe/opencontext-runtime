@@ -36,8 +36,11 @@ class _StubGateway:
     def generate(self, request: object) -> LLMResponse:
         self.calls.append(request)
         return LLMResponse(
-            content=self._content, provider="mock", model="stub",
-            input_tokens=1, output_tokens=1,
+            content=self._content,
+            provider="mock",
+            model="stub",
+            input_tokens=1,
+            output_tokens=1,
         )
 
 
@@ -55,7 +58,8 @@ _VALID_EDIT_JSON = (
 
 def _verify_cmd() -> list[str]:
     return [
-        sys.executable, "-c",
+        sys.executable,
+        "-c",
         "import sys; sys.path.insert(0, '.'); import calc; assert calc.add(2, 3) == 5",
     ]
 
@@ -77,8 +81,10 @@ def test_provider_valid_apply_edit_fixes_bug_and_verifies(tmp_path: Path) -> Non
     gateway = _StubGateway(_VALID_EDIT_JSON)
     executor = ProviderBackedNodeExecutor(gateway=gateway, root=tmp_path, provider="mock")
     result = OCFlowRunner(root=tmp_path, executor=executor).run(
-        "Fix failing test", lane=Lane.FAST,
-        run_external_inspection=True, test_command=_verify_cmd(),
+        "Fix failing test",
+        lane=Lane.FAST,
+        run_external_inspection=True,
+        test_command=_verify_cmd(),
     )
     assert gateway.calls  # the full pipeline really called the provider
     assert result.status == "completed"
@@ -95,8 +101,10 @@ def test_mcp_sampling_executor_uses_same_pipeline(tmp_path: Path) -> None:
     gateway = _StubGateway(_VALID_EDIT_JSON)
     executor = McpSamplingNodeExecutor(gateway=gateway, root=tmp_path)
     result = OCFlowRunner(root=tmp_path, executor=executor).run(
-        "Fix failing test", lane=Lane.FAST,
-        run_external_inspection=True, test_command=_verify_cmd(),
+        "Fix failing test",
+        lane=Lane.FAST,
+        run_external_inspection=True,
+        test_command=_verify_cmd(),
     )
     assert result.status == "completed"
     assert (tmp_path / "calc.py").read_text() == "def add(a, b):\n    return a + b\n"
@@ -108,7 +116,8 @@ def test_provider_malformed_edits_block_run_no_mutation(tmp_path: Path) -> None:
     gateway = _StubGateway("Sure! Here is the fix you asked for, no JSON though.")
     executor = ProviderBackedNodeExecutor(gateway=gateway, root=tmp_path, provider="mock")
     result = OCFlowRunner(root=tmp_path, executor=executor).run(
-        "Fix failing test", lane=Lane.FAST,
+        "Fix failing test",
+        lane=Lane.FAST,
     )
     assert result.status != "completed"
     assert result.status == "blocked"
@@ -124,7 +133,8 @@ def test_provider_schema_invalid_edits_block_run(tmp_path: Path) -> None:
     gateway = _StubGateway(bad)
     executor = ProviderBackedNodeExecutor(gateway=gateway, root=tmp_path, provider="mock")
     result = OCFlowRunner(root=tmp_path, executor=executor).run(
-        "Fix failing test", lane=Lane.FAST,
+        "Fix failing test",
+        lane=Lane.FAST,
     )
     assert result.status == "blocked"
     assert (tmp_path / "calc.py").read_text() == "def add(a, b):\n    return a - b\n"
@@ -141,7 +151,8 @@ def test_provider_forbidden_path_denied_by_policy(tmp_path: Path) -> None:
     gateway = _StubGateway(escape)
     executor = ProviderBackedNodeExecutor(gateway=gateway, root=tmp_path, provider="mock")
     result = OCFlowRunner(root=tmp_path, executor=executor).run(
-        "Fix failing test", lane=Lane.FAST,
+        "Fix failing test",
+        lane=Lane.FAST,
     )
     assert result.status == "blocked"
     assert "policy denied" in result.completion_reason

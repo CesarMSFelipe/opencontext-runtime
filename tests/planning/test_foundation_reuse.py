@@ -17,9 +17,7 @@ from opencontext_core.verify.compliance import ComplianceMatrix
 
 def test_convergence_map_builds_on_compliance_matrix() -> None:
     # ConvergenceMap reuses the shipped ComplianceMatrix primitive (no parallel model).
-    plan = MetaPlanner().build(
-        intent="reuse compliance", requirements=["R1", "R2"], persist=False
-    )
+    plan = MetaPlanner().build(intent="reuse compliance", requirements=["R1", "R2"], persist=False)
     matrix = plan.convergence.to_compliance_matrix()
     assert isinstance(matrix, ComplianceMatrix)
     assert {e.requirement_id for e in matrix.iter_entries()} == {"R1", "R2"}

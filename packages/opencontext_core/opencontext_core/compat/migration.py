@@ -109,9 +109,7 @@ class MigrationLedger(BaseModel):
         """Map every classified module to its single migration state."""
         return {entry.module: entry.state for entry in self.modules}
 
-    def is_migrated(
-        self, module: str, *, root: Path | str | None = None
-    ) -> tuple[bool, list[str]]:
+    def is_migrated(self, module: str, *, root: Path | str | None = None) -> tuple[bool, list[str]]:
         """Evaluate the four CL-006 "migrated" conditions for *module*.
 
         Returns ``(migrated, reasons)`` where ``reasons`` names each failing

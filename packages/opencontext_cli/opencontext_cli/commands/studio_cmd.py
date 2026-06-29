@@ -16,9 +16,7 @@ from typing import Any
 
 
 def add_studio_parser(subparsers: Any) -> None:
-    p = subparsers.add_parser(
-        "studio", help="Launch the local read-only Studio web control plane."
-    )
+    p = subparsers.add_parser("studio", help="Launch the local read-only Studio web control plane.")
     p.add_argument("--port", type=int, default=8765, help="Port to bind (default: 8765).")
     p.add_argument(
         "--no-browser", action="store_true", help="Print the URL without opening a browser."

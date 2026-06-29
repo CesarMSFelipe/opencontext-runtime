@@ -121,9 +121,7 @@ def test_applier_denies_promotion_when_gate_fails_and_stays_propose_only(
 
 def test_applier_default_behaviour_unchanged_without_gate(tmp_path: Path) -> None:
     applier = EvolutionApplier(project_root=tmp_path)
-    proposal = EvolutionProposal(
-        proposal_id="p3", kind="context_weight", title="t", rationale="r"
-    )
+    proposal = EvolutionProposal(proposal_id="p3", kind="context_weight", title="t", rationale="r")
     # No gate supplied → existing propose-only behaviour (never auto-applies).
     result = applier.apply(proposal, approved=True)
     assert result.applied is False

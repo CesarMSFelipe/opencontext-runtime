@@ -61,9 +61,7 @@ def test_policy_ref_links_existing_policy_decision_without_duplication() -> None
     )
 
     recorder = DecisionRecorder()
-    entry = recorder.record(
-        _decision("run-1", "provider", "ollama:llama3"), policy_ref=policy.id
-    )
+    entry = recorder.record(_decision("run-1", "provider", "ollama:llama3"), policy_ref=policy.id)
     # The entry references the policy id; it does not re-model the PolicyDecision.
     assert entry.policy_ref == "pol-1"
     assert envelope.policy_decisions[0].id == entry.policy_ref

@@ -110,8 +110,7 @@ def should_escalate_to_sdd(contract: TaskContract, *, max_changed_areas: int = 5
     if len(contract.changed_areas) > max_changed_areas:
         return True
     risk = {r.lower() for r in contract.risk_flags}
-    high_risk = {"public_api", "schema", "architecture", "security", "migration",
-                 "breaking_change"}
+    high_risk = {"public_api", "schema", "architecture", "security", "migration", "breaking_change"}
     return bool(risk & high_risk)
 
 
@@ -146,18 +145,14 @@ class OCFlowRunner:
         if context_engine_enabled is None or kg_v2_enabled is None:
             runtime_cfg = self._load_runtime_config()
             if context_engine_enabled is None:
-                context_engine_enabled = bool(
-                    getattr(runtime_cfg, "context_engine_enabled", False)
-                )
+                context_engine_enabled = bool(getattr(runtime_cfg, "context_engine_enabled", False))
             if kg_v2_enabled is None:
                 kg_v2_enabled = bool(getattr(runtime_cfg, "kg_v2_enabled", False))
         self._context_engine_enabled = bool(context_engine_enabled)
         self._kg_v2_enabled = bool(kg_v2_enabled)
         # kg_v2 consults the KG index before broad file reads; locate it under root
         # only when the flag is on (None on an unindexed project = honest fallback).
-        self._graph_db_path = (
-            self._resolve_graph_db_path() if self._kg_v2_enabled else None
-        )
+        self._graph_db_path = self._resolve_graph_db_path() if self._kg_v2_enabled else None
 
     # -- config / kg resolution ----------------------------------------------
     def _load_runtime_config(self) -> Any:
@@ -171,9 +166,7 @@ class OCFlowRunner:
             from opencontext_core.config import load_config_or_defaults
             from opencontext_core.config_resolver import resolve_config_path
 
-            config = load_config_or_defaults(
-                resolve_config_path(self.root), auto_detect=False
-            )
+            config = load_config_or_defaults(resolve_config_path(self.root), auto_detect=False)
             return config.runtime
         except Exception:  # pragma: no cover - config is advisory; default to legacy.
             return None
@@ -193,14 +186,7 @@ class OCFlowRunner:
 
     # -- paths ----------------------------------------------------------------
     def _run_dir(self, session_id: str, run_id: str) -> Path:
-        return (
-            self.root
-            / ".opencontext"
-            / "sessions"
-            / session_id
-            / "runs"
-            / run_id
-        )
+        return self.root / ".opencontext" / "sessions" / session_id / "runs" / run_id
 
     def _artifacts_dir(self, session_id: str, run_id: str) -> Path:
         return self._run_dir(session_id, run_id) / "artifacts" / "oc-flow"
@@ -270,13 +256,18 @@ class OCFlowRunner:
         node = self.definition.start_node
         status = "completed"
         steps = 0
-        self._emit_event(events, "workflow.selected", node, {
-            "workflow": "oc-flow",
-            "lane": lane_enum.value,
-            "selection_reason": selection.reason,
-            "selection_signals": selection.signals,
-            "mutation_required": mut_required,
-        })
+        self._emit_event(
+            events,
+            "workflow.selected",
+            node,
+            {
+                "workflow": "oc-flow",
+                "lane": lane_enum.value,
+                "selection_reason": selection.reason,
+                "selection_signals": selection.signals,
+                "mutation_required": mut_required,
+            },
+        )
 
         while node not in self.definition.terminal_nodes:
             steps += 1
@@ -291,8 +282,12 @@ class OCFlowRunner:
             result = handler(ctx)
             visited.append(node)
             guard.charge(node, result.llm_tokens)
-            self._emit_event(events, "node.completed", node,
-                             {"outcome": result.outcome.value, "tokens": result.llm_tokens})
+            self._emit_event(
+                events,
+                "node.completed",
+                node,
+                {"outcome": result.outcome.value, "tokens": result.llm_tokens},
+            )
 
             # Exit-condition guard (book §7-§11): refuse to advance until met.
             if not can_exit(node, ctx):
@@ -325,9 +320,18 @@ class OCFlowRunner:
             else completion_reason(completion, mutation_required=mut_required)
         )
         self._persist(
-            session_id, run_id, ctx, events, decisions, guard, status, visited,
-            graph_status=graph_status, completion_reason=reason,
-            mutation_required=mut_required, selection=selection,
+            session_id,
+            run_id,
+            ctx,
+            events,
+            decisions,
+            guard,
+            status,
+            visited,
+            graph_status=graph_status,
+            completion_reason=reason,
+            mutation_required=mut_required,
+            selection=selection,
         )
 
         return OCFlowRunResult(
@@ -395,8 +399,9 @@ class OCFlowRunner:
                 + (f"; brain recommended '{brain_reco}'" if brain_reco else "")
             ),
             alternatives=[
-                e.to_node for e in self.definition.edges if e.from_node == node
-                and e.to_node != target
+                e.to_node
+                for e in self.definition.edges
+                if e.from_node == node and e.to_node != target
             ],
             confidence=0.9,
             governed_by="state_machine",  # the SM governs; Brain only advises.
@@ -410,8 +415,9 @@ class OCFlowRunner:
             node_id=node,
         )
         decisions.append(decision)
-        self._emit_event(events, "decision.recorded", node,
-                         {"chosen": target, "outcome": outcome.value})
+        self._emit_event(
+            events, "decision.recorded", node, {"chosen": target, "outcome": outcome.value}
+        )
         return target
 
     # -- events / persistence -------------------------------------------------
@@ -494,9 +500,7 @@ class OCFlowRunner:
 
         contract_path = artifacts_dir / "task-contract.json"
         if not contract_path.is_file():
-            raise OCFlowError(
-                "cannot resume: required artifact task-contract.json is missing"
-            )
+            raise OCFlowError("cannot resume: required artifact task-contract.json is missing")
         contract = TaskContract.model_validate(_load(contract_path))
 
         envelope = None

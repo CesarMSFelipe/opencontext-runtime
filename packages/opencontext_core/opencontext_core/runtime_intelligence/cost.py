@@ -221,8 +221,9 @@ class CostEngine:
         else:
             chosen = min(
                 estimates,
-                key=lambda wf: estimates[wf].estimated_input_tokens
-                + estimates[wf].estimated_output_tokens,
+                key=lambda wf: (
+                    estimates[wf].estimated_input_tokens + estimates[wf].estimated_output_tokens
+                ),
             )
             reason = f"lowest estimated tokens among {list(estimates)}"
 

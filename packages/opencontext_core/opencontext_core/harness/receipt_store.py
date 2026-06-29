@@ -91,9 +91,7 @@ class ReceiptStore:
 
     def list_for_run(self, run_id: str) -> list[Receipt]:
         """Return the book :class:`Receipt`s recorded for *run_id*, in order."""
-        return [
-            r for r in self._iter() if isinstance(r, Receipt) and r.run_id == run_id
-        ]
+        return [r for r in self._iter() if isinstance(r, Receipt) and r.run_id == run_id]
 
     def list_apply_receipts(self) -> list[ApplyReceipt]:
         """Return every :class:`ApplyReceipt` in append order."""

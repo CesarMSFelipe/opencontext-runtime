@@ -74,9 +74,7 @@ def _seed_oc_flow_run(tmp_path: Path, run_id: str, decisions: list[dict]) -> Non
     run_dir = tmp_path / ".opencontext" / "sessions" / "sess-flow" / "runs" / run_id
     run_dir.mkdir(parents=True)
     (run_dir / "state.json").write_text(json.dumps({"run_id": run_id}), encoding="utf-8")
-    (run_dir / "decisions.json").write_text(
-        json.dumps({"decisions": decisions}), encoding="utf-8"
-    )
+    (run_dir / "decisions.json").write_text(json.dumps({"decisions": decisions}), encoding="utf-8")
 
 
 def test_decisions_show_reads_oc_flow_decisions(tmp_path: Path, capsys) -> None:
@@ -84,8 +82,15 @@ def test_decisions_show_reads_oc_flow_decisions(tmp_path: Path, capsys) -> None:
     _seed_oc_flow_run(
         tmp_path,
         "run-flow",
-        [{"kind": "next_node", "selected": "plan", "governed_by": "state_machine",
-          "rationale": "graph routes init -> plan", "alternatives": []}],
+        [
+            {
+                "kind": "next_node",
+                "selected": "plan",
+                "governed_by": "state_machine",
+                "rationale": "graph routes init -> plan",
+                "alternatives": [],
+            }
+        ],
     )
     handle_decisions(
         SimpleNamespace(decisions_action="show", run_id="run-flow", root=str(tmp_path), json=False)

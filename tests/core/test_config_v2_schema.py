@@ -33,9 +33,7 @@ def test_v2_file_loads_with_named_sections(tmp_path: Path) -> None:
 
 
 def test_v1_file_without_version_loads_as_v1(tmp_path: Path) -> None:
-    (tmp_path / "opencontext.yaml").write_text(
-        "project:\n  name: legacy\n", encoding="utf-8"
-    )
+    (tmp_path / "opencontext.yaml").write_text("project:\n  name: legacy\n", encoding="utf-8")
     config = load_config(tmp_path / "opencontext.yaml")
     assert config.version == 1
 

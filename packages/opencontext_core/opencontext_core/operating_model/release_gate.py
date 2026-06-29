@@ -441,8 +441,13 @@ class AcceptanceEvaluator:
         gates.extend(self._gate_b(functional or {}))
         gates.extend(
             self._gate_c(
-                runner, bench_root, smoke, regression or {}, dod_gates,
-                release_mode=release_mode, e2e_proof=e2e_proof,
+                runner,
+                bench_root,
+                smoke,
+                regression or {},
+                dod_gates,
+                release_mode=release_mode,
+                e2e_proof=e2e_proof,
             )
         )
         gates.extend(self._gate_d(governance or {}))
@@ -464,9 +469,7 @@ class AcceptanceEvaluator:
         blocking = [
             g
             for g in gates
-            if not (
-                g.gate in DEFERRED_PROVIDER_CI_GATES and g.status is GateStatus.NOT_MEASURED
-            )
+            if not (g.gate in DEFERRED_PROVIDER_CI_GATES and g.status is GateStatus.NOT_MEASURED)
         ]
         ready = bool(blocking) and all(g.status is GateStatus.MET for g in blocking)
         return AcceptanceVerdict(
@@ -624,16 +627,22 @@ class AcceptanceEvaluator:
         if proof is not None and bool(proof.get("passed")):
             steps = proof.get("steps") or []
             return GateResult(
-                gate=name, category="C", status=GateStatus.MET,
+                gate=name,
+                category="C",
+                status=GateStatus.MET,
                 detail=f"DoD e2e sequence proven end-to-end ({len(steps)} steps passed)",
             )
         if release_mode:
             return GateResult(
-                gate=name, category="C", status=GateStatus.FAILED,
+                gate=name,
+                category="C",
+                status=GateStatus.FAILED,
                 detail="DoD e2e sequence unproven — 1.0 cannot be declared (run tests/e2e)",
             )
         return GateResult(
-            gate=name, category="C", status=GateStatus.NOT_MEASURED,
+            gate=name,
+            category="C",
+            status=GateStatus.NOT_MEASURED,
             detail="DoD e2e sequence not proven in this environment (run tests/e2e)",
         )
 
@@ -662,7 +671,9 @@ class AcceptanceEvaluator:
             if missing:
                 gates.append(
                     GateResult(
-                        gate=name, category="C", status=GateStatus.FAILED,
+                        gate=name,
+                        category="C",
+                        status=GateStatus.FAILED,
                         detail=f"flip bundle incomplete — missing: {', '.join(missing)}",
                     )
                 )
@@ -673,7 +684,9 @@ class AcceptanceEvaluator:
                 where = "config_after" if bundle.accepted else "config_before (reverted)"
                 gates.append(
                     GateResult(
-                        gate=name, category="C", status=GateStatus.FAILED,
+                        gate=name,
+                        category="C",
+                        status=GateStatus.FAILED,
                         detail=f"ACTIVE {bundle.flag}={active!r} != {where} {expected!r}",
                     )
                 )

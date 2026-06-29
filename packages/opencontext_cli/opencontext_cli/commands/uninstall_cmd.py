@@ -491,9 +491,7 @@ def handle_uninstall(args: Any) -> None:
                     console.warning("verify failed: global traces remain:")
                     for p in global_residue:
                         console.dim(f"  {p}")
-                console.dim(
-                    "Run 'opencontext uninstall --full --global-state --yes' to clean up."
-                )
+                console.dim("Run 'opencontext uninstall --full --global-state --yes' to clean up.")
         sys.exit(0 if passed else 1)
 
     # --full: complete trace removal
@@ -520,9 +518,7 @@ def handle_uninstall(args: Any) -> None:
             eprint("--full requires --yes in non-interactive mode.")
             sys.exit(1)
         if not yes:
-            console.warning(
-                "--full will delete all OpenContext traces under the project root."
-            )
+            console.warning("--full will delete all OpenContext traces under the project root.")
             if not __import__("opencontext_core.prompts", fromlist=["confirm"]).confirm(
                 "Proceed?", default=False
             ):

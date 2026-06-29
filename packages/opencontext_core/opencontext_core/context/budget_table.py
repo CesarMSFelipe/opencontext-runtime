@@ -126,11 +126,7 @@ def known_nodes() -> list[tuple[str, str]]:
 
 def assert_complete() -> None:
     """Raise if any canonical node lacks an explicit table entry (book completeness)."""
-    missing = [
-        (wf, node)
-        for wf, node in known_nodes()
-        if node not in BUDGETS.get(wf, {})
-    ]
+    missing = [(wf, node) for wf, node in known_nodes() if node not in BUDGETS.get(wf, {})]
     if missing:
         raise AssertionError(f"budget table missing entries for nodes: {missing}")
 

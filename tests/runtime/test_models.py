@@ -104,9 +104,7 @@ class TestRuntimeFailure:
 
     def test_is_an_opencontext_error(self) -> None:
         # Existing ``except OpenContextError`` handlers keep catching it.
-        err = RuntimeFailure(
-            RuntimeErrorCode.CAPABILITY_MISSING, "no docker", recoverable=False
-        )
+        err = RuntimeFailure(RuntimeErrorCode.CAPABILITY_MISSING, "no docker", recoverable=False)
         assert isinstance(err, OpenContextError)
         # User summary defaults to the message when not supplied.
         assert err.user_summary == "no docker"

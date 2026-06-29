@@ -578,9 +578,7 @@ class KnowledgeGraph:
         result: dict[str, set[str]] = {}
         conn = self.db._connect()
         for path in file_paths:
-            rows = conn.execute(
-                "SELECT id FROM nodes WHERE file_path = ?", (path,)
-            ).fetchall()
+            rows = conn.execute("SELECT id FROM nodes WHERE file_path = ?", (path,)).fetchall()
             result[path] = {row["id"] for row in rows}
         return result
 
@@ -648,9 +646,7 @@ class KnowledgeGraph:
             )
         return delta
 
-    def index_with_receipt(
-        self, root: str | Path, *, storage_dir: str | Path | None = None
-    ) -> Any:
+    def index_with_receipt(self, root: str | Path, *, storage_dir: str | Path | None = None) -> Any:
         """Index ``root`` while emitting kg.index.* events and writing a receipt (KG-14).
 
         Additive over :meth:`index_project` (whose return is unchanged): this brackets
@@ -758,8 +754,7 @@ class KnowledgeGraph:
             )
         for edge in extraction.edges:
             existing = conn.execute(
-                "SELECT 1 FROM edges WHERE source_node_id = ? AND target_node_id = ? "
-                "AND kind = ?",
+                "SELECT 1 FROM edges WHERE source_node_id = ? AND target_node_id = ? AND kind = ?",
                 (edge.source_id, edge.target_id, edge.type.value),
             ).fetchone()
             if existing is None:

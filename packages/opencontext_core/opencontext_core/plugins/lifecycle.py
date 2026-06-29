@@ -296,8 +296,11 @@ def activate_plugin(
         plugin_obj = registry.load(name)
         if plugin_obj is None:
             return _result(
-                LifecycleStatus.FAILED, LifecycleStage.ACTIVATE, "legacy_load_failed",
-                contributions=contributions, plugin_dir=plugin_dir,
+                LifecycleStatus.FAILED,
+                LifecycleStage.ACTIVATE,
+                "legacy_load_failed",
+                contributions=contributions,
+                plugin_dir=plugin_dir,
             )
     else:
         sandbox = run_sandboxed(
@@ -309,8 +312,11 @@ def activate_plugin(
         )
         if not sandbox.ok:
             return _result(
-                LifecycleStatus.FAILED, LifecycleStage.ACTIVATE, sandbox.reason,
-                contributions=contributions, plugin_dir=plugin_dir,
+                LifecycleStatus.FAILED,
+                LifecycleStage.ACTIVATE,
+                sandbox.reason,
+                contributions=contributions,
+                plugin_dir=plugin_dir,
             )
         plugin_obj = sandbox.plugin
 
@@ -319,8 +325,12 @@ def activate_plugin(
     healthy, reason = _run_health_check(plugin_obj, contributions, sinks)
     if not healthy:
         return _result(
-            LifecycleStatus.UNHEALTHY, LifecycleStage.HEALTH_CHECK, reason,
-            contributions=contributions, plugin_obj=plugin_obj, plugin_dir=plugin_dir,
+            LifecycleStatus.UNHEALTHY,
+            LifecycleStage.HEALTH_CHECK,
+            reason,
+            contributions=contributions,
+            plugin_obj=plugin_obj,
+            plugin_dir=plugin_dir,
         )
 
     return _result(

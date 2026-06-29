@@ -25,9 +25,11 @@ def test_cost_report_emits_event_to_canonical_layout(tmp_path: Path, make_trace)
     assert events_path.exists()
     events = telemetry_layout.read_events(tmp_path)
     assert any(e["event"] == ri_events.COST_REPORTED for e in events)
-    assert all(e["family"] == "runtime_intelligence" for e in events if e["event"].startswith(
-        "intelligence."
-    ))
+    assert all(
+        e["family"] == "runtime_intelligence"
+        for e in events
+        if e["event"].startswith("intelligence.")
+    )
 
 
 def test_required_events_and_receipts_defined() -> None:

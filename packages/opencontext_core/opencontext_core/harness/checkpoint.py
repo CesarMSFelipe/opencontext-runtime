@@ -227,9 +227,7 @@ class CheckpointManager:
                 snapshot_paths[str(snap.path)] = str(blob_path)
         return checksums, snapshot_paths
 
-    def _augment_manifest(
-        self, checkpoint: Checkpoint, *, session_id: str, run_id: str
-    ) -> None:
+    def _augment_manifest(self, checkpoint: Checkpoint, *, session_id: str, run_id: str) -> None:
         manifest_path = checkpoint.dir / "manifest.json"
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -240,9 +238,7 @@ class CheckpointManager:
         manifest["snapshot_paths"] = snapshot_paths
         manifest["session_id"] = session_id
         manifest["run_id"] = run_id
-        _atomic_write_bytes(
-            manifest_path, (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
-        )
+        _atomic_write_bytes(manifest_path, (json.dumps(manifest, indent=2) + "\n").encode("utf-8"))
 
     def model(
         self, checkpoint: Checkpoint, *, session_id: str = "", run_id: str = ""

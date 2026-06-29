@@ -18,9 +18,7 @@ def test_handoff_artifact_names_next_phase_inputs(tmp_path: Path) -> None:
 
     run_dir = tmp_path / ".opencontext" / "runs" / result.run_id
     refs = ArtifactStore(run_dir).list_for_run(result.run_id)
-    spec_handoffs = [
-        r for r in refs if r.kind == "task-contract" and r.node_id == "spec"
-    ]
+    spec_handoffs = [r for r in refs if r.kind == "task-contract" and r.node_id == "spec"]
     assert spec_handoffs, "expected a handoff artifact for the propose -> spec transition"
     payload = json.loads((run_dir / spec_handoffs[0].path).read_text(encoding="utf-8"))
     # The handoff names proposal.md as the spec phase's input.
