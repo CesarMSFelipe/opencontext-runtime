@@ -117,7 +117,7 @@ def handle_run_exec(args: Any) -> None:
     except Exception:  # config is advisory for the gate; default-on for the explicit CLI
         enabled = True
 
-    run_oc_flow_cli(
+    summary = run_oc_flow_cli(
         getattr(args, "task", None),
         root=root,
         workflow=getattr(args, "workflow", "oc-flow"),
@@ -127,6 +127,17 @@ def handle_run_exec(args: Any) -> None:
         enabled=enabled,
         as_json=getattr(args, "json", False),
     )
+    # B1 / PROD-004: a mutation that found no executor/provider is reported honestly
+    # as needs_executor/needs_provider. Print an actionable next step naming at least
+    # one concrete remedy. STDERR keeps the --json STDOUT payload pure JSON.
+    if isinstance(summary, dict) and summary.get("status") in {"needs_executor", "needs_provider"}:
+        print(
+            "Hint: enable mutation by configuring a provider "
+            "(export ANTHROPIC_API_KEY=... / OPENAI_API_KEY=...), an MCP sampler, or "
+            "set `provider: test_stub` + `edits_file` in opencontext.yaml; see "
+            "`opencontext doctor`.",
+            file=sys.stderr,
+        )
 
 
 def add_simulate_parser(subparsers: Any) -> None:
