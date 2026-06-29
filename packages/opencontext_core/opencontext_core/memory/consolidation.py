@@ -16,6 +16,7 @@ outputs, with no model calls or randomness.
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 
 from opencontext_core.compat import StrEnum
 from opencontext_core.models.agent_memory import MemoryLayer, MemoryRecord
@@ -100,6 +101,38 @@ def decide_action(
         return (ConsolidationAction.INSERT, None)
     most_confident = max(candidates, key=lambda r: r.confidence)
     return (ConsolidationAction.SUPERSEDE, most_confident.id)
+
+
+# Composite-quality weights (PR-009 MEM-CONV memory quality score). Evidence and
+# confidence dominate; reuse and freshness are secondary corroboration.
+_QUALITY_WEIGHTS = {"evidence": 0.35, "reuse": 0.2, "freshness": 0.15, "confidence": 0.3}
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
+
+
+def memory_quality_score(record: MemoryRecord, *, now: datetime | None = None) -> float:
+    """Composite per-record quality in [0, 1] (MEM-CONV memory quality score).
+
+    Combines evidence (how many source refs back it), reuse (how often the belief
+    has been refreshed), freshness (recency of last sighting), and confidence. A
+    record with no evidence and never re-read scores low and is prune-eligible.
+    """
+    moment = now or datetime.now(tz=UTC)
+    evidence = min(len(record.source_refs) / 2.0, 1.0)
+    reuse = min(record.revision_count / 3.0, 1.0)
+    seen = record.last_seen_at or record.updated_at
+    age_days = max(0.0, (moment - _as_utc(seen)).days) if seen else 9999.0
+    freshness = 1.0 / (1.0 + age_days / 30.0)
+    confidence = record.confidence
+    score = (
+        _QUALITY_WEIGHTS["evidence"] * evidence
+        + _QUALITY_WEIGHTS["reuse"] * reuse
+        + _QUALITY_WEIGHTS["freshness"] * freshness
+        + _QUALITY_WEIGHTS["confidence"] * confidence
+    )
+    return round(min(max(score, 0.0), 1.0), 4)
 
 
 def summarize_records(records: list[MemoryRecord], *, max_items: int = 5) -> str:

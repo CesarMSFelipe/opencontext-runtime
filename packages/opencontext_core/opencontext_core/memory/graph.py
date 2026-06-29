@@ -217,6 +217,15 @@ class LocalMemoryStore:
         3. For a supersession, mark the prior record invalid-as-of now and link
            the records bi-temporally so history is preserved, not deleted.
         """
+        # MEM-1: the persistence chokepoint refuses chain-of-thought / raw private
+        # logs (restricted memory content) before any write, in addition to the
+        # candidate-stage novelty gate and SinkGuard secret redaction. The record
+        # is not stored; its id is returned so callers stay non-fatal.
+        from opencontext_core.policy.memory_content import forbidden_memory_content
+
+        if forbidden_memory_content(memory.content) is not None:
+            return memory.id
+
         # Advisory intent tag (decision/error/constraint/...), derived from the
         # content so memory is filterable by meaning. Never overrides a caller's
         # own kind tag, and never affects layer/consolidation.
@@ -229,7 +238,7 @@ class LocalMemoryStore:
 
         existing = self._backend.get_by_key(memory.key)
 
-        contradicted_ids = self._detector.detect(memory, existing)
+        contradicted_ids = self._detector.detect_ids(memory, existing)
         if contradicted_ids:
             evidence = EvidenceRef(
                 source=memory.id,

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from opencontext_core.memory_usability.memory_candidates import MemoryCandidate
 from opencontext_core.models.context import DataClassification
+from opencontext_core.policy.memory_content import forbidden_memory_content
 
 
 class NoveltyDecision(BaseModel):
@@ -21,9 +22,19 @@ class NoveltyDecision(BaseModel):
 class NoveltyGate:
     """Rejects duplicate, trivial, stale, or risky memory candidates."""
 
-    def __init__(self, min_score: float = 0.45, max_tokens: int = 400) -> None:
+    def __init__(
+        self,
+        min_score: float = 0.45,
+        max_tokens: int = 400,
+        *,
+        require_evidence: bool = False,
+    ) -> None:
         self.min_score = min_score
         self.max_tokens = max_tokens
+        # PR-009 (CONV.6): when True, a candidate without evidence_refs is rejected.
+        # Off by default so the legacy markdown-harvest path is unchanged; the
+        # Memory Harness constructs the gate with require_evidence=True.
+        self.require_evidence = require_evidence
 
     def evaluate(
         self,
@@ -42,6 +53,13 @@ class NoveltyGate:
             return NoveltyDecision(accepted=False, reason="duplicate", score=0.0)
         if candidate.classification in {DataClassification.SECRET, DataClassification.REGULATED}:
             return NoveltyDecision(accepted=False, reason="classification_too_sensitive", score=0.0)
+        # MEM-1: reject chain-of-thought / raw private logs (beyond secret redaction).
+        forbidden = forbidden_memory_content(candidate.content)
+        if forbidden is not None:
+            return NoveltyDecision(accepted=False, reason=forbidden, score=0.0)
+        # PR-009 (CONV.6): evidence-backed promotion — refuse unsupported beliefs.
+        if self.require_evidence and not candidate.evidence_refs:
+            return NoveltyDecision(accepted=False, reason="evidence_missing", score=0.0)
         if candidate.token_cost > self.max_tokens:
             return NoveltyDecision(accepted=False, reason="too_large_for_value", score=0.2)
         risk_penalty = 0.15 if candidate.classification is DataClassification.CONFIDENTIAL else 0.0

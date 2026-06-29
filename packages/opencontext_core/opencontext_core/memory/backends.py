@@ -194,7 +194,7 @@ class SQLiteMemoryBackend:
             ).fetchall()
             if existing_rows:
                 existing = [_row_to_record(r) for r in existing_rows]
-                contradicted_ids = ContradictionDetector().detect(record, existing)
+                contradicted_ids = ContradictionDetector().detect_ids(record, existing)
                 if contradicted_ids:
                     now = datetime.now(tz=UTC).isoformat()
                     for cid in contradicted_ids:

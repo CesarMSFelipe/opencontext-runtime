@@ -141,7 +141,7 @@ class EngramMemoryStore:
             existing_raw = []
         existing = [_result_to_record(item, layer=memory.layer) for item in existing_raw]
         existing = [r for r in existing if r.key == memory.key and r.id]
-        contradicted_ids = self._detector.detect(memory, existing)
+        contradicted_ids = self._detector.detect_ids(memory, existing)
         evidence = EvidenceRef(source=memory.id, source_type="memory", confidence=memory.confidence)
         for contradicted_id in contradicted_ids:
             self.contradict(contradicted_id, evidence)
