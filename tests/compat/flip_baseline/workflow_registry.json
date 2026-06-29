@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "subsystem": "workflow_registry",
+  "flag": "runtime.registry_enabled",
+  "config_before": {
+    "runtime.registry_enabled": false
+  },
+  "config_after": {
+    "runtime.registry_enabled": true
+  },
+  "benchmark_before": {
+    "tests": {
+      "passed": 3912,
+      "failed": 0
+    }
+  },
+  "benchmark_after": {
+    "tests": {
+      "passed": 3912,
+      "failed": 0
+    }
+  },
+  "parity": {
+    "subsystem": "workflow_registry",
+    "flag": "runtime.registry_enabled",
+    "passed": true,
+    "mismatch": null
+  },
+  "rollback_flag": "runtime.registry_enabled",
+  "rollback_path": "packages/opencontext_core/opencontext_core/config.py",
+  "accepted": true,
+  "reverted": false,
+  "reason": "parity passed; executed-phase ledger identical to legacy; flip accepted",
+  "generated_at": "2026-06-29T12:42:00.000000+00:00"
+}
