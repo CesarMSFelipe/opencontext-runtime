@@ -1518,6 +1518,18 @@ class OpenContextConfig(BaseModel):
     # seven-level resolver (``config_resolver``); ``balanced`` is the default.
     profile: str = Field(default="balanced", description="Active configuration profile.")
 
+    # Test/dev provider override for deterministic OC Flow mutation without live
+    # credentials (PROD-002). When ``provider == "test_stub"`` and ``edits_file``
+    # resolves under the project root, the CLI builds a TestStubGateway executor.
+    # Test-only: a normal config leaves these None and never activates the stub.
+    provider: str | None = Field(
+        default=None,
+        description="Provider override (test/dev: 'test_stub' for deterministic mutation).",
+    )
+    edits_file: str | None = Field(
+        default=None, description="JSON ApplyEdit file used by the test_stub provider."
+    )
+
     project: ProjectConfig = Field(description="Project configuration.")
     models: ModelConfigMap = Field(description="Model aliases.")
     project_index: ProjectIndexConfig = Field(description="Project indexing configuration.")

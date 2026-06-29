@@ -19,6 +19,7 @@ OC Flow models/inspection downward.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ from typing import Any, Protocol
 from opencontext_core.actions.policy import ActionRequest, ActionType, evaluate_action
 from opencontext_core.agents.executor import ApplyEdit, ApplyOperation, apply_edit
 from opencontext_core.config import SecurityMode
+from opencontext_core.errors import ProviderError
 from opencontext_core.harness.checkpoint import CheckpointStore
 from opencontext_core.models.llm import LLMRequest
 from opencontext_core.oc_flow.budgets import OC_FLOW_BUDGETS, lane_config
@@ -256,6 +258,25 @@ _APPLY_EDIT_INSTRUCTION = (
 )
 
 
+# Generic endpoint URLs (http/https/ws/wss/ftp/...) so a provider transport error
+# never leaks an endpoint into a user-visible block_reason.
+_URL_RE = re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s'\"<>]+", re.IGNORECASE)
+
+
+def _redact_provider_error(exc: Exception) -> str:
+    """Redact secrets, credentials and endpoint URLs from a provider error.
+
+    Reuses the repository's :class:`SecretScanner` (API keys, tokens, connection
+    strings, JWTs) and additionally strips generic endpoint URLs. The resulting
+    string is honest about the failure mode but never carries a secret or an
+    endpoint; the raw, unredacted exception is reserved for ``--strict`` output.
+    """
+    from opencontext_core.safety.secrets import SecretScanner
+
+    redacted = SecretScanner().redact(str(exc))
+    return _URL_RE.sub("[REDACTED:url]", redacted)
+
+
 def _parse_apply_edit_set(text: str) -> list[ApplyEdit] | None:
     """Parse a provider response into a validated ``list[ApplyEdit]``.
 
@@ -349,6 +370,7 @@ class ProviderBackedNodeExecutor:
         self, contract: TaskContract, envelope: ContextEnvelope
     ) -> list[ApplyEdit]:
         self.block_reason = None
+        self.provider_available = True
         prompt = (
             f"{_APPLY_EDIT_INSTRUCTION}\n\nTask: {contract.scope}\n"
             f"Acceptance: {'; '.join(contract.acceptance_criteria)}"
@@ -361,7 +383,29 @@ class ProviderBackedNodeExecutor:
             max_output_tokens=self._max_output_tokens,
             metadata={"role": "generate", "phase": "mutate", "workflow": "oc-flow"},
         )
-        response = self._gateway.generate(request)
+        try:
+            response = self._gateway.generate(request)
+        except ProviderError as exc:
+            # Provider fallback chain exhausted (or no adapter / unsupported capability)
+            # at runtime. Catch it here so the failure flows node_mutate ->
+            # resolve_completion as a structured `needs_provider`, never a raw traceback
+            # in user-visible output. The redacted detail is honest about the failure
+            # mode; the raw exception is reserved for --strict.
+            detail = (
+                _redact_provider_error(exc)
+                .removeprefix("provider_fallback_exhausted:")
+                .strip()
+            )
+            self.block_reason = (
+                f"provider_fallback_exhausted: {detail}"
+                if detail
+                else "provider_fallback_exhausted"
+            )
+            # Mark the provider unavailable so the completion gate emits needs_provider
+            # (a provider-backed run that produced nothing because the provider failed),
+            # not a generic `blocked`.
+            self.provider_available = False
+            return []
         edits = _parse_apply_edit_set(getattr(response, "content", "") or "")
         if edits is None:
             self.block_reason = "provider returned an unparseable or schema-invalid edit set"

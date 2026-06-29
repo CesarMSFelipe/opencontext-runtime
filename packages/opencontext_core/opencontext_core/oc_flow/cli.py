@@ -12,6 +12,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+import yaml
+
+from opencontext_core.config_resolver import resolve_config_path
 from opencontext_core.context.planning.workflow_selector import select_workflow
 from opencontext_core.llm.provider_gateway import build_adapter, build_provider_gateway
 from opencontext_core.oc_flow.models import Lane
@@ -20,6 +23,7 @@ from opencontext_core.oc_flow.runner import OCFlowRunner
 from opencontext_core.operating_model.receipts import RunReceiptStore
 from opencontext_core.providers.detect import detect_provider
 from opencontext_core.providers.gateway import ProviderGateway
+from opencontext_core.providers.test_stub import TestStubGateway
 
 
 def run_oc_flow_cli(
@@ -149,7 +153,14 @@ def _resolve_executor(root: Path) -> NodeExecutor | None:
     """
     det = detect_provider()
     if det.name == "mock":
-        return None
+        # TEST-ONLY gate (PROD-002 / design B2): a config that EXPLICITLY declares
+        # `provider: test_stub` with a resolvable `edits_file` drives the real mutation
+        # pipeline credential-free. This is NEVER a production fallback — any other
+        # state (no config, no `test_stub`, or a missing / out-of-root `edits_file`)
+        # returns None exactly as the pre-change path, so the runner falls back to the
+        # model-free DeterministicNodeExecutor and a mutation task stays honestly
+        # `needs_executor`.
+        return _resolve_test_stub_executor(root)
     base = build_provider_gateway(det.name, det.model)
     if base is None:
         return None
@@ -162,6 +173,56 @@ def _resolve_executor(root: Path) -> NodeExecutor | None:
     return ProviderBackedNodeExecutor(
         gateway=gateway, root=root, provider=det.name, model=det.model
     )
+
+
+def _resolve_test_stub_executor(root: Path) -> NodeExecutor | None:
+    """Build a ``TestStubGateway``-backed executor IFF config explicitly opts in (B2).
+
+    TEST-ONLY: returns a productive :class:`ProviderBackedNodeExecutor` ONLY when the
+    resolved ``opencontext.yaml`` declares ``provider: test_stub`` AND a resolvable
+    ``edits_file`` that exists under *root*. Any other state — no config, no
+    ``test_stub``, a missing / non-string ``edits_file``, a file that does not exist,
+    or one escaping *root* — returns ``None`` so the caller behaves EXACTLY as the
+    pre-change production path. This is never a production resolver fallback; the
+    no-fallthrough invariant is asserted in ``tests/oc_flow/test_test_stub_resolution.py``.
+    """
+    raw = _read_yaml_mapping(resolve_config_path(root, None))
+    if raw.get("provider") != "test_stub":
+        return None
+    edits_file = raw.get("edits_file")
+    if not edits_file or not isinstance(edits_file, str):
+        return None
+    root_resolved = root.resolve()
+    resolved = (root_resolved / edits_file).resolve()
+    if not resolved.is_file() or not _within(root_resolved, resolved):
+        return None
+    return ProviderBackedNodeExecutor(
+        gateway=TestStubGateway(resolved), root=root, provider="test_stub"
+    )
+
+
+def _read_yaml_mapping(path: Path) -> dict[str, Any]:
+    """Raw-read a YAML file's top-level mapping; ``{}`` on missing / invalid / non-mapping.
+
+    Deliberately raw (NOT :class:`OpenContextConfig`) so the test-only ``test_stub``
+    keys never enter the typed production config schema or the detect stack (B2).
+    """
+    if not path.is_file():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _within(root: Path, candidate: Path) -> bool:
+    """True iff *candidate* is *root* or lives under it (rejects ``edits_file`` escaping root)."""
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return False
+    return True
 
 
 def _latest_session(root: Path) -> str:

@@ -1,0 +1,7 @@
+# TEST-ONLY config (PROD-002 / design B2): drives the REAL `opencontext run`
+# mutation path credential-free via the deterministic `test_stub` provider.
+# `_resolve_executor` raw-reads these two keys (NOT the typed OpenContextConfig
+# schema), so `test_stub` stays structurally out of production config + detect.
+# `edits_file` is the fixture's ApplyEdit set that fixes the seeded buggy_add bug.
+provider: test_stub
+edits_file: provider_stub.json
