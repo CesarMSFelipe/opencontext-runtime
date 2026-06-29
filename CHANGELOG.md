@@ -5,6 +5,26 @@ All notable changes to OpenContext Runtime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Deferred (DEFERRED_PROVIDER_CI)
+
+- **Two 1.0 acceptance gates ship deferred to a provider-CI lane (Option A), non-blocking for 1.0.**
+  `kg-retrieval-precision` (R@5 / MRR over labeled retrieval tasks) and `context-token-efficiency`
+  (CON vs SIN token comparison) both require a live LLM/embeddings provider plus an indexed fixture
+  corpus to measure. OpenContext 1.0 does **not** hard-require a credentialed provider in CI, so each
+  gate reports **`NOT_MEASURED`** — never a fabricated `MET` and never `FAILED` (build-rule #1:
+  HONESTY). `AcceptanceEvaluator` (`operating_model/release_gate.py`, `DEFERRED_PROVIDER_CI_GATES`)
+  **excludes both gates' `NOT_MEASURED` status from the `ready` denominator**, so their deferral does
+  not force `ready=False`; a *real* `FAILED` (when a provider hook is supplied) still blocks the
+  release. Both runner hooks already exist (`RunnerConfig.recall_provider` /
+  `RunnerConfig.efficiency_provider`) — injecting a provider callable activates a genuine
+  `MET` / `FAILED` with no code change.
+  **Promotion path:** once a persistent provider-CI lane (credentialed embeddings + a real indexed
+  corpus) exists, both gates MUST be promoted to mandatory — wired in the provider-CI workflow and
+  removed from `DEFERRED_PROVIDER_CI_GATES` — before the next minor release. Full classification,
+  activation snippet, and promotion trigger: see [`DEFERRED_PROVIDER_CI.md`](DEFERRED_PROVIDER_CI.md).
+
 ## [1.5.0] - 2026-06-23
 
 ### Added
