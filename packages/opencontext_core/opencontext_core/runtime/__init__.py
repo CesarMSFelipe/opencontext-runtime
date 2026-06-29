@@ -46,9 +46,12 @@ from opencontext_core.operating_model.call_budget import (
     CallBudgetManager,
     FreeProviderRegistry,
 )
-from opencontext_core.operating_model.performance import ModelRoleRouter
+from opencontext_core.operating_model.events import ProviderEventEmitter
+from opencontext_core.operating_model.performance import CostLedger, ModelRoleRouter
 from opencontext_core.operating_model.quality import PreLLMQualityGate
+from opencontext_core.operating_model.receipts import RunReceiptStore
 from opencontext_core.project.profiles import TechnologyProfile
+from opencontext_core.providers.gateway import ProviderGateway as UnifiedProviderGateway
 from opencontext_core.retrieval.contracts import (
     EvidenceItem,
     EvidencePlan,
@@ -62,6 +65,84 @@ from opencontext_core.retrieval.contracts import (
     VerifiedContextResult,
 )
 from opencontext_core.retrieval.planner import RetrievalPlanner
+
+# --- PR-001 Runtime Core (workflow-neutral substrate), re-exported here ---
+from opencontext_core.runtime.api import (
+    ApplyResult,
+    ArchiveResult,
+    ArtifactSummary,
+    InspectionReport,
+    InspectionScope,
+    MutationRequest,
+    ReceiptSummary,
+    RunRequest,
+    RuntimeApi,
+    RuntimeEventInput,
+    SessionRef,
+    SessionState,
+    StartSessionRequest,
+)
+from opencontext_core.runtime.brain import (
+    HistoryPort,
+    IntelligencePort,
+    KnowledgeGraphPort,
+    NullRuntimeBrain,
+    RuntimeBrain,
+    RuntimeBrainPort,
+)
+from opencontext_core.runtime.decision_log import (
+    DecisionLogEntry,
+    DecisionRecorder,
+    SelectionKind,
+    redact_chain_of_thought,
+)
+from opencontext_core.runtime.decisions import (
+    DECISION_CONTRACT_VERSION,
+    DECISION_EVENT_FAMILY,
+    DecisionKind,
+    DecisionLog,
+    NextNodeDecision,
+    RuntimeDecision,
+    SchedulingDecision,
+    SimulationReport,
+    summarize_decision_log,
+)
+from opencontext_core.runtime.errors import RuntimeErrorCode, RuntimeFailure
+from opencontext_core.runtime.event_bus import (
+    CollectingConsumer,
+    EventBus,
+    EventConsumer,
+    JsonlEventBus,
+)
+from opencontext_core.runtime.events import EventCategory, RuntimeEvent, make_event
+from opencontext_core.runtime.execution_strategy import ExecutionStrategy, resolve_strategy
+from opencontext_core.runtime.modes import RuntimeMode
+from opencontext_core.runtime.run import (
+    GateResult,
+    NextAction,
+    NodeResult,
+    RunResult,
+    RuntimeRun,
+)
+from opencontext_core.runtime.scheduler import (
+    HarnessScheduler,
+    RuntimeScheduler,
+    Scheduler,
+)
+from opencontext_core.runtime.session import (
+    ExecutionProfile,
+    LiveState,
+    RuntimeSession,
+    SessionStatus,
+)
+from opencontext_core.runtime.session_store import SessionStore
+from opencontext_core.runtime.state_machine import StateMachine, TransitionDecision
+from opencontext_core.runtime.workflow_runner import (
+    ExecutionContext,
+    NodeSpec,
+    WorkflowRunner,
+    WorkflowSpec,
+)
 from opencontext_core.safety.firewall import ContextFirewall
 from opencontext_core.safety.trace_sanitizer import TraceSanitizer
 from opencontext_core.trace.logger import LocalTraceLogger
@@ -251,17 +332,56 @@ class OpenContextRuntime:
             }
 
         self.router = ModelRoleRouter(
-            roles=router_roles, budget_manager=self.budget_manager, free_registry=self.free_registry
+            roles=router_roles,
+            budget_manager=self.budget_manager,
+            free_registry=self.free_registry,
+            strategy=self.config.providers.strategy,
         )
         self.quality_gate = PreLLMQualityGate()
 
-        # Wrap gateway with budget awareness
-        self.llm_gateway = BudgetAwareLLMGateway(
-            base_gateway=self.llm_gateway,
-            router=self.router,
-            budget_manager=self.budget_manager,
-            quality_gate=self.quality_gate,
-        )
+        # PR-012: route provider calls through the unified ProviderGateway facade
+        # when runtime.gateway_enabled (default off). The facade composes routing
+        # -> policy -> prompt -> adapter with bounded fallback, a cost ledger,
+        # provider events/receipts, and a Decision Log record per choice. Off, the
+        # legacy BudgetAwareLLMGateway path runs byte-for-byte as before.
+        raw_gateway = self.llm_gateway
+        if self.config.runtime.gateway_enabled:
+            from opencontext_core.cache.provider_cache import ProviderResponseCache
+            from opencontext_core.cache.store import CcrBackedCacheStore
+            from opencontext_core.learning.feed import record_outcome
+
+            self.cost_ledger = CostLedger()
+            self.provider_receipts = RunReceiptStore(self.storage_path)
+            self.provider_decisions = DecisionRecorder()
+            self.provider_events = ProviderEventEmitter()
+            # PR-000.3 provider-response cache seam, plugged in but conservative
+            # (enabled=False) so response caching never silently changes the
+            # agentic loop; flip `enabled` to reuse identical provider responses.
+            self.provider_cache = ProviderResponseCache(CcrBackedCacheStore(), enabled=False)
+            self.llm_gateway = UnifiedProviderGateway(
+                raw_gateway,
+                router=self.router,
+                firewall=ContextFirewall(self.config),
+                budget_manager=self.budget_manager,
+                quality_gate=self.quality_gate,
+                ledger=self.cost_ledger,
+                receipts=self.provider_receipts,
+                recorder=self.provider_decisions,
+                emitter=self.provider_events,
+                cache=self.provider_cache,
+                learning=self.learning,
+                feed=record_outcome,
+                retry_limit=self.config.providers.retry_limit,
+                fallback=self.config.providers.fallback,
+            )
+        else:
+            # Wrap gateway with budget awareness (legacy path).
+            self.llm_gateway = BudgetAwareLLMGateway(
+                base_gateway=raw_gateway,
+                router=self.router,
+                budget_manager=self.budget_manager,
+                quality_gate=self.quality_gate,
+            )
 
         self._validate_security_mode_guards()
 
@@ -1393,3 +1513,80 @@ def _verified_context_gates(
             risks=[] if plan.trust_decision.status == "sufficient" else ["insufficient_trust"],
         ),
     ]
+
+
+__all__ = [
+    "DECISION_CONTRACT_VERSION",
+    "DECISION_EVENT_FAMILY",
+    "ApplyResult",
+    "ArchiveResult",
+    "ArtifactSummary",
+    "CollectingConsumer",
+    "DecisionKind",
+    "DecisionLog",
+    "DecisionLogEntry",
+    "DecisionRecorder",
+    # Bus / store
+    "EventBus",
+    "EventCategory",
+    "EventConsumer",
+    "ExecutionContext",
+    "ExecutionProfile",
+    "ExecutionStrategy",
+    "GateResult",
+    "HarnessScheduler",
+    "HistoryPort",
+    "InspectionReport",
+    "InspectionScope",
+    "IntelligencePort",
+    "JsonlEventBus",
+    "KnowledgeGraphPort",
+    "LiveState",
+    "MutationRequest",
+    "NextAction",
+    "NextNodeDecision",
+    "NodeResult",
+    "NodeSpec",
+    "NullRuntimeBrain",
+    # Legacy facade (unchanged public contract)
+    "OpenContextRuntime",
+    "PreparedContext",
+    "ProjectSetupResult",
+    "ReceiptSummary",
+    "RunRequest",
+    "RunResult",
+    # PR-001 facade + DTOs
+    "RuntimeApi",
+    "RuntimeBrain",
+    "RuntimeBrainPort",
+    # Convergence seams
+    "RuntimeDecision",
+    "RuntimeErrorCode",
+    "RuntimeEvent",
+    "RuntimeEventInput",
+    "RuntimeFailure",
+    "RuntimeMode",
+    "RuntimeResult",
+    "RuntimeRun",
+    "RuntimeScheduler",
+    # Models / enums
+    "RuntimeSession",
+    "Scheduler",
+    "SchedulingDecision",
+    "SelectionKind",
+    "SessionRef",
+    "SessionState",
+    "SessionStatus",
+    "SessionStore",
+    "SimulationReport",
+    "StartSessionRequest",
+    # State machine / runner
+    "StateMachine",
+    "TransitionDecision",
+    "WorkflowRunner",
+    "WorkflowSpec",
+    "make_event",
+    "redact_chain_of_thought",
+    "resolve_strategy",
+    "summarize_decision_log",
+]
