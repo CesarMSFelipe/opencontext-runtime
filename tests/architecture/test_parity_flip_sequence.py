@@ -19,6 +19,7 @@ from pathlib import Path
 
 from opencontext_core.compat.flags import flag_catalog
 from opencontext_core.compat.flip_evidence import (
+    FLIP_BASELINE_DIR,
     FLIP_SEQUENCE,
     SUBSYSTEM_FLAGS,
     FlipEvidence,
@@ -202,3 +203,55 @@ def test_no_bundles_adds_no_flip_gates(tmp_path: Path) -> None:
     verdict = AcceptanceEvaluator(repo_root=tmp_path).evaluate()
     assert not [g for g in verdict.gates if g.gate.startswith("flip-")]
     assert read_flip_bundles(tmp_path) == []
+
+
+# ── Phase 2 (VDM-002): committed baseline + runtime union ─────────────────────
+
+
+def _baseline_evidence(subsystem: str, *, accepted: bool) -> FlipEvidence:
+    """A complete FlipEvidence object (not written to the runtime dir)."""
+    flag = SUBSYSTEM_FLAGS[subsystem]
+    return FlipEvidence(
+        subsystem=subsystem,
+        flag=flag,
+        config_before={flag: False},
+        config_after={flag: True},
+        benchmark_before=_GREEN,
+        benchmark_after=_GREEN,
+        parity={"subsystem": subsystem, "flag": flag, "passed": True, "mismatch": None},
+        rollback_flag=flag,
+        rollback_path="packages/opencontext_core/opencontext_core/config.py",
+        accepted=accepted,
+        reverted=not accepted,
+    )
+
+
+def _write_baseline(root: Path, evidence: FlipEvidence) -> None:
+    baseline = root / FLIP_BASELINE_DIR
+    baseline.mkdir(parents=True, exist_ok=True)
+    (baseline / f"{evidence.subsystem}.json").write_text(
+        evidence.model_dump_json(indent=2), encoding="utf-8"
+    )
+
+
+def test_read_flip_bundles_unions_baseline_and_runtime(tmp_path: Path) -> None:
+    # A subsystem present ONLY in the committed baseline is visible via the default union.
+    _write_baseline(tmp_path, _baseline_evidence("workflow_registry", accepted=True))
+    by_sub = {b.subsystem: b for b in read_flip_bundles(tmp_path)}
+    assert by_sub["workflow_registry"].accepted is True
+
+
+def test_runtime_bundle_wins_over_baseline_on_conflict(tmp_path: Path) -> None:
+    # Same subsystem in BOTH: baseline=reverted, runtime=accepted -> runtime wins.
+    _write_baseline(tmp_path, _baseline_evidence("memory", accepted=False))
+    _bundle(tmp_path, "memory")  # writes an ACCEPTED memory bundle to .opencontext/flips
+    by_sub = {b.subsystem: b for b in read_flip_bundles(tmp_path)}
+    assert by_sub["memory"].accepted is True  # runtime override beats the baseline
+
+
+def test_read_flip_bundles_subdir_reads_single_dir(tmp_path: Path) -> None:
+    # The explicit subdir param reads ONE directory and ignores the union.
+    _write_baseline(tmp_path, _baseline_evidence("oc_flow", accepted=True))
+    _bundle(tmp_path, "memory")  # runtime-only bundle
+    baseline_only = read_flip_bundles(tmp_path, subdir=FLIP_BASELINE_DIR)
+    assert {b.subsystem for b in baseline_only} == {"oc_flow"}

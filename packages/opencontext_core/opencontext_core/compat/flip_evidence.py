@@ -34,8 +34,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from opencontext_core.compat.parity import ParityReport
 
-#: Directory (under the repo/project root) holding per-subsystem flip bundles.
+#: Directory (under the repo/project root) holding per-subsystem flip bundles. This is
+#: gitignored runtime churn (every ``release acceptance`` run may rewrite it).
 FLIPS_DIR = ".opencontext/flips"
+
+#: Tracked, committed baseline of ACCEPTED flip bundles. Unlike :data:`FLIPS_DIR` this
+#: path is NOT gitignored, so the migration evidence is reproducible on a fresh CI
+#: checkout. :func:`read_flip_bundles` reads the union of this baseline and the runtime
+#: dir, with the runtime path winning on a per-subsystem conflict.
+FLIP_BASELINE_DIR = "tests/compat/flip_baseline"
 
 #: Bundle schema version (bump on any field change so old bundles are diffable).
 FLIP_SCHEMA_VERSION = 1
@@ -265,13 +272,12 @@ def emit_flip_evidence(
     return evidence
 
 
-def read_flip_bundles(root: Path | str) -> list[FlipEvidence]:
-    """Read every valid flip bundle under ``<root>/.opencontext/flips`` (sorted).
+def _read_bundle_dir(directory: Path) -> list[FlipEvidence]:
+    """Read every valid flip bundle directly under *directory* (sorted by filename).
 
     A malformed/unreadable bundle is skipped (it is not a valid flip record), never
-    fabricated into a pass — honesty (build-rule #1).
+    fabricated into a pass — honesty (build-rule #1). A missing directory yields ``[]``.
     """
-    directory = Path(root) / FLIPS_DIR
     if not directory.is_dir():
         return []
     bundles: list[FlipEvidence] = []
@@ -281,6 +287,27 @@ def read_flip_bundles(root: Path | str) -> list[FlipEvidence]:
         except (OSError, ValueError):
             continue
     return bundles
+
+
+def read_flip_bundles(root: Path | str, *, subdir: str | None = None) -> list[FlipEvidence]:
+    """Read flip bundles for *root*, sorted by subsystem.
+
+    Default (``subdir=None``): the UNION of the committed baseline
+    (:data:`FLIP_BASELINE_DIR`, tracked and CI-reproducible) and the runtime directory
+    (:data:`FLIPS_DIR`, gitignored). The runtime path WINS on a per-subsystem conflict,
+    so a local ``release acceptance`` run can override the committed baseline. A fresh
+    checkout with neither directory present yields ``[]`` — never an error.
+
+    Pass an explicit *subdir* (relative to *root*) to read a single directory instead.
+    """
+    if subdir is not None:
+        return _read_bundle_dir(Path(root) / subdir)
+    merged: dict[str, FlipEvidence] = {}
+    for bundle in _read_bundle_dir(Path(root) / FLIP_BASELINE_DIR):
+        merged[bundle.subsystem] = bundle
+    for bundle in _read_bundle_dir(Path(root) / FLIPS_DIR):  # runtime overrides baseline
+        merged[bundle.subsystem] = bundle
+    return sorted(merged.values(), key=lambda bundle: bundle.subsystem)
 
 
 def active_flag_value(flag: str) -> bool | str | None:
@@ -293,6 +320,7 @@ def active_flag_value(flag: str) -> bool | str | None:
 
 __all__ = [
     "FLIPS_DIR",
+    "FLIP_BASELINE_DIR",
     "FLIP_SCHEMA_VERSION",
     "REQUIRED_ARTIFACTS",
     "FlipEvidence",

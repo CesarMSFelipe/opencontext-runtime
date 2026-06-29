@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
 from opencontext_core.compat import MigrationState, flag_catalog, flag_spec
+from opencontext_core.compat.flags import FlagSpec
 from opencontext_core.config import RuntimeMigrationConfig
 
 
@@ -49,12 +54,87 @@ def test_session_wrapper_defaults_on() -> None:
     assert spec.is_legacy_default is True  # CL-010: off route is the legacy path
 
 
-def test_every_enabled_flag_defaults_legacy() -> None:
-    # CL-005: every *_enabled migration flag defaults False (legacy).
-    for spec in flag_catalog():
+def _assert_enabled_flags_legacy_unless_flipped(
+    accepted: set[str], *, catalog: list[FlagSpec] | None = None
+) -> None:
+    """CL-005 core check (ledger-driven).
+
+    Every ``*_enabled`` migration flag MUST default to the legacy path (``False``)
+    UNLESS its subsystem carries an ACCEPTED flip-evidence bundle. An accepted bundle is
+    the recorded, parity-gated migration evidence, so that subsystem's flags are EXEMPT
+    from the default-False assertion; every other ``*_enabled`` flag is still enforced.
+    """
+    for spec in catalog if catalog is not None else flag_catalog():
         if spec.field.endswith("_enabled"):
+            if spec.subsystem in accepted:
+                continue  # accepted flip bundle = recorded migration evidence
             assert spec.default is False, spec.name
             assert spec.is_legacy_default is True
+
+
+def _accepted_subsystems(root: Path) -> set[str]:
+    """Subsystems whose committed/runtime flip bundle is ACCEPTED (migration evidence)."""
+    from opencontext_core.compat.flip_evidence import read_flip_bundles
+
+    return {bundle.subsystem for bundle in read_flip_bundles(root) if bundle.accepted}
+
+
+def _enabled_spec(field: str, subsystem: str, *, default: bool) -> FlagSpec:
+    """A synthetic ``*_enabled`` flag spec for the exemption test."""
+    return FlagSpec(
+        name=f"runtime.{field}",
+        field=field,
+        subsystem=subsystem,
+        default=default,
+        migration_state=MigrationState.legacy,
+        superseding_pr="PR-TEST",
+        note="synthetic spec for the CL-005 exemption test",
+    )
+
+
+def test_every_enabled_flag_defaults_legacy_unless_flipped() -> None:
+    # CL-005 (ledger/flip-bundle driven): every *_enabled migration flag defaults False
+    # (legacy) UNLESS its subsystem has an ACCEPTED flip-evidence bundle. On a fresh
+    # checkout there are no accepted bundles, so read_flip_bundles() -> [] and every flag
+    # is asserted legacy-default (the test passes, it never errors).
+    repo = Path(__file__).resolve().parents[2]
+    _assert_enabled_flags_legacy_unless_flipped(_accepted_subsystems(repo))
+
+
+def test_fresh_checkout_has_no_accepted_bundles_enforces_legacy(tmp_path: Path) -> None:
+    # VDM-001/002 fresh-checkout safety: with neither a committed baseline nor the runtime
+    # flips dir present, read_flip_bundles() returns [] and CL-005 enforcement is ACTIVE —
+    # a flag defaulting vNext with no accepted bundle must fail. Uses a synthetic spec so it
+    # tests the mechanism independently of the real (now partially-migrated) config defaults.
+    from opencontext_core.compat.flip_evidence import read_flip_bundles
+
+    assert read_flip_bundles(tmp_path) == []
+    rogue = _enabled_spec("kg_v2_enabled", "knowledge_graph", default=True)
+    with pytest.raises(AssertionError):
+        _assert_enabled_flags_legacy_unless_flipped(
+            _accepted_subsystems(tmp_path), catalog=[rogue]
+        )
+
+
+def test_accepted_bundle_exempts_its_subsystem_only() -> None:
+    # An accepted flip bundle exempts ONLY its own subsystem from the default-False
+    # assertion; every other *_enabled flag must still default legacy. Uses synthetic
+    # flipped-ON specs so the exemption is actually exercised (real defaults stay False
+    # this phase, which would make a no-op assertion).
+    flipped = _enabled_spec("oc_flow_enabled", "oc_flow", default=True)
+    not_flipped = _enabled_spec("kg_v2_enabled", "knowledge_graph", default=True)
+    catalog = [flipped, not_flipped]
+
+    # only oc_flow accepted -> knowledge_graph (default True, no bundle) MUST fail.
+    with pytest.raises(AssertionError):
+        _assert_enabled_flags_legacy_unless_flipped({"oc_flow"}, catalog=catalog)
+
+    # both accepted -> both exempt -> no assertion error.
+    _assert_enabled_flags_legacy_unless_flipped({"oc_flow", "knowledge_graph"}, catalog=catalog)
+
+    # none accepted -> the flipped-on flag is enforced and fails (regression guard intact).
+    with pytest.raises(AssertionError):
+        _assert_enabled_flags_legacy_unless_flipped(set(), catalog=catalog)
 
 
 def test_catalog_fields_are_real_config_fields() -> None:

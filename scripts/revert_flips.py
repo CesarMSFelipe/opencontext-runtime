@@ -4,7 +4,7 @@
 The per-flip targeted probe passed for each subsystem, but the FULL test suite is the
 final arbiter and it regressed: flipping ANY vNext ``*_enabled`` default violates the
 codebase's encoded CL-005 contract (``tests/compat/test_compat_flags.py``:
-``test_every_enabled_flag_defaults_legacy`` / ``test_one_flip_is_isolated`` /
+``test_every_enabled_flag_defaults_legacy_unless_flipped`` / ``test_one_flip_is_isolated`` /
 ``test_catalog_includes_vnext_subsystem_flags``), because the subsystems have not met the
 CL-006 "migrated" criteria (migration_state still legacy/adapted). Per the honesty bar we
 auto-revert every flip: restore the legacy ``False`` default in config.py and re-emit each
