@@ -127,6 +127,8 @@ class OCFlowRunner:
         brain: RuntimeBrainPort | None = None,
         cache: Any | None = None,
         enabled: bool = True,
+        context_engine_enabled: bool | None = None,
+        kg_v2_enabled: bool | None = None,
     ) -> None:
         self.root = Path(root)
         self.definition = oc_flow_definition()
@@ -136,6 +138,58 @@ class OCFlowRunner:
         self.brain_advisory = brain is not None
         self.cache = cache
         self.enabled = enabled
+        # VDM-004 seam wiring: resolve the PR-010 ContextEngine (context_engine) and
+        # PR-008 KG v2 (kg_v2) gather-path flags. An explicit ctor value wins (cli /
+        # tests); otherwise they come from the project config at ``root`` so flipping
+        # ``runtime.context_engine_enabled`` / ``runtime.kg_v2_enabled`` activates the
+        # vNext gather path with no code change. Default config = legacy (both off).
+        if context_engine_enabled is None or kg_v2_enabled is None:
+            runtime_cfg = self._load_runtime_config()
+            if context_engine_enabled is None:
+                context_engine_enabled = bool(
+                    getattr(runtime_cfg, "context_engine_enabled", False)
+                )
+            if kg_v2_enabled is None:
+                kg_v2_enabled = bool(getattr(runtime_cfg, "kg_v2_enabled", False))
+        self._context_engine_enabled = bool(context_engine_enabled)
+        self._kg_v2_enabled = bool(kg_v2_enabled)
+        # kg_v2 consults the KG index before broad file reads; locate it under root
+        # only when the flag is on (None on an unindexed project = honest fallback).
+        self._graph_db_path = (
+            self._resolve_graph_db_path() if self._kg_v2_enabled else None
+        )
+
+    # -- config / kg resolution ----------------------------------------------
+    def _load_runtime_config(self) -> Any:
+        """Load the project's RuntimeMigration flags from ``<root>/opencontext.yaml``.
+
+        Config is advisory here: a missing or invalid config yields built-in defaults
+        (every migration flag legacy-off via ``getattr(..., False)``), so flag-off
+        behaviour is byte-identical to before this seam was wired.
+        """
+        try:
+            from opencontext_core.config import load_config_or_defaults
+            from opencontext_core.config_resolver import resolve_config_path
+
+            config = load_config_or_defaults(
+                resolve_config_path(self.root), auto_detect=False
+            )
+            return config.runtime
+        except Exception:  # pragma: no cover - config is advisory; default to legacy.
+            return None
+
+    def _resolve_graph_db_path(self) -> Path | None:
+        """Locate the project's KG v2 index under ``root``, or None when unindexed.
+
+        ``kg_first_subgraph`` returns None for a missing DB, so kg_v2 stays active but
+        non-fatal on an unindexed project (the gather falls back to the legacy path).
+        """
+        storage = self.root / ".storage" / "opencontext"
+        for name in ("context_graph.db", "codegraph.db"):
+            candidate = storage / name
+            if candidate.exists():
+                return candidate
+        return None
 
     # -- paths ----------------------------------------------------------------
     def _run_dir(self, session_id: str, run_id: str) -> Path:
@@ -197,6 +251,11 @@ class OCFlowRunner:
             run_external_inspection=run_external_inspection,
             test_command=test_command,
             mutation_required=mut_required,
+            # VDM-004: vNext gather-path flags reach the node handlers here. With both
+            # off (default config) node_gather_context runs the legacy executor path.
+            context_engine_enabled=self._context_engine_enabled,
+            kg_v2_enabled=self._kg_v2_enabled,
+            graph_db_path=self._graph_db_path,
         )
 
         # B6 / AVH-013: the explainable workflow-selection receipt (same shared

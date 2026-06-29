@@ -39,6 +39,11 @@ MEMORY_WRITE_RATCHET: dict[tuple[str, str], str] = {
         "legacy direct harvester writes kept verbatim until memory_v2_enabled flips "
         "(see config.py memory_v2_enabled note)"
     ),
+    ("provider.py", "write"): (
+        "VDM-004 legacy direct path in MemoryStoreProvider._legacy_write, taken only "
+        "when memory_v2_enabled is off; flag on routes write() through the harness "
+        "(AVH-002 sole writer). Kept verbatim until memory_v2_enabled flips."
+    ),
     ("provider.py", "supersede"): (
         "supersede composes the store's deterministic supersession path; AVH-002 routes "
         "write() through the harness, supersede ratcheted for a follow-up"

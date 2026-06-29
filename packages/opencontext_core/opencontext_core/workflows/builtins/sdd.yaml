@@ -22,6 +22,8 @@ compatible_profiles:
   - full
   - standard
   - quick
+  - explore-only
+  - apply-only
 required_capabilities: []
 
 metadata:
@@ -131,3 +133,11 @@ profiles:
     - explore
     - apply
     - verify
+  # Legacy custom-subset tracks (HarnessRunner.schedule_phases): pure SDD-phase
+  # subsets, so they resolve onto this definition via the alias table (spec BAK1).
+  explore-only:
+    - explore
+  apply-only:
+    - apply
+    - verify
+    - archive

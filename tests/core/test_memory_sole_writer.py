@@ -2,8 +2,10 @@
 
 Anti-regression for the confirmed bypass at ``memory/provider.py`` where ``write``
 called ``self._store.write(record)`` directly, skipping the harness lifecycle
-(conflict-check / KG-link / receipt). These tests prove ``write`` now delegates to
-``MemoryHarness.write`` and that the harness lifecycle actually fires.
+(conflict-check / KG-link / receipt). With VDM-004 the harness path is gated on
+``memory_v2_enabled``; these tests construct the provider with the flag ON and prove
+``write`` delegates to ``MemoryHarness.write`` and that the harness lifecycle fires.
+The flag-OFF legacy path is covered by ``test_memory_v2_routing.py``.
 """
 
 from __future__ import annotations
@@ -54,7 +56,7 @@ def test_provider_write_delegates_to_harness_not_store() -> None:
             )
 
     spy = _SpyHarness()
-    provider = MemoryStoreProvider(_ExplodingStore(), harness=spy)
+    provider = MemoryStoreProvider(_ExplodingStore(), harness=spy, memory_v2_enabled=True)
     receipt = provider.write(_record("r1", "auth:model", "auth lives in AccessResolver"))
 
     assert receipt.memory_id == "m1"
@@ -66,7 +68,7 @@ def test_provider_write_runs_harness_lifecycle_and_emits_event() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         store = LocalMemoryStore(Path(tmp) / "mem.db")
         harness = MemoryHarness(store)
-        provider = MemoryStoreProvider(store, harness=harness)
+        provider = MemoryStoreProvider(store, harness=harness, memory_v2_enabled=True)
 
         receipt = provider.write(_record("r1", "auth:model", "auth lives in AccessResolver"))
 
@@ -89,7 +91,7 @@ def test_provider_write_links_kg_through_harness() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         store = LocalMemoryStore(Path(tmp) / "mem.db")
         harness = MemoryHarness(store, kg_linker=_Linker())
-        provider = MemoryStoreProvider(store, harness=harness)
+        provider = MemoryStoreProvider(store, harness=harness, memory_v2_enabled=True)
 
         provider.write(_record("r1", "db:migrate", "migrations run via the migrate command"))
 

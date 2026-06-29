@@ -10,13 +10,25 @@ historical phase set, rather than four scattered tracks.
 from __future__ import annotations
 
 # Legacy name -> (canonical workflow id, phase-subset profile). The profile name
-# matches a phase-subset profile declared on the SDD definition (full/standard/quick),
-# so the resolved phase order equals the legacy track's order (spec BAK1).
+# matches a phase-subset profile declared on the target definition, so the resolved
+# phase order equals the legacy track's order (spec BAK1). The SDD-subset tracks
+# (full/standard/quick/explore-only/apply-only) resolve onto the SDD definition; the
+# quality tracks (full+judgment/full+gga/full+quality) add judgment/gga phases the
+# SDD graph lacks and so resolve onto the derived ``sdd-quality`` definition. Every
+# legacy track that the legacy HarnessRunner scheduled (WORKFLOW_TRACKS +
+# explore-only/apply-only subsets) is mapped here, so registry resolution never
+# falls back with a ``workflow.validation.failed`` event for a *known* track —
+# that event stays reserved for genuinely unknown workflows (spec VDM-004).
 WORKFLOW_ALIASES: dict[str, tuple[str, str]] = {
     "full": ("sdd", "full"),
     "standard": ("sdd", "standard"),
     "quick": ("sdd", "quick"),
     "sdd": ("sdd", "full"),
+    "explore-only": ("sdd", "explore-only"),
+    "apply-only": ("sdd", "apply-only"),
+    "full+judgment": ("sdd-quality", "full+judgment"),
+    "full+gga": ("sdd-quality", "full+gga"),
+    "full+quality": ("sdd-quality", "full+quality"),
 }
 
 
