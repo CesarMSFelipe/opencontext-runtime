@@ -1,0 +1,134 @@
+# Built-in OC Flow workflow — declarative form of book doc 04 §6.
+#
+# OC Flow is the fast, local-first OPERATIONAL workflow for focused engineering
+# tasks (failing tests, localized bugfixes, lint/type errors, small refactors). It
+# coexists with SDD over the shared Runtime infra (invariant 9.2): same runner,
+# event ledger and receipt seam — no per-kind duplication. Node roles mirror
+# oc_flow.personas.OC_FLOW_NODE_PERSONAS; the conditional edges mirror book §6.
+schema_version: opencontext.workflow.v1
+id: oc-flow
+version: "1.0"
+label: OpenContext Agentic Flow
+kind: oc-flow
+
+start_node: init
+terminal_nodes:
+  - completed
+
+strategy: fast
+expected_cost: low
+risk_level: low
+default_profile: balanced
+compatible_profiles: []
+required_capabilities: []
+
+metadata:
+  runner: HarnessRunner
+  event_store: events.json
+  receipt_store: workflow-selection.json
+
+nodes:
+  - id: init
+    label: Initialize
+    role: oc-orchestrator
+    action: session_init
+    required_harnesses: [protocol]
+    required_outputs:
+      - init.json
+      - workflow-selection.json
+  - id: gather_context
+    label: Gather Context
+    role: oc-context-engineer
+    action: gather_context_layers
+    required_skills: [oc-context-discovery]
+    required_harnesses: [context, kg, memory]
+    required_outputs:
+      - context-envelope.json
+  - id: plan
+    label: Plan
+    role: oc-architect
+    action: produce_task_contract
+    required_skills: [oc-plan-lite]
+    required_harnesses: [planning, protocol]
+    required_outputs:
+      - task-contract.json
+  - id: mutate
+    label: Mutate
+    role: oc-builder
+    action: apply_structured_mutation
+    required_skills: [oc-apply-surgical]
+    required_harnesses: [mutation, security]
+    required_outputs:
+      - patch.diff
+      - apply-receipts.json
+  - id: local_inspection
+    label: Local Inspection
+    role: oc-harness-verifier
+    action: inspect_changed_scope
+    required_skills: [oc-inspect-local-first]
+    required_harnesses: [inspection]
+    required_outputs:
+      - inspection-report.json
+  - id: diagnose
+    label: Diagnose
+    role: oc-diagnostician
+    action: diagnosis_loop
+    required_skills: [oc-diagnose-three-hypotheses]
+    required_harnesses: [diagnosis, memory]
+    required_outputs:
+      - diagnosis
+  - id: escalation
+    label: Escalation
+    role: oc-orchestrator
+    action: escalate_to_owner
+    required_skills: [oc-escalate-owner]
+    required_harnesses: [escalation, kg, memory]
+    required_outputs:
+      - escalation/handoff.md
+      - escalation/escalation-report.json
+  - id: consolidation
+    label: Consolidation
+    role: oc-archivist
+    action: consolidate_session
+    required_skills: [oc-archive-memory]
+    required_harnesses: [consolidation, memory, kg]
+    required_outputs:
+      - consolidation/memory-delta.json
+      - consolidation/graph-delta.json
+      - consolidation/summary.md
+  - id: completed
+    label: Completed
+    role: oc-orchestrator
+    action: complete
+
+edges:
+  - from_node: init
+    to_node: gather_context
+  - from_node: gather_context
+    to_node: plan
+  - from_node: plan
+    to_node: mutate
+  - from_node: mutate
+    to_node: local_inspection
+  - from_node: local_inspection
+    to_node: consolidation
+    condition: inspection_passed
+  - from_node: local_inspection
+    to_node: diagnose
+    condition: inspection_failed_recoverable
+  - from_node: local_inspection
+    to_node: escalation
+    condition: inspection_failed_blocking
+  - from_node: diagnose
+    to_node: mutate
+    condition: fix_ready
+  - from_node: diagnose
+    to_node: gather_context
+    condition: needs_context
+  - from_node: diagnose
+    to_node: escalation
+    condition: attempts_exhausted
+  - from_node: escalation
+    to_node: consolidation
+  - from_node: consolidation
+    to_node: completed
