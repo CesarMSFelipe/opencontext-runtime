@@ -510,6 +510,10 @@ class InstallationManager:
         from opencontext_core.config import default_config_data, load_config
 
         project_root.mkdir(parents=True, exist_ok=True)
+        # Canonical config location (B2 / ADR-A2): install MUST write the SAME
+        # path the resolver reads — <root>/opencontext.yaml. Keep this in lockstep
+        # with opencontext_core.config_resolver.resolve_config_path; writing a
+        # configs/ subpath here re-introduces the AVH-012 install/run mismatch.
         config_path = project_root / "opencontext.yaml"
         if not config_path.exists():
             config_data = default_config_data()
