@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenContext Studio</title>
+    <link rel="stylesheet" href="/studio.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <span class="brand">OpenContext Studio</span>
+      <span class="badge">read-only</span>
+      <span id="status" class="status"></span>
+    </header>
+    <main class="layout">
+      <aside class="sidebar">
+        <h2>Sessions</h2>
+        <ul id="sessions" class="sessions"></ul>
+        <p class="hint">MVP shell over the read-only Studio API. Pick a session,
+        then a view. The data layer and JSON endpoints are real; the rich
+        visualizations are intentionally minimal in this milestone.</p>
+      </aside>
+      <section class="content">
+        <nav id="views" class="views"></nav>
+        <pre id="panel" class="panel">Select a session to begin.</pre>
+      </section>
+    </main>
+    <script src="/studio.js"></script>
+  </body>
+</html>
