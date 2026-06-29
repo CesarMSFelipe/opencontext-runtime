@@ -1,0 +1,902 @@
+"""OC Flow node handlers + the work-producing executor seam (PR-007, FLOW-3,
+FLOW-4, FLOW-5, FLOW-6, FLOW-7, FLOW-8, FLOW-13, FLOW-14, book doc 04 §7-§14).
+
+Each node is a pure handler ``node_<name>(ctx) -> NodeResult`` returning its outputs
+and a typed outcome; the runner dispatches them and resolves the next node from the
+outcome. The actual reasoning (build a contract, propose edits, form hypotheses) is
+delegated to a :class:`NodeExecutor` — the typed seam a provider-backed
+implementation fills later. The default :class:`DeterministicNodeExecutor` produces
+honest, model-free artifacts so OC Flow runs end-to-end with no LLM configured
+(matching the harness's planned/executor-absent behaviour).
+
+Exit-condition guards (book §7-§11) are explicit predicates the runner checks before
+transitioning out of a node — a node that has not met its contract refuses to advance.
+
+Layering (doc 58): L9 composing L2 (checkpoint), agents executor (ApplyEdit) and the
+OC Flow models/inspection downward.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Protocol
+
+from opencontext_core.actions.policy import ActionRequest, ActionType, evaluate_action
+from opencontext_core.agents.executor import ApplyEdit, ApplyOperation, apply_edit
+from opencontext_core.config import SecurityMode
+from opencontext_core.harness.checkpoint import CheckpointStore
+from opencontext_core.models.llm import LLMRequest
+from opencontext_core.oc_flow.budgets import OC_FLOW_BUDGETS, lane_config
+from opencontext_core.oc_flow.inspection import run_local_inspection
+from opencontext_core.oc_flow.models import (
+    ContextEnvelope,
+    ContextEnvelopeItem,
+    DiagnosisAttempt,
+    EscalationReport,
+    Hypothesis,
+    InspectionReport,
+    Lane,
+    NodeOutcome,
+    TaskContract,
+)
+
+
+class OCFlowError(RuntimeError):
+    """Raised when a node cannot satisfy its contract (e.g. refused transition)."""
+
+
+@dataclass
+class NodeResult:
+    """The output of a node handler: outputs, the typed outcome and token spend."""
+
+    node: str
+    outcome: NodeOutcome
+    outputs: dict[str, Any] = field(default_factory=dict)
+    llm_tokens: int = 0
+    artifacts: list[str] = field(default_factory=list)
+
+
+@dataclass
+class OCFlowContext:
+    """Mutable run context threaded through the node handlers."""
+
+    root: Path
+    artifacts_dir: Path
+    task: str
+    lane: Lane
+    profile: str | None
+    executor: NodeExecutor
+    max_attempts: int
+    seed_paths: list[str] = field(default_factory=list)
+    requested_edits: list[ApplyEdit] = field(default_factory=list)
+    cache: Any | None = None  # SemanticCache (L4) — optional, advisory.
+    run_external_inspection: bool = False
+    test_command: list[str] | None = None
+    lint_command: list[str] | None = None
+    typecheck_command: list[str] | None = None
+    # PR-008 KG v2 (flag-gated, default off): when enabled and a graph DB exists,
+    # gather_context consults the KG subgraph before broad file reads (KG-09/14).
+    kg_v2_enabled: bool = False
+    graph_db_path: Path | None = None
+    kg_observer: Any | None = None  # optional KgObserver for kg.* events/receipts
+    # PR-010 Context Engine v2 (flag-gated, default off): when enabled, gather_context
+    # assembles the canonical three-layer ContextEnvelope via the ContextEngine and
+    # projects it onto the surgical seam; with the flag off the legacy path runs.
+    context_engine_enabled: bool = False
+    # B1 / AVH-011: whether the task implies a code/file mutation. Threaded into the
+    # inspection scope gate (no-op on a mutation task is blocking) and the post-graph
+    # completion gate (a no-op mutation may never report `completed`).
+    mutation_required: bool = False
+
+    # live state produced by nodes
+    init_done: bool = False
+    envelope: ContextEnvelope | None = None
+    contract: TaskContract | None = None
+    changed_files: list[str] = field(default_factory=list)
+    checkpoint_id: str | None = None
+    inspection: InspectionReport | None = None
+    diagnosis_attempts: list[DiagnosisAttempt] = field(default_factory=list)
+    failed_strategies: list[str] = field(default_factory=list)
+    cache_hits: int = 0
+    # B1 / AVH-015: reason the run produced no usable edits (invalid/blocked edit
+    # set, policy denial), surfaced by the completion gate and the CLI summary.
+    block_reason: str | None = None
+
+
+# --------------------------------------------------------------------- executor seam
+class NodeExecutor(Protocol):
+    """The work-producing seam OC Flow delegates reasoning to (book §5).
+
+    A provider-backed implementation (future PR) supplies real model output; the
+    default deterministic implementation supplies honest, model-free artifacts.
+    """
+
+    def gather_context(
+        self, task: str, seed_paths: Sequence[str], depth: int
+    ) -> ContextEnvelope: ...
+
+    def plan(self, task: str, envelope: ContextEnvelope) -> TaskContract: ...
+
+    def mutate(
+        self, contract: TaskContract, envelope: ContextEnvelope
+    ) -> list[ApplyEdit]: ...
+
+    def diagnose(
+        self,
+        attempt: int,
+        contract: TaskContract,
+        inspection: InspectionReport,
+        failed_strategies: Sequence[str],
+    ) -> DiagnosisAttempt: ...
+
+
+class DeterministicNodeExecutor:
+    """Model-free executor: honest, deterministic artifacts (no LLM).
+
+    ``requested_edits`` lets a caller (or the CLI fixture) drive a concrete surgical
+    change without a model; without them ``mutate`` proposes no edits (an honest
+    no-op patch) rather than fabricating one.
+    """
+
+    def __init__(self, requested_edits: list[ApplyEdit] | None = None) -> None:
+        self._requested_edits = list(requested_edits or [])
+
+    def gather_context(
+        self, task: str, seed_paths: Sequence[str], depth: int
+    ) -> ContextEnvelope:
+        items: list[ContextEnvelopeItem] = []
+        omissions: list[str] = []
+        for rel in list(seed_paths)[: max(1, depth) * 4]:
+            items.append(
+                ContextEnvelopeItem(
+                    source="file", ref=rel, summary=f"seed file for: {task[:60]}", tokens=200
+                )
+            )
+        if not items:
+            # No seeds resolved — still produce a usable, minimal envelope so the
+            # run can proceed, and record the omission (book §8).
+            items.append(
+                ContextEnvelopeItem(
+                    source="memory", ref="task", summary=task[:120], tokens=120
+                )
+            )
+            omissions.append("no source files seeded; planning from task statement only")
+        return ContextEnvelope(
+            task=task,
+            items=items,
+            omissions=omissions,
+            token_estimate=sum(i.tokens for i in items),
+        )
+
+    def plan(self, task: str, envelope: ContextEnvelope) -> TaskContract:
+        changed = [i.ref for i in envelope.items if i.source == "file"]
+        return TaskContract(
+            scope=task,
+            non_scope=["unrelated modules", "architecture redesign", "public API changes"],
+            acceptance_criteria=[f"the task is addressed: {task[:120]}"],
+            constraints=["surgical change only", "no broad refactor"],
+            changed_areas=changed,
+            verification_plan=["run local inspection (syntax, secrets, tests)"],
+            risk_flags=[],
+            stop_conditions=["scope grows beyond OC Flow bounds"],
+        )
+
+    def mutate(
+        self, contract: TaskContract, envelope: ContextEnvelope
+    ) -> list[ApplyEdit]:
+        edits: list[ApplyEdit] = []
+        for edit in self._requested_edits:
+            # Ensure every edit carries a reason + acceptance-criterion ref (FLOW-7).
+            reason = edit.reason or f"surgical change for: {contract.scope[:80]}"
+            refs = edit.requirement_refs or list(contract.acceptance_criteria[:1])
+            edits.append(edit.model_copy(update={"reason": reason, "requirement_refs": refs}))
+        # Emit the requested edits once; re-entry from a diagnose loop proposes no
+        # new edits (the deterministic executor has no model to invent a fix).
+        self._requested_edits = []
+        return edits
+
+    def diagnose(
+        self,
+        attempt: int,
+        contract: TaskContract,
+        inspection: InspectionReport,
+        failed_strategies: Sequence[str],
+    ) -> DiagnosisAttempt:
+        failure = inspection.failure_summary or "unknown failure"
+        # Three candidate strategies; pick the first not already ruled out (book §12
+        # "never repeat a failed strategy").
+        candidates = [
+            "correct the failing assertion / off-by-one in the changed code",
+            "fix the import or symbol resolution in the changed scope",
+            "adjust the test fixture or expected value to the new behaviour",
+        ]
+        hypotheses = [
+            Hypothesis(statement=c, evidence=failure[:160], confidence=0.5 - 0.1 * idx)
+            for idx, c in enumerate(candidates)
+        ]
+        selected = 0
+        for idx, c in enumerate(candidates):
+            if c not in failed_strategies:
+                selected = idx
+                break
+        return DiagnosisAttempt(
+            attempt=attempt,
+            reproduction_command="python -m pytest -q (changed scope)",
+            reproduction_result=failure[:200],
+            hypotheses=hypotheses,
+            selected_hypothesis=selected,
+            fix_strategy=candidates[selected],
+        )
+
+
+# ------------------------------------------------------- productive provider executor
+class _ProviderClient(Protocol):
+    """Minimal duck type for a provider gateway: ``generate(request).content``.
+
+    Satisfied by :class:`opencontext_core.providers.gateway.ProviderGateway` and by
+    any deterministic test stub — so the productive executor is fully injectable and
+    the full pipeline (provider -> validate -> policy -> apply) is exercised honestly.
+    """
+
+    def generate(self, request: LLMRequest) -> Any: ...
+
+
+# Instruction framing the provider's mutation as a strict ApplyEdit JSON array.
+_APPLY_EDIT_INSTRUCTION = (
+    "Implement the task below as concrete file edits. Output ONLY a JSON array of "
+    "ApplyEdit objects, nothing else: "
+    '[{"path":"<root-relative>","operation":"replace_range|insert_after|delete_range'
+    '|create_file","start_line":1,"end_line":3,"content":"<new content>",'
+    '"reason":"<why>","requirement_refs":["<criterion>"]}]. '
+    "Use surgical line anchors; no prose, no Markdown fences, nothing outside the array."
+)
+
+
+def _parse_apply_edit_set(text: str) -> list[ApplyEdit] | None:
+    """Parse a provider response into a validated ``list[ApplyEdit]``.
+
+    Returns the validated edits on success, or ``None`` when the response is
+    unparseable or schema-invalid (freeform text, not a JSON array, or any element
+    failing :class:`ApplyEdit` validation) — the caller treats ``None`` as a hard
+    block (never silently completed). An empty array parses to ``[]`` (a valid but
+    empty set: the provider proposed no edits).
+    """
+    from pydantic import ValidationError
+
+    start = text.find("[")
+    end = text.rfind("]")
+    if start == -1 or end <= start:
+        return None
+    try:
+        data = json.loads(text[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, list):
+        return None
+    edits: list[ApplyEdit] = []
+    for item in data:
+        if not isinstance(item, dict):
+            return None
+        try:
+            edits.append(ApplyEdit.model_validate(item))
+        except ValidationError:
+            return None
+    return edits
+
+
+class ProviderBackedNodeExecutor:
+    """Productive :class:`NodeExecutor` that mutates via a provider gateway (AVH-015).
+
+    ``gather_context`` / ``plan`` / ``diagnose`` reuse the deterministic, model-free
+    artifacts; only ``mutate`` is provider-backed: it asks the injected gateway for a
+    STRUCTURED, schema-validated ``ApplyEdit`` set, runs each edit through the action
+    policy, and returns the edits for ``node_mutate`` to checkpoint/apply/receipt and
+    ``node_local_inspection`` to verify. An unparseable/invalid set or a policy denial
+    yields zero edits plus a ``block_reason`` — so the run is blocked, never completed.
+    A provider-free executor (no gateway) is the deterministic path and never claims a
+    mutation it did not make.
+    """
+
+    # The completion gate reads this to distinguish "needs an executor" from "the
+    # provider produced nothing" (a configured gateway means an executor exists).
+    provider_available = True
+
+    def __init__(
+        self,
+        *,
+        gateway: _ProviderClient,
+        root: Path,
+        provider: str = "mock",
+        model: str = "default",
+        security_mode: SecurityMode = SecurityMode.PRIVATE_PROJECT,
+        is_allowed_path: Any = None,
+        max_output_tokens: int = 6000,
+    ) -> None:
+        self._gateway = gateway
+        self._root = Path(root)
+        self._provider = provider
+        self._model = model
+        self._security_mode = security_mode
+        self._is_allowed_path = is_allowed_path
+        self._max_output_tokens = max_output_tokens
+        self._fallback = DeterministicNodeExecutor()
+        self.block_reason: str | None = None
+
+    # gather / plan / diagnose: honest, model-free artifacts (mutation is the model job)
+    def gather_context(
+        self, task: str, seed_paths: Sequence[str], depth: int
+    ) -> ContextEnvelope:
+        return self._fallback.gather_context(task, seed_paths, depth)
+
+    def plan(self, task: str, envelope: ContextEnvelope) -> TaskContract:
+        return self._fallback.plan(task, envelope)
+
+    def diagnose(
+        self,
+        attempt: int,
+        contract: TaskContract,
+        inspection: InspectionReport,
+        failed_strategies: Sequence[str],
+    ) -> DiagnosisAttempt:
+        return self._fallback.diagnose(attempt, contract, inspection, failed_strategies)
+
+    # mutate: provider -> schema-validate -> policy (the productive path)
+    def mutate(
+        self, contract: TaskContract, envelope: ContextEnvelope
+    ) -> list[ApplyEdit]:
+        self.block_reason = None
+        prompt = (
+            f"{_APPLY_EDIT_INSTRUCTION}\n\nTask: {contract.scope}\n"
+            f"Acceptance: {'; '.join(contract.acceptance_criteria)}"
+        )
+        request = LLMRequest(
+            prompt=prompt,
+            system_prompt="",
+            provider=self._provider,
+            model=self._model,
+            max_output_tokens=self._max_output_tokens,
+            metadata={"role": "generate", "phase": "mutate", "workflow": "oc-flow"},
+        )
+        response = self._gateway.generate(request)
+        edits = _parse_apply_edit_set(getattr(response, "content", "") or "")
+        if edits is None:
+            self.block_reason = "provider returned an unparseable or schema-invalid edit set"
+            return []
+        if not edits:
+            self.block_reason = "provider proposed no edits"
+            return []
+        # Policy stage: a single denied/forbidden path blocks the WHOLE set so no
+        # partial mutation is written (AVH-015 forbidden-path scenario).
+        for edit in edits:
+            decision = self._policy_decision(edit)
+            if not decision.allowed:
+                self.block_reason = (
+                    f"policy denied write to {edit.path}: {decision.reason}"
+                )
+                return []
+        # Carry a reason + acceptance-criterion ref on every edit (FLOW-7).
+        prepared: list[ApplyEdit] = []
+        for edit in edits:
+            reason = edit.reason or f"surgical change for: {contract.scope[:80]}"
+            refs = edit.requirement_refs or list(contract.acceptance_criteria[:1])
+            prepared.append(edit.model_copy(update={"reason": reason, "requirement_refs": refs}))
+        return prepared
+
+    def _policy_decision(self, edit: ApplyEdit) -> Any:
+        allowlisted = self._allowed(edit.path)
+        request = ActionRequest(
+            action=ActionType.WRITE_FILE,
+            sandbox_enabled=True,  # OC Flow mutates under a rollback checkpoint.
+            explicitly_allowlisted=allowlisted,
+            approved=True,
+        )
+        return evaluate_action(request, security_mode=self._security_mode)
+
+    def _allowed(self, rel: str) -> bool:
+        if self._is_allowed_path is not None:
+            return bool(self._is_allowed_path(rel))
+        # Default allowlist: the path must resolve under root and not target the
+        # runtime's own state directory.
+        try:
+            resolved = (self._root / rel).resolve()
+            resolved.relative_to(self._root.resolve())
+        except ValueError:
+            return False
+        parts = Path(rel).parts
+        return not (parts and parts[0] == ".opencontext")
+
+
+class McpSamplingNodeExecutor(ProviderBackedNodeExecutor):
+    """Productive executor sourcing its mutation via host MCP sampling (AVH-015).
+
+    MCP sampling is exposed through the same gateway seam (the base gateway preserves
+    host MCP sampling), so this reuses the full provider -> validate -> policy ->
+    apply pipeline and only differs in provenance. An MCP sampler counts as a
+    productive executor (``provider_available = True``) for the completion gate.
+    """
+
+    def __init__(self, *, gateway: _ProviderClient, root: Path, **kwargs: Any) -> None:
+        super().__init__(gateway=gateway, root=root, provider="mcp", **kwargs)
+
+
+# ----------------------------------------------------------------------- utilities
+def _write_json(path: Path, payload: Any) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, default=str) + "\n", encoding="utf-8")
+    return path.name
+
+
+def _budget_for(node: str) -> int:
+    """A deterministic per-node token estimate (mid-budget; PR-011 will measure)."""
+    lo, hi = OC_FLOW_BUDGETS.get(node, (0, 0))
+    return (lo + hi) // 2
+
+
+def _owner_candidates(root: Path, changed_files: Sequence[str]) -> list[str]:
+    """Best-effort owner candidates from git history, with a path fallback."""
+    owners: list[str] = []
+    for rel in list(changed_files)[:5]:
+        try:
+            proc = subprocess.run(
+                ["git", "log", "-1", "--format=%an", "--", rel],
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            name = proc.stdout.strip()
+            if name and name not in owners:
+                owners.append(name)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+    if not owners:
+        # Fallback: the top package directory of the first changed file.
+        for rel in changed_files:
+            top = Path(rel).parts[0] if Path(rel).parts else rel
+            owners.append(f"maintainers of {top}")
+            break
+    return owners or ["repository maintainers"]
+
+
+# -------------------------------------------------------------------- node handlers
+def node_init(ctx: OCFlowContext) -> NodeResult:
+    """Bind session/profile/policy + persist the init record (book §7)."""
+    init = {
+        "task": ctx.task,
+        "lane": ctx.lane.value,
+        "profile": ctx.profile,
+        "policy_mode": "default",
+        "capabilities_available": True,
+        "workflow": "oc-flow",
+    }
+    name = _write_json(ctx.artifacts_dir / "init.json", init)
+    selection = {"workflow": "oc-flow", "reason": "operational task", "lane": ctx.lane.value}
+    sel_name = _write_json(ctx.artifacts_dir / "workflow-selection.json", selection)
+    ctx.init_done = True
+    return NodeResult(
+        node="init",
+        outcome=NodeOutcome.OK,
+        outputs=init,
+        llm_tokens=_budget_for("init"),
+        artifacts=[name, sel_name],
+    )
+
+
+def node_gather_context(ctx: OCFlowContext) -> NodeResult:
+    """Retrieve minimal-sufficient context surgically (book §8, FLOW-CONV).
+
+    PR-008 KG v2 (flag-gated): when ``ctx.kg_v2_enabled`` and a graph DB exists, the
+    KG subgraph is consulted FIRST and its nodes seed the envelope before any broad
+    file read; with the flag off (default) the legacy executor path runs verbatim.
+    """
+    depth = lane_config(ctx.lane).context_depth
+    cache_hit = False
+    kg_consulted = False
+    # FLOW-CONV semantic-cache: consult before re-retrieving (advisory, best-effort).
+    if ctx.cache is not None and ctx.envelope is not None:
+        cache_hit = True
+        ctx.cache_hits += 1
+        envelope = ctx.envelope
+    else:
+        kg_items = _kg_v2_seed_items(ctx) if ctx.kg_v2_enabled else None
+        if kg_items:
+            kg_consulted = True
+            envelope = ContextEnvelope(
+                task=ctx.task,
+                items=kg_items,
+                omissions=[],
+                token_estimate=sum(i.tokens for i in kg_items),
+            )
+        elif ctx.context_engine_enabled:
+            envelope = _context_engine_envelope(ctx, depth)
+        else:
+            envelope = ctx.executor.gather_context(ctx.task, ctx.seed_paths, depth)
+    envelope = envelope.model_copy(update={"cache_hit": cache_hit})
+    ctx.envelope = envelope
+    name = _write_json(ctx.artifacts_dir / "context-envelope.json", envelope.model_dump())
+    tokens = 0 if cache_hit else min(envelope.token_estimate or _budget_for("gather_context"),
+                                     OC_FLOW_BUDGETS["gather_context"][1])
+    return NodeResult(
+        node="gather_context",
+        outcome=NodeOutcome.OK,
+        outputs={"items": len(envelope.items), "omissions": len(envelope.omissions),
+                 "cache_hit": cache_hit, "kg_consulted": kg_consulted},
+        llm_tokens=tokens,
+        artifacts=[name],
+    )
+
+
+def _context_engine_envelope(ctx: OCFlowContext, depth: int) -> ContextEnvelope:
+    """PR-010 path: build the canonical envelope via the ContextEngine, then project.
+
+    Flag-gated by ``ctx.context_engine_enabled``. Seeds the engine from KG v2 items
+    (when available) or the seed paths, runs strategy -> budget -> pack -> envelope,
+    and projects the canonical envelope onto the surgical OC Flow seam. Defensive:
+    any failure falls back to the legacy executor gather so a run never breaks.
+    """
+    try:
+        from opencontext_core.context.engine import ContextEngine, to_surgical_envelope
+        from opencontext_core.models.context import ContextItem, ContextPriority
+
+        kg_items = _kg_v2_seed_items(ctx) if ctx.kg_v2_enabled else None
+        seeds = (
+            [(i.ref, i.source, i.tokens) for i in kg_items]
+            if kg_items
+            else [(rel, "file", 200) for rel in list(ctx.seed_paths)[: max(1, depth) * 4]]
+        )
+        candidates = [
+            ContextItem(
+                id=ref,
+                content=f"seed for: {ctx.task[:60]} ({ref})",
+                source=ref,
+                source_type=src_type,
+                priority=ContextPriority.P2,
+                tokens=tokens,
+                score=0.6,
+            )
+            for ref, src_type, tokens in seeds
+        ]
+        result = ContextEngine().build(
+            "oc_flow",
+            "gather_context",
+            ctx.task,
+            candidates=candidates,
+            l2={"task": ctx.task},
+        )
+        surgical = to_surgical_envelope(result.envelope)
+        if not surgical.has_items:
+            return ctx.executor.gather_context(ctx.task, ctx.seed_paths, depth)
+        return surgical
+    except Exception:  # pragma: no cover - defensive: never break a run on the v2 path
+        return ctx.executor.gather_context(ctx.task, ctx.seed_paths, depth)
+
+
+def _kg_v2_seed_items(ctx: OCFlowContext) -> list[ContextEnvelopeItem] | None:
+    """KG-first envelope items from the v2 subgraph, or None to fall back to files.
+
+    Best-effort and flag-gated: returns None when no graph DB is configured or the
+    subgraph is empty, so ``node_gather_context`` falls back to the executor's
+    file-based gather verbatim.
+    """
+    if ctx.graph_db_path is None:
+        return None
+    from opencontext_core.retrieval.kg_context import kg_first_subgraph
+
+    subgraph = kg_first_subgraph(
+        ctx.task,
+        ctx.graph_db_path,
+        workflow="oc-flow",
+        node="gather_context",
+        observer=ctx.kg_observer,
+    )
+    if subgraph is None or not subgraph.nodes:
+        return None
+    return [
+        ContextEnvelopeItem(
+            source="kg",
+            ref=(n.path or n.name),
+            summary=f"{n.type.value} {n.name}",
+            tokens=80,
+        )
+        for n in subgraph.nodes
+    ]
+
+
+def node_plan(ctx: OCFlowContext) -> NodeResult:
+    """Produce the frozen :class:`TaskContract` and persist it (book §9, FLOW-4)."""
+    if ctx.envelope is None:
+        raise OCFlowError("plan requires a context envelope")
+    contract = ctx.executor.plan(ctx.task, ctx.envelope)
+    ctx.contract = contract
+    name = _write_json(ctx.artifacts_dir / "task-contract.json", contract.model_dump())
+    return NodeResult(
+        node="plan",
+        outcome=NodeOutcome.OK,
+        outputs={"acceptance_criteria": len(contract.acceptance_criteria),
+                 "changed_areas": list(contract.changed_areas)},
+        llm_tokens=_budget_for("plan"),
+        artifacts=[name],
+    )
+
+
+def node_mutate(ctx: OCFlowContext) -> NodeResult:
+    """Apply surgical edits with reason+criterion, behind a rollback checkpoint
+    (book §10, FLOW-7)."""
+    if ctx.contract is None:
+        raise OCFlowError("mutate requires a frozen task contract")
+    edits = ctx.executor.mutate(ctx.contract, ctx.envelope or ContextEnvelope(task=ctx.task))
+    # A productive executor records WHY it produced no usable edits (invalid edit
+    # set / policy denial); surface it so the completion gate + CLI can report it.
+    executor_block = getattr(ctx.executor, "block_reason", None)
+    if executor_block and not edits:
+        ctx.block_reason = executor_block
+
+    # Validate the surgical-mutation contract: every edit has a reason + criterion.
+    for edit in edits:
+        if not edit.reason:
+            raise OCFlowError(f"edit for {edit.path} is missing a reason")
+        if not (edit.requirement_refs or edit.task_refs):
+            raise OCFlowError(f"edit for {edit.path} references no acceptance criterion")
+
+    changed_paths = [(ctx.root / e.path).resolve() for e in edits]
+    store = CheckpointStore(ctx.root)
+    checkpoint = store.create(changed_paths, source="oc-flow-mutate") if changed_paths else None
+    ctx.checkpoint_id = checkpoint.id if checkpoint is not None else "empty"
+
+    receipts: list[dict[str, Any]] = []
+    for edit in edits:
+        applied = apply_edit(ctx.root, edit)
+        receipts.append(applied.model_dump())
+        if edit.path not in ctx.changed_files:
+            ctx.changed_files.append(edit.path)
+
+    patch_lines = [
+        f"# {e.operation.value} {e.path} :: {e.reason}" for e in edits
+    ] or ["# no edits proposed (honest no-op mutation)"]
+    patch_name = (ctx.artifacts_dir / "patch.diff")
+    patch_name.parent.mkdir(parents=True, exist_ok=True)
+    patch_name.write_text("\n".join(patch_lines) + "\n", encoding="utf-8")
+    rec_name = _write_json(
+        ctx.artifacts_dir / "apply-receipts.json",
+        {"checkpoint_id": ctx.checkpoint_id, "receipts": receipts},
+    )
+    return NodeResult(
+        node="mutate",
+        outcome=NodeOutcome.OK,
+        outputs={"edits": len(edits), "checkpoint_id": ctx.checkpoint_id,
+                 "changed_files": list(ctx.changed_files)},
+        llm_tokens=_budget_for("mutate"),
+        artifacts=["patch.diff", rec_name],
+    )
+
+
+def node_local_inspection(ctx: OCFlowContext) -> NodeResult:
+    """Run the zero-LLM local inspection and map to a typed outcome (book §11)."""
+    report = run_local_inspection(
+        ctx.root,
+        ctx.changed_files,
+        test_command=ctx.test_command,
+        lint_command=ctx.lint_command,
+        typecheck_command=ctx.typecheck_command,
+        run_external=ctx.run_external_inspection,
+        mutation_required=ctx.mutation_required,
+    )
+    ctx.inspection = report
+    name = _write_json(ctx.artifacts_dir / "inspection-report.json", report.model_dump())
+    outcome_map = {
+        "passed": NodeOutcome.PASSED,
+        "failed_recoverable": NodeOutcome.FAILED_RECOVERABLE,
+        "failed_blocking": NodeOutcome.FAILED_BLOCKING,
+        "skipped_with_reason": NodeOutcome.PASSED,  # no skip edge — proceed (book §6)
+    }
+    return NodeResult(
+        node="local_inspection",
+        outcome=outcome_map[report.outcome],
+        outputs={"outcome": report.outcome, "gates": len(report.gate_results)},
+        llm_tokens=0,
+        artifacts=[name],
+    )
+
+
+def node_diagnose(ctx: OCFlowContext) -> NodeResult:
+    """Bounded, evidence-driven diagnosis loop (book §12, FLOW-5, FLOW-6)."""
+    if len(ctx.diagnosis_attempts) >= ctx.max_attempts:
+        return NodeResult(
+            node="diagnose",
+            outcome=NodeOutcome.ATTEMPTS_EXHAUSTED,
+            outputs={"attempts": len(ctx.diagnosis_attempts), "max_attempts": ctx.max_attempts},
+            llm_tokens=0,
+        )
+    if ctx.contract is None or ctx.inspection is None:
+        raise OCFlowError("diagnose requires a contract and a failed inspection")
+
+    attempt_no = len(ctx.diagnosis_attempts) + 1
+    attempt = ctx.executor.diagnose(
+        attempt_no, ctx.contract, ctx.inspection, ctx.failed_strategies
+    )
+    # Never repeat a failed strategy (book §12).
+    if attempt.fix_strategy in ctx.failed_strategies:
+        return NodeResult(
+            node="diagnose",
+            outcome=NodeOutcome.ATTEMPTS_EXHAUSTED,
+            outputs={"reason": "no untried strategy remains"},
+            llm_tokens=0,
+        )
+    ctx.diagnosis_attempts.append(attempt)
+    ctx.failed_strategies.append(attempt.fix_strategy)
+    name = _write_json(
+        ctx.artifacts_dir / "diagnosis" / f"attempt-{attempt_no:03d}.json",
+        attempt.model_dump(),
+    )
+    return NodeResult(
+        node="diagnose",
+        outcome=NodeOutcome.FIX_READY,
+        outputs={"attempt": attempt_no, "selected": attempt.selected_hypothesis,
+                 "fix_strategy": attempt.fix_strategy},
+        llm_tokens=_budget_for("diagnose"),
+        artifacts=[name],
+    )
+
+
+def node_escalation(ctx: OCFlowContext) -> NodeResult:
+    """Produce a human handoff; never mutate code (book §13, FLOW-13)."""
+    blocking = (
+        ctx.inspection.failure_summary
+        if ctx.inspection is not None
+        else "could not converge within OC Flow bounds"
+    ) or "blocked"
+    report = EscalationReport(
+        blocking_error=blocking,
+        owner_candidates=_owner_candidates(ctx.root, ctx.changed_files),
+        known_blockers=[a.fix_strategy for a in ctx.diagnosis_attempts],
+        next_recommended_action="escalate to SDD or a human owner for a deeper fix",
+        failed_strategies=list(ctx.failed_strategies),
+    )
+    rep_name = _write_json(
+        ctx.artifacts_dir / "escalation" / "escalation-report.json", report.model_dump()
+    )
+    handoff = (
+        f"# OC Flow Handoff\n\n"
+        f"**Task:** {ctx.task}\n\n"
+        f"**Blocking error:** {report.blocking_error}\n\n"
+        f"**Owner candidates:** {', '.join(report.owner_candidates)}\n\n"
+        f"**Attempts made:** {len(ctx.diagnosis_attempts)}\n\n"
+        f"**Strategies ruled out:** {', '.join(report.failed_strategies) or 'none'}\n\n"
+        f"**Next action:** {report.next_recommended_action}\n"
+    )
+    handoff_path = ctx.artifacts_dir / "escalation" / "handoff.md"
+    handoff_path.parent.mkdir(parents=True, exist_ok=True)
+    handoff_path.write_text(handoff, encoding="utf-8")
+    return NodeResult(
+        node="escalation",
+        outcome=NodeOutcome.OK,
+        outputs={"owner_candidates": report.owner_candidates},
+        llm_tokens=_budget_for("escalation"),
+        artifacts=[rep_name, "escalation/handoff.md"],
+    )
+
+
+def node_consolidation(ctx: OCFlowContext) -> NodeResult:
+    """Finalize: deltas, summary, reindex, cost report (book §14, FLOW-14)."""
+    memory_delta = {
+        "task": ctx.task,
+        "durable_notes": [f"OC Flow change: {ctx.task[:160]}"],
+        "failed_strategies": list(ctx.failed_strategies),
+        "saved_chain_of_thought": False,  # book §14: never save CoT
+    }
+    graph_delta = {
+        "reindexed_files": list(ctx.changed_files),
+        "changed_areas": list(ctx.contract.changed_areas) if ctx.contract else [],
+    }
+    cost_report = {
+        "diagnosis_attempts": len(ctx.diagnosis_attempts),
+        "cache_hits": ctx.cache_hits,
+        "changed_files": len(ctx.changed_files),
+    }
+    mem_name = _write_json(ctx.artifacts_dir / "consolidation" / "memory-delta.json", memory_delta)
+    graph_name = _write_json(
+        ctx.artifacts_dir / "consolidation" / "graph-delta.json", graph_delta
+    )
+    summary = (
+        f"# OC Flow Summary\n\n"
+        f"Task: {ctx.task}\n\n"
+        f"Changed files: {', '.join(ctx.changed_files) or 'none'}\n\n"
+        f"Diagnosis attempts: {len(ctx.diagnosis_attempts)}\n\n"
+        f"Cache hits: {ctx.cache_hits}\n"
+    )
+    summary_path = ctx.artifacts_dir / "consolidation" / "summary.md"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(summary, encoding="utf-8")
+    _write_json(ctx.artifacts_dir / "consolidation" / "cost-report.json", cost_report)
+    return NodeResult(
+        node="consolidation",
+        outcome=NodeOutcome.OK,
+        outputs={"reindexed": list(ctx.changed_files), "cost": cost_report},
+        llm_tokens=_budget_for("consolidation"),
+        artifacts=[mem_name, graph_name, "consolidation/summary.md"],
+    )
+
+
+# Node dispatch table.
+NODE_HANDLERS: dict[str, Any] = {
+    "init": node_init,
+    "gather_context": node_gather_context,
+    "plan": node_plan,
+    "mutate": node_mutate,
+    "local_inspection": node_local_inspection,
+    "diagnose": node_diagnose,
+    "escalation": node_escalation,
+    "consolidation": node_consolidation,
+}
+
+
+# --------------------------------------------------------------- exit-condition guards
+def can_exit_init(ctx: OCFlowContext) -> bool:
+    """Book §7: session + definition + config snapshot + capabilities + policy known."""
+    return ctx.init_done and (ctx.artifacts_dir / "init.json").exists()
+
+
+def can_exit_gather_context(ctx: OCFlowContext) -> bool:
+    """Book §8: a context envelope must exist before planning (FLOW-3)."""
+    return ctx.envelope is not None
+
+
+def can_exit_plan(ctx: OCFlowContext) -> bool:
+    """Book §9: a frozen contract with criteria + verification must exist."""
+    return (
+        ctx.contract is not None
+        and bool(ctx.contract.acceptance_criteria)
+        and bool(ctx.contract.verification_plan)
+    )
+
+
+def can_exit_mutate(ctx: OCFlowContext) -> bool:
+    """Book §10: receipts + patch + rollback checkpoint must exist."""
+    return (
+        ctx.checkpoint_id is not None
+        and (ctx.artifacts_dir / "patch.diff").exists()
+        and (ctx.artifacts_dir / "apply-receipts.json").exists()
+    )
+
+
+EXIT_GUARDS: dict[str, Any] = {
+    "init": can_exit_init,
+    "gather_context": can_exit_gather_context,
+    "plan": can_exit_plan,
+    "mutate": can_exit_mutate,
+}
+
+
+def can_exit(node: str, ctx: OCFlowContext) -> bool:
+    """Return whether ``node``'s exit conditions are satisfied (default: True)."""
+    guard = EXIT_GUARDS.get(node)
+    return guard(ctx) if guard is not None else True
+
+
+def make_apply_edit(
+    path: str,
+    *,
+    content: str,
+    operation: ApplyOperation = ApplyOperation.CREATE_FILE,
+    reason: str,
+    requirement_ref: str,
+    start_line: int | None = None,
+    end_line: int | None = None,
+    after_line: int | None = None,
+) -> ApplyEdit:
+    """Convenience builder for a contract-bearing :class:`ApplyEdit` (tests/CLI)."""
+    return ApplyEdit(
+        path=path,
+        operation=operation,
+        content=content,
+        reason=reason,
+        requirement_refs=[requirement_ref],
+        start_line=start_line,
+        end_line=end_line,
+        after_line=after_line,
+    )

@@ -82,6 +82,10 @@ class PhaseDefinition(BaseModel):
     required_artifacts: list[str] = Field(default_factory=list)
     expected_artifacts: list[str] = Field(default_factory=list)
     required_tools: list[str] = Field(default_factory=list)
+    # First-class per-phase harness declaration (spec PR-004 REQ-05). Names the
+    # PR-006 SDD harness subsystems this phase requires (see harness/matrix.py
+    # SDD_HARNESS_MATRIX); consumed read-only to resolve strictness per profile.
+    required_harnesses: list[str] = Field(default_factory=list)
 
 
 class PhaseState(BaseModel):

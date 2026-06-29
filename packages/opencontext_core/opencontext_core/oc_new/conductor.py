@@ -241,6 +241,18 @@ class OcNewConductor:
                 _e,
             )
 
+        # NOTE: spec PR-004 REQ-06 / SDD-CONV — mirror the harness spine's uniform
+        # per-phase decision receipt on the oc_new spine. One PhaseReceipt per
+        # phase (id, status, artifacts, declared harnesses) written through the
+        # PR-002 ReceiptStore. Advisory: never interrupts the conductor flow.
+        self._write_phase_receipt(
+            run_id=run_id,
+            phase_name=phase_name,
+            status=status,
+            artifact_paths=resolved if resolved is not None else [],
+            trace_id=getattr(state.identity, "trace_id", None),
+        )
+
         if status == "blocked":
             state = state.model_copy(
                 update={
@@ -465,11 +477,17 @@ class OcNewConductor:
                 phase=phase_def.name,
                 persona=phase_def.persona or "",
                 skill=phase_def.skill or "",
+                # SDD-CONV: name the inputs this phase will consume so the handoff
+                # artifact is an explicit input contract for the next persona.
+                required_inputs=list(phase_def.required_artifacts),
                 expected_outputs=list(phase_def.expected_artifacts),
                 allowed_tools=list(phase_def.required_tools),
                 context_report_ref=context_report_ref,
                 budget=self._handoff_budget(state, phase_def.name),
             )
+            # SDD-CONV: persist the handoff as a PersonaHandoff artifact on disk so
+            # the phase transition leaves an inspectable input-naming record.
+            self._write_handoff_artifact(state, phase_def.name, handoff)
             metadata: dict[str, object] = {
                 "memory": mem_metadata,
                 "context_report_ref": context_report_ref,
@@ -524,6 +542,74 @@ class OcNewConductor:
         from opencontext_core.agentic.modes import should_execute_code
 
         return should_execute_code(state.config.flow_mode)
+
+    def _write_handoff_artifact(
+        self, state: OcNewRunState, phase_name: str, handoff: AgentHandoff
+    ) -> None:
+        """Persist a phase handoff as a PersonaHandoff artifact (SDD-CONV).
+
+        Projects the :class:`AgentHandoff` onto the PR-006 ``PersonaHandoff`` view
+        (book field names) and writes it to ``handoff.<phase>.json`` in the run
+        dir, naming the inputs the phase will consume. Advisory: any failure is
+        logged and swallowed so it never interrupts the conductor flow.
+        """
+        try:
+            from opencontext_core.personas.handoff import PersonaHandoff
+
+            persona_handoff = PersonaHandoff.from_agent_handoff(handoff)
+            run_dir = self.store.run_dir(state.identity.run_id)
+            run_dir.mkdir(parents=True, exist_ok=True)
+            (run_dir / f"handoff.{phase_name}.json").write_text(
+                persona_handoff.model_dump_json(indent=2), encoding="utf-8"
+            )
+        except Exception as exc:
+            _logger.warning(
+                "Handoff artifact write failed for phase %s (run %s): %s",
+                phase_name,
+                state.identity.run_id,
+                exc,
+            )
+
+    def _write_phase_receipt(
+        self,
+        run_id: str,
+        phase_name: str,
+        status: str,
+        artifact_paths: list[str],
+        trace_id: str | None = None,
+    ) -> None:
+        """Mirror the harness spine's per-phase receipt on the oc_new spine.
+
+        Writes one :class:`PhaseReceipt` (spec PR-004 REQ-06 / SDD-CONV) through
+        the PR-002 ``ReceiptStore`` into the run dir, recording the phase id, its
+        resolved status, the artifacts it produced and the phase's declared
+        required harnesses. Advisory: any failure is logged and swallowed so it
+        never interrupts the conductor flow.
+        """
+        try:
+            from opencontext_core.harness.receipt_store import ReceiptStore
+            from opencontext_core.models.receipt import PhaseReceipt
+
+            phase_def = next((p for p in OC_NEW_FLOW if p.name == phase_name), None)
+            required = list(getattr(phase_def, "required_harnesses", []) or [])
+            run_dir = self.store.run_dir(run_id)
+            run_dir.mkdir(parents=True, exist_ok=True)
+            receipt = PhaseReceipt(
+                run_id=run_id,
+                phase=phase_name,
+                status=status,
+                artifact_refs=list(artifact_paths or []),
+                required_harnesses=required,
+                trace_id=trace_id,
+            )
+            ReceiptStore(run_dir).write(receipt)
+        except Exception as exc:
+            _logger.warning(
+                "Phase receipt write failed for phase %s (run %s): %s",
+                phase_name,
+                run_id,
+                exc,
+            )
 
     def _write_receipt(self, state: OcNewRunState) -> None:
         """Build and write AgenticReceipt to the run directory after archive."""

@@ -10,6 +10,7 @@ OC_NEW_FLOW: tuple[PhaseDefinition, ...] = (
         persona="oc-explorer",
         skill="oc-explore",
         expected_artifacts=["explore.artifact.json", "context-pack.json"],
+        required_harnesses=["context", "kg", "memory"],
         required_tools=[
             "opencontext_memory_context",
             "opencontext_context",
@@ -23,6 +24,7 @@ OC_NEW_FLOW: tuple[PhaseDefinition, ...] = (
         skill="oc-propose",
         required_artifacts=["explore.artifact.json"],
         expected_artifacts=["proposal.md", "proposal.json", "propose.artifact.json"],
+        required_harnesses=["planning"],
         required_tools=["opencontext_memory_context", "opencontext_memory_save"],
     ),
     PhaseDefinition(
@@ -31,6 +33,7 @@ OC_NEW_FLOW: tuple[PhaseDefinition, ...] = (
         skill="oc-spec",
         required_artifacts=["proposal.md"],
         expected_artifacts=["spec.md", "spec.json", "spec.artifact.json"],
+        required_harnesses=["planning"],
         required_tools=["opencontext_memory_context", "opencontext_memory_save"],
     ),
     PhaseDefinition(
@@ -39,6 +42,7 @@ OC_NEW_FLOW: tuple[PhaseDefinition, ...] = (
         skill="oc-design",
         required_artifacts=["spec.md"],
         expected_artifacts=["design.md", "design.json", "design.artifact.json"],
+        required_harnesses=["planning"],
         required_tools=[
             "opencontext_memory_context",
             "opencontext_context",
@@ -52,6 +56,7 @@ OC_NEW_FLOW: tuple[PhaseDefinition, ...] = (
         skill="oc-tasks",
         required_artifacts=["spec.md", "design.md"],
         expected_artifacts=["tasks.md", "tasks.json", "tasks.artifact.json"],
+        required_harnesses=["planning"],
         required_tools=["opencontext_memory_context", "opencontext_memory_save"],
     ),
     PhaseDefinition(
@@ -69,6 +74,7 @@ OC_NEW_FLOW: tuple[PhaseDefinition, ...] = (
         requires_approval=True,
         required_artifacts=["approval.json", "tasks.md"],
         expected_artifacts=["apply-manifest.json", "apply.artifact.json"],
+        required_harnesses=["mutation", "protocol"],
         required_tools=[
             "opencontext_memory_context",
             "opencontext_context",
@@ -91,6 +97,7 @@ OC_NEW_FLOW: tuple[PhaseDefinition, ...] = (
             "tdd-evidence.json",
             "quality-gate.json",
         ],
+        required_harnesses=["inspection", "evaluation", "security", "review"],
         required_tools=[
             "opencontext_memory_context",
             "opencontext_context",
@@ -105,6 +112,7 @@ OC_NEW_FLOW: tuple[PhaseDefinition, ...] = (
         skill="oc-review",
         required_artifacts=["verify-report.json"],
         expected_artifacts=["review-report.json", "review.artifact.json"],
+        required_harnesses=["review"],
         required_tools=[
             "opencontext_memory_context",
             "opencontext_context",
@@ -123,6 +131,7 @@ OC_NEW_FLOW: tuple[PhaseDefinition, ...] = (
             "harness-report.json",
         ],
         expected_artifacts=["archive-report.json", "archive.artifact.json", "receipt.json"],
+        required_harnesses=["consolidation", "memory", "kg"],
         required_tools=["opencontext_memory_context", "opencontext_memory_save"],
     ),
 )
