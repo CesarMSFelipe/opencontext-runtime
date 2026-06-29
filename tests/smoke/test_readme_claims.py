@@ -308,6 +308,22 @@ class TestMCPTools:
             "opencontext_memory_context",
             "opencontext_memory_judge",
             "opencontext_quality",
+            # PR-013 interface tools: session step tools + workflow/profile meta
+            # tools + config doctor (13 added; total 32). The README + SVG alt
+            # text were updated in lockstep (test_readme_mcp_tool_count_matches_server).
+            "opencontext_session_start",
+            "opencontext_session_next",
+            "opencontext_session_observe",
+            "opencontext_session_apply",
+            "opencontext_session_inspect",
+            "opencontext_session_status",
+            "opencontext_session_resume",
+            "opencontext_session_archive",
+            "opencontext_workflow_list",
+            "opencontext_workflow_explain",
+            "opencontext_profile_list",
+            "opencontext_profile_explain",
+            "opencontext_doctor",
         }
     )
 

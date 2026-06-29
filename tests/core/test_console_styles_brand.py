@@ -19,4 +19,6 @@ def test_no_marketing_strings_in_dx(needle: str) -> None:
 def test_console_styles_references_brand_mark() -> None:
     text = CONSOLE_STYLES.read_text(encoding="utf-8")
     assert "README_LOGO_TERMINAL" in text, "console_styles.py must reference README_LOGO_TERMINAL"
-    assert "README_LOGO_TERMINAL_COMPACT" in text, "console_styles.py must reference README_LOGO_TERMINAL_COMPACT"
+    assert "README_LOGO_TERMINAL_COMPACT" in text, (
+        "console_styles.py must reference README_LOGO_TERMINAL_COMPACT"
+    )

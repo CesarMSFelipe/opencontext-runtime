@@ -31,6 +31,9 @@ _EXPECTED = {
     "oc-harness-verifier",
     "oc-archivist",
     "oc-evolution-steward",
+    # PR-006 added the two missing book built-ins (doc 05 §7.11/§7.12).
+    "oc-diagnostician",
+    "oc-security-reviewer",
 }
 
 

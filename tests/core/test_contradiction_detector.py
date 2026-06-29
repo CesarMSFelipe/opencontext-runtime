@@ -38,8 +38,11 @@ def test_same_key_different_content_detected() -> None:
     existing = [
         make_record("old", key="proc:auth", content="auth never needs refresh", confidence=0.5)
     ]
-    contradicted = detector.detect(new_rec, existing)
-    assert "old" in contradicted
+    # PR-009: detect() now returns typed MemoryConflict reports; detect_ids() is
+    # the id-list shim the deterministic write path consumes.
+    conflicts = detector.detect(new_rec, existing)
+    assert [c.record_id for c in conflicts] == ["old"]
+    assert detector.detect_ids(new_rec, existing) == ["old"]
 
 
 def test_same_key_same_content_no_contradiction() -> None:

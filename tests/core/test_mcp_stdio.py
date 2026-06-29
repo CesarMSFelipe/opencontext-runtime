@@ -87,7 +87,9 @@ class TestMCPServer:
         """Server initializes with correct tools."""
 
         server = MCPServer(db_path=tmp_path / "test.db")
-        assert len(server.tools) == 19
+        # PR-013 added 13 interface tools (8 session_* + workflow/profile meta +
+        # doctor) on top of the original 19 analysis/edit/memory/run tools.
+        assert len(server.tools) == 32
         assert "opencontext_search" in server.tools
         assert "opencontext_context" in server.tools
         assert "opencontext_callers" in server.tools
@@ -108,6 +110,12 @@ class TestMCPServer:
         assert "opencontext_memory_judge" in server.tools
         # architecture & code-quality gate tool
         assert "opencontext_quality" in server.tools
+        # PR-013 interface tools: session step + workflow/profile meta + doctor.
+        assert "opencontext_session_start" in server.tools
+        assert "opencontext_session_archive" in server.tools
+        assert "opencontext_workflow_explain" in server.tools
+        assert "opencontext_profile_list" in server.tools
+        assert "opencontext_doctor" in server.tools
         server.close()
 
     def test_handle_initialize(self, tmp_path: Path) -> None:
@@ -132,7 +140,7 @@ class TestMCPServer:
             server._handle_request(request)
             mock_send.assert_called_once()
             result = mock_send.call_args[0][1]
-            assert len(result["tools"]) == 19
+            assert len(result["tools"]) == 32
             assert all("name" in t for t in result["tools"])
             assert all("description" in t for t in result["tools"])
         server.close()
