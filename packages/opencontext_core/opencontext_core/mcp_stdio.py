@@ -26,6 +26,7 @@ from opencontext_core.tools.policy import ToolPermissionPolicy
 if TYPE_CHECKING:
     from opencontext_core.indexing.graph_db import Node
     from opencontext_core.runtime import OpenContextRuntime
+    from opencontext_core.runtime.api import RuntimeApi
 
 
 # Adaptive max_nodes tiers based on indexed file count
@@ -1099,7 +1100,7 @@ class MCPServer:
         except Exception:
             pass
 
-    def _runtime_api(self, params: dict[str, Any]) -> Any:
+    def _runtime_api(self, params: dict[str, Any]) -> RuntimeApi:
         from pathlib import Path
 
         from opencontext_core.runtime.api import RuntimeApi

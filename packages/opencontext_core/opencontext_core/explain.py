@@ -57,7 +57,8 @@ def _track_phases(workflow_id: str) -> list[str]:
         track = WORKFLOW_TRACKS.get(track_name)
         if track is None:
             return []
-        return list(track.get("phases", []))  # type: ignore[arg-type]
+        phases = track.get("phases", [])
+        return [str(p) for p in phases] if isinstance(phases, list) else []
     except Exception:
         return []
 

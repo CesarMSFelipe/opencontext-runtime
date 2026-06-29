@@ -169,7 +169,7 @@ def handle_session(args: Any) -> None:
             rows.append(row)
             seen.add(row["session_id"])
 
-        def _human(_: dict[str, Any]) -> None:
+        def _human_list(_: dict[str, Any]) -> None:
             if not rows:
                 print("No runtime sessions found.")
                 return
@@ -177,7 +177,7 @@ def handle_session(args: Any) -> None:
                 workflow = r.get("workflow") or "-"
                 print(f"{r['session_id']}\t{workflow}\t{r['status']}\t{r['task'][:48]}")
 
-        emit({"sessions": rows}, mode, _human)
+        emit({"sessions": rows}, mode, _human_list)
         return
 
     api = RuntimeApi(root=root)
@@ -190,10 +190,10 @@ def handle_session(args: Any) -> None:
                 data = report.model_dump()
             except FileNotFoundError:
                 # Fall back to the oc_flow on-disk session tree (`opencontext run`).
-                row = _oc_flow_session_row(root / ".opencontext" / "sessions" / sid)
-                if row is None:
+                fallback_row = _oc_flow_session_row(root / ".opencontext" / "sessions" / sid)
+                if fallback_row is None:
                     raise
-                data = row
+                data = fallback_row
         elif command == "resume":
             data = api.resume(sid).model_dump()
         elif command == "archive":

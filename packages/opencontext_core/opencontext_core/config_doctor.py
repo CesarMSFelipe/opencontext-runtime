@@ -143,9 +143,6 @@ def validate(root: str | Path = ".") -> list[DeepDiagnostic]:
         )
         return diags
 
-    if config is None:
-        return diags
-
     # 5. Provider sanity (bounded; PR-012 owns deep gateway validation).
     providers = config.providers
     if providers.external_enabled and config.security.mode.value == "air_gapped":

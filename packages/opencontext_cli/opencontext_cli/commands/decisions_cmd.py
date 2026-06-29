@@ -85,20 +85,20 @@ def handle_decisions(args: Any) -> None:
         if run is None:
             print(f"Run not found: {args.run_id}", file=sys.stderr)
             sys.exit(1)
-        rows = summarize_decision_log(run.decision_log)
+        decision_rows = summarize_decision_log(run.decision_log)
         if getattr(args, "json", False):
-            print(json.dumps(rows, indent=2))
+            print(json.dumps(decision_rows, indent=2))
         else:
-            if not rows:
+            if not decision_rows:
                 print(f"No decisions recorded for run {args.run_id}.")
                 return
-            for row in rows:
-                governed = f" [governed_by={row['governed_by']}]" if row["governed_by"] else ""
-                print(f"- {row['kind']}: {row['selected']}{governed}")
-                if row["rationale"]:
-                    print(f"    rationale: {row['rationale']}")
-                if row["alternatives"]:
-                    print(f"    alternatives: {', '.join(row['alternatives'])}")
+            for drow in decision_rows:
+                governed = f" [governed_by={drow['governed_by']}]" if drow["governed_by"] else ""
+                print(f"- {drow['kind']}: {drow['selected']}{governed}")
+                if drow["rationale"]:
+                    print(f"    rationale: {drow['rationale']}")
+                if drow["alternatives"]:
+                    print(f"    alternatives: {', '.join(drow['alternatives'])}")
         return
 
     print("Usage: opencontext decisions [list|show]")

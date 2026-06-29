@@ -125,8 +125,12 @@ def _handle_suite(args: Any) -> None:
     # run
     smoke = bool(getattr(args, "smoke", False))
     root = getattr(args, "root", ".")
-    name = getattr(args, "name", None)
-    reports = [runner.run(name, root, smoke=smoke)] if name else runner.run_all(root, smoke=smoke)
+    suite_name = getattr(args, "name", None)
+    reports = (
+        [runner.run(suite_name, root, smoke=smoke)]
+        if suite_name
+        else runner.run_all(root, smoke=smoke)
+    )
     print(_json.dumps([r.model_dump(mode="json") for r in reports], indent=2))
     # Honest exit: only a real FAILED gate is a failure; NOT_MEASURED never blocks.
     if any(r.status.value == "failed" for r in reports):
