@@ -1,7 +1,13 @@
 """CompositeMemoryStore — routes writes and searches by MemoryLayer.
 
 EPISODIC / SEMANTIC  → EngramMemoryStore (long-term, external)
-PROCEDURAL / FAILURE / WORKING → LocalMemoryStore (SQLite, fast, private)
+PROCEDURAL / FAILURE / WORKING / PROJECT / HARNESS_EXPERIENCE
+    → LocalMemoryStore (SQLite, fast, private)
+
+PR-009 adds ``PROJECT`` and ``HARNESS_EXPERIENCE`` as repo-local curation layers;
+both route to the local store (Engram stays semantic/episodic only). A module-load
+assertion guarantees every ``MemoryLayer`` is explicitly routed so a future layer
+addition can never silently default.
 
 When scope=None, both stores are searched and results are merged via RRF.
 Both backing stores are unchanged; this class only adds routing.
@@ -19,7 +25,22 @@ from opencontext_core.models.evidence import EvidenceRef
 _log = logging.getLogger(__name__)
 
 _ENGRAM_LAYERS = {MemoryLayer.EPISODIC, MemoryLayer.SEMANTIC}
-_LOCAL_LAYERS = {MemoryLayer.PROCEDURAL, MemoryLayer.FAILURE, MemoryLayer.WORKING}
+_LOCAL_LAYERS = {
+    MemoryLayer.PROCEDURAL,
+    MemoryLayer.FAILURE,
+    MemoryLayer.WORKING,
+    MemoryLayer.PROJECT,
+    MemoryLayer.HARNESS_EXPERIENCE,
+}
+
+# Anti-regression: every MemoryLayer must be routed to exactly one backend so a
+# new layer cannot silently default to local (PR-009 SPEC-MEM-009-11).
+_ROUTED_LAYERS = _ENGRAM_LAYERS | _LOCAL_LAYERS
+assert _ROUTED_LAYERS == set(MemoryLayer), (
+    "every MemoryLayer must be routed in composite.py; "
+    f"unrouted: {set(MemoryLayer) - _ROUTED_LAYERS}"
+)
+assert not (_ENGRAM_LAYERS & _LOCAL_LAYERS), "a MemoryLayer is routed to two backends"
 
 
 class CompositeMemoryStore:

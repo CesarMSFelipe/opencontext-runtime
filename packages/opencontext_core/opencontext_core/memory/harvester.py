@@ -12,6 +12,7 @@ from opencontext_core.memory.session_summary import SessionSummary
 from opencontext_core.models.agent_memory import DecayPolicy, MemoryLayer, MemoryRecord
 
 if TYPE_CHECKING:
+    from opencontext_core.memory.harness import MemoryHarness
     from opencontext_core.memory_usability.context_repository import ContextRepository
 
 
@@ -100,10 +101,55 @@ class MemoryHarvester:
     """
 
     def __init__(
-        self, store: AgentMemoryStore, context_repo: ContextRepository | None = None
+        self,
+        store: AgentMemoryStore,
+        context_repo: ContextRepository | None = None,
+        *,
+        harness: MemoryHarness | None = None,
     ) -> None:
         self.store = store
         self._context_repo = context_repo
+        # PR-009: when a MemoryHarness is injected (runtime.memory_v2_enabled), every
+        # harvested record is promoted through the harness — the sole durable writer —
+        # instead of writing directly to the store. Default None keeps the legacy
+        # direct-write path verbatim.
+        self._harness = harness
+
+    def _persist(self, record: MemoryRecord, run_id: str) -> None:
+        """Route a harvested record to the store, via the harness when enabled."""
+        if self._harness is None:
+            self.store.write(record)
+            return
+        from opencontext_core.memory_usability.memory_candidates import (
+            MemoryCandidate,
+            MemoryKind,
+        )
+        from opencontext_core.models.context import DataClassification
+        from opencontext_core.models.evidence import EvidenceRef
+
+        candidate = MemoryCandidate(
+            content=record.content,
+            source=f"run:{run_id}",
+            kind=MemoryKind.FACT,  # harness re-classifies from content
+            novelty_score=0.6,
+            reuse_likelihood=record.confidence,
+            classification=DataClassification.INTERNAL,
+            token_cost=max(1, len(record.content) // 4),
+            source_trust=0.7,
+            proposed_by="harvester",
+            evidence_refs=[
+                EvidenceRef(
+                    source=f"run:{run_id}",
+                    source_type="run",
+                    confidence=record.confidence,
+                    run_id=run_id,
+                )
+            ],
+            expected_reuse="bias future runs of similar tasks",
+            confidence=record.confidence,
+            metadata={"key": record.key, "layer": record.layer.value},
+        )
+        self._harness.promote(candidate)
 
     def harvest(self, result: Any) -> list[MemoryRecord]:
         """Extract learnings from a HarnessRunResult and write to store.
@@ -142,7 +188,7 @@ class MemoryHarvester:
                 key=episodic_key,
                 content=(f"Task '{task}' last completed with status '{status}' (run {run_id})."),
             )
-            self.store.write(episodic)
+            self._persist(episodic, run_id)
             records.append(episodic)
         # Otherwise: skip — the previous task-version episode remains the canonical one.
 
@@ -159,7 +205,7 @@ class MemoryHarvester:
                     ),
                     confidence=0.7,
                 )
-                self.store.write(procedural)
+                self._persist(procedural, run_id)
                 records.append(procedural)
 
         # Failure patterns: missing context. Prior to this change linked_nodes
@@ -185,7 +231,7 @@ class MemoryHarvester:
                     linked_nodes=missing,
                     confidence=0.9,
                 )
-                self.store.write(failure)
+                self._persist(failure, run_id)
                 records.append(failure)
 
         if self._context_repo is not None:
