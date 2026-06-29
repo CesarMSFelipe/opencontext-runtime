@@ -16,6 +16,15 @@ class TestSddDeprecation:
         assert expected.issubset(_DeprecationAwareParser._DEPRECATED)
 
     def test_original_deprecated_commands_still_present(self) -> None:
-        """Legacy deprecated commands are still in the frozenset."""
-        original = {"run", "orchestrate", "validate", "propose", "governance", "evidence"}
+        """Legacy deprecated commands are still in the frozenset.
+
+        NOTE: ``run`` was removed from this set by PR-007 — it is now the OC Flow
+        execution command (`opencontext run "<task>" --workflow oc-flow`, FLOW-16),
+        no longer a deprecated alias.
+        """
+        original = {"orchestrate", "validate", "propose", "governance", "evidence"}
         assert original.issubset(_DeprecationAwareParser._DEPRECATED)
+
+    def test_run_is_no_longer_deprecated(self) -> None:
+        """PR-007 FLOW-16: ``run`` is the OC Flow execution command, not deprecated."""
+        assert "run" not in _DeprecationAwareParser._DEPRECATED

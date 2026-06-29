@@ -11,12 +11,16 @@ from opencontext_core.models.evidence import EvidenceRef
 def test_failure_layer_exists():
     assert MemoryLayer.FAILURE == "failure"
     layers = list(MemoryLayer)
-    assert len(layers) == 5
+    # PR-009 six-type taxonomy: adds PROJECT and HARNESS_EXPERIENCE to the
+    # original five layers (WORKING is retained as scratch).
+    assert len(layers) == 7
     assert MemoryLayer.SEMANTIC in layers
     assert MemoryLayer.EPISODIC in layers
     assert MemoryLayer.PROCEDURAL in layers
     assert MemoryLayer.WORKING in layers
     assert MemoryLayer.FAILURE in layers
+    assert MemoryLayer.PROJECT in layers
+    assert MemoryLayer.HARNESS_EXPERIENCE in layers
 
 
 def test_decay_policy_defaults():

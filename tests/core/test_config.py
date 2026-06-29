@@ -158,9 +158,15 @@ def test_public_surfaces_do_not_expose_external_names() -> None:
         root / "opencontext.yaml",
         root / "packages/opencontext_cli/opencontext_cli/main.py",
         root / "packages/opencontext_core/opencontext_core/mcp_stdio.py",
-        root / "packages/opencontext_core/opencontext_core/runtime.py",
+        root / "packages/opencontext_core/opencontext_core/runtime/__init__.py",
         *sorted((root / "packages/opencontext_core/opencontext_core/indexing").glob("*.py")),
-        *sorted((root / "docs").rglob("*.md")),
+        # Shipped docs only; the internal planning corpus (architecture book) is not a
+        # public surface and intentionally references external systems for comparison.
+        *sorted(
+            p
+            for p in (root / "docs").rglob("*.md")
+            if "OpenContext_Complete_Plans_and_Architecture_Book" not in p.parts
+        ),
         *sorted((root / "examples").rglob("opencontext.yaml")),
     ]
     public_text = "\n".join(

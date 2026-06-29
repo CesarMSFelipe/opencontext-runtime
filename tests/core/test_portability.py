@@ -59,7 +59,11 @@ def test_handle_run_honors_root(tmp_path: Path, monkeypatch) -> None:
     out = server._handle_run({"task": "x", "root": str(tmp_path)})
 
     assert captured["root"] == tmp_path.resolve()
-    assert out["run_id"] == "r1"
+    # PR-013: run now routes through RuntimeApi which mints its own run/session
+    # ids and returns the full RunContract (no longer the bare legacy run_id).
+    assert out["run_id"]
+    assert out["session_id"].startswith("sess-")
+    assert "artifacts" in out and "gates" in out
 
 
 def test_handle_run_defaults_root_to_cwd(tmp_path: Path, monkeypatch) -> None:

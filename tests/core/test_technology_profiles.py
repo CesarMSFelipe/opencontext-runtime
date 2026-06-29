@@ -144,9 +144,20 @@ def test_core_python_sources_do_not_contain_first_party_profile_logic() -> None:
     excluded = {
         "indexing/framework_routes.py",  # route parser for django/fastapi/flask
         "indexing/framework_router.py",  # router detection, sibling to framework_routes
+        # PR-008 KG-13: convention-driven KG extraction (routes/services/config) for
+        # detectable PHP frameworks — same legitimate-reference category as the route
+        # parsers above; the *technology profile* detection still lives in opencontext_profiles.
+        "indexing/framework_profiles/base.py",
+        "indexing/framework_profiles/__init__.py",
+        "indexing/framework_profiles/drupal.py",
+        "indexing/framework_profiles/symfony.py",
         "evaluation/comparative.py",  # benchmark tasks use framework names as test data
         "workflow/extension_registry.py",  # extension registry lists framework-related extensions
         "project/profiles.py",  # technology profile detection checks framework names
+        # PR-014 Studio: uses FastAPI as its read-only web server — a genuine web-framework
+        # dependency, not technology-profile-detection logic (the concern this guard protects).
+        "studio/app.py",
+        "studio/__init__.py",
     }
     offenders: list[str] = []
     for path in core_root.rglob("*.py"):

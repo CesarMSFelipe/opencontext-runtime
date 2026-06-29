@@ -23,7 +23,8 @@ def test_public_personas_exact_ids():
 
 
 def test_delegation_personas_count():
-    assert len(delegation_personas()) == 10
+    # PR-006 added oc-diagnostician + oc-security-reviewer (both hidden_delegation).
+    assert len(delegation_personas()) == 12
 
 
 def test_completeness_guard():
@@ -70,6 +71,6 @@ def test_persona_list_delegates_shows_only_delegation(capsys):
     out = capsys.readouterr().out
     for pid in _PUBLIC_IDS:
         assert pid not in out
-    assert len(delegation_personas()) == 10
+    assert len(delegation_personas()) == 12
     for p in delegation_personas():
         assert p.id in out
