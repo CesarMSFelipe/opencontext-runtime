@@ -56,7 +56,7 @@ def snapshot_contracts() -> dict[str, dict[str, object]]:
             tree = ast.parse(py.read_text(encoding="utf-8"))
         except SyntaxError:
             continue
-        rel = str(py.relative_to(ROOT))
+        rel = py.relative_to(ROOT).as_posix()  # posix keys: stable across OSes (Windows)
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef) or "VersionedContract" not in _base_names(node):
                 continue
