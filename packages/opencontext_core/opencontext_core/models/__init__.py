@@ -14,7 +14,14 @@ from opencontext_core.models.context import (
     TokenBudget,
 )
 from opencontext_core.models.llm import LLMRequest, LLMResponse
-from opencontext_core.models.memory import MemoryItem, MemoryType, ProjectMemorySnapshot
+from opencontext_core.models.memory import (
+    MemoryConflict,
+    MemoryItem,
+    MemoryQuery,
+    MemoryReceipt,
+    MemoryType,
+    ProjectMemorySnapshot,
+)
 from opencontext_core.models.project import (
     FileKind,
     ProjectFile,
@@ -38,7 +45,10 @@ __all__ = [
     "FileKind",
     "LLMRequest",
     "LLMResponse",
+    "MemoryConflict",
     "MemoryItem",
+    "MemoryQuery",
+    "MemoryReceipt",
     "MemoryType",
     "ProjectFile",
     "ProjectManifest",

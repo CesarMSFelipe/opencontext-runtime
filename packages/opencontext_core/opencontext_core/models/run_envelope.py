@@ -27,14 +27,38 @@ class ModelUse(BaseModel):
 
 
 class PolicyDecision(BaseModel):
+    """Serialized policy decision attached to a run (L0 evidence record).
+
+    The canonical, runtime-enforced decision is
+    ``opencontext_core.policy.models.PolicyDecision`` (L3); this L0 record is the
+    shape persisted on :class:`RunEnvelope` so the envelope never imports the
+    governance layer. The ``decision`` literal accepts both the canonical verbs
+    (``allow``/``warn``/``ask``/``deny``) and the legacy serialized values
+    (``allowed``/``denied``/``redacted``/``skipped``) for backward compatibility.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     id: str
     subject: str
     operation: str
-    decision: Literal["allowed", "denied", "redacted", "skipped"]
+    decision: Literal[
+        "allow",
+        "warn",
+        "ask",
+        "deny",
+        "allowed",
+        "denied",
+        "redacted",
+        "skipped",
+    ]
     reason: str
     policy: str
+    # Canonical fields (PR-005) — optional so legacy construction still validates.
+    policy_id: str = ""
+    evidence_refs: list[str] = Field(default_factory=list)
+    required_approval: bool = False
+    remediation: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

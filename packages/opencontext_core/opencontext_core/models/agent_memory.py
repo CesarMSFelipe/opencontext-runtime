@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -11,13 +12,22 @@ from opencontext_core.models.evidence import EvidenceRef
 
 
 class MemoryLayer(StrEnum):
-    """The five explicit memory layers used by the OpenContext agent memory system."""
+    """The memory layers used by the OpenContext agent memory system.
+
+    Book OC-MEMORY-001 §5 six-type taxonomy: ``episodic``, ``semantic``,
+    ``procedural``, ``project``, ``failure`` (== book ``failure_pattern``) and
+    ``harness_experience``. ``working`` is retained as the short-lived scratch
+    layer. ``PROJECT``/``HARNESS_EXPERIENCE`` are PR-009 additions; both route to
+    the local store (see ``memory/composite.py``).
+    """
 
     SEMANTIC = "semantic"
     EPISODIC = "episodic"
     PROCEDURAL = "procedural"
     WORKING = "working"
     FAILURE = "failure"
+    PROJECT = "project"
+    HARNESS_EXPERIENCE = "harness_experience"
 
 
 class MemoryLifecycle(StrEnum):
@@ -29,6 +39,21 @@ class MemoryLifecycle(StrEnum):
     EXPIRED = "expired"
 
 
+class MemoryStatus(StrEnum):
+    """Book OC-MEMORY-001 §6 belief-validity axis (distinct from ``MemoryLifecycle``).
+
+    ``lifecycle`` tracks candidate→active→superseded→expired wiring; ``status`` is
+    the belief-validity of the record's content: still trusted (``active``),
+    aged/contradicted but not replaced (``stale``), replaced (``superseded``), or
+    refused by the promotion gate (``rejected``).
+    """
+
+    ACTIVE = "active"
+    STALE = "stale"
+    SUPERSEDED = "superseded"
+    REJECTED = "rejected"
+
+
 class DecayPolicy(BaseModel):
     """Policy controlling how a memory record ages over time."""
 
@@ -37,8 +62,18 @@ class DecayPolicy(BaseModel):
 
 
 class MemoryRecord(BaseModel):
-    """A typed, versioned record in the agent memory graph."""
+    """A typed, versioned record in the agent memory graph.
 
+    PR-009 adds the book OC-MEMORY-001 §6 schema fields (``schema_version``,
+    ``scope``, ``structured``, ``status``, ``source_session_id``, ``last_seen_at``,
+    ``quality_score``). All are defaulted so every pre-v2 constructor and serialized
+    record keeps validating unchanged.
+    """
+
+    schema_version: str = Field(
+        default="opencontext.memory.v1",
+        description="Book schema version for this record (OC-MEMORY-001 §6).",
+    )
     id: str = Field(description="Stable unique identifier for this record.")
     layer: MemoryLayer = Field(description="Which memory layer this record belongs to.")
     key: str = Field(description="Namespaced key, e.g. 'auth:login_failure'.")
@@ -92,3 +127,43 @@ class MemoryRecord(BaseModel):
         default=MemoryLifecycle.CANDIDATE,
         description="Lifecycle state of this record.",
     )
+    scope: Literal["project", "repo", "workspace", "team", "user"] = Field(
+        default="project",
+        description="Ownership scope of this belief (OC-MEMORY-001 §6).",
+    )
+    structured: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional machine-readable payload alongside the prose content.",
+    )
+    status: MemoryStatus = Field(
+        default=MemoryStatus.ACTIVE,
+        description="Belief-validity status (active/stale/superseded/rejected).",
+    )
+    source_session_id: str | None = Field(
+        default=None,
+        description="Session that produced this record (sess_<ulid>), if known.",
+    )
+    last_seen_at: datetime | None = Field(
+        default=None,
+        description="When this belief was last re-observed/re-read (UTC).",
+    )
+    quality_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Composite quality (evidence + reuse + freshness + confidence). "
+        "Computed by memory.consolidation.memory_quality_score; 0.0 until set.",
+    )
+
+
+def migrate_legacy_record(payload: dict[str, Any]) -> MemoryRecord:
+    """Load a serialized (possibly pre-v2) record, backfilling the book fields.
+
+    Pre-v2 payloads lack ``schema_version``/``scope``/``status``/``structured`` etc.;
+    pydantic supplies the defaults, and this helper stamps ``schema_version`` so a
+    re-serialized record carries the current contract version. Idempotent: a v2
+    payload round-trips unchanged.
+    """
+    data = dict(payload)
+    data.setdefault("schema_version", "opencontext.memory.v1")
+    return MemoryRecord.model_validate(data)

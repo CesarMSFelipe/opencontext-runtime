@@ -70,6 +70,36 @@ class DataClassification(StrEnum):
     REGULATED = "regulated"
 
 
+class RetrievalStrategy(StrEnum):
+    """The seven named retrieval strategies (OC-CONTEXT-001 §Retrieval Strategies).
+
+    The Context Harness selects one per workflow node; each is a deterministic
+    re-ordering of an existing evidence plan, not a separate retriever.
+    """
+
+    SYMBOL_FIRST = "symbol_first"
+    TEST_FIRST = "test_first"
+    OWNER_FIRST = "owner_first"
+    FAILURE_FIRST = "failure_first"
+    ARCHITECTURE_FIRST = "architecture_first"
+    DECISION_FIRST = "decision_first"
+    COMMAND_FIRST = "command_first"
+
+
+class ContextProfile(StrEnum):
+    """The five context profiles (OC-CONTEXT-001 §Context Profiles).
+
+    Each profile tunes retrieval depth, compression aggressiveness, memory limits,
+    and file-loading thresholds. ``BALANCED`` reproduces current default behaviour.
+    """
+
+    BALANCED = "balanced"
+    LOW_COST = "low-cost"
+    PERFORMANCE = "performance"
+    ENTERPRISE = "enterprise"
+    RESEARCH = "research"
+
+
 class ContextItem(BaseModel):
     """A candidate or selected unit of context that may be sent to an LLM."""
 

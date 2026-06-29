@@ -11,6 +11,34 @@ from pydantic import BaseModel, ConfigDict, Field
 from opencontext_core.compat import UTC
 from opencontext_core.models.context import ContextItem, PromptSection, TokenBudget
 
+# --- KG event names (PR-008, OC-KG-001 §21; family "kg" per doc 59) -----------
+KG_EVENT_FAMILY = "kg"
+
+KG_INDEX_STARTED = "kg.index.started"
+KG_INDEX_COMPLETED = "kg.index.completed"
+KG_INDEX_FAILED = "kg.index.failed"
+KG_QUERY_STARTED = "kg.query.started"
+KG_QUERY_COMPLETED = "kg.query.completed"
+KG_SUBGRAPH_CREATED = "kg.subgraph.created"
+KG_DELTA_CREATED = "kg.delta.created"
+KG_NODE_SUPERSEDED = "kg.node.superseded"
+KG_CONFIDENCE_LOW = "kg.confidence.low"
+
+# The complete set of required KG events (guard/test surface).
+KG_EVENTS: frozenset[str] = frozenset(
+    {
+        KG_INDEX_STARTED,
+        KG_INDEX_COMPLETED,
+        KG_INDEX_FAILED,
+        KG_QUERY_STARTED,
+        KG_QUERY_COMPLETED,
+        KG_SUBGRAPH_CREATED,
+        KG_DELTA_CREATED,
+        KG_NODE_SUPERSEDED,
+        KG_CONFIDENCE_LOW,
+    }
+)
+
 
 class RunEvent(BaseModel):
     """One immutable typed step in a run's deterministic event ledger.
