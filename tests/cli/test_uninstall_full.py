@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -13,6 +14,18 @@ from opencontext_cli.commands.uninstall_cmd import (
     verify_no_global_traces,
     verify_no_traces,
 )
+
+
+def _isolate_home(monkeypatch: pytest.MonkeyPatch, home: Path) -> None:
+    """Redirect ``Path.home()``/``expanduser`` to *home* on every OS.
+
+    POSIX ``expanduser`` consults ``HOME``; Windows consults ``USERPROFILE``
+    first, so setting ``HOME`` alone leaks the real home (and the real
+    ``~/.config/opencontext``) into the verify/uninstall scans on Windows.
+    """
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+
 
 # ---------------------------------------------------------------------------
 # verify_no_traces unit tests
@@ -97,7 +110,7 @@ def test_verify_flag_exits_0_when_clean(tmp_path, monkeypatch):
     # developer's real ~/.config/opencontext or installed global personas.
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    _isolate_home(monkeypatch, home)
     monkeypatch.setattr(main_mod, "_resolve_flag", lambda v, _: v)
     args = SimpleNamespace(
         verify=True,
@@ -341,7 +354,7 @@ def test_full_uninstall_leaves_no_opencontext_dir(tmp_path, monkeypatch):
     """
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    _isolate_home(monkeypatch, home)
     project = tmp_path / "project"
     project.mkdir()
     # Simulate an installed project.
@@ -371,7 +384,7 @@ def test_empty_claude_parent_removed_after_full_uninstall(tmp_path, monkeypatch)
     """After sweeping oc-* files, the empty .claude/ dir must be removed."""
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    _isolate_home(monkeypatch, home)
     project = tmp_path / "project"
     project.mkdir()
 
@@ -396,7 +409,7 @@ def test_nonempty_claude_parent_left_intact_after_full_uninstall(tmp_path, monke
     """When .claude/ still has user content after sweep, it must stay."""
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    _isolate_home(monkeypatch, home)
     project = tmp_path / "project"
     project.mkdir()
 
@@ -426,7 +439,7 @@ def test_verify_no_global_traces_clean(tmp_path, monkeypatch):
     """An isolated, empty HOME has no global residue."""
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    _isolate_home(monkeypatch, home)
     assert verify_no_global_traces([]) == []
 
 
@@ -434,7 +447,7 @@ def test_verify_no_global_traces_detects_home_mcp_entry(tmp_path, monkeypatch):
     """The home mcp.json opencontext server is detected by parsing (regex misses it)."""
     home = tmp_path / "home"
     (home / ".claude").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    _isolate_home(monkeypatch, home)
     mcp = home / ".claude" / "mcp.json"
     mcp.write_text(
         json.dumps({"mcpServers": {"opencontext": {"command": "opencontext"}}}),
@@ -448,7 +461,7 @@ def test_verify_no_global_traces_ignores_clean_home_mcp(tmp_path, monkeypatch):
     """A home mcp.json without our server is not flagged."""
     home = tmp_path / "home"
     (home / ".claude").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    _isolate_home(monkeypatch, home)
     (home / ".claude" / "mcp.json").write_text(
         json.dumps({"mcpServers": {"mine": {"command": "x"}}}), encoding="utf-8"
     )
@@ -460,7 +473,7 @@ def test_verify_no_global_traces_detects_global_personas(tmp_path, monkeypatch):
     home = tmp_path / "home"
     agents = home / ".config" / "opencode" / "agents"
     agents.mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    _isolate_home(monkeypatch, home)
     persona = agents / "oc-orchestrator.md"
     persona.write_text("# persona", encoding="utf-8")
     residue = verify_no_global_traces([])
@@ -471,7 +484,7 @@ def test_verify_no_global_traces_detects_state_dirs(tmp_path, monkeypatch):
     """~/.config/opencontext and ~/.opencontext/backups are detected as residue."""
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    _isolate_home(monkeypatch, home)
     (home / ".config" / "opencontext").mkdir(parents=True)
     (home / ".opencontext" / "backups").mkdir(parents=True)
     residue = verify_no_global_traces([])
@@ -487,7 +500,7 @@ def test_verify_flag_exits_1_on_global_only_residue(tmp_path, monkeypatch):
     """
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    _isolate_home(monkeypatch, home)
     (home / ".config" / "opencontext").mkdir(parents=True)
     project = tmp_path / "project"
     project.mkdir()  # no OpenContext project traces
@@ -518,7 +531,7 @@ def test_full_uninstall_global_state_removes_home_opencontext_state(tmp_path, mo
     """--full --global-state removes known OpenContext HOME state."""
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    _isolate_home(monkeypatch, home)
     project = tmp_path / "project"
     project.mkdir()
 

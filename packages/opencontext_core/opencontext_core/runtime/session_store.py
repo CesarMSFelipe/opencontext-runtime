@@ -56,9 +56,11 @@ class SessionStore:
         + initial ``live-state.json``."""
         sid = session.session_id
         # Fill in canonical paths so the persisted record points at its own tree.
-        session.live_state_path = str(self.live_state_json(sid))
-        session.events_path = str(self.events_jsonl(sid))
-        session.artifacts_root = str(self.runs_dir(sid))
+        # as_posix: recorded paths stay separator-stable across OSes (Windows opens
+        # forward-slash paths fine); the JSON record is portable + assertable.
+        session.live_state_path = self.live_state_json(sid).as_posix()
+        session.events_path = self.events_jsonl(sid).as_posix()
+        session.artifacts_root = self.runs_dir(sid).as_posix()
         self.runs_dir(sid).mkdir(parents=True, exist_ok=True)
         events = self.events_jsonl(sid)
         if not events.exists():
