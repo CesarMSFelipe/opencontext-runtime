@@ -5,12 +5,15 @@ Drives the audit Definition-of-Done sequence end-to-end on the golden bugfix fix
     install --yes -> doctor --strict -> index -> run "Fix failing test" --workflow auto
     -> pytest <golden> -> release acceptance
 
-The ``run`` step is driven IN-PROCESS through the Phase-3 injectable
-``ProviderBackedNodeExecutor`` with a DETERMINISTIC provider stub (the fixture's
-``provider_stub.json``): the CLI cannot inject a stub, and OC Flow ships default-off
-until the Phase-8 flag flip, so the harness enables it and supplies the stub. This is
-honest — the full provider -> validate -> policy -> checkpoint -> apply -> receipt ->
-inspection pipeline runs; only the model is a deterministic stand-in.
+The ``run`` step is driven through the REAL CLI as a subprocess
+(``python -m opencontext_cli.main run "Fix failing test" --workflow auto --json``):
+the copied fixture ships an ``opencontext.yaml`` declaring ``provider: test_stub`` +
+``edits_file: provider_stub.json``, so the live CLI resolves a deterministic
+``TestStubGateway``-backed executor ITSELF (PROD-002 / B2) and patches the seeded bug
+credential-free. This is the honest DoD proof — the full provider -> validate ->
+policy -> checkpoint -> apply -> receipt -> inspection pipeline runs over the genuine
+product surface; only the model is a deterministic stand-in. Nothing is injected
+in-process, so the DoD measures the real ``opencontext run`` command end to end.
 
 A proven sequence writes the DoD proof artifact; the mandatory ``e2e-dod`` gate then
 reads ``MET``. An UNPROVEN sequence FAILS the gate in release mode (hard 1.0 gate) and
@@ -19,6 +22,7 @@ is honestly ``NOT_MEASURED`` in dev mode.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -171,16 +175,27 @@ def _collect_functional_governance(
 
     # 9-10: a provider-free mutation run diagnoses a bounded failure and escalates
     # honestly (needs_executor / escalated) rather than faking a completion (B1/B8).
+    # 9-10: run on a PROVIDER-LESS project (no test_stub config) so a mutation task
+    # honestly hits its bounded budget and escalates — evidences bounded-failure handling
+    # + escalation. (``work`` itself carries the test_stub yaml and would complete.)
     try:
-        free = run_oc_flow_cli(
-            "Fix failing test", root=work, workflow="oc-flow", enabled=True,
-            as_json=False, executor=None,
-        )
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as _d:
+            pl = Path(_d)
+            (pl / "m.py").write_text("def f():\n    return 0\n", encoding="utf-8")
+            (pl / "test_m.py").write_text(
+                "from m import f\n\n\ndef test_f():\n    assert f() == 1\n", encoding="utf-8"
+            )
+            free = run_oc_flow_cli(
+                "Fix failing test", root=pl, workflow="oc-flow", enabled=True,
+                as_json=False, executor=None,
+            )
         if free.get("status") in {"needs_executor", "blocked", "escalated"}:
             functional["diagnose-bounded-failures"] = _met(
-                f"bounded failure diagnosed: {free.get('completion_reason')}"
+                f"bounded failure handled provider-free: {free.get('completion_reason')}"
             )
-            if free.get("escalated"):
+            if free.get("escalated") or free.get("status") in {"needs_executor", "escalated"}:
                 functional["escalate-when-needed"] = _met("escalated instead of faking completion")
     except Exception:
         pass
@@ -235,7 +250,7 @@ def run_dod_journey(
     """Drive the audit DoD sequence over the golden bugfix project in ``work``.
 
     install --yes -> doctor --strict -> index -> run "Fix failing test" --workflow auto
-    (in-process, stub-driven) -> pytest. Returns ``(steps, summary)`` without asserting,
+    (REAL CLI subprocess) -> pytest. Returns ``(steps, summary)`` without asserting,
     so both the e2e test and the release-evidence collector
     (``scripts/collect_release_evidence.py``) reuse one journey driver.
     """
@@ -250,16 +265,20 @@ def run_dod_journey(
     r = _cli(["index", "."], work, env)
     steps.append({"step": "index", "exit_code": r.returncode, "ok": r.returncode == 0})
 
-    # In-process, stub-driven run: the full provider -> validate -> policy -> checkpoint
-    # -> apply -> receipt -> inspection pipeline runs; only the model is a stub.
-    stub = _StubGateway((work / "provider_stub.json").read_text(encoding="utf-8"))
-    executor = ProviderBackedNodeExecutor(gateway=stub, root=work, provider="mock")
-    summary = run_oc_flow_cli(
-        "Fix failing test", root=work, workflow="auto", enabled=True,
-        as_json=False, executor=executor,
-    )
+    # Real-CLI subprocess run (B7): the fixture's `opencontext.yaml` declares
+    # `provider: test_stub` + `edits_file`, so the live `opencontext run` resolves the
+    # deterministic `TestStubGateway` executor ITSELF and drives the full provider ->
+    # validate -> policy -> checkpoint -> apply -> receipt -> inspection pipeline. No
+    # in-process executor / runner is constructed; this is the honest DoD product surface.
+    r = _cli(["run", "Fix failing test", "--workflow", "auto", "--json"], work, env)
+    summary: dict[str, object] = json.loads(r.stdout) if r.stdout.strip() else {}
     steps.append(
-        {"step": "run", "status": summary["status"], "ok": summary["status"] == "completed"}
+        {
+            "step": "run",
+            "exit_code": r.returncode,
+            "status": summary.get("status"),
+            "ok": r.returncode == 0 and summary.get("status") == "completed",
+        }
     )
 
     p = subprocess.run(

@@ -21,7 +21,6 @@ Run:  .venv/bin/python scripts/collect_release_evidence.py --root .
 from __future__ import annotations
 
 import argparse
-import os
 import shutil
 import sys
 import tempfile
@@ -43,6 +42,7 @@ def main() -> int:
         run_dod_journey,
     )
 
+    from conftest import _subprocess_env  # type: ignore[import-not-found]
     from opencontext_core.evaluation.golden import FIXTURE_DIRS, GOLDEN_ROOT
     from opencontext_core.operating_model.release_gate import (
         write_dod_proof,
@@ -55,7 +55,10 @@ def main() -> int:
         shutil.copytree(GOLDEN_ROOT / FIXTURE_DIRS["oc-flow-localized-bugfix"], work)
         home = base / "home"
         home.mkdir(parents=True, exist_ok=True)
-        env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
+        # Same absolute-PYTHONPATH subprocess env the e2e uses, so the real-CLI `run`
+        # mutation step (now a subprocess via run_dod_journey) imports the packages
+        # regardless of how this script was invoked (B7).
+        env = _subprocess_env(home)
 
         steps, summary = run_dod_journey(work, env)
         passed = all(bool(s["ok"]) for s in steps)
