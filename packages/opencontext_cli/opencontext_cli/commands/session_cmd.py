@@ -7,7 +7,9 @@ runtime session tree lives under ``.opencontext/sessions/<id>/``.
 
 from __future__ import annotations
 
+import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,82 @@ from opencontext_cli.output import add_output_flag, emit, resolve_output_mode
 
 def _root(args: Any) -> Path:
     return Path(getattr(args, "root", None) or Path.cwd())
+
+
+def _read_json(path: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _iso_mtime(path: Path) -> str:
+    try:
+        ts = path.stat().st_mtime
+    except OSError:
+        return ""
+    return datetime.fromtimestamp(ts, tz=UTC).isoformat()
+
+
+def _oc_flow_session_row(session_dir: Path) -> dict[str, Any] | None:
+    """Derive a session row from the oc_flow on-disk layout (PR-002).
+
+    Reads ``<session_dir>/session.json`` or ``state.json`` when present, then
+    falls back to the most-recent ``runs/<run_id>/state.json`` written by
+    ``opencontext run`` (oc_flow). Returns ``None`` when nothing readable.
+    """
+    session_id = session_dir.name
+
+    # Session-level record, if oc_flow/PR-002 wrote one.
+    for name in ("session.json", "state.json"):
+        rec = _read_json(session_dir / name)
+        if rec:
+            return {
+                "session_id": rec.get("session_id", session_id),
+                "status": str(rec.get("status", "")),
+                "task": str(rec.get("task", "")),
+                "workflow": str(rec.get("workflow", "")),
+                "active_run_id": rec.get("active_run_id") or rec.get("run_id"),
+                "created": rec.get("created") or rec.get("created_at") or _iso_mtime(session_dir),
+            }
+
+    # Fall back to the latest run-level state.json under runs/<run_id>/.
+    runs_dir = session_dir / "runs"
+    if not runs_dir.is_dir():
+        return None
+    run_states = [
+        run_dir / "state.json"
+        for run_dir in runs_dir.iterdir()
+        if run_dir.is_dir() and (run_dir / "state.json").is_file()
+    ]
+    if not run_states:
+        return None
+    latest = max(run_states, key=lambda p: p.stat().st_mtime)
+    rec = _read_json(latest) or {}
+    return {
+        "session_id": rec.get("session_id", session_id),
+        "status": str(rec.get("status", "")),
+        "task": str(rec.get("task", "")),
+        "workflow": str(rec.get("workflow", "")),
+        "active_run_id": rec.get("run_id"),
+        "created": _iso_mtime(latest),
+    }
+
+
+def _oc_flow_sessions(root: Path) -> list[dict[str, Any]]:
+    """List sessions from the ``.opencontext/sessions/`` tree ``run`` writes."""
+    sessions_path = root / ".opencontext" / "sessions"
+    rows: list[dict[str, Any]] = []
+    if not sessions_path.is_dir():
+        return rows
+    for session_dir in sorted(sessions_path.glob("*")):
+        if not session_dir.is_dir():
+            continue
+        row = _oc_flow_session_row(session_dir)
+        if row is not None:
+            rows.append(row)
+    return rows
 
 
 def add_session_parser(subparsers: Any) -> None:
@@ -63,6 +141,8 @@ def handle_session(args: Any) -> None:
     if command == "list":
         store = SessionStore(root)
         rows: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        # Legacy SessionStore source (records with a session.json).
         if store.sessions_path.is_dir():
             for session_dir in sorted(store.sessions_path.glob("*")):
                 if not (session_dir / "session.json").is_file():
@@ -76,16 +156,26 @@ def handle_session(args: Any) -> None:
                         "session_id": session.session_id,
                         "status": str(session.status),
                         "task": getattr(session, "task", ""),
+                        "workflow": "",
                         "active_run_id": getattr(session, "active_run_id", None),
+                        "created": getattr(session, "created_at", ""),
                     }
                 )
+                seen.add(session.session_id)
+        # Union with the oc_flow on-disk session tree (`opencontext run`).
+        for row in _oc_flow_sessions(root):
+            if row["session_id"] in seen:
+                continue
+            rows.append(row)
+            seen.add(row["session_id"])
 
         def _human(_: dict[str, Any]) -> None:
             if not rows:
                 print("No runtime sessions found.")
                 return
             for r in rows:
-                print(f"{r['session_id']}\t{r['status']}\t{r['task'][:48]}")
+                workflow = r.get("workflow") or "-"
+                print(f"{r['session_id']}\t{workflow}\t{r['status']}\t{r['task'][:48]}")
 
         emit({"sessions": rows}, mode, _human)
         return
@@ -95,8 +185,15 @@ def handle_session(args: Any) -> None:
 
     try:
         if command == "status":
-            report = api.inspect(sid)
-            data = report.model_dump()
+            try:
+                report = api.inspect(sid)
+                data = report.model_dump()
+            except FileNotFoundError:
+                # Fall back to the oc_flow on-disk session tree (`opencontext run`).
+                row = _oc_flow_session_row(root / ".opencontext" / "sessions" / sid)
+                if row is None:
+                    raise
+                data = row
         elif command == "resume":
             data = api.resume(sid).model_dump()
         elif command == "archive":

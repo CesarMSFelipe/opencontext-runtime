@@ -86,6 +86,38 @@ def test_init_template_creates_workspace_and_config(tmp_path: Path, monkeypatch,
     assert (tmp_path / ".opencontext/policies/security-policy.yaml").exists()
 
 
+def test_init_profile_writes_canonical_config(tmp_path: Path, monkeypatch, capsys) -> None:
+    """`init --profile <name>` sets the config profile at <root>/opencontext.yaml."""
+    import yaml
+
+    from opencontext_core.config import load_config
+
+    monkeypatch.chdir(tmp_path)
+    # Use a non-default profile so the assertion proves the flag was honoured
+    # (``balanced`` is the OpenContextConfig default).
+    _init("opencontext.yaml", non_interactive=True, profile="research")
+    out = capsys.readouterr().out
+    assert "Profile: research" in out
+
+    cfg = tmp_path / "opencontext.yaml"
+    assert cfg.exists()
+    raw = yaml.safe_load(cfg.read_text(encoding="utf-8"))
+    assert raw["profile"] == "research"
+    # Loads cleanly via the strict OpenContextConfig model (extra="forbid").
+    assert load_config(cfg).profile == "research"
+
+
+def test_init_profile_balanced_non_interactive(tmp_path: Path, monkeypatch) -> None:
+    """The documented 1.0 DoD sequence: `init --profile balanced --non-interactive`."""
+    from opencontext_core.config import load_config
+
+    monkeypatch.chdir(tmp_path)
+    _init("opencontext.yaml", non_interactive=True, profile="balanced")
+    cfg = tmp_path / "opencontext.yaml"
+    assert cfg.exists()
+    assert load_config(cfg).profile == "balanced"
+
+
 def test_more_required_scaffolds(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "workflow-packs/example").mkdir(parents=True)

@@ -188,6 +188,13 @@ def _technology_template_names() -> tuple[str, ...]:
 TECHNOLOGY_TEMPLATE_NAMES = _technology_template_names()
 
 
+def _config_profile_names() -> list[str]:
+    """Return the built-in configuration profile names (PR-013, ``balanced`` first)."""
+    from opencontext_core.config_profiles import profile_names
+
+    return profile_names()
+
+
 def _get_version() -> str:
     """Get installed version via importlib.metadata, with fallback."""
     try:
@@ -476,6 +483,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--agent",
         default=None,
         help="Comma-separated agent clients (e.g. opencode,cursor).",
+    )
+    init_parser.add_argument(
+        "--profile",
+        choices=_config_profile_names(),
+        default=None,
+        help="Built-in configuration profile (PR-013): governance/routing posture.",
     )
     install_parser = subparsers.add_parser(
         "install",
@@ -1386,6 +1399,7 @@ def _dispatch(args: argparse.Namespace) -> None:
             security_mode=getattr(args, "security_mode", None),
             tdd=getattr(args, "tdd", None),
             agent=getattr(args, "agent", None),
+            profile=getattr(args, "profile", None),
         )
         return
     if command == "install":
@@ -1770,11 +1784,16 @@ def _init(
     security_mode: str | None = None,
     tdd: str | None = None,
     agent: str | None = None,
+    profile: str | None = None,
 ) -> None:
     """Initialize project with wizard or fast template.
 
     When running interactively without overrides, launches the full wizard.
     With --non-interactive or explicit flags, applies settings directly.
+
+    ``profile`` selects a built-in configuration profile (PR-013): the chosen
+    name is written to the config's ``profile`` key at the canonical
+    ``<root>/opencontext.yaml`` path (the B2 location ``run`` reads).
     """
     root = Path.cwd()
 
@@ -1799,12 +1818,18 @@ def _init(
 
         wizard = OnboardingWizard(root=root)
         wizard.run(non_interactive=False, **kwargs)
+        if profile:
+            _apply_profile_to_config(root / "opencontext.yaml", profile)
         return
 
-    # Fast non-interactive path (original behavior)
-    path = Path(config_path)
+    # Fast non-interactive path (original behavior).
+    # When a profile is requested, write to the CANONICAL <root>/opencontext.yaml
+    # (B2 / ADR-A2) so `run` and the resolver read exactly what we wrote.
+    path = (root / "opencontext.yaml") if profile else Path(config_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     config_data = _template_config(template)
+    if profile:
+        config_data["profile"] = profile
     if path.exists():
         print(f"Config already exists: {path}")
         ensure_workspace(Path("."))
@@ -1813,7 +1838,28 @@ def _init(
     ensure_workspace(Path("."))
     print(f"Created config: {path}")
     print(f"Template: {template}")
+    if profile:
+        print(f"Profile: {profile}")
     print("Workspace: .opencontext/")
+
+
+def _apply_profile_to_config(config_path: Path, profile: str) -> None:
+    """Set the ``profile`` key on an existing config file written by the wizard.
+
+    Best-effort: keeps the interactive path honouring ``--profile`` without
+    threading config-profile knowledge into the onboarding wizard.
+    """
+    if not config_path.exists():
+        return
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return
+    if not isinstance(data, dict):
+        return
+    data["profile"] = profile
+    config_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    print(f"Profile: {profile}")
 
 
 def _runtime(config_path: str) -> OpenContextRuntime:
