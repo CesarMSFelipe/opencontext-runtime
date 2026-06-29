@@ -1078,18 +1078,23 @@ class RuntimeMigrationConfig(BaseModel):
         default=True, description="Bracket legacy runs with a RuntimeApi session."
     )
     registry_enabled: bool = Field(
-        default=False, description="Resolve workflows through the PR-003 WorkflowRegistry."
+        default=False,
+        description=(
+            "Resolve workflows through the PR-003 WorkflowRegistry. Default legacy: not yet "
+            "parity-safe — legacy tracks (explore-only, full+judgment) emit a spurious "
+            "workflow.validation.failed event until registered as declarative WorkflowDefinitions."
+        ),
     )
     persona_registry_enabled: bool = Field(
-        default=False,
+        default=True,
         description="Resolve personas through the PR-006 PersonaRegistry/Resolver.",
     )
     skill_registry_enabled: bool = Field(
-        default=False,
+        default=True,
         description="Resolve skills through the PR-006 SkillRegistryV2 (bundles/tiers).",
     )
     harness_registry_enabled: bool = Field(
-        default=False,
+        default=True,
         description="Resolve harnesses through the PR-006 HarnessRegistry.",
     )
     gateway_enabled: bool = Field(
@@ -1130,7 +1135,7 @@ class RuntimeMigrationConfig(BaseModel):
         ),
     )
     oc_flow_enabled: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Enable the PR-007 OC Flow operational workflow "
             "(`opencontext run \"<task>\" --workflow oc-flow`). Off (default-legacy) "
@@ -1451,7 +1456,7 @@ class RuntimeBrainConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Enable advisory Runtime Brain decision recording. Off restores the "
             "legacy implicit selectors with no Decision Log writes; the State "
@@ -2109,14 +2114,14 @@ def default_config_data() -> dict[str, Any]:
         "runtime": {
             "session_wrapper": True,
             "registry_enabled": False,
-            "persona_registry_enabled": False,
-            "skill_registry_enabled": False,
-            "harness_registry_enabled": False,
+            "persona_registry_enabled": True,
+            "skill_registry_enabled": True,
+            "harness_registry_enabled": True,
             "gateway_enabled": False,
             "context_engine_enabled": False,
             "execution_profile": "balanced",
             "durable_artifacts": False,
-            "oc_flow_enabled": False,
+            "oc_flow_enabled": True,
             "memory_v2_enabled": False,
             "retention": {
                 "summaries": "always",

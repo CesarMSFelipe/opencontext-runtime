@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "subsystem": "oc_flow",
+  "flag": "runtime.oc_flow_enabled",
+  "config_before": {
+    "runtime.oc_flow_enabled": false
+  },
+  "config_after": {
+    "runtime.oc_flow_enabled": true
+  },
+  "benchmark_before": {
+    "tests": {
+      "passed": 3912,
+      "failed": 0
+    }
+  },
+  "benchmark_after": {
+    "tests": {
+      "passed": 3912,
+      "failed": 0
+    }
+  },
+  "parity": {
+    "subsystem": "oc_flow",
+    "flag": "runtime.oc_flow_enabled",
+    "passed": true,
+    "mismatch": null
+  },
+  "rollback_flag": "runtime.oc_flow_enabled",
+  "rollback_path": "packages/opencontext_core/opencontext_core/config.py",
+  "accepted": true,
+  "reverted": false,
+  "reason": "parity passed; benchmark not worse; flip accepted",
+  "generated_at": "2026-06-29T10:42:35.226519+00:00"
+}

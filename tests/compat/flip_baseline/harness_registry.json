@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "subsystem": "harness_registry",
+  "flag": "runtime.harness_registry_enabled",
+  "config_before": {
+    "runtime.harness_registry_enabled": false
+  },
+  "config_after": {
+    "runtime.harness_registry_enabled": true
+  },
+  "benchmark_before": {
+    "tests": {
+      "passed": 3912,
+      "failed": 0
+    }
+  },
+  "benchmark_after": {
+    "tests": {
+      "passed": 3912,
+      "failed": 0
+    }
+  },
+  "parity": {
+    "subsystem": "harness_registry",
+    "flag": "runtime.harness_registry_enabled",
+    "passed": true,
+    "mismatch": null
+  },
+  "rollback_flag": "runtime.harness_registry_enabled",
+  "rollback_path": "packages/opencontext_core/opencontext_core/config.py",
+  "accepted": true,
+  "reverted": false,
+  "reason": "parity passed; benchmark not worse; flip accepted",
+  "generated_at": "2026-06-29T10:42:35.226757+00:00"
+}
