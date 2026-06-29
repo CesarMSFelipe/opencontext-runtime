@@ -73,6 +73,18 @@ class ActionPolicyDecision(BaseModel):
     requires_approval: bool = Field(description="Whether human approval is required.")
     reason: str = Field(description="Stable policy reason.")
 
+    @property
+    def as_policy_verb(self) -> str:
+        """Map this decision onto a canonical PolicyDecision verb (PR-005 adapter).
+
+        ``ApprovalLevel`` already uses the canonical ``allow``/``ask``/``deny``
+        values, so the unified ``PolicyEngine`` surfaces the fail-closed defaults
+        here unchanged (no upward import — the engine wraps this verb into its
+        ``policy.models.PolicyDecision``). PE-4 parity: a default-denied action
+        maps to ``deny``.
+        """
+        return self.decision.value
+
 
 _DEFAULT_ACTIONS: dict[ActionType, ApprovalLevel] = {
     ActionType.READ_CONTEXT: ApprovalLevel.ALLOW,

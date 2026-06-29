@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import NoReturn
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -47,10 +48,26 @@ class FirewallBlockedError(RuntimeError):
 class ContextFirewall:
     """Central security gate for prompts, providers, traces, and exports."""
 
-    def __init__(self, config: OpenContextConfig) -> None:
+    def __init__(
+        self,
+        config: OpenContextConfig,
+        *,
+        on_secret_detected: Callable[[str, list[str]], None] | None = None,
+    ) -> None:
         self._config = config
         self._secret_scanner = SecretScanner()
         self._injection_scanner = PromptInjectionScanner()
+        # Optional ``secret.detected`` emission hook (EVENT-1 / task 4.2). Called
+        # with ``(sink, secret_kinds)`` on a secret hit before the firewall blocks
+        # or redacts. Default ``None`` keeps the firewall a pure enforcer.
+        self._on_secret_detected = on_secret_detected
+
+    def _emit_secret_detected(self, sink: str, text: str) -> None:
+        if self._on_secret_detected is None:
+            return
+        kinds = sorted({f.kind for f in self._secret_scanner.scan(text)})
+        if kinds:
+            self._on_secret_detected(sink, kinds)
 
     def check_context_export(self, items: list[ContextItem], *, sink: str) -> FirewallDecision:
         """Block raw secret-bearing context before export-like sinks."""
@@ -63,6 +80,7 @@ class ContextFirewall:
             # Sanitizing in place strips the raw value, so downstream sinks — including
             # the provider egress gate (check_provider_call) — still see clean content.
             if self._secret_scanner.scan(item.content):
+                self._emit_secret_detected(sink, item.content)
                 redacted = self._secret_scanner.redact(item.content)
                 if self._secret_scanner.scan(redacted):
                     # Redaction could not fully sanitize — keep the hard block.
@@ -108,6 +126,7 @@ class ContextFirewall:
 
         for item in items:
             if self._secret_scanner.scan(item.content):
+                self._emit_secret_detected(f"provider:{provider}", item.content)
                 return ProviderPolicyDecision(
                     allowed=False,
                     reason="raw_secret_detected_before_provider_call",

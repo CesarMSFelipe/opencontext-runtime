@@ -25,9 +25,21 @@ PhaseResultStatus = Literal[
     "blocked",
     "halted",
     "skipped",
+    # PR-006 persona failure semantics (book doc 05 §13). `done`/`done_with_concerns`
+    # advance (the latter only when gates allow — see `can_advance`); `needs_context`
+    # routes to context retrieval and `failed_contract` returns to protocol/diagnosis,
+    # so both are non-advancing.
+    "done",
+    "done_with_concerns",
+    "needs_context",
+    "failed_contract",
 ]
 
-_ADVANCE_STATUSES: frozenset[str] = frozenset({"passed", "warning"})
+# `done` is the persona equivalent of `passed`; `done_with_concerns` of `warning`.
+# `needs_context`/`failed_contract` are intentionally absent — they must NOT advance.
+_ADVANCE_STATUSES: frozenset[str] = frozenset(
+    {"passed", "warning", "done", "done_with_concerns"}
+)
 
 
 class PhaseResultEnvelope(BaseModel):

@@ -52,7 +52,37 @@ def run_doctor(config: OpenContextConfig) -> list[DoctorCheck]:
         ),
         _check_provider(config),
         _check_learning(config),
+        _check_capability_graph(),
     ]
+
+
+def _check_capability_graph() -> DoctorCheck:
+    """Build the live Capability Graph (PR-000.2 CP-006) and report it.
+
+    ``doctor`` materialises the typed environment graph in addition to the
+    existing checks, listing the detected capability nodes. Never raises — a
+    detection failure degrades to a best-effort, non-blocking message.
+    """
+    try:
+        from opencontext_core.capabilities.detector import build_capability_graph
+
+        graph = build_capability_graph(".")
+        ready = sorted(graph.available_ids())
+        total = len(graph.nodes)
+        listed = ", ".join(ready) if ready else "none"
+        return DoctorCheck(
+            name="capabilities.graph",
+            ok=bool(ready),
+            details=(
+                f"Capability graph: {len(ready)}/{total} ready — {listed}."
+            ),
+        )
+    except Exception as exc:
+        return DoctorCheck(
+            name="capabilities.graph",
+            ok=True,
+            details=f"Capability graph unavailable: {exc}.",
+        )
 
 
 def _check_learning(config: OpenContextConfig) -> DoctorCheck:

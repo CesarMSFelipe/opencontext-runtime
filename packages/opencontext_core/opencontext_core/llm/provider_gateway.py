@@ -40,6 +40,22 @@ _KEY_ENV: dict[str, str] = {
 }
 
 
+def build_adapter(provider: str, *, max_tokens: int = 4000) -> ProviderAdapter | None:
+    """Build a provider adapter, pulling its API key from the env.
+
+    Returns ``None`` for an unknown provider. Construction never requires the key
+    — a missing key only fails at call time. Shared by the legacy shim, the
+    ``build_provider_gateway`` helper, and the PR-012 ``ProviderGateway`` facade
+    (``providers/gateway.py``) so there is a single adapter-build path.
+    """
+
+    adapter_cls = _ADAPTERS.get(provider)
+    if adapter_cls is None:
+        return None
+    api_key = os.environ.get(_KEY_ENV.get(provider, ""), "").strip() or None
+    return adapter_cls(ProviderConfig(name=provider, api_key=api_key, max_tokens=max_tokens))
+
+
 class ProviderGateway:
     """Adapts a ``ProviderAdapter.chat`` to ``LLMGateway.generate``."""
 
@@ -56,12 +72,9 @@ class ProviderGateway:
         # Budget swaps only ever target LOCAL providers, so this re-dispatch adds no
         # external egress the firewall did not already approve.
         if request.provider and request.provider != self._provider:
-            adapter_cls = _ADAPTERS.get(request.provider)
-            if adapter_cls is not None:
-                api_key = os.environ.get(_KEY_ENV.get(request.provider, ""), "").strip() or None
-                adapter = adapter_cls(
-                    ProviderConfig(name=request.provider, api_key=api_key, max_tokens=4000)
-                )
+            routed = build_adapter(request.provider)
+            if routed is not None:
+                adapter = routed
         model = request.model or self._model
         messages: list[dict[str, str]] = []
         if request.system_prompt:
@@ -91,9 +104,16 @@ def build_provider_gateway(provider: str, model: str) -> ProviderGateway | None:
     Construction never requires the key — a missing key only fails at call time —
     so building a runtime with a real provider configured does not crash.
     """
-    adapter_cls = _ADAPTERS.get(provider)
-    if adapter_cls is None:
+    adapter = build_adapter(provider)
+    if adapter is None:
         return None
-    api_key = os.environ.get(_KEY_ENV.get(provider, ""), "").strip() or None
-    config = ProviderConfig(name=provider, api_key=api_key, max_tokens=4000)
-    return ProviderGateway(adapter_cls(config), provider=provider, model=model)
+    return ProviderGateway(adapter, provider=provider, model=model)
+
+
+# Name-collision resolution (compat/collisions.py — "ProviderGateway", rule
+# ``namespace``): this module's ``ProviderGateway`` is the legacy per-provider
+# adapter shim and is KEPT as-is for the ``runtime.gateway_enabled=False`` path.
+# The PR-012 unified facade is a DISTINCT class in ``providers/gateway.py``,
+# disambiguated by package. ``_AdapterDispatcher`` is the design-doc name for the
+# adapter-dispatch role this shim plays inside the facade composition.
+_AdapterDispatcher = ProviderGateway
