@@ -162,9 +162,22 @@ def handle_kg(args: Any) -> None:
                 console.print(f"  [bold]{r.get('name', '?')}[/]")
 
     elif command == "context":
-        console.header(f"Context: {task}")
-        console.info("Context building uses the indexed knowledge graph.")
-        console.info("Run 'opencontext pack' for full context generation.")
+        # Build real, token-aware context with the same engine `opencontext pack`
+        # uses (runtime.build_context_pack), instead of pointing at another command.
+        # Imported lazily because main imports this module at load time.
+        from opencontext_cli.main import (
+            _default_config_path,
+            _render_pack_markdown,
+            _runtime,
+        )
+
+        ctx_runtime = _runtime(_default_config_path())
+        pack = ctx_runtime.build_context_pack(task)
+        if json_output:
+            print(pack.model_dump_json(indent=2))
+        else:
+            console.header(f"Context: {task}")
+            print(_render_pack_markdown(pack, query=task, mode="context"))
 
     elif command == "callers":
         console.header(f"Callers: {symbol}")

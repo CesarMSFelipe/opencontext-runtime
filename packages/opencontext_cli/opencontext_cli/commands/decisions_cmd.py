@@ -27,24 +27,49 @@ def _root(args: Any) -> Path:
     return Path(getattr(args, "root", None) or Path.cwd())
 
 
-def _iter_runs(store: SessionStore) -> list[RuntimeRun]:
-    """Load every persisted run across all sessions (best-effort)."""
-    runs: list[RuntimeRun] = []
+def _run_dirs(store: SessionStore) -> list[Path]:
+    """Every run directory on disk across all sessions (best-effort)."""
+    dirs: list[Path] = []
     if not store.sessions_path.is_dir():
-        return runs
+        return dirs
     for session_dir in sorted(store.sessions_path.glob("*")):
         runs_dir = session_dir / "runs"
         if not runs_dir.is_dir():
             continue
-        for run_dir in sorted(runs_dir.glob("*")):
-            run_json = run_dir / "run.json"
-            if not run_json.exists():
-                continue
-            try:
-                runs.append(RuntimeRun.model_validate_json(run_json.read_text(encoding="utf-8")))
-            except (OSError, ValueError):
-                continue
-    return runs
+        dirs.extend(run_dir for run_dir in sorted(runs_dir.glob("*")) if run_dir.is_dir())
+    return dirs
+
+
+def _decisions_for(run_dir: Path) -> list[dict[str, Any]] | None:
+    """Summarized decision rows for a run directory, or ``None`` if not a run.
+
+    A run can be persisted in two shapes: the RuntimeApi ``run.json``
+    (:class:`RuntimeRun` with a ``decision_log``) or the OC Flow run, which
+    writes ``decisions.json`` (already summarized) plus ``state.json``. Returns
+    ``[]`` for a real run that recorded no decisions, and ``None`` only when
+    ``run_dir`` is not a recognizable run at all.
+    """
+    run_json = run_dir / "run.json"
+    if run_json.exists():
+        try:
+            run = RuntimeRun.model_validate_json(run_json.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return summarize_decision_log(run.decision_log)
+
+    decisions_json = run_dir / "decisions.json"
+    if decisions_json.exists():
+        try:
+            payload = json.loads(decisions_json.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        rows = payload.get("decisions") if isinstance(payload, dict) else None
+        return list(rows) if isinstance(rows, list) else []
+
+    # An OC Flow run dir is marked by state.json even when no decisions exist.
+    if (run_dir / "state.json").exists():
+        return []
+    return None
 
 
 def add_decisions_parser(subparsers: Any) -> None:
@@ -68,29 +93,36 @@ def handle_decisions(args: Any) -> None:
     store = SessionStore(_root(args))
 
     if action == "list":
-        rows = [
-            {"run_id": run.run_id, "decisions": len(run.decision_log)}
-            for run in _iter_runs(store)
-            if len(run.decision_log) > 0
-        ]
+        rows: list[dict[str, Any]] = []
+        for run_dir in _run_dirs(store):
+            decisions = _decisions_for(run_dir)
+            if decisions:  # only runs that actually recorded decisions
+                rows.append({"run_id": run_dir.name, "decisions": len(decisions)})
         if getattr(args, "json", False):
             print(json.dumps(rows, indent=2))
-        else:
+        elif rows:
             for row in rows:
                 print(f"{row['run_id']}\t{row['decisions']} decisions")
+        else:
+            print("No runs with recorded decisions yet.")
         return
 
     if action == "show":
-        run = next((r for r in _iter_runs(store) if r.run_id == args.run_id), None)
-        if run is None:
+        run_dir = next((d for d in _run_dirs(store) if d.name == args.run_id), None)
+        if run_dir is None:
             print(f"Run not found: {args.run_id}", file=sys.stderr)
             sys.exit(1)
-        decision_rows = summarize_decision_log(run.decision_log)
+        decision_rows = _decisions_for(run_dir) or []
         if getattr(args, "json", False):
             print(json.dumps(decision_rows, indent=2))
         else:
             if not decision_rows:
-                print(f"No decisions recorded for run {args.run_id}.")
+                # The run exists; it simply has no decisions (RI/decision-log off
+                # or the run produced none). Honest, not "Run not found".
+                print(
+                    f"Run {args.run_id}: no decisions recorded "
+                    "(runtime decision-log produced none)."
+                )
                 return
             for drow in decision_rows:
                 governed = f" [governed_by={drow['governed_by']}]" if drow["governed_by"] else ""

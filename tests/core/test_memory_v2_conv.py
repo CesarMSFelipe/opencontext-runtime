@@ -13,7 +13,7 @@ from opencontext_core.memory.contradictions import ContradictionDetector
 from opencontext_core.memory.graph import LocalMemoryStore
 from opencontext_core.memory.learning_seam import build_learning_candidates, feed_memory_outcome
 from opencontext_core.memory.retrieval import apply_profile
-from opencontext_core.memory.stale_audit import stale_audit
+from opencontext_core.memory.stale_audit import audit_live_memory, stale_audit
 from opencontext_core.models.agent_memory import (
     DecayPolicy,
     MemoryLayer,
@@ -117,6 +117,62 @@ def test_learning_seam_builds_candidates_and_is_non_blocking() -> None:
     assert any(c.is_failure for c in candidates)
     # No orchestrator wired: returns candidates without raising.
     assert feed_memory_outcome(None, task="fix bug", records=records) == candidates
+
+
+# -- memory audit (live store) ----------------------------------------------
+
+
+class _StubStore:
+    """Minimal store exposing ``list_records`` for the live-memory audit."""
+
+    def __init__(self, records: list[MemoryRecord]) -> None:
+        self._records = records
+
+    def list_records(self, *, limit: int = 200) -> list[MemoryRecord]:
+        return self._records[:limit]
+
+
+def _keyed(rid: str, key: str, *, content: str, confidence: float, age_days: int = 0):
+    now = datetime.now(tz=UTC)
+    ts = now - timedelta(days=age_days)
+    return MemoryRecord(
+        id=rid,
+        layer=MemoryLayer.SEMANTIC,
+        key=key,
+        content=content,
+        confidence=confidence,
+        decay_policy=DecayPolicy(enabled=False),
+        created_at=ts,
+        updated_at=ts,
+        last_seen_at=ts,
+    )
+
+
+def test_audit_live_memory_reports_counts_stale_dups_conflicts_and_cot() -> None:
+    records = [
+        _keyed("good", "k:good", content="run pytest in the activated venv", confidence=0.9),
+        _keyed("stale", "k:stale", content="an old note nobody refreshed", confidence=0.2,
+               age_days=200),
+        _keyed("d1", "k:dup", content="the cache lives under storage opencontext", confidence=0.7),
+        _keyed("d2", "k:dup", content="the cache lives under storage opencontext", confidence=0.7),
+        _keyed("c1", "k:conf", content="provider defaults to ollama", confidence=0.2),
+        _keyed("c2", "k:conf", content="provider defaults to openai instead", confidence=0.9),
+        _keyed("cot", "k:cot", content="let me think step by step about this", confidence=0.8),
+    ]
+    report = audit_live_memory(_StubStore(records))
+    assert report["total"] == 7
+    assert report["stale"]["count"] >= 1
+    assert report["duplicates"] >= 1
+    assert report["conflicts"] >= 1
+    assert report["chain_of_thought_leaks"] == 1
+    assert 0.0 <= report["quality"]["minimum"] <= report["quality"]["average"] <= 1.0
+
+
+def test_audit_live_memory_empty_store_is_clean() -> None:
+    report = audit_live_memory(_StubStore([]))
+    assert report["total"] == 0
+    assert report["stale"]["count"] == 0
+    assert report["quality"] == {"average": 0.0, "minimum": 0.0}
 
 
 if __name__ == "__main__":  # pragma: no cover
