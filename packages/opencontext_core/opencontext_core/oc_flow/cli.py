@@ -13,9 +13,13 @@ from pathlib import Path
 from typing import Any
 
 from opencontext_core.context.planning.workflow_selector import select_workflow
+from opencontext_core.llm.provider_gateway import build_adapter, build_provider_gateway
 from opencontext_core.oc_flow.models import Lane
-from opencontext_core.oc_flow.nodes import NodeExecutor
+from opencontext_core.oc_flow.nodes import NodeExecutor, ProviderBackedNodeExecutor
 from opencontext_core.oc_flow.runner import OCFlowRunner
+from opencontext_core.operating_model.receipts import RunReceiptStore
+from opencontext_core.providers.detect import detect_provider
+from opencontext_core.providers.gateway import ProviderGateway
 
 
 def run_oc_flow_cli(
@@ -37,6 +41,11 @@ def run_oc_flow_cli(
     without one the model-free ``DeterministicNodeExecutor`` is used, so a mutation
     task with no provider is reported honestly as ``needs_executor`` (never a false
     ``completed`` — B1/B8).
+
+    When no executor is injected (the live CLI path) this resolves one from the
+    ambient environment via :func:`_resolve_executor`: a real (non-mock) provider
+    yields a provider-backed executor that produces an actual edit; no provider keeps
+    the executor absent so mutation tasks stay honestly ``needs_executor`` (VDM-005).
     """
     summary: dict[str, Any]
     if not enabled:
@@ -46,6 +55,11 @@ def run_oc_flow_cli(
         }
         _maybe_print(summary, as_json)
         return summary
+
+    # An explicitly injected executor (tests / embedders) always wins; otherwise
+    # detect a real provider and build the productive executor for the live path.
+    if executor is None:
+        executor = _resolve_executor(root)
 
     runner = OCFlowRunner(root=root, enabled=enabled, executor=executor)
 
@@ -116,6 +130,38 @@ def run_oc_flow_cli(
         summary["message"] = f"{result.status}: {result.completion_reason}"
     _maybe_print(summary, as_json)
     return summary
+
+
+def _resolve_executor(root: Path) -> NodeExecutor | None:
+    """Build a productive provider-backed executor when a real provider is detected.
+
+    Reads the ambient environment via :func:`detect_provider`. When a non-mock
+    provider is available it composes the PR-012 :class:`ProviderGateway` (run
+    receipts + bounded local-first fallback) over a base gateway bound to that
+    provider, then returns a :class:`ProviderBackedNodeExecutor` so a mutation task
+    produces a REAL ``ApplyEdit`` (VDM-005). When no provider is detected (``mock``)
+    — or the detected provider has no buildable adapter (e.g. ``google``/``mistral``)
+    — it returns ``None`` so the runner falls back to the model-free
+    ``DeterministicNodeExecutor`` and a mutation task is reported honestly as
+    ``needs_executor`` (never a false ``completed`` with empty ``changed_files`` —
+    B1/B8). The full provider -> validate -> policy -> checkpoint -> apply -> receipt
+    -> inspection -> verify pipeline lives in ``ProviderBackedNodeExecutor``.
+    """
+    det = detect_provider()
+    if det.name == "mock":
+        return None
+    base = build_provider_gateway(det.name, det.model)
+    if base is None:
+        return None
+    gateway = ProviderGateway(
+        base,
+        receipts=RunReceiptStore(root),
+        fallback=True,
+        adapter_factory=build_adapter,
+    )
+    return ProviderBackedNodeExecutor(
+        gateway=gateway, root=root, provider=det.name, model=det.model
+    )
 
 
 def _latest_session(root: Path) -> str:
