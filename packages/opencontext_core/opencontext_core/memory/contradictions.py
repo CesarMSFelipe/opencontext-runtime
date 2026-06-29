@@ -8,6 +8,8 @@ consumes.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from opencontext_core.models.agent_memory import MemoryRecord
 from opencontext_core.models.memory import MemoryConflict
 
@@ -36,7 +38,9 @@ class ContradictionDetector:
                 continue
             if abs(rec.confidence - new_record.confidence) <= _CONFLICT_CONFIDENCE_DELTA:
                 continue
-            resolution = "supersede" if new_record.confidence > rec.confidence else "mark_stale"
+            resolution: Literal["mark_stale", "supersede"] = (
+                "supersede" if new_record.confidence > rec.confidence else "mark_stale"
+            )
             conflicts.append(
                 MemoryConflict(
                     record_id=rec.id,

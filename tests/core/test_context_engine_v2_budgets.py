@@ -9,6 +9,7 @@ from opencontext_core.context.budget_table import (
     assert_complete,
     known_nodes,
     resolve,
+    verify_against_registries,
     workflow_total,
 )
 
@@ -43,3 +44,11 @@ def test_workflow_aliases_resolve() -> None:
 def test_unknown_node_is_still_resolvable() -> None:
     # Book invariant: every workflow node must have a resolvable budget.
     assert resolve("oc_flow", "nonexistent_node") > 0
+
+
+def test_cross_check_runs_and_finds_no_problems() -> None:
+    # Regression: the cross-check iterated the nodes *dict* (yielding str keys) and
+    # accessed ``.id``, which raised AttributeError caught by the broad except — so it
+    # silently reported "registry unavailable" and never actually verified anything.
+    # An empty list proves it now reaches and matches the live OC Flow registry.
+    assert verify_against_registries() == []

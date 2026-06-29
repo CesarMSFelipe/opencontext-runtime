@@ -146,7 +146,7 @@ def verify_against_registries() -> list[str]:
     try:
         from opencontext_core.oc_flow.definition import oc_flow_definition
 
-        live_oc = {n.id for n in oc_flow_definition().nodes}
+        live_oc = {n.id for n in oc_flow_definition().nodes.values()}
         for node in live_oc:
             if node not in BUDGETS["oc_flow"]:
                 problems.append(f"oc_flow node {node!r} has no budget")

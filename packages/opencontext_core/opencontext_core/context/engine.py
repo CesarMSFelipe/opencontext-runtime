@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from opencontext_core.context.budget_table import resolve as resolve_budget
 from opencontext_core.context.budgeting import estimate_tokens
@@ -31,6 +31,7 @@ from opencontext_core.context.packing import ContextPackBuilder
 from opencontext_core.context.profiles import ProfileSettings, resolve_profile
 from opencontext_core.context.ranking import attach_usefulness
 from opencontext_core.context.receipt import (
+    BudgetDecision,
     BudgetReceipt,
     CompressionReceipt,
     OmissionReceipt,
@@ -48,6 +49,12 @@ from opencontext_core.models.context import (
 )
 from opencontext_core.models.context_envelope import ContextEnvelope
 from opencontext_core.models.evidence import EvidenceRef
+
+if TYPE_CHECKING:
+    # The OC Flow surgical envelope (L9) is a projection of the canonical envelope.
+    # Imported only for typing — annotations are lazy strings (PEP 563), so this L5
+    # module still pulls no L9 code at import time.
+    from opencontext_core.oc_flow.models import ContextEnvelope as SurgicalEnvelope
 
 
 @dataclass
@@ -243,7 +250,7 @@ class ContextEngine:
         budget: int,
         comp_receipt: CompressionReceipt,
         attempts: list[GcAttempt] | None,
-    ) -> tuple[ContextEnvelope, str, str, str, list[str]]:
+    ) -> tuple[ContextEnvelope, BudgetDecision, str, str, list[str]]:
         """Enforce the node budget over the envelope token_estimate (book §Harness).
 
         Returns ``(envelope, decision, ledger_status, gc_output, discarded_keys)``.
@@ -255,7 +262,7 @@ class ContextEngine:
 
         compressed = comp_receipt.tokens_after < comp_receipt.tokens_before
         if used <= budget:
-            decision = "compressed" if compressed else "fit"
+            decision: BudgetDecision = "compressed" if compressed else "fit"
             return envelope, decision, ledger.status.value, "", []
 
         # Overflow: run incremental GC over L1, then re-evaluate.
@@ -361,7 +368,7 @@ def envelope_l3_from_subgraph(subgraph: Any) -> dict[str, Any]:
     }
 
 
-def to_surgical_envelope(envelope: ContextEnvelope) -> Any:
+def to_surgical_envelope(envelope: ContextEnvelope) -> SurgicalEnvelope:
     """Project the canonical envelope onto the OC Flow surgical seam (PR-007).
 
     Reconciliation: there is one canonical :class:`ContextEnvelope`; the OC Flow

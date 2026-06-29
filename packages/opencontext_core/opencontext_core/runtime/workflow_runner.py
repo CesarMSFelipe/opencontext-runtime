@@ -118,9 +118,9 @@ class WorkflowRunner:
         # loop can never run away; the no-progress break below is the normal exit.
         max_steps = max(len(self._workflow.nodes) * 2 + 1, 2)
         for _ in range(max_steps):
+            # run.current_node is provably non-None here: it is seeded above, and the
+            # completion / no-progress checks below break out before it can be None.
             node_id = run.current_node
-            if node_id is None:
-                break
             result = self.execute_node(run_id, node_id)
             node_results.append(result)
             if result.status == "failed":
