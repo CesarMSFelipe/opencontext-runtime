@@ -136,9 +136,12 @@ def _check_provider(config: OpenContextConfig) -> DoctorCheck:
                 name="llm.provider",
                 ok=True,
                 details=(
-                    "No LLM provider detected — core features (context packing, knowledge graph, "
-                    "MCP tools) work without one. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, "
-                    "or OPENROUTER_API_KEY to enable the autonomous loop."
+                    "No LLM provider detected — analysis/context features (context packing, "
+                    "knowledge graph, MCP tools) work without one. OC Flow MUTATION tasks (the "
+                    "`run` command) additionally require a configured provider (set "
+                    "ANTHROPIC_API_KEY/OPENAI_API_KEY/OPENROUTER_API_KEY), an MCP sampler, or "
+                    "`provider: test_stub` in opencontext.yaml; without one a mutation run is "
+                    "reported honestly as needs_executor (read-only features are unaffected)."
                 ),
             )
         return DoctorCheck(
