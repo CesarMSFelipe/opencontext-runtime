@@ -1,0 +1,1 @@
+Primary provider unavailable — exercise the gateway fallback path

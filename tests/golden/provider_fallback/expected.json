@@ -1,0 +1,9 @@
+{
+  "suite": "provider-fallback",
+  "description": "Core runtime promise: when the primary provider errors/times out, the ProviderGateway falls back to the always-available mock and records a fallback receipt. Provider-free — uses a seeded faulty adapter, no live LLM.",
+  "provider": "seeded-faulty-adapter (fault.json) -> mock",
+  "expected_result": "fallback-succeeded-and-receipt-recorded",
+  "fallback_provider": "mock",
+  "fallback_receipt_recorded": true,
+  "max_time_s": 30
+}

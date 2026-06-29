@@ -1,0 +1,11 @@
+[
+  {
+    "path": "calc.py",
+    "operation": "replace_range",
+    "start_line": 3,
+    "end_line": 3,
+    "content": "    return a * b",
+    "reason": "fix multiply() to return the product",
+    "requirement_refs": ["multiply returns the product"]
+  }
+]

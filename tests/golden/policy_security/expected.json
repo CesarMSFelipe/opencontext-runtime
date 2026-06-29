@@ -1,0 +1,12 @@
+{
+  "suite": "policy-security",
+  "description": "Policy/security gate: a forbidden-path write and a secret-bearing output must both be blocked. Provider-free — no live LLM required.",
+  "provider": "deterministic-stub",
+  "expected_artifacts": [],
+  "verification": "secret detected by scanner; forbidden write denied by policy; OC Flow run blocked; secret value absent from durable artifacts",
+  "expected_result": "blocked",
+  "forbidden_path_denied": true,
+  "secret_detected": true,
+  "secret_in_artifacts": false,
+  "max_time_s": 60
+}

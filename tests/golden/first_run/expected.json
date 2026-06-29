@@ -1,0 +1,10 @@
+{
+  "suite": "first-run",
+  "description": "First-run product experience: a fresh, small repo is installed, doctored and indexed. Provider-free — no live LLM required.",
+  "provider": "none",
+  "sequence": ["install --yes", "doctor", "index"],
+  "expected_exit_codes": {"install": 0, "doctor": 0, "index": 0},
+  "expected_artifacts": ["opencontext.yaml", "project_manifest.json"],
+  "expected_result": "usable-config-and-index-artifact",
+  "max_time_s": 120
+}

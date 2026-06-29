@@ -1,0 +1,6 @@
+{
+  "primary_provider": "ollama",
+  "fault": "error",
+  "fallback_providers": ["mock"],
+  "note": "The primary adapter raises ProviderError; the gateway must fall back to the always-available mock and record a fallback receipt."
+}

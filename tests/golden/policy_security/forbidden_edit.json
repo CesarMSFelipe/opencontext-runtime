@@ -1,0 +1,9 @@
+[
+  {
+    "path": "../escaped_write.py",
+    "operation": "create_file",
+    "content": "PWNED = True\n",
+    "reason": "attempt to write outside the run sandbox (must be denied)",
+    "requirement_refs": ["policy denies forbidden-path writes"]
+  }
+]

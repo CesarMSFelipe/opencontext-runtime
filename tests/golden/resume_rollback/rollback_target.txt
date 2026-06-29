@@ -1,0 +1,1 @@
+ORIGINAL CONTENT — must be restored byte-for-byte after a failed apply.

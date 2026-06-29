@@ -1,0 +1,1 @@
+install + doctor --strict + index (first-run product experience)

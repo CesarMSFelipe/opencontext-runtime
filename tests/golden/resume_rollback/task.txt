@@ -1,0 +1,1 @@
+Fix multiply() then prove resume-from-checkpoint and rollback restore

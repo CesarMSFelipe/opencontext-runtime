@@ -1,0 +1,11 @@
+[
+  {
+    "path": "buggy_add.py",
+    "operation": "replace_range",
+    "start_line": 2,
+    "end_line": 2,
+    "content": "    return a + b",
+    "reason": "fix off-by-operator: add() must return the sum of its arguments",
+    "requirement_refs": ["add returns the sum of its arguments"]
+  }
+]

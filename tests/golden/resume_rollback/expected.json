@@ -1,0 +1,11 @@
+{
+  "suite": "resume-rollback",
+  "description": "Core runtime promise: a checkpointed run can be resumed (manifest + artifacts validate and continue) and a failed/corrupt apply is rolled back to the prior byte-identical state. Provider-free — no live LLM required.",
+  "provider": "deterministic-stub (provider_stub.json)",
+  "workflow": "oc-flow",
+  "expected_artifacts": ["task-contract.json", "patch.diff", "apply-receipts.json"],
+  "expected_result": "resumed-and-rolled-back",
+  "resume_validates": true,
+  "rollback_restores": true,
+  "max_time_s": 60
+}
