@@ -1,0 +1,46 @@
+name: release-acceptance
+
+# AVH-007 / AVH-010 / B3 / B4: the HARD 1.0 acceptance gate. Runs the Definition-of-Done
+# command sequence over the golden fixture and then the doc-57 A/B/C/D acceptance verdict
+# in RELEASE mode, where any NOT_MEASURED mandatory gate FAILS the workflow (build-rule #1:
+# 1.0 cannot be declared on unproven evidence). Parity-gated flip bundles under
+# .opencontext/flips/*.json are read by `release acceptance`, which verifies each flipped
+# default's ACTIVE flag state matches its evidence bundle.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-ci.txt
+          python -m pip install -e packages/opencontext_core
+          python -m pip install -e packages/opencontext_profiles
+          python -m pip install -e packages/opencontext_cli
+          python -m pip install -e packages/opencontext_api
+      - name: DoD sequence — install -> doctor -> index -> run -> pytest (golden)
+        run: |
+          opencontext install --yes tests/golden/oc_flow_bugfix_python
+          opencontext doctor --strict
+          opencontext index tests/golden/oc_flow_bugfix_python
+          opencontext run "Fix failing test" --workflow auto \
+            --root tests/golden/oc_flow_bugfix_python --json
+          pytest tests/golden/oc_flow_bugfix_python -q
+      - name: Release acceptance (RELEASE mode — NOT_MEASURED mandatory gate fails)
+        run: opencontext release acceptance --root . --release

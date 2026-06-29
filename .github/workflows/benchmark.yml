@@ -1,0 +1,65 @@
+name: benchmark
+
+# REL-10: a fast benchmark smoke gate on every PR + the full suite nightly.
+# This is ISOLATED from test.yml so the unit gate stays fast; benchmarks are
+# slower/flakier. Reports are honest — a NOT_MEASURED suite never blocks; only a
+# real FAILED gate fails the build (build-rule #1).
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * *"  # nightly full suite
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-ci.txt
+          python -m pip install -e packages/opencontext_core
+          python -m pip install -e packages/opencontext_profiles
+          python -m pip install -e packages/opencontext_cli
+          python -m pip install -e packages/opencontext_api
+      - name: Layering guard (doc-58)
+        run: pytest tests/architecture -q
+      - name: Benchmark smoke (fast subset, pinned index)
+        run: opencontext benchmark suite run --smoke
+
+  nightly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-ci.txt
+          python -m pip install -e packages/opencontext_core
+          python -m pip install -e packages/opencontext_profiles
+          python -m pip install -e packages/opencontext_cli
+          python -m pip install -e packages/opencontext_api
+      - name: Full benchmark suite (run_all)
+        run: opencontext benchmark suite run
+      - name: Release acceptance verdict (A/B/C/D, honest)
+        run: opencontext release acceptance
+      - name: Release DoD regression gates vs baseline
+        run: opencontext release gate
