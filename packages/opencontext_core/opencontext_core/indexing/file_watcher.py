@@ -125,19 +125,29 @@ class FileWatcher:
             self._scan_all()
 
     def _start_watchdog(self) -> None:
-        """Start watchdog-based observer."""
-        self._observer = Observer(timeout=self.poll_interval)
-        handler = _WatchdogHandler(self)
-        self._observer.schedule(handler, str(self.root), recursive=True)
-        self._observer.start()
+        """Start watchdog-based observer; degrade to polling if the OS can't start it."""
+        try:
+            self._observer = Observer(timeout=self.poll_interval)
+            handler = _WatchdogHandler(self)
+            self._observer.schedule(handler, str(self.root), recursive=True)
+            self._observer.start()
+        except OSError:
+            # e.g. inotify instance/watch limit reached — fall back to polling so the
+            # watcher degrades gracefully instead of leaving a half-started observer.
+            self._observer = None
+            self._scan_all()
 
     def stop(self) -> None:
         """Stop watching files."""
         self._running = False
 
         if self._observer is not None:
-            self._observer.stop()
-            self._observer.join(timeout=5)
+            try:
+                self._observer.stop()
+                if self._observer.is_alive():  # guard: never join an unstarted observer
+                    self._observer.join(timeout=5)
+            except RuntimeError:
+                pass
             self._observer = None
 
     def scan(self) -> list[tuple[str, str]]:

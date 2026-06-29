@@ -44,64 +44,45 @@ def handle_verify(args: Any) -> None:
         sys.stdout.write("\n")
         sys.exit(0 if report.is_healthy else 1)
 
-    # ── Rich table output ──────────────────────────────────────────────
-    try:
-        from rich.console import Console
-        from rich.table import Table
-        from rich.text import Text
+    # ── Branded report ──────────────────────────────────────────────────
+    # Route through the canonical BrandConsole (logo + brand panel + heavy-box
+    # brand table) and degrade to plain text automatically when rich is absent.
+    from opencontext_core.dx.console_styles import (
+        BRAND_ERROR,
+        BRAND_SUCCESS,
+        BRAND_WARNING,
+        console,
+    )
 
-        console = Console()
+    STATUS_LABELS = {
+        "passed": "✓ passed",
+        "warning": "⚠ warning",
+        "failed": "✗ failed",
+        "skipped": "- skipped",
+    }
 
-        table = Table(title="OpenContext Health Check", show_lines=True)
-        table.add_column("Check", style="bold")
-        table.add_column("Status", width=10)
-        table.add_column("Message")
+    console.header("OpenContext Health Check")
+    console.table(
+        "Component Checks",
+        ["Check", "Status", "Message"],
+        [[r.name, STATUS_LABELS.get(r.status, r.status), r.message] for r in report.results],
+    )
 
-        STATUS_STYLES = {
-            "passed": "✓ passed",
-            "warning": "⚠ warning",
-            "failed": "✗ failed",
-            "skipped": "-- skipped",
-        }
-
-        for r in report.results:
-            status_text = Text(STATUS_STYLES.get(r.status, r.status))
-            table.add_row(r.name, status_text, r.message)
-
-        console.print()
-        console.print(table)
-        console.print()
-
-        parts = []
-        if report.passed:
-            parts.append(f"[green]{report.passed} passed[/green]")
-        if report.warnings:
-            parts.append(f"[yellow]{report.warnings} warnings[/yellow]")
-        if report.failures:
-            parts.append(f"[red]{report.failures} failed[/red]")
+    parts = []
+    if report.passed:
+        parts.append(f"[{BRAND_SUCCESS}]{report.passed} passed[/]")
+    if report.warnings:
+        parts.append(f"[{BRAND_WARNING}]{report.warnings} warnings[/]")
+    if report.failures:
+        parts.append(f"[{BRAND_ERROR}]{report.failures} failed[/]")
+    if parts:
         console.print("  ".join(parts))
 
-        if report.is_healthy:
-            console.print("\n[bold green]✓ All checks passed[/bold green]")
-        else:
-            console.print(
-                f"\n[bold red]✗ {report.failures} check(s) failed — "
-                "run 'opencontext doctor' for details[/bold red]"
-            )
-
-    except ImportError:
-        print(f"\nOpenContext Health Check ({report.timestamp})")
-        print("=" * 50)
-        for r in report.results:
-            icon = {"passed": "✓", "warning": "⚠", "failed": "✗", "skipped": "--"}.get(
-                r.status, "?"
-            )
-            print(f"  {icon} {r.name}: {r.message}")
-        print(f"\n{report.passed} passed, {report.warnings} warnings, {report.failures} failed")
-
-        if not report.is_healthy:
-            sys.exit(1)
-
-    # Honest exit code for the rich path too, so CI can gate on `opencontext verify`.
-    if not report.is_healthy:
+    if report.is_healthy:
+        console.success("All checks passed")
+    else:
+        console.error(
+            f"{report.failures} check(s) failed — run 'opencontext doctor' for details"
+        )
+        # Honest exit code so CI can gate on `opencontext verify`.
         sys.exit(1)

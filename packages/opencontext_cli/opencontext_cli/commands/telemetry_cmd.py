@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rich.console import Console
-from rich.table import Table
-
-console = Console()
+from opencontext_core.dx.console_styles import console
 
 
 def add_telemetry_parser(subparsers: Any) -> None:
@@ -53,42 +50,41 @@ def _handle_export(root: str) -> None:
             },
             root,
         )
-    console.print(f"[green]Exported {len(store.events)} event(s) to[/] {directory}")
+    console.success(f"Exported {len(store.events)} event(s) to {directory}")
 
 
 def _handle_show(root: str, last: int | None = None) -> None:
     from opencontext_core.evaluation.telemetry import load_telemetry
 
     store = load_telemetry(root)
+    console.header("Token Savings")
     if not store.events:
-        console.print(
-            "[dim]No telemetry data yet. "
-            "Run 'opencontext pack . --query <task>' to start tracking.[/]"
+        console.info(
+            "No telemetry yet. Run 'opencontext pack . --query <task>' to start tracking."
         )
         return
 
     events = store.events[-last:] if last else store.events
 
-    console.print(f"\n[bold]Token Savings Summary[/] — {len(store.events)} total events\n")
+    console.print(f"\n  {len(store.events)} total events\n")
     console.print(f"  Total tokens saved : [green]{store.total_saved:>10,}[/]")
     console.print(f"  Avg reduction      : [green]{store.average_reduction:>9.1f}%[/]")
     console.print(f"  Naive total        :         {store.total_naive:>10,}")
     console.print(f"  Optimized total    :         {store.total_optimized:>10,}")
-    console.print()
 
-    table = Table(title=f"Recent Events ({len(events)})", box=None)
-    table.add_column("Scenario")
-    table.add_column("Naive", justify="right")
-    table.add_column("Optimized", justify="right")
-    table.add_column("Reduction", justify="right")
-    for e in reversed(events):
-        table.add_row(
-            e.scenario or e.task[:50],
-            f"{e.naive_tokens:,}",
-            f"{e.optimized_tokens:,}",
-            f"[green]{e.reduction_pct:.1f}%[/]",
-        )
-    console.print(table)
+    console.table(
+        f"Recent Events ({len(events)})",
+        ["Scenario", "Naive", "Optimized", "Reduction"],
+        [
+            [
+                e.scenario or e.task[:50],
+                f"{e.naive_tokens:,}",
+                f"{e.optimized_tokens:,}",
+                f"{e.reduction_pct:.1f}%",
+            ]
+            for e in reversed(events)
+        ],
+    )
 
 
 def _handle_clear(root: str) -> None:
@@ -133,6 +129,6 @@ def _handle_clear(root: str) -> None:
         cleared = True
 
     if cleared:
-        console.print("[green]✓ Telemetry cleared.[/]")
+        console.success("Telemetry cleared.")
     else:
-        console.print("[dim]No telemetry data to clear.[/]")
+        console.info("No telemetry yet.")

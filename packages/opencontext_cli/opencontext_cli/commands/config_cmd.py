@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 from typing import Any
 
+from opencontext_core.dx.console_styles import BrandConsole, console
 from opencontext_core.state import ConfigBackupManager
 from opencontext_core.user_prefs import UserConfigStore
 from opencontext_core.wizard import (
@@ -17,6 +18,20 @@ from opencontext_core.wizard import (
     reset_config,
     show_config,
 )
+
+
+def _stderr_console() -> BrandConsole:
+    """Brand console bound to STDERR so error lines never pollute stdout/JSON."""
+    bc = BrandConsole()
+    inner = getattr(bc, "_console", None)
+    if inner is not None:
+        from rich.console import Console as _Console
+
+        bc._console = _Console(stderr=True)
+    return bc
+
+
+err_console = _stderr_console()
 
 
 def add_config_parser(subparsers: Any) -> None:
@@ -162,12 +177,20 @@ def _config_doctor(args: Any) -> None:
             )
         )
     else:
+        console.header("Config Doctor")
         for d in diags:
-            symbol = {"passed": "✓", "warning": "!", "failed": "✗", "error": "✗"}.get(d.status, "·")
-            print(f"  {symbol} [{d.status}] {d.name}: {d.message}")
+            line = f"[{d.status}] {d.name}: {d.message}"
+            if d.status == "passed":
+                console.success(line)
+            elif d.status == "warning":
+                console.warning(line)
+            elif d.status in ("failed", "error"):
+                err_console.error(line)
+            else:
+                console.dim(line)
             if d.recommendation:
-                print(f"      → {d.recommendation}")
-        print(f"\n  {len(diags)} check(s), {failed} failed.")
+                console.dim(f"      → {d.recommendation}")
+        console.print(f"\n  {len(diags)} check(s), {failed} failed.")
 
     if getattr(args, "strict", False) and failed:
         sys.exit(1)
@@ -257,10 +280,10 @@ def _bridge_to_project_yaml(key: str, value: object) -> None:
     if key not in RUNTIME_PREF_TO_YAML:
         # Be honest: this key lives in user preferences and is not mirrored to the
         # opencontext.yaml the runtime reads, so it does not change runtime behavior.
-        print("  → saved to user preferences only (does not change runtime behavior)")
+        console.dim("  → saved to user preferences only (does not change runtime behavior)")
         return
     if sync_pref_to_yaml(key, value):
-        print(f"  → applied to opencontext.yaml ({RUNTIME_PREF_TO_YAML[key]})")
+        console.dim(f"  → applied to opencontext.yaml ({RUNTIME_PREF_TO_YAML[key]})")
 
 
 def _config_set(key: str, value: str) -> None:
@@ -273,23 +296,23 @@ def _config_set(key: str, value: str) -> None:
         _target_type, _description = CONFIG_PATHS[key]
         resolved = _resolve_config_path(prefs, key)
         if resolved is None:
-            print(f"Error: Cannot resolve path '{key}'")
+            err_console.error(f"Cannot resolve path '{key}'")
             return
         parent, attr = resolved
         try:
             parsed = _coerce_value(value, _target_type)
             setattr(parent, attr, parsed)
             store.save(prefs)
-            print(f"Set {key} = {parsed}")
+            console.success(f"Set {key} = {parsed}")
             _bridge_to_project_yaml(key, parsed)
         except (ValueError, TypeError) as exc:
-            print(f"Error: Cannot set '{key}' to '{value}': {exc}")
-            print(f"Expected type: {_target_type.__name__}")
+            err_console.error(f"Cannot set '{key}' to '{value}': {exc}")
+            err_console.dim(f"Expected type: {_target_type.__name__}")
     else:
-        print(f"Unknown key: {key}")
-        print(f"Available paths ({len(CONFIG_PATHS)}):")
+        err_console.error(f"Unknown key: {key}")
+        console.dim(f"Available paths ({len(CONFIG_PATHS)}):")
         for path, (typ, desc) in sorted(CONFIG_PATHS.items()):
-            print(f"  {path}  ({typ.__name__})  {desc}")
+            console.dim(f"  {path}  ({typ.__name__})  {desc}")
 
 
 def _config_get(key: str) -> None:
@@ -306,55 +329,58 @@ def _config_get(key: str) -> None:
             return
         parent, attr = resolved
         value = getattr(parent, attr, "<not set>")
-        print(f"{key} = {value}")
+        console.print(f"{key} = {value}")
     else:
-        print(f"Unknown key: {key}")
+        err_console.error(f"Unknown key: {key}")
         # Suggest the closest key (replace dots with underscores for display)
         candidates = sorted(CONFIG_PATHS.keys())
         key_norm = key.lower().replace(".", "_")
         suggestions = [c for c in candidates if key_norm in c.lower() or c.lower() in key_norm]
         if suggestions:
-            print(f"Hint: did you mean {suggestions[0]!r}?")
-        print(f"Available paths ({len(CONFIG_PATHS)}):")
+            console.info(f"Hint: did you mean {suggestions[0]!r}?")
+        console.dim(f"Available paths ({len(CONFIG_PATHS)}):")
         for path, (typ, desc) in sorted(CONFIG_PATHS.items()):
-            print(f"  {path}  ({typ.__name__})  {desc}")
+            console.dim(f"  {path}  ({typ.__name__})  {desc}")
 
 
 def _config_backup() -> None:
     """Create a manual backup."""
 
     backup_id = ConfigBackupManager.create_backup(description="manual")
-    print(f"  ✓ Backup created: {backup_id}")
-    print(f"    Location: {ConfigBackupManager.BACKUP_DIR / backup_id}")
+    console.success(f"Backup created: {backup_id}")
+    console.dim(f"   Location: {ConfigBackupManager.BACKUP_DIR / backup_id}")
 
 
 def _config_backups() -> None:
     """List backups."""
 
     backups = ConfigBackupManager.list_backups()
+    console.header("Configuration Backups")
     if not backups:
-        print("  No backups found.")
-        print(f"  Backup directory: {ConfigBackupManager.BACKUP_DIR}")
+        console.info("No backups yet.")
+        console.dim(f"Backup directory: {ConfigBackupManager.BACKUP_DIR}")
         return
 
-    print()
-    print(f"  {'Backup ID':<30} {'Timestamp':<25} {'Description':<20} {'Files'}")
-    print(f"  {'─' * 30} {'─' * 25} {'─' * 20} {'─' * 20}")
-    for b in backups:
-        files_str = ", ".join(b.files) if b.files else "—"
-        print(f"  {b.id:<30} {b.timestamp:<25} {b.description:<20} {files_str}")
-    print(f"\n  {len(backups)} backup(s) available")
-    print("\n  Restore: opencontext config restore <id>")
+    console.table(
+        "Backups",
+        ["Backup ID", "Timestamp", "Description", "Files"],
+        [
+            [b.id, b.timestamp, b.description, ", ".join(b.files) if b.files else "—"]
+            for b in backups
+        ],
+    )
+    console.dim(f"{len(backups)} backup(s) available")
+    console.dim("Restore: opencontext config restore <id>")
 
 
 def _config_restore(backup_id: str) -> None:
     """Restore from a backup."""
 
     if ConfigBackupManager.restore_backup(backup_id):
-        print(f"  ✓ Restored from backup: {backup_id}")
+        console.success(f"Restored from backup: {backup_id}")
     else:
-        print(f"  ✗ Backup not found: {backup_id}")
-        print("    List available: opencontext config backups")
+        err_console.error(f"Backup not found: {backup_id}")
+        err_console.dim("   List available: opencontext config backups")
         sys.exit(1)
 
 
@@ -362,5 +388,5 @@ def _config_cleanup(keep_days: int) -> None:
     """Clean up old backups beyond keep_days."""
 
     removed, remaining = ConfigBackupManager.cleanup(keep_days)
-    print(f"  ✓ Removed {removed} backup(s) older than {keep_days} days")
-    print(f"    {remaining} backup(s) remaining")
+    console.success(f"Removed {removed} backup(s) older than {keep_days} days")
+    console.dim(f"   {remaining} backup(s) remaining")

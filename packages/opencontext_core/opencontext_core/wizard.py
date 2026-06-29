@@ -320,11 +320,20 @@ def reconfigure(section: str | None = None) -> None:
 
 def show_config() -> None:
     """Display current configuration."""
+    from opencontext_core.dx.console_styles import BRAND_PRIMARY
+    from opencontext_core.dx.console_styles import console as brand_console
 
     store = UserConfigStore()
     prefs = store.load()
 
-    _print_section("Current Configuration")
+    def _flag(value: bool, on: str = "ON", off: str = "OFF") -> str:
+        return f"[green]{on}[/]" if value else f"[dim]{off}[/]"
+
+    def _label(text: str) -> None:
+        console.print(f"\n  [bold {BRAND_PRIMARY}]{text}[/]")
+
+    # Canonical brand header (logo + brand panel) — replaces the ad-hoc cyan rule.
+    brand_console.header("Current Configuration")
     console.print(f"\n  Config file: {store.CONFIG_FILE}")
     console.print(f"  First run: {'Yes' if prefs.first_run else 'No'}")
     if prefs.install_date:
@@ -333,39 +342,39 @@ def show_config() -> None:
     console.print(f"\n  Security Mode: {prefs.security_mode}")
     console.print(f"  Data Classification: {prefs.data_classification}")
 
-    console.print("\n  Features:")
+    _label("Features")
     for key, value in vars(prefs.features).items():
-        console.print(f"    {key}: {'ON' if value else 'OFF'}")
+        console.print(f"    {key}: {_flag(value)}")
 
-    console.print("\n  Token Budgets:")
+    _label("Token Budgets")
     console.print(f"    Default: {prefs.default_token_budget}")
     console.print(f"    Max Input: {prefs.max_input_tokens}")
 
-    console.print("\n  Agents:")
+    _label("Agents")
     for agent, enabled in prefs.agent_integrations.items():
-        console.print(f"    {agent}: {'enabled' if enabled else 'disabled'}")
+        console.print(f"    {agent}: {_flag(enabled, 'enabled', 'disabled')}")
 
     # Show installed plugins from the plugin system
+    _label("Plugins")
     try:
         registry = PluginRegistry()
         installed_plugins = registry.discover()
         if installed_plugins:
-            console.print(f"\n  Plugins ({len(installed_plugins)} installed):")
             for p in installed_plugins:
-                status = "✓" if p.enabled else "○"
+                status = "[green]✓[/]" if p.enabled else "[dim]○[/]"
                 console.print(f"    {status} {p.name} v{p.version} [{p.install_source}]")
         else:
-            console.print("\n  Plugins: none installed")
+            console.print("    [dim]none installed[/]")
     except Exception:
-        console.print("\n  Plugins: (error reading plugins)")
+        console.print("    [dim](error reading plugins)[/]")
 
-    console.print("\n  Learning:")
-    console.print(f"    Auto-optimize: {'ON' if prefs.learning_auto_optimize else 'OFF'}")
-    console.print(f"    Share anonymous: {'ON' if prefs.learning_share_anonymous else 'OFF'}")
+    _label("Learning")
+    console.print(f"    Auto-optimize: {_flag(prefs.learning_auto_optimize)}")
+    console.print(f"    Share anonymous: {_flag(prefs.learning_share_anonymous)}")
 
-    console.print("\n  Updates:")
-    console.print(f"    Check updates: {'ON' if prefs.check_updates else 'OFF'}")
-    console.print(f"    Auto-update plugins: {'ON' if prefs.auto_update_plugins else 'OFF'}")
+    _label("Updates")
+    console.print(f"    Check updates: {_flag(prefs.check_updates)}")
+    console.print(f"    Auto-update plugins: {_flag(prefs.auto_update_plugins)}")
 
 
 def reset_config() -> None:

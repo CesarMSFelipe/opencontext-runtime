@@ -17,7 +17,9 @@ import json
 import sys
 from typing import Any
 
+from opencontext_cli.output import eprint
 from opencontext_core.config import load_config_or_defaults
+from opencontext_core.dx.console_styles import console
 from opencontext_core.policy.engine import PolicyEngine, PolicyOperation
 from opencontext_core.policy.presets import (
     PRESET_TABLE,
@@ -63,7 +65,7 @@ def handle_policy(args: Any) -> None:
     if action == "simulate":
         _handle_simulate(args)
         return
-    print("Usage: opencontext policy [presets|show|simulate]")
+    eprint("Usage: opencontext policy [presets|show|simulate]")
     sys.exit(1)
 
 
@@ -98,15 +100,17 @@ def _handle_show(args: Any) -> None:
         "posture": posture.model_dump(),
     }
     if getattr(args, "json", False):
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(payload, indent=2))  # pure JSON to stdout
         return
-    print(f"Active preset: {engine.preset.value}")
-    print(f"CI/remote mode: {engine.ci_mode}")
-    print(f"Network: {posture.network}")
-    print(f"External provider: {posture.external_provider}")
-    print(f"Unknown command: {posture.unknown_command}")
-    print(f"Command enforcement: {posture.command_enforcement}")
-    print(f"Cache ceiling: {posture.cache_ceiling}")
+    console.header("Policy")
+    console.section("Active posture")
+    console.print(f"Active preset: {engine.preset.value}")
+    console.print(f"CI/remote mode: {engine.ci_mode}")
+    console.print(f"Network: {posture.network}")
+    console.print(f"External provider: {posture.external_provider}")
+    console.print(f"Unknown command: {posture.unknown_command}")
+    console.print(f"Command enforcement: {posture.command_enforcement}")
+    console.print(f"Cache ceiling: {posture.cache_ceiling}")
 
 
 def _handle_simulate(args: Any) -> None:

@@ -25,7 +25,9 @@ def _run_cli(
 
 
 def test_version_emits_aggregate_block() -> None:
-    result = _run_cli("version")
+    # `version` now defaults to a branded human banner; the machine-readable
+    # aggregate block is emitted under --json (pure JSON to stdout).
+    result = _run_cli("version", "--json")
     assert result.returncode == 0, result.stderr
     block = json.loads(result.stdout)
     for key in (

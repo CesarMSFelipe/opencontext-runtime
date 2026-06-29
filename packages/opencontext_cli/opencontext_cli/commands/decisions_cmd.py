@@ -18,6 +18,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
 from opencontext_core.runtime.decisions import summarize_decision_log
 from opencontext_core.runtime.run import RuntimeRun
 from opencontext_core.runtime.session_store import SessionStore
@@ -99,18 +101,20 @@ def handle_decisions(args: Any) -> None:
             if decisions:  # only runs that actually recorded decisions
                 rows.append({"run_id": run_dir.name, "decisions": len(decisions)})
         if getattr(args, "json", False):
-            print(json.dumps(rows, indent=2))
-        elif rows:
+            print(json.dumps(rows, indent=2))  # pure JSON to stdout
+            return
+        console.header("Decisions")
+        if rows:
             for row in rows:
                 print(f"{row['run_id']}\t{row['decisions']} decisions")
         else:
-            print("No runs with recorded decisions yet.")
+            console.info("No runs with recorded decisions yet.")
         return
 
     if action == "show":
         run_dir = next((d for d in _run_dirs(store) if d.name == args.run_id), None)
         if run_dir is None:
-            print(f"Run not found: {args.run_id}", file=sys.stderr)
+            eprint(f"Run not found: {args.run_id}")
             sys.exit(1)
         decision_rows = _decisions_for(run_dir) or []
         if getattr(args, "json", False):
@@ -133,5 +137,5 @@ def handle_decisions(args: Any) -> None:
                     print(f"    alternatives: {', '.join(drow['alternatives'])}")
         return
 
-    print("Usage: opencontext decisions [list|show]")
+    eprint("Usage: opencontext decisions [list|show]")
     sys.exit(1)

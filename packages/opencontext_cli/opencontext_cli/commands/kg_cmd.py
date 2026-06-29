@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import webbrowser
+from pathlib import Path
 from typing import Any
 
 from opencontext_core.dx.console_styles import console
@@ -20,6 +21,7 @@ def add_kg_parser(subparsers: Any) -> None:
     kg_search = kg_sub.add_parser("search", help="Search for symbols.")
     kg_search.add_argument("query", help="Search query.")
     kg_search.add_argument("--limit", type=int, default=20)
+    kg_search.add_argument("--root", default=".", help="Project root (default: cwd).")
     kg_search.add_argument("--json", action="store_true")
 
     kg_query = kg_sub.add_parser("query", help="Query graph by kind.")
@@ -62,6 +64,7 @@ def add_kg_parser(subparsers: Any) -> None:
     kg_node.add_argument(
         "--code", action="store_true", help="Include the symbol's exact source code."
     )
+    kg_node.add_argument("--root", default=".", help="Project root (default: cwd).")
     kg_node.add_argument("--json", action="store_true")
 
     kg_sub.add_parser("status", help="Check index status.")
@@ -122,11 +125,13 @@ def handle_kg(args: Any) -> None:
     limit = getattr(args, "limit", 20)
     depth = getattr(args, "depth", 2)
     radius = getattr(args, "radius", 2)
-    getattr(args, "max_nodes", 20)
     json_output = getattr(args, "json", False)
-    getattr(args, "root", ".")
+    # Project-scoped commands (search/node) accept an explicit `--root PATH`; the
+    # graph store lives under `<root>/.storage/opencontext`, matching `index`. For
+    # commands without --root this resolves to cwd — identical to the old default.
+    root = getattr(args, "root", ".")
 
-    kg = KnowledgeGraph()
+    kg = KnowledgeGraph(db_path=Path(root) / ".storage" / "opencontext" / "context_graph.db")
 
     # Graph-reading commands need an index; if it's empty, say so rather than
     # returning a bare "No results" (indistinguishable from "indexed, no match").

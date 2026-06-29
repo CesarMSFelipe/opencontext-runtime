@@ -11,9 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rich.console import Console
-
-console = Console()
+from opencontext_core.dx.console_styles import console
 
 
 def add_health_parser(subparsers: Any) -> None:
@@ -36,9 +34,10 @@ def handle_health(args: Any) -> None:
     report = RuntimeHealth().report(root, emit=True, **evidence)
 
     if getattr(args, "json", False):
-        print(to_json(report))
+        print(to_json(report))  # pure JSON to stdout
         return
 
+    console.header("Runtime Health")
     console.print(render_health_report(report))
     if not _flag_enabled(root):
         console.print(

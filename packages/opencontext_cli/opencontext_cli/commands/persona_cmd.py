@@ -11,12 +11,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from rich.console import Console
 from rich.table import Table
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
 from opencontext_core.personas import PERSONAS, delegation_personas, get_persona, public_personas
-
-console = Console()
 
 
 def add_persona_parser(subparsers: Any) -> None:
@@ -55,6 +54,7 @@ def handle_persona(args: Any) -> int:
             rows = delegation_personas()
         else:
             rows = public_personas()
+        console.header("Personas")
         table = Table(title=f"OpenContext personas ({len(rows)})")
         table.add_column("Id", style="cyan")
         table.add_column("Name", style="bold")
@@ -67,8 +67,8 @@ def handle_persona(args: Any) -> int:
     if args.persona_command == "show":
         found = get_persona(args.id)
         if found is None:
-            console.print(f"[red]Unknown persona:[/] {args.id}")
-            console.print(f"  Available: {', '.join(p.id for p in PERSONAS)}")
+            eprint(f"Unknown persona: {args.id}")
+            eprint(f"  Available: {', '.join(p.id for p in PERSONAS)}")
             return 1
         console.print(f"[bold]{found.name}[/] [dim]({found.id})[/]")
         console.print(found.description)
@@ -92,12 +92,12 @@ def handle_persona(args: Any) -> int:
 
     if args.persona_command == "set-model":
         if get_persona(args.id) is None:
-            console.print(f"[red]Unknown persona:[/] {args.id}")
-            console.print(f"  Available: {', '.join(p.id for p in PERSONAS)}")
+            eprint(f"Unknown persona: {args.id}")
+            eprint(f"  Available: {', '.join(p.id for p in PERSONAS)}")
             return 1
         cfg_path = Path(getattr(args, "root", ".")) / "opencontext.yaml"
         if not cfg_path.exists():
-            console.print(f"[red]No opencontext.yaml at {cfg_path}[/] — run `opencontext install`.")
+            eprint(f"No opencontext.yaml at {cfg_path} — run `opencontext install`.")
             return 1
         data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
         sdd = data.setdefault("sdd", {})

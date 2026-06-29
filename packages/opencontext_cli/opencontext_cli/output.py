@@ -54,6 +54,25 @@ def resolve_output_mode(args: Any) -> OutputMode:
     return OutputMode.human
 
 
+def eprint(message: str) -> None:
+    """Print a branded error line to *stderr* (brand palette, CI-safe).
+
+    Diagnostics must never pollute the ``--json`` stdout stream, so error text
+    goes to stderr through a stderr-bound console. Callers decide the exit code
+    (``return 1`` for exit-code handlers, ``sys.exit(1)`` otherwise).
+    """
+    try:
+        from rich.console import Console
+
+        from opencontext_core.dx.console_styles import BRAND_ERROR
+
+        Console(stderr=True).print(f"[bold {BRAND_ERROR}]✗[/] {message}")
+    except Exception:  # rich missing / unusable — still emit on stderr.
+        import sys
+
+        print(f"x {message}", file=sys.stderr)
+
+
 def emit(
     data: dict[str, Any],
     mode: OutputMode,

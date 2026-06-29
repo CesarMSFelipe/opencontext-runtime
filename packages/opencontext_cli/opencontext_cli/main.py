@@ -82,6 +82,7 @@ from opencontext_cli.commands.update_cmd import (
     handle_upgrade,
 )
 from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
+from opencontext_cli.output import add_output_flag
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
 from opencontext_core.config import SecurityMode, default_config_data, load_config
 from opencontext_core.context.modes import ContextMode
@@ -205,6 +206,26 @@ def _get_version() -> str:
 
 
 __version__ = _get_version()
+
+
+def _version_human() -> None:
+    """Render the branded human version banner (logo + version + schema lines).
+
+    The machine-readable block stays available via ``version --json``; this is
+    the default surface so ``opencontext version`` carries the same brand chrome
+    as every other command instead of dumping raw JSON.
+    """
+    from opencontext_core.dx.console_styles import console
+    from opencontext_core.migration.versions import aggregate_versions
+
+    block = aggregate_versions()
+    console.header("OpenContext")
+    console.success(f"OpenContext {block['opencontext']}")
+    console.section("Schema versions")
+    for key, value in block.items():
+        if key == "opencontext":
+            continue
+        console.print(f"  [bold]{key.replace('_', ' '):<16}[/] {value}")
 
 
 def _force_utf8_output() -> None:
@@ -1278,7 +1299,8 @@ def _build_parser() -> argparse.ArgumentParser:
     version_parser = subparsers.add_parser(
         "version", help="Show the aggregate runtime/schema version block."
     )
-    del version_parser  # no args; handled in dispatch
+    version_parser.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
+    add_output_flag(version_parser)
 
     status_parser = subparsers.add_parser("status", help="Show project status.")
     status_parser.add_argument("root", nargs="?", default=".", help="Project root.")
@@ -1448,7 +1470,13 @@ def _dispatch(args: argparse.Namespace) -> None:
         _agent(args.agent_command, args.target, args.root, args.force)
         return
     if command == "version":
-        raise SystemExit(handle_version())
+        from opencontext_cli.output import OutputMode as _CliOutputMode
+        from opencontext_cli.output import resolve_output_mode
+
+        if resolve_output_mode(args) is _CliOutputMode.json:
+            raise SystemExit(handle_version())  # pure JSON to stdout
+        _version_human()
+        raise SystemExit(0)
     if command == "memory":
         _memory(args)
         return
@@ -2966,6 +2994,53 @@ def _doctor(
     checks = (
         run_security_doctor(runtime.config) if scope == "security" else run_doctor(runtime.config)
     )
+
+    # CI-friendly JSON: pure JSON to stdout, no logo/panel/human text.
+    if json_output:
+        payload: dict[str, Any]
+        if scope == "tokens":
+            tr = build_token_report(Path("."))
+            payload = {
+                "scope": scope,
+                "indexable_files": tr.baseline_indexable_files,
+                "total_tokens": tr.total_indexable_tokens,
+                "raw_characters": tr.baseline_raw_character_count,
+                "compression_savings": tr.compression_savings,
+                "cache_savings": tr.cache_savings,
+            }
+        elif scope == "providers":
+            payload = {
+                "scope": scope,
+                "default_provider": "mock/mock-llm",
+                "external_providers": "disabled",
+            }
+        elif scope == "tools":
+            payload = {
+                "scope": scope,
+                "mcp_enabled": runtime.config.tools.mcp.enabled,
+                "native_enabled": runtime.config.tools.native.enabled,
+            }
+        else:
+            rows = [
+                {
+                    "name": getattr(c, "name", "unknown"),
+                    "ok": bool(getattr(c, "ok", False)),
+                    "details": getattr(c, "details", ""),
+                }
+                for c in checks
+            ]
+            passed_n = sum(1 for r in rows if r["ok"])
+            payload = {
+                "scope": scope,
+                "checks": rows,
+                "passed": passed_n,
+                "failed": len(rows) - passed_n,
+            }
+        json.dump(payload, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        if strict and int(payload.get("failed", 0)):
+            sys.exit(1)
+        return
 
     console.header(f"Doctor Check: {scope}")
 
@@ -4533,6 +4608,9 @@ def _memory(args: argparse.Namespace) -> None:
             print(f"- {path}")
         return
     if command == "list":
+        from opencontext_core.dx.console_styles import console
+
+        console.header("Memory")
         # Canonical SQLite store first (what the agent recalls), markdown second.
         shown = False
         store = _agent_memory_store(args)
@@ -4546,7 +4624,7 @@ def _memory(args: argparse.Namespace) -> None:
             )
             shown = True
         if not shown:
-            print("No memory yet. Run 'opencontext memory harvest' or an agentic loop.")
+            console.info("No memory yet. Run 'opencontext memory harvest' or an agentic loop.")
         return
     if command == "search":
         seen: set[str] = set()

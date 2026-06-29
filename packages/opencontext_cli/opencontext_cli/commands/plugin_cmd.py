@@ -20,12 +20,27 @@ import json
 from pathlib import Path
 from typing import Any
 
+from opencontext_core.dx.console_styles import BrandConsole, console
 from opencontext_core.plugin_system import (
     PluginInstaller,
     PluginRegistry,
     PluginUpdater,
     RegistryFetcher,
 )
+
+
+def _stderr_console() -> BrandConsole:
+    """Brand console bound to STDERR so error lines never pollute stdout/JSON."""
+    bc = BrandConsole()
+    inner = getattr(bc, "_console", None)
+    if inner is not None:
+        from rich.console import Console as _Console
+
+        bc._console = _Console(stderr=True)
+    return bc
+
+
+err_console = _stderr_console()
 
 
 def add_plugin_parser(subparsers: Any) -> None:
@@ -172,26 +187,25 @@ def _plugin_list(args: Any) -> None:
         print(json.dumps(data, indent=2))
         return
 
+    console.header("Installed Plugins")
     if not plugins:
-        print("\n  No plugins installed.")
-        print(f"  Plugin directory: {registry.plugins_dir}")
-        print()
-        print("  Search available:  opencontext plugin search")
-        print("  Install plugin:    opencontext plugin install <name>")
-        print("  Install from GH:   opencontext plugin install <name> --github owner/repo")
+        console.info("No plugins installed.")
+        console.dim(f"Plugin directory: {registry.plugins_dir}")
+        console.print()
+        console.dim("Search available:  opencontext plugin search")
+        console.dim("Install plugin:    opencontext plugin install <name>")
+        console.dim("Install from GH:   opencontext plugin install <name> --github owner/repo")
         return
 
-    print()
-    print(f"  {'Name':<22} {'Version':<10} {'Source':<12} {'Status':<10} {'Description'}")
-    print(f"  {'─' * 22} {'─' * 10} {'─' * 12} {'─' * 10} {'─' * 50}")
+    rows = []
     for p in plugins:
         status = "✓ enabled" if p.enabled else "○ disabled"
         source = {"local": "local", "registry": "registry", "github": "GitHub", "url": "URL"}.get(
             p.install_source, p.install_source
         )
-        print(f"  {p.name:<22} {p.version:<10} {source:<12} {status:<10} {p.description[:50]}")
-    print(f"\n  {len(plugins)} plugin(s) installed")
-    print(f"  Directory: {registry.plugins_dir}")
+        rows.append([p.name, p.version, source, status, p.description[:50]])
+    console.table("Plugins", ["Name", "Version", "Source", "Status", "Description"], rows)
+    console.dim(f"{len(plugins)} plugin(s) installed · {registry.plugins_dir}")
 
 
 def _plugin_search(args: Any) -> None:
@@ -202,35 +216,33 @@ def _plugin_search(args: Any) -> None:
     try:
         results = fetcher.search(query=args.query, force=args.refresh)
     except Exception as e:
-        print(f"\n  Error fetching registry: {e}")
-        print("  Falling back to built-in registry...")
+        err_console.warning(f"Error fetching registry: {e}")
+        console.dim("Falling back to built-in registry...")
         results = fetcher.search(query=args.query)
 
+    title = f"Search: {args.query}" if args.query else "Plugin Registry"
+    console.header(title)
     if not results:
         if args.query:
-            print(f"\n  No plugins matching '{args.query}' found.")
+            console.info(f"No plugins matching '{args.query}' yet.")
         else:
-            print("\n  No plugins available in registry.")
+            console.info("No plugins available in registry yet.")
         return
 
-    print()
-    if args.query:
-        print(f"  Search results for '{args.query}':")
-    else:
-        print("  Plugin registry  (planned plugins — not yet published)")
-        print("  Install your own: opencontext plugin install <name> --github owner/repo")
-    print()
+    if not args.query:
+        console.dim("Planned plugins — not yet published.")
 
-    for p in results:
-        latest = p.versions[0].version if p.versions else "—"
-        print(f"  {p.name:<22} v{latest:<12} {p.description}")
-        print()
+    rows = [
+        [p.name, f"v{p.versions[0].version}" if p.versions else "—", p.description]
+        for p in results
+    ]
+    console.table("Available", ["Name", "Version", "Description"], rows)
 
-    print(f"  {len(results)} plugin(s) listed")
-    print()
-    print("  Custom install:  opencontext plugin install <name> --github owner/repo")
-    print("  Custom install:  opencontext plugin install <name> --url <url>")
-    print("  New scaffold:    opencontext plugin install <name>")
+    console.dim(f"{len(results)} plugin(s) listed")
+    console.print()
+    console.dim("Custom install:  opencontext plugin install <name> --github owner/repo")
+    console.dim("Custom install:  opencontext plugin install <name> --url <url>")
+    console.dim("New scaffold:    opencontext plugin install <name>")
 
 
 def _plugin_init(args: Any) -> None:
@@ -238,12 +250,14 @@ def _plugin_init(args: Any) -> None:
 
     name = args.name.strip()
     if not name.replace("-", "").replace("_", "").isalnum():
-        print(f"\n  ✗ Invalid plugin name: '{name}'. Use alphanumeric, hyphens, or underscores.\n")
+        err_console.error(
+            f"Invalid plugin name: '{name}'. Use alphanumeric, hyphens, or underscores."
+        )
         return
 
     plugin_dir = Path.cwd() / name
     if plugin_dir.exists():
-        print(f"\n  ✗ Directory '{name}' already exists.\n")
+        err_console.error(f"Directory '{name}' already exists.")
         return
 
     description = args.description or f"Plugin '{name}'"
@@ -271,7 +285,7 @@ def _plugin_init(args: Any) -> None:
         "permissions": {},
     }
     (plugin_dir / "plugin.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    print(f"  ✓ Created {name}/plugin.json")
+    console.success(f"Created {name}/plugin.json")
 
     # --- plugin.py ---
     if args.template == "advanced":
@@ -322,7 +336,7 @@ def _plugin_init(args: Any) -> None:
             f'        return "{description}"\n'
         )
     (plugin_dir / "plugin.py").write_text(plugin_py, encoding="utf-8")
-    print(f"  ✓ Created {name}/plugin.py")
+    console.success(f"Created {name}/plugin.py")
 
     # Stamp the entry-point checksum now that plugin.py exists, so load() can
     # verify integrity instead of treating the plugin as unverified.
@@ -339,9 +353,9 @@ def _plugin_init(args: Any) -> None:
         f"Describe how to use this plugin.\n"
     )
     (plugin_dir / "README.md").write_text(readme, encoding="utf-8")
-    print(f"  ✓ Created {name}/README.md")
+    console.success(f"Created {name}/README.md")
 
-    print(f"\n  Plugin '{name}' scaffolded. Edit plugin.py to add your logic.\n")
+    console.info(f"Plugin '{name}' scaffolded. Edit plugin.py to add your logic.")
 
 
 def _plugin_install(args: Any) -> None:
@@ -354,10 +368,10 @@ def _plugin_install(args: Any) -> None:
     installer = PluginInstaller()
 
     if args.github:
-        print(f"\n  Installing from GitHub: {args.github}")
+        console.info(f"Installing from GitHub: {args.github}")
         result = installer.install_from_github(args.github, name=args.name)
     elif args.url:
-        print(f"\n  Installing from URL: {args.url}")
+        console.info(f"Installing from URL: {args.url}")
         result = installer.install_from_url(args.name, args.url)
     else:
         version = args.ver or None
@@ -371,9 +385,9 @@ def _plugin_install_marketplace(args: Any) -> None:
 
     host = _host_config()
     if not getattr(host, "marketplace_enabled", False):
-        print(
-            "\n  ✗ Marketplace install is disabled. Enable plugins.marketplace_enabled"
-            " in opencontext.yaml to use multi-asset bundles.\n"
+        err_console.error(
+            "Marketplace install is disabled. Enable plugins.marketplace_enabled"
+            " in opencontext.yaml to use multi-asset bundles."
         )
         return
 
@@ -382,18 +396,18 @@ def _plugin_install_marketplace(args: Any) -> None:
     installer = MarketplaceInstaller()
     result = installer.install(args.marketplace, verify_key=(args.key or None))
 
-    icon = {"installed": "✓", "refused": "✗", "failed": "✗"}.get(result.status, "?")
-    print()
-    print(f"  {icon} {result.message}")
+    if result.status == "installed":
+        console.success(result.message)
+    else:
+        err_console.error(result.message)
     if result.trust_level:
-        print(f"     Trust:     {result.trust_level}")
+        console.dim(f"   Trust:     {result.trust_level}")
     if result.signature_verified:
-        print("     Signature: verified")
+        console.dim("   Signature: verified")
     if result.receipt_path:
-        print(f"     Receipt:   {result.receipt_path}")
+        console.dim(f"   Receipt:   {result.receipt_path}")
     for kind, ids in result.contributions:
-        print(f"     provides {kind}: {', '.join(ids)}")
-    print()
+        console.dim(f"   provides {kind}: {', '.join(ids)}")
 
 
 def _plugin_publish(args: Any) -> None:
@@ -408,22 +422,24 @@ def _plugin_publish(args: Any) -> None:
         out_dir=(args.out or None),
     )
 
-    print()
     if result.ok:
-        print(f"  ✓ {result.message}")
+        console.success(result.message)
         if result.archive_path:
-            print(f"     Archive: {result.archive_path}")
-        print(f"     Signed:  {'yes' if result.signed else 'no (no --key)'}")
+            console.dim(f"   Archive: {result.archive_path}")
+        console.dim(f"   Signed:  {'yes' if result.signed else 'no (no --key)'}")
         if result.findings:
-            print(f"     Note:    {len(result.findings)} secret finding(s) acknowledged (--allow)")
+            console.dim(
+                f"   Note:    {len(result.findings)} secret finding(s) acknowledged (--allow)"
+            )
     else:
-        print(f"  ✗ {result.message or 'publish failed'}")
+        err_console.error(result.message or "publish failed")
         for err in result.errors:
-            print(f"     {err}")
+            err_console.dim(f"   {err}")
         for finding in result.findings:
             # Fingerprint-only — never the raw secret value.
-            print(f"     leak: {finding.kind} fp={finding.fingerprint} {finding.redacted_value}")
-    print()
+            err_console.dim(
+                f"   leak: {finding.kind} fp={finding.fingerprint} {finding.redacted_value}"
+            )
 
 
 def _plugin_remove(args: Any) -> None:
@@ -433,11 +449,11 @@ def _plugin_remove(args: Any) -> None:
 
     info = registry.get_info(args.name)
     if info is None:
-        print(f"\n  Plugin '{args.name}' not found.")
-        print(f"  Installed plugins: {', '.join(p.name for p in registry.discover())}")
+        err_console.error(f"Plugin '{args.name}' not found.")
+        console.dim(f"Installed plugins: {', '.join(p.name for p in registry.discover())}")
         return
 
-    print(f"\n  Removing '{args.name}'...")
+    console.info(f"Removing '{args.name}'...")
 
     plugin_dir = registry.plugins_dir / args.name
     backup_dir = plugin_dir.parent / f".{args.name}.bak"
@@ -453,7 +469,7 @@ def _plugin_remove(args: Any) -> None:
             import shutil
 
             shutil.rmtree(backup_dir)
-        print(f"  ✓ '{args.name}' removed.\n")
+        console.success(f"'{args.name}' removed.")
     else:
         if backup_dir.exists():
             import shutil
@@ -462,7 +478,7 @@ def _plugin_remove(args: Any) -> None:
             for item in backup_dir.iterdir():
                 shutil.copy2(item, plugin_dir / item.name)
             shutil.rmtree(backup_dir)
-        print(f"  ✗ Failed to remove '{args.name}'.\n")
+        err_console.error(f"Failed to remove '{args.name}'.")
 
 
 def _plugin_update(args: Any) -> None:
@@ -471,36 +487,38 @@ def _plugin_update(args: Any) -> None:
     updater = PluginUpdater()
 
     if args.name:
-        print(f"\n  Checking updates for '{args.name}'...")
+        console.info(f"Checking updates for '{args.name}'...")
         result = updater.check_updates_for(args.name)
         _print_install_result(result)
         return
 
-    print("\n  Checking all plugins for updates...")
+    console.info("Checking all plugins for updates...")
     results = updater.check_updates()
 
     updated = [r for r in results if r.status == "updated"]
     skipped = [r for r in results if r.status == "skipped"]
     failed = [r for r in results if r.status == "failed"]
 
-    print()
     for r in results:
-        icon = {"updated": "✓", "skipped": "·", "failed": "✗"}.get(r.status, "?")
-        print(f"  {icon} {r.message}")
+        if r.status == "updated":
+            console.success(r.message)
+        elif r.status == "failed":
+            err_console.error(r.message)
+        else:
+            console.dim(r.message)
 
-    print()
+    console.print()
     if updated:
-        print(f"  {len(updated)} plugin(s) updated.")
+        console.success(f"{len(updated)} plugin(s) updated.")
     if skipped:
-        print(f"  {len(skipped)} plugin(s) up to date.")
+        console.dim(f"{len(skipped)} plugin(s) up to date.")
     if failed:
-        print(f"  {len(failed)} plugin(s) failed to update.")
+        err_console.error(f"{len(failed)} plugin(s) failed to update.")
         for r in failed:
             if r.error:
-                print(f"    {r.name}: {r.error}")
+                err_console.dim(f"   {r.name}: {r.error}")
     if not updated and not failed:
-        print("  All plugins up to date.")
-    print()
+        console.success("All plugins up to date.")
 
 
 def _plugin_info(args: Any) -> None:
@@ -552,50 +570,46 @@ def _plugin_info(args: Any) -> None:
         fetcher = RegistryFetcher()
         entry = fetcher.get(args.name)
         if entry:
-            print(f"\n  {entry.name}")
-            print(f"  {'─' * len(entry.name)}")
-            print(f"  Description: {entry.description}")
-            print(f"  Author:      {entry.author or '—'}")
-            print(f"  Homepage:    {entry.homepage or '—'}")
-            print(f"  Repository:  {entry.repository or '—'}")
+            console.header(entry.name)
+            console.print(f"  Description: {entry.description}")
+            console.print(f"  Author:      {entry.author or '—'}")
+            console.print(f"  Homepage:    {entry.homepage or '—'}")
+            console.print(f"  Repository:  {entry.repository or '—'}")
             if entry.versions:
-                print(f"  Versions:    {', '.join(v.version for v in entry.versions)}")
-            print()
-            print(f"  Not installed. Install with: opencontext plugin install {args.name}")
+                console.print(f"  Versions:    {', '.join(v.version for v in entry.versions)}")
+            console.info(f"Not installed. Install with: opencontext plugin install {args.name}")
             return
-        print(f"\n  Plugin '{args.name}' not found locally or in registry.\n")
+        err_console.error(f"Plugin '{args.name}' not found locally or in registry.")
         return
 
-    print(f"\n  {info.name}")
-    print(f"  {'─' * len(info.name)}")
-    print(f"  Version:      {info.version}")
+    console.header(info.name)
+    console.print(f"  Version:      {info.version}")
     if latest_version != "unknown" and latest_version != info.version:
-        print(f"  Latest:       {latest_version}  (update available)")
+        console.print(f"  Latest:       {latest_version}  (update available)")
     else:
-        print(f"  Latest:       {latest_version}")
-    print(f"  Description:  {info.description}")
-    print(f"  Author:       {info.author or '—'}")
-    print(f"  Homepage:     {info.homepage or '—'}")
-    print(f"  Repository:   {info.repository or '—'}")
-    print(f"  Status:       {'enabled' if info.enabled else 'disabled'}")
-    print(f"  Source:       {info.install_source}")
-    print(f"  Source URL:   {info.source_url or '—'}")
-    print(f"  Entry point:  {info.entry_point}")
-    print(f"  Installed at: {info.installed_at or '—'}")
-    print(f"  Updated at:   {info.updated_at or '—'}")
+        console.print(f"  Latest:       {latest_version}")
+    console.print(f"  Description:  {info.description}")
+    console.print(f"  Author:       {info.author or '—'}")
+    console.print(f"  Homepage:     {info.homepage or '—'}")
+    console.print(f"  Repository:   {info.repository or '—'}")
+    console.print(f"  Status:       {'enabled' if info.enabled else 'disabled'}")
+    console.print(f"  Source:       {info.install_source}")
+    console.print(f"  Source URL:   {info.source_url or '—'}")
+    console.print(f"  Entry point:  {info.entry_point}")
+    console.print(f"  Installed at: {info.installed_at or '—'}")
+    console.print(f"  Updated at:   {info.updated_at or '—'}")
     # PR-016: surface marketplace trust/publisher + a compatibility marker.
     meta = _marketplace_meta(registry, args.name)
     if meta.get("trust_level"):
-        print(f"  Trust:        {meta['trust_level']}")
+        console.print(f"  Trust:        {meta['trust_level']}")
     if meta.get("publisher"):
-        print(f"  Publisher:    {meta['publisher']}")
+        console.print(f"  Publisher:    {meta['publisher']}")
     if info.incompatible:
-        print(f"  Compat:       ✗ {info.incompatible}")
+        console.print(f"  Compat:       [bold]✗[/] {info.incompatible}")
     else:
-        print("  Compat:       ✓ compatible")
+        console.print("  Compat:       [green]✓[/] compatible")
     if info.hooks:
-        print(f"  Hooks:        {', '.join(info.hooks)}")
-    print()
+        console.print(f"  Hooks:        {', '.join(info.hooks)}")
 
 
 def _marketplace_meta(registry: PluginRegistry, name: str) -> dict[str, str]:
@@ -619,9 +633,9 @@ def _plugin_enable(args: Any) -> None:
 
     registry = PluginRegistry()
     if registry.enable(args.name):
-        print(f"  ✓ '{args.name}' enabled.\n")
+        console.success(f"'{args.name}' enabled.")
     else:
-        print(f"  ✗ Plugin '{args.name}' not found.\n")
+        err_console.error(f"Plugin '{args.name}' not found.")
 
 
 def _plugin_disable(args: Any) -> None:
@@ -629,9 +643,9 @@ def _plugin_disable(args: Any) -> None:
 
     registry = PluginRegistry()
     if registry.disable(args.name):
-        print(f"  ○ '{args.name}' disabled.\n")
+        console.warning(f"'{args.name}' disabled.")
     else:
-        print(f"  ✗ Plugin '{args.name}' not found.\n")
+        err_console.error(f"Plugin '{args.name}' not found.")
 
 
 def _host_config() -> Any:
@@ -651,7 +665,7 @@ def _plugin_activate(args: Any) -> None:
 
     registry = PluginRegistry()
     if registry.get_info(args.name) is None:
-        print(f"\n  Plugin '{args.name}' not found.\n")
+        err_console.error(f"Plugin '{args.name}' not found.")
         return
     result = registry.activate(args.name, host_config=_host_config())
 
@@ -673,13 +687,15 @@ def _plugin_activate(args: Any) -> None:
         )
         return
 
-    icon = "✓" if result.active else "✗"
-    print(f"\n  {icon} {result.plugin}: {result.status} (stage: {result.stage})")
+    line = f"{result.plugin}: {result.status} (stage: {result.stage})"
+    if result.active:
+        console.success(line)
+    else:
+        err_console.error(line)
     if result.reason:
-        print(f"     {result.reason}")
+        console.dim(f"   {result.reason}")
     for c in result.contributions:
-        print(f"     contributes {c.extension_point}: {c.contribution_id}")
-    print()
+        console.dim(f"   contributes {c.extension_point}: {c.contribution_id}")
 
 
 def _plugin_health(args: Any) -> None:
@@ -687,15 +703,15 @@ def _plugin_health(args: Any) -> None:
 
     registry = PluginRegistry()
     if registry.get_info(args.name) is None:
-        print(f"\n  Plugin '{args.name}' not found.\n")
+        err_console.error(f"Plugin '{args.name}' not found.")
         return
     result = registry.activate(args.name, host_config=_host_config())
     healthy = result.active
-    icon = "✓" if healthy else "✗"
-    print(f"\n  {icon} {result.plugin}: {'healthy' if healthy else result.status}")
-    if not healthy:
-        print(f"     {result.reason}  (stage: {result.stage})")
-    print()
+    if healthy:
+        console.success(f"{result.plugin}: healthy")
+    else:
+        err_console.error(f"{result.plugin}: {result.status}")
+        err_console.dim(f"   {result.reason}  (stage: {result.stage})")
 
 
 def _plugin_benchmark(args: Any) -> None:
@@ -704,7 +720,7 @@ def _plugin_benchmark(args: Any) -> None:
     registry = PluginRegistry()
     info = registry.get_info(args.name)
     if info is None:
-        print(f"\n  Plugin '{args.name}' not found.\n")
+        err_console.error(f"Plugin '{args.name}' not found.")
         return
     try:
         import json as _json
@@ -722,29 +738,27 @@ def _plugin_benchmark(args: Any) -> None:
             manifest, enabled=getattr(host, "benchmark_on_install", True), runner=None
         )
     except Exception as exc:
-        print(f"\n  ✗ Benchmark gate error: {exc}\n")
+        err_console.error(f"Benchmark gate error: {exc}")
         return
 
-    icon = "✓" if gate.passed else "✗"
     state = "ran" if gate.ran else "skipped"
-    print(f"\n  {icon} {args.name}: benchmark {state} — {gate.reason}\n")
+    line = f"{args.name}: benchmark {state} — {gate.reason}"
+    if gate.passed:
+        console.success(line)
+    else:
+        err_console.error(line)
 
 
 def _print_install_result(result: Any) -> None:
     """Pretty-print an install result."""
 
-    icons = {
-        "installed": "✓",
-        "updated": "✓",
-        "skipped": "·",
-        "failed": "✗",
-    }
-    icon = icons.get(result.status, "?")
-
-    print()
-    print(f"  {icon} {result.message}")
+    if result.status in ("installed", "updated"):
+        console.success(result.message)
+    elif result.status == "failed":
+        err_console.error(result.message)
+    else:
+        console.dim(result.message)
     if result.source:
-        print(f"     Source: {result.source}")
+        console.dim(f"   Source: {result.source}")
     if result.error:
-        print(f"     Error:  {result.error}")
-    print()
+        err_console.dim(f"   Error:  {result.error}")

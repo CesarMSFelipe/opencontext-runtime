@@ -13,7 +13,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from opencontext_cli.output import add_output_flag, emit, resolve_output_mode
+from opencontext_cli.output import add_output_flag, emit, eprint, resolve_output_mode
+from opencontext_core.dx.console_styles import console
 
 
 def _root(args: Any) -> Path:
@@ -170,8 +171,9 @@ def handle_session(args: Any) -> None:
             seen.add(row["session_id"])
 
         def _human_list(_: dict[str, Any]) -> None:
+            console.header("Sessions")
             if not rows:
-                print("No runtime sessions found.")
+                console.info("No runtime sessions yet.")
                 return
             for r in rows:
                 workflow = r.get("workflow") or "-"
@@ -199,10 +201,10 @@ def handle_session(args: Any) -> None:
         elif command == "archive":
             data = api.archive(sid).model_dump()
         else:
-            print("Usage: opencontext session [list|status|resume|archive]", file=sys.stderr)
+            eprint("Usage: opencontext session [list|status|resume|archive]")
             sys.exit(2)
     except FileNotFoundError:
-        print(f"Session not found: {sid}", file=sys.stderr)
+        eprint(f"Session not found: {sid}")
         sys.exit(1)
 
     def _human(d: dict[str, Any]) -> None:

@@ -13,10 +13,10 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from rich.console import Console
 from rich.table import Table
 
-console = Console()
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
 
 ROLES = (
     "classify",
@@ -86,7 +86,7 @@ def handle_models(args: Any) -> int:
     """Dispatch a ``models`` subcommand. Returns a process exit code."""
     cfg_path = _find_config()
     if cfg_path is None:
-        console.print("[red]No opencontext.yaml found.[/] Run 'opencontext init' first.")
+        eprint("No opencontext.yaml found. Run 'opencontext init' first.")
         return 1
 
     command = args.models_command
@@ -115,6 +115,7 @@ def _show(cfg_path: Path) -> int:
     default = (models.get("default", {}) or {}).get("model", "—")
     persona_models = (data.get("sdd", {}) or {}).get("persona_models", {}) or {}
 
+    console.header("Models")
     console.print(f"[bold]default[/] (your client's model): {default}")
 
     personas = Table(title="Per-persona models (recommended) — SDD phase routing")

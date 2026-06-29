@@ -11,12 +11,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from rich.console import Console
 from rich.table import Table
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
 from opencontext_core.sdd_profiles import SDDProfileManager
-
-console = Console()
 
 SDD_PHASES = ("explore", "propose", "spec", "design", "tasks", "apply", "verify", "archive")
 
@@ -37,7 +36,8 @@ def add_profile_parser(subparsers: Any) -> None:
     )
     sub = parser.add_subparsers(dest="profile_command", required=True)
 
-    sub.add_parser("list", help="List config profiles and per-phase model profiles.")
+    list_p = sub.add_parser("list", help="List config profiles and per-phase model profiles.")
+    list_p.add_argument("--json", action="store_true", help="Emit as JSON.")
 
     explain = sub.add_parser(
         "explain", help="Explain a profile (security/budget/approvals/observability)."
@@ -71,7 +71,7 @@ def handle_profile(args: Any) -> int:
     command = args.profile_command
 
     if command == "list":
-        return _list(manager)
+        return _list(manager, getattr(args, "json", False))
     if command == "explain":
         return _explain(args.name, getattr(args, "json", False))
     if command == "show":
@@ -85,11 +85,19 @@ def handle_profile(args: Any) -> int:
     return 1
 
 
-def _list(manager: SDDProfileManager) -> int:
+def _list(manager: SDDProfileManager, as_json: bool = False) -> int:
     from opencontext_core import config_profiles
 
     # Config profiles (PR-013) — governance/routing posture.
     cfg = config_profiles.list_profiles()
+    profiles = manager.list_profiles()
+    if as_json:
+        print(  # pure JSON to stdout
+            json.dumps({"config_profiles": cfg, "model_profiles": profiles}, indent=2)
+        )
+        return 0
+
+    console.header("Profiles")
     cfg_table = Table(title=f"Config profiles ({len(cfg)})")
     cfg_table.add_column("Name", style="cyan")
     cfg_table.add_column("Default")
@@ -99,7 +107,6 @@ def _list(manager: SDDProfileManager) -> int:
     console.print(cfg_table)
 
     # Model profiles — per-phase model assignment family.
-    profiles = manager.list_profiles()
     table = Table(title=f"Model profiles ({len(profiles)})")
     table.add_column("Name", style="cyan")
     table.add_column("Description")
@@ -118,9 +125,9 @@ def _explain(name: str, as_json: bool) -> int:
         print(json.dumps(info, indent=2))
         return 0 if "error" not in info else 1
     if "error" in info:
-        console.print(f"[red]{info['error']}[/]")
+        eprint(str(info["error"]))
         if info.get("next_action"):
-            console.print(f"  → {info['next_action']}")
+            eprint(f"  → {info['next_action']}")
         return 1
     console.print(f"[bold cyan]Profile:[/] {info['id']} ({info['family']})")
     if info.get("description"):
@@ -141,7 +148,7 @@ def _explain(name: str, as_json: bool) -> int:
 def _show(manager: SDDProfileManager, name: str, as_json: bool) -> int:
     profile = manager.get_profile(name)
     if profile is None:
-        console.print(f"[red]Profile not found:[/] {name}")
+        eprint(f"Profile not found: {name}")
         return 1
     if as_json:
         print(json.dumps(profile.to_dict(), indent=2))
@@ -166,7 +173,7 @@ def _create(manager: SDDProfileManager, name: str, description: str, base: str |
     if base is not None:
         base_profile = manager.get_profile(base)
         if base_profile is None:
-            console.print(f"[red]Base profile not found:[/] {base}")
+            eprint(f"Base profile not found: {base}")
             return 1
         assignments = dict(base_profile.model_assignments)
         if not description:
@@ -185,7 +192,7 @@ def _set_phase(manager: SDDProfileManager, name: str, phase: str, model: str) ->
         return 1
     profile = manager.get_profile(name)
     if profile is None:
-        console.print(f"[red]Profile not found:[/] {name}. Create it first with 'profile create'.")
+        eprint(f"Profile not found: {name}. Create it first with 'profile create'.")
         return 1
     assignments = dict(profile.model_assignments)
     assignments[phase] = model
@@ -201,5 +208,5 @@ def _delete(manager: SDDProfileManager, name: str) -> int:
     if manager.delete_profile(name):
         console.print(f"[green]Deleted profile[/] {name}")
         return 0
-    console.print(f"[red]Profile not found:[/] {name}")
+    eprint(f"Profile not found: {name}")
     return 1

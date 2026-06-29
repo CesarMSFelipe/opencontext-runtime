@@ -106,6 +106,9 @@ def handle_run_exec(args: Any) -> None:
     if not config_path.exists():
         # Config is advisory for this explicit CLI (run defaults oc-flow on), but
         # a missing config still earns an actionable nudge (path + how to fix).
+        # This diagnostic always goes to STDERR so STDOUT carries only the run
+        # summary — in --json mode that is ONLY the JSON object, keeping
+        # `json.load(stdout)` clean.
         print(missing_config_hint(root), file=sys.stderr)
     enabled = True
     try:

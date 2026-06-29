@@ -10,7 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from opencontext_cli.output import add_output_flag, emit, resolve_output_mode
+from opencontext_cli.output import add_output_flag, emit, eprint, resolve_output_mode
+from opencontext_core.dx.console_styles import console
 
 # dimension -> (level, score 0..1, recommendation)
 _READY = "ready"
@@ -107,12 +108,13 @@ def handle_maturity(args: Any) -> None:
     import sys
 
     if getattr(args, "maturity_command", None) != "assess":
-        print("Usage: opencontext maturity assess", file=sys.stderr)
+        eprint("Usage: opencontext maturity assess")
         sys.exit(2)
 
     data = _assess(_root(args))
 
     def _human(d: dict[str, Any]) -> None:
+        console.header("Maturity")
         print(f"Maturity: {d['overall_level']} ({d['overall_score']})")
         for dim in d["dimensions"]:
             mark = "x" if dim["level"] == _READY else " "
