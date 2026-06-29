@@ -49,6 +49,9 @@ class _NoopCoordStore:
         pass
 
 
+# DEPRECATED(2.0): adapted (losing) execution spine of the two-spine convergence; superseded
+# by HarnessRunner->RuntimeApi. Still the live oc-new driver; remove when resume carry-over
+# reaches parity on the HarnessRunner spine (milestone-C).
 class OcNewConductor:
     def __init__(
         self,

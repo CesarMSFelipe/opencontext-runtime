@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Any
 
 
+# DEPRECATED(2.0): dead agent SDK helper (used only by the deprecated AgentOrchestrator;
+# not the live models.context.TokenBudget). Remove in 2.0.
 @dataclass
 class TokenBudget:
     """Manages token allocation and tracking."""

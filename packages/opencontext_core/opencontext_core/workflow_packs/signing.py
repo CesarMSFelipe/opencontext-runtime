@@ -1,5 +1,8 @@
 """Workflow pack integrity signatures."""
 
+# DEPRECATED(2.0): dead module — no runtime caller (only its own tests). Superseded by
+# marketplace.signing (which mirrors this precedent). Remove in 2.0.
+
 from __future__ import annotations
 
 import hashlib

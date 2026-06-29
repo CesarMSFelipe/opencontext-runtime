@@ -17,6 +17,9 @@ if typing.TYPE_CHECKING:
     from opencontext_core.context.compression import CompressionEngine
 
 
+# DEPRECATED(2.0): legacy context packing; superseded by the PR-010 ContextEngine. Still the
+# live default; remove when runtime.context_engine_enabled is default + legacy removed
+# (milestone-D).
 class ContextPackBuilder:
     """Packs ranked context under a hard token budget with traceable decisions."""
 

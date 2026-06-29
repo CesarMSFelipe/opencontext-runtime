@@ -11,6 +11,8 @@ from opencontext_core.context.planning.planner import ContextPlanner
 from opencontext_core.context.planning.risk import RiskClassifier
 
 
+# DEPRECATED(2.0): dead agent SDK spine (no live caller;
+# superseded by opencontext_core.harness). Remove in 2.0.
 class ContextPlannerAgent(BaseAgent):
     """Builds a verified ContextContract for a task. Pure local, no LLM."""
 

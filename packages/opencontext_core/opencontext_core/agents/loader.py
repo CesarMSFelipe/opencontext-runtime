@@ -7,6 +7,8 @@ import yaml
 from .base import AgentConfig
 
 
+# DEPRECATED(2.0): dead agent SDK helper (used only by the deprecated
+# AgentOrchestrator). Remove in 2.0.
 def load_agent_config(config_path: Path) -> AgentConfig:
     """Load agent configuration from YAML file.
 

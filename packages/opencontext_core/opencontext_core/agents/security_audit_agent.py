@@ -17,6 +17,8 @@ _SECRET_PATTERNS = [
 ]
 
 
+# DEPRECATED(2.0): dead agent SDK spine (no live caller;
+# superseded by opencontext_core.harness). Remove in 2.0.
 class SecurityAuditAgent(BaseAgent):
     """Scans files for secret leakage patterns. Pure local."""
 

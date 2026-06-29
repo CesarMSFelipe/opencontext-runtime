@@ -8,6 +8,8 @@ from typing import Any
 from opencontext_core.agents.base import BaseAgent
 
 
+# DEPRECATED(2.0): dead agent SDK spine (no live caller;
+# superseded by opencontext_core.harness). Remove in 2.0.
 class TDDEnforcerAgent(BaseAgent):
     """Runs test suite and reports TDD cycle status. Pure local."""
 

@@ -45,6 +45,9 @@ class FirewallBlockedError(RuntimeError):
         super().__init__(_format_block(reason, alternatives))
 
 
+# DEPRECATED(2.0): legacy standalone firewall; superseded by the unified gateway firewall
+# (PR-012). Still the live default (used widely); remove when runtime.gateway_enabled is
+# default + legacy removed (milestone-E).
 class ContextFirewall:
     """Central security gate for prompts, providers, traces, and exports."""
 

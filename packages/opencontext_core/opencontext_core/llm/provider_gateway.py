@@ -56,6 +56,10 @@ def build_adapter(provider: str, *, max_tokens: int = 4000) -> ProviderAdapter |
     return adapter_cls(ProviderConfig(name=provider, api_key=api_key, max_tokens=max_tokens))
 
 
+# DEPRECATED(2.0): legacy per-provider adapter shim; superseded by the unified
+# providers.gateway.ProviderGateway (PR-012). NOTE: build_adapter/build_provider_gateway in
+# this module are reused by the vNext gateway and stay. Remove this class when
+# runtime.gateway_enabled is default + legacy removed (milestone-E).
 class ProviderGateway:
     """Adapts a ``ProviderAdapter.chat`` to ``LLMGateway.generate``."""
 
