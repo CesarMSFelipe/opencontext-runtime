@@ -327,7 +327,7 @@ def _run_policy_security(
         )
         if result.status == "completed":
             problems.append("secret-output run reported completed")
-        token = "AKIAIOSFODNN7EXAMPLE"
+        token = "AKIAIOSFODNN7EXAMPLE"  # gitleaks:allow — AWS docs example key, redaction canary
         art = result.artifacts_dir
         if art is not None:
             for path in art.rglob("*"):
