@@ -73,5 +73,5 @@ def test_handle_explain_renders_for_a_task(tmp_path: Path, capsys: pytest.Captur
 
     assert handle_explain(runtime, args) == 0
     out = capsys.readouterr().out
-    assert "Why this context" in out
+    assert "Why This Context" in out
     assert "auth" in out  # the relevant file surfaces in the explanation

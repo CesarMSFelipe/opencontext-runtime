@@ -11,7 +11,9 @@ import json
 import sys
 from typing import Any
 
+from opencontext_cli.output import eprint
 from opencontext_core.configurator.capability import build_capability_matrix
+from opencontext_core.dx.console_styles import console
 
 
 def add_capabilities_parser(subparsers: Any) -> None:
@@ -30,20 +32,21 @@ def handle_capabilities(args: Any) -> None:
     if agent_id:
         client = matrix.get(agent_id)
         if client is None:
-            print(f"Unknown client: {agent_id}", file=sys.stderr)
+            eprint(f"Unknown client: {agent_id}")
             sys.exit(1)
         if json_out:
             print(json.dumps(client.model_dump(), indent=2))
         else:
+            console.header(f"Client: {agent_id}")
             for k, v in client.model_dump().items():
+                # Values can be list/str reprs containing brackets — keep them on
+                # raw stdout so rich markup parsing never mangles them.
                 print(f"{k}: {v}")
         return
 
     if json_out:
         print(json.dumps(matrix.model_dump(), indent=2))
         return
-
-    from opencontext_core.dx.console_styles import console
 
     console.header(f"Client Capabilities ({len(matrix.clients)})")
     rows = [

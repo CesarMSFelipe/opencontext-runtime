@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import sys
 from typing import Any
 
+from opencontext_cli.output import eprint
 from opencontext_core.dx.agent_hints import AgentHintsManager
 from opencontext_core.dx.console_styles import console
 
@@ -44,7 +46,7 @@ def handle_hints(args: Any) -> None:
                 console.header("Agent Hints")
                 console.panel(ctx, title=hints.project_name or "Project Hints")
         else:
-            console.warning("No hints found. Run 'opencontext hints init' to create them.")
+            console.info("No hints yet. Run 'opencontext hints init' to create them.")
     elif command == "validate":
         files = manager.discover_hints()
         valid: list[str] = []
@@ -61,9 +63,10 @@ def handle_hints(args: Any) -> None:
             console.header("Hints Validation")
             console.success(f"Valid: {len(valid)}")
             if invalid:
-                console.error(f"Invalid: {len(invalid)}")
+                console.warning(f"Invalid: {len(invalid)}")
                 for item in invalid:
                     console.print(f"  [dim]✗ {item}[/]")
             console.info(f"Total files checked: {len(files)}")
     else:
-        console.error(f"Unknown hints command: {command}")
+        eprint(f"Unknown hints command: {command}")
+        sys.exit(1)

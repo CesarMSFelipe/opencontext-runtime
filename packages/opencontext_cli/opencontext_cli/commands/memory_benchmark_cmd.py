@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
 
 
 def add_memory_benchmark_parser(memory_sub: Any) -> None:
@@ -73,10 +75,7 @@ def _resolve_fixture(args: Any) -> Path:
         path = Path(args.fixture_path)
         if path.exists():
             return path
-        print(
-            f"Error: fixture path {args.fixture_path!r} does not exist.",
-            file=sys.stderr,
-        )
+        eprint(f"Fixture path {args.fixture_path!r} does not exist.")
         raise SystemExit(1)
 
     fixture_name = getattr(args, "fixture", "coding-agent-life-v1")
@@ -114,12 +113,11 @@ def _resolve_fixture(args: Any) -> Path:
         if candidate.exists():
             return candidate
 
-    print(
-        f"Error: fixture {fixture_name!r} not found via importlib.resources or fallback paths.\n"
+    eprint(
+        f"Fixture {fixture_name!r} not found via importlib.resources or fallback paths.\n"
         "Searched:\n"
         + "\n".join(f"  {c}" for c in fallback_candidates)
-        + "\nTip: supply an explicit path with --fixture-path <path>.",
-        file=sys.stderr,
+        + "\nTip: supply an explicit path with --fixture-path <path>."
     )
     raise SystemExit(1)
 
@@ -207,11 +205,10 @@ def handle_memory_benchmark(args: Any) -> None:
 
     # NOTE: REQ-02c — invalid-state guard: fail loudly if store returned 0.0 recall.
     if result.recall_at_5 == 0.0:
-        print(
+        eprint(
             f"invalid-state: seeded store returned 0.0 recall after seeding"
             f" {seeded_count} record(s)."
-            " The memory backend search may not be functioning correctly.",
-            file=sys.stderr,
+            " The memory backend search may not be functioning correctly."
         )
         raise SystemExit(1)
 
@@ -227,11 +224,12 @@ def handle_memory_benchmark(args: Any) -> None:
         }
         print(json.dumps(output, indent=2))
     else:
-        print(f"Memory benchmark results (fixture: {fixture_path.name})")
-        print(f"  Questions:    {result.num_questions}")
-        print(f"  Seeded:       {seeded_count} record(s)")
-        print(f"  Recall@{k}:    {result.recall_at_5:.3f}")
-        print(f"  MRR:          {result.mrr:.3f}")
-        print(f"  Precision@{k}: {result.precision_at_5:.3f}")
-        print(f"  Latency p50:  {result.p50_ms:.1f} ms")
-        print(f"  Latency p95:  {result.p95_ms:.1f} ms")
+        console.header("Memory Benchmark")
+        console.print(f"  Fixture:      {fixture_path.name}")
+        console.print(f"  Questions:    {result.num_questions}")
+        console.print(f"  Seeded:       {seeded_count} record(s)")
+        console.print(f"  Recall@{k}:    {result.recall_at_5:.3f}")
+        console.print(f"  MRR:          {result.mrr:.3f}")
+        console.print(f"  Precision@{k}: {result.precision_at_5:.3f}")
+        console.print(f"  Latency p50:  {result.p50_ms:.1f} ms")
+        console.print(f"  Latency p95:  {result.p95_ms:.1f} ms")

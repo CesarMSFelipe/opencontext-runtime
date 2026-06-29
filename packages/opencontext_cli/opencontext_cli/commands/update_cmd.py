@@ -11,12 +11,14 @@ from __future__ import annotations
 import sys
 from typing import Any
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
 from opencontext_core.update import EcosystemUpdateChecker, UpdateCheck, UpdateChecker
 
 
 def _format_release_notes(check: UpdateCheck) -> str:
     if check.release_notes:
-        return f"  Release notes: {check.release_notes}"
+        return f"Release notes: {check.release_notes}"
     return ""
 
 
@@ -55,55 +57,60 @@ def handle_update(args: Any) -> None:
 
     check = UpdateChecker.check(force=getattr(args, "force", False))
 
+    console.header("Check for Updates")
     if check.is_outdated:
-        print()
-        print(f"  Update available: {check.current_version} -> {check.latest_version}")
-        print(_format_release_notes(check))
-        print()
-        print("  Run 'opencontext upgrade' to install the latest version.")
+        console.info(f"Update available: {check.current_version} -> {check.latest_version}")
+        if check.release_notes:
+            console.dim(_format_release_notes(check))
+        console.print()
+        console.info("Run 'opencontext upgrade' to install the latest version.")
         sys.exit(0)
     else:
-        print(f"  ✓ OpenContext {check.current_version} is up to date.")
+        console.success(f"OpenContext {check.current_version} is up to date.")
         if check.release_notes:
-            print(_format_release_notes(check))
+            console.dim(_format_release_notes(check))
         sys.exit(0)
 
 
 def handle_upgrade(args: Any) -> None:
     """Check and upgrade all OpenContext packages."""
 
-    print()
-    print("  Checking for OpenContext updates...")
-    print()
+    console.header("Upgrade OpenContext")
+    console.info("Checking for OpenContext updates...")
 
     results = UpdateChecker.upgrade_all()
 
     upgraded = [r for r in results if r["status"] == "upgraded"]
     failed = [r for r in results if r["status"] == "failed"]
 
-    print(f"  {'Package':<25} {'Status':<12} {'Message'}")
-    print(f"  {'─' * 25} {'─' * 12} {'─' * 40}")
-    for r in results:
-        icon = "✓" if r["status"] == "upgraded" else "✗"
-        print(f"  {r['package']:<25} {icon + ' ' + r['status']:<12} {r['message']}")
-    print()
+    console.table(
+        "Upgrade Results",
+        ["Package", "Status", "Message"],
+        [
+            [
+                r["package"],
+                ("✓ " if r["status"] == "upgraded" else "✗ ") + r["status"],
+                r["message"],
+            ]
+            for r in results
+        ],
+    )
 
     if upgraded:
-        print(f"  ✓ {len(upgraded)} package(s) upgraded.")
+        console.success(f"{len(upgraded)} package(s) upgraded.")
     if failed:
-        print(f"  ✗ {len(failed)} package(s) failed.")
+        eprint(f"{len(failed)} package(s) failed.")
         sys.exit(1)
     if not upgraded and not failed:
-        print("  ✓ All packages are up to date.")
+        console.success("All packages are up to date.")
 
     try:
         eco = EcosystemUpdateChecker.refresh()
         outdated_eco = [e for e in eco if e.is_outdated]
         if outdated_eco:
-            print()
-            print("  Ecosystem updates available:")
+            console.section("Ecosystem updates available")
             for e in outdated_eco:
-                print(f"    {e.name}: {e.current_version} -> {e.latest_version}")
-            print("  Run 'pip install --upgrade <package>' to update.")
+                console.print(f"    {e.name}: {e.current_version} -> {e.latest_version}")
+            console.dim("Run 'pip install --upgrade <package>' to update.")
     except Exception:
         pass

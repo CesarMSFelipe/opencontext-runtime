@@ -7,13 +7,9 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
 from opencontext_core.user_prefs import UserConfigStore
-
-console = Console()
 
 
 def add_sync_parser(subparsers: Any) -> None:
@@ -96,7 +92,7 @@ def handle_sync(args: Any) -> None:
     store = UserConfigStore()
     prefs = store.load()
 
-    console.print(Panel.fit("[bold]OpenContext Sync[/bold]", border_style="cyan"))
+    console.header("OpenContext Sync")
 
     checks: list[dict[str, Any]] = []
 
@@ -112,13 +108,13 @@ def handle_sync(args: Any) -> None:
     _show_sync_summary(checks)
 
     if dry_run:
-        console.print("[yellow]── Dry run — no changes made ──[/]")
+        console.warning("Dry run — no changes made.")
         return
 
     if not any(c["status"] == "applied" for c in checks):
-        console.print("[green]✓ Everything is up to date.[/]")
+        console.success("Everything is up to date.")
     else:
-        console.print("[green]✓ Sync complete.[/]")
+        console.success("Sync complete.")
 
 
 # ── sync issues ───────────────────────────────────────────────────────────────
@@ -156,26 +152,29 @@ def _handle_sync_issues(args: Any) -> None:
     dry_run = getattr(args, "dry_run", False)
     repo = getattr(args, "repo", None)
 
+    # NOTE: missing/empty inputs report on stderr and return (no raise) — these
+    # are recoverable user-input states, not crashes.
     if tasks_file is None:
-        console.print("[red]Error: specify --change <name> or --tasks-file <path>[/]")
+        eprint("Specify --change <name> or --tasks-file <path>.")
         return
 
     if not tasks_file.exists():
-        console.print(f"[red]Tasks file not found: {tasks_file}[/]")
+        eprint(f"Tasks file not found: {tasks_file}")
         return
 
     tasks = parse_tasks_from_md(tasks_file)
     if not tasks:
-        console.print("[yellow]No task items found in tasks file.[/]")
+        console.warning("No task items found in tasks file.")
         return
 
+    console.header("Sync Issues")
     console.print(f"Found [bold]{len(tasks)}[/] task(s) in {tasks_file}")
 
     if dry_run:
-        console.print("[yellow]── Dry run — issues NOT created ──[/]")
+        console.warning("Dry run — issues NOT created.")
         for t in tasks:
             icon = "○" if t["state"] == "open" else "✓"
-            console.print(f"  {icon} {t['title']}")
+            console.dim(f"  {icon} {t['title']}")
         return
 
     created = 0
@@ -190,11 +189,11 @@ def _handle_sync_issues(args: Any) -> None:
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode == 0:
             created += 1
-            console.print(f"  [green]✓[/] {task['title']}")
+            console.success(task["title"])
         else:
-            console.print(f"  [red]✗[/] {task['title']}: {result.stderr.strip()}")
+            eprint(f"{task['title']}: {result.stderr.strip()}")
 
-    console.print(f"[green]Created {created} issue(s)[/], skipped {skipped} closed task(s).")
+    console.success(f"Created {created} issue(s), skipped {skipped} closed task(s).")
 
 
 # ── sync config helpers ───────────────────────────────────────────────────────
@@ -287,25 +286,16 @@ def _sync_plugins(prefs: Any, dry_run: bool) -> dict[str, Any]:
 def _show_sync_summary(checks: list[dict[str, Any]]) -> None:
     """Display sync results."""
 
-    table = Table(title="Sync Results", box=None)
-    table.add_column("Component")
-    table.add_column("Status")
-    table.add_column("Message")
-
-    status_styles = {
-        "ok": "green",
-        "applied": "cyan",
-        "warning": "yellow",
-        "skipped": "white",
-        "pending": "dim",
+    status_labels = {
+        "ok": "✓ ok",
+        "applied": "✓ applied",
+        "warning": "⚠ warning",
+        "skipped": "- skipped",
+        "pending": "… pending",
     }
 
-    for check in checks:
-        style = status_styles.get(check["status"], "white")
-        table.add_row(
-            check["component"],
-            f"[{style}]{check['status']}[/]",
-            check["message"],
-        )
-
-    console.print(table)
+    rows = [
+        [check["component"], status_labels.get(check["status"], check["status"]), check["message"]]
+        for check in checks
+    ]
+    console.table("Sync Results", ["Component", "Status", "Message"], rows)

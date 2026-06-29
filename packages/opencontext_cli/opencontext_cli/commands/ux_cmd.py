@@ -16,7 +16,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.output import eprint
 from opencontext_core.agentic.receipt import AgenticReceipt
+from opencontext_core.dx.console_styles import console
 from opencontext_core.oc_new.conductor import OcNewConductor
 from opencontext_core.oc_new.store import OcNewStore
 from opencontext_core.workflow.state import WorkflowState
@@ -34,27 +36,31 @@ def _resolve_run_id(args: Any, store: OcNewStore) -> str:
         return str(run_id)
     latest = store.latest()
     if latest is None:
-        print("No active run. Use 'opencontext workflow start <task>'.", file=sys.stderr)
+        eprint("No active run. Use 'opencontext workflow start <task>'.")
         sys.exit(1)
     return latest.identity.run_id
 
 
-def _print_workflow_state(state: WorkflowState, *, json_out: bool) -> None:
+def _print_workflow_state(
+    state: WorkflowState, *, json_out: bool, title: str = "Workflow Run"
+) -> None:
     if json_out:
         print(state.model_dump_json(indent=2))
         return
-    print(f"Run       : {state.run_id}")
-    print(f"Change    : {state.change_id}")
-    print(f"Trace     : {state.trace_id}")
-    print(f"Task      : {state.task}")
-    print(f"Current   : {state.current_phase or 'done'}")
-    print(f"Next      : {state.next_action_kind or '-'}")
+    console.header(title)
+    console.print(f"Run     : {state.run_id}")
+    console.print(f"Change  : {state.change_id}")
+    console.print(f"Trace   : {state.trace_id}")
+    console.print(f"Task    : {state.task}")
+    console.print(f"Current : {state.current_phase or 'done'}")
+    console.print(f"Next    : {state.next_action_kind or '-'}")
     if state.blocked_reason:
-        print(f"Blocked   : {state.blocked_reason}")
-    print("Phases:")
-    for phase in state.phases:
-        marker = "x" if phase.status in {"passed", "warning", "skipped"} else " "
-        print(f"  [{marker}] {phase.name:<10} {phase.status}")
+        console.warning(f"Blocked: {state.blocked_reason}")
+    console.table(
+        "Phases",
+        ["Phase", "Status"],
+        [[phase.name, phase.status] for phase in state.phases],
+    )
 
 
 # Handlers — each MUST be a one-hop delegation to the existing spine.
@@ -64,7 +70,9 @@ def _handle_start(args: Any) -> None:
     root = _root(args)
     state = OcNewConductor(root).start(args.task)
     _print_workflow_state(
-        WorkflowState.project_from(state), json_out=getattr(args, "json_out", False)
+        WorkflowState.project_from(state),
+        json_out=getattr(args, "json_out", False),
+        title="Workflow Started",
     )
 
 
@@ -74,7 +82,9 @@ def _handle_status(args: Any) -> None:
     run_id = _resolve_run_id(args, store)
     state = store.load(run_id)
     _print_workflow_state(
-        WorkflowState.project_from(state), json_out=getattr(args, "json_out", False)
+        WorkflowState.project_from(state),
+        json_out=getattr(args, "json_out", False),
+        title="Workflow Status",
     )
 
 
@@ -105,7 +115,9 @@ def _handle_approve(args: Any) -> None:
     )
     state = OcNewConductor(root).resume(run_id)
     _print_workflow_state(
-        WorkflowState.project_from(state), json_out=getattr(args, "json_out", False)
+        WorkflowState.project_from(state),
+        json_out=getattr(args, "json_out", False),
+        title="Workflow Approved",
     )
 
 
@@ -116,21 +128,22 @@ def _handle_receipt(args: Any) -> None:
     run_id = _resolve_run_id(args, store)
     receipt_path = store.run_dir(run_id) / "receipt.json"
     if not receipt_path.exists():
-        print(f"No receipt at {receipt_path}", file=sys.stderr)
+        eprint(f"No receipt at {receipt_path}")
         sys.exit(1)
     receipt = AgenticReceipt.model_validate_json(receipt_path.read_text())
     if getattr(args, "json_out", False):
         print(receipt.model_dump_json(indent=2))
         return
-    print(f"Receipt   : {receipt.run_id}")
-    print(f"Change    : {receipt.change_id}")
-    print(f"Status    : {receipt.status}")
-    print(f"Flow      : {receipt.flow_mode}")
-    print(f"Completed : {', '.join(receipt.completed_phases) or '-'}")
+    console.header("Workflow Receipt")
+    console.print(f"Receipt   : {receipt.run_id}")
+    console.print(f"Change    : {receipt.change_id}")
+    console.print(f"Status    : {receipt.status}")
+    console.print(f"Flow      : {receipt.flow_mode}")
+    console.print(f"Completed : {', '.join(receipt.completed_phases) or '-'}")
     if receipt.failed_phases:
-        print(f"Failed    : {', '.join(receipt.failed_phases)}")
+        console.error(f"Failed    : {', '.join(receipt.failed_phases)}")
     if receipt.warnings:
-        print(f"Warnings  : {len(receipt.warnings)}")
+        console.warning(f"Warnings  : {len(receipt.warnings)}")
 
 
 def add_workflow_ux_parser(workflow_subparsers: Any) -> None:
@@ -191,19 +204,19 @@ def _handle_explain(args: Any) -> None:
             sys.exit(1)
         return
     if "error" in info:
-        print(info["error"], file=sys.stderr)
+        eprint(str(info["error"]))
         if info.get("next_action"):
-            print(f"  {info['next_action']}", file=sys.stderr)
+            console.dim(f"  {info['next_action']}")
         sys.exit(1)
-    print(f"Workflow  : {info['id']}")
-    print(f"When      : {info['when']}")
-    print(f"When not  : {info['when_not']}")
-    print(f"Cost      : {info['cost']}")
-    print(f"Risk      : {info['risk']}")
-    print(f"Phases    : {', '.join(info['phases']) or '-'}")
-    print(f"Harnesses : {', '.join(info['harnesses']) or '-'}")
+    console.header(f"Workflow: {info['id']}")
+    console.print(f"When      : {info['when']}")
+    console.print(f"When not  : {info['when_not']}")
+    console.print(f"Cost      : {info['cost']}")
+    console.print(f"Risk      : {info['risk']}")
+    console.print(f"Phases    : {', '.join(info['phases']) or '-'}")
+    console.print(f"Harnesses : {', '.join(info['harnesses']) or '-'}")
     if info["outputs"]:
-        print(f"Outputs   : {', '.join(info['outputs'])}")
+        console.print(f"Outputs   : {', '.join(info['outputs'])}")
 
 
 def handle_workflow_ux(args: Any) -> None:
@@ -220,5 +233,5 @@ def handle_workflow_ux(args: Any) -> None:
     elif cmd == "explain":
         _handle_explain(args)
     else:
-        print(f"Unknown workflow subcommand: {cmd}", file=sys.stderr)
+        eprint(f"Unknown workflow subcommand: {cmd}")
         sys.exit(2)

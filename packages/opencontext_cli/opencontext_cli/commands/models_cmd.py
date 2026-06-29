@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from rich.table import Table
 
 from opencontext_cli.output import eprint
 from opencontext_core.dx.console_styles import console
@@ -118,23 +117,22 @@ def _show(cfg_path: Path) -> int:
     console.header("Models")
     console.print(f"[bold]default[/] (your client's model): {default}")
 
-    personas = Table(title="Per-persona models (recommended) — SDD phase routing")
-    personas.add_column("Persona", style="cyan")
-    personas.add_column("SDD phase(s)", style="dim")
-    personas.add_column("Model")
-    for name, (persona_id, phases) in PERSONAS.items():
-        personas.add_row(name, phases, str(persona_models.get(persona_id, "(default)")))
-    console.print(personas)
+    console.table(
+        "Per-Persona Models (recommended) — SDD phase routing",
+        ["Persona", "SDD phase(s)", "Model"],
+        [
+            [name, phases, str(persona_models.get(persona_id, "(default)"))]
+            for name, (persona_id, phases) in PERSONAS.items()
+        ],
+    )
 
     roles = models.get("roles", {}) or {}
     if any((roles.get(r) or {}).get("model") for r in ROLES):
-        advanced = Table(title="Per-role models (advanced fallback)")
-        advanced.add_column("Role", style="cyan")
-        advanced.add_column("Model")
-        for role in ROLES:
-            entry = roles.get(role) or {}
-            advanced.add_row(role, str(entry.get("model", "(default)")))
-        console.print(advanced)
+        console.table(
+            "Per-Role Models (advanced fallback)",
+            ["Role", "Model"],
+            [[role, str((roles.get(role) or {}).get("model", "(default)"))] for role in ROLES],
+        )
     return 0
 
 
@@ -145,7 +143,7 @@ def _set_persona(cfg_path: Path, persona: str, model: str) -> int:
     persona_models = sdd.setdefault("persona_models", {})
     persona_models[persona_id] = model
     _save(cfg_path, data)
-    console.print(f"[green]Set[/] sdd.persona_models.{persona_id} = {model}  ({persona})")
+    console.success(f"Set sdd.persona_models.{persona_id} = {model}  ({persona})")
     return 0
 
 
@@ -156,7 +154,7 @@ def _set_role(cfg_path: Path, role: str, model: str) -> int:
     # A role is just a model — the provider is the agent's, not OpenContext's.
     roles[role] = {"model": model}
     _save(cfg_path, data)
-    console.print(f"[green]Set[/] models.roles.{role}.model = {model}")
+    console.success(f"Set models.roles.{role}.model = {model}")
     return 0
 
 
@@ -166,5 +164,5 @@ def _set_default(cfg_path: Path, model: str) -> int:
     default = models.setdefault("default", {})
     default["model"] = model
     _save(cfg_path, data)
-    console.print(f"[green]Set[/] models.default.model = {model}")
+    console.success(f"Set models.default.model = {model}")
     return 0

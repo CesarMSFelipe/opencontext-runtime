@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from rich.table import Table
 
 from opencontext_cli.output import eprint
 from opencontext_core.dx.console_styles import console
@@ -55,22 +54,21 @@ def handle_persona(args: Any) -> int:
         else:
             rows = public_personas()
         console.header("Personas")
-        table = Table(title=f"OpenContext personas ({len(rows)})")
-        table.add_column("Id", style="cyan")
-        table.add_column("Name", style="bold")
-        table.add_column("Description")
-        for persona in rows:
-            table.add_row(persona.id, persona.name, persona.description)
-        console.print(table)
+        console.table(
+            f"OpenContext Personas ({len(rows)})",
+            ["Id", "Name", "Description"],
+            [[persona.id, persona.name, persona.description] for persona in rows],
+        )
         return 0
 
     if args.persona_command == "show":
         found = get_persona(args.id)
         if found is None:
             eprint(f"Unknown persona: {args.id}")
-            eprint(f"  Available: {', '.join(p.id for p in PERSONAS)}")
+            console.dim(f"  Available: {', '.join(p.id for p in PERSONAS)}")
             return 1
-        console.print(f"[bold]{found.name}[/] [dim]({found.id})[/]")
+        console.header(found.name)
+        console.dim(found.id)
         console.print(found.description)
         console.print()
         console.print(found.system_prompt)
@@ -82,18 +80,18 @@ def handle_persona(args: Any) -> int:
         if cfg_path.exists():
             data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
             assignments = (data.get("sdd") or {}).get("persona_models", {}) or {}
-        table = Table(title="Per-persona model assignments")
-        table.add_column("Persona", style="cyan")
-        table.add_column("Model")
-        for persona in PERSONAS:
-            table.add_row(persona.id, assignments.get(persona.id) or "[dim]default[/]")
-        console.print(table)
+        console.header("Persona Models")
+        console.table(
+            "Per-Persona Model Assignments",
+            ["Persona", "Model"],
+            [[persona.id, assignments.get(persona.id) or "default"] for persona in PERSONAS],
+        )
         return 0
 
     if args.persona_command == "set-model":
         if get_persona(args.id) is None:
             eprint(f"Unknown persona: {args.id}")
-            eprint(f"  Available: {', '.join(p.id for p in PERSONAS)}")
+            console.dim(f"  Available: {', '.join(p.id for p in PERSONAS)}")
             return 1
         cfg_path = Path(getattr(args, "root", ".")) / "opencontext.yaml"
         if not cfg_path.exists():
@@ -104,6 +102,6 @@ def handle_persona(args: Any) -> int:
         persona_models = sdd.setdefault("persona_models", {})
         persona_models[args.id] = args.model
         cfg_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
-        console.print(f"[green]✓[/] {args.id} → [cyan]{args.model}[/]")
+        console.success(f"{args.id} → {args.model}")
         return 0
     return 1

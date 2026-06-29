@@ -13,14 +13,12 @@ import os
 from pathlib import Path
 from typing import Any
 
-from rich.console import Console
-
+from opencontext_cli.output import eprint
 from opencontext_core.configurator.filemerge import (
     inject_managed_section,
     write_text_atomic,
 )
-
-console = Console()
+from opencontext_core.dx.console_styles import console
 
 _SECTION_ID = "stack"
 # A real stack you work in matches several markers; one stray fixture file does
@@ -156,7 +154,7 @@ def handle_stack(args: Any) -> int:
     """Dispatch the ``stack`` command. Returns a process exit code."""
     root = Path(args.path).resolve()
     if not root.is_dir():
-        console.print(f"[red]Not a directory:[/] {root}")
+        eprint(f"Not a directory: {root}")
         return 1
 
     try:
@@ -165,32 +163,34 @@ def handle_stack(args: Any) -> int:
             render_stack_standards,
         )
     except ImportError:
-        console.print("[red]Stack standards require the opencontext-profiles package.[/]")
+        eprint("Stack standards require the opencontext-profiles package.")
         return 1
 
     if not args.write:
         chosen, dropped = _select_stacks(_detect_profiles(root), KNOWN_PROFILES)
+        console.header("Stack Standards")
         if chosen:
-            console.print(f"[dim]Detected stack:[/] {', '.join(chosen)}")
+            console.info(f"Detected stack: {', '.join(chosen)}")
         else:
-            console.print("[dim]No specific stack detected — showing general standards.[/]")
+            console.dim("No specific stack detected — showing general standards.")
         if dropped:
-            console.print(f"[dim]Lower-confidence, not included:[/] {', '.join(dropped)}")
+            console.dim(f"Lower-confidence, not included: {', '.join(dropped)}")
         console.print()
         console.print(render_stack_standards(chosen))
-        console.print("[dim]Run `opencontext stack --write` to add these to AGENTS.md.[/]")
+        console.dim("Run `opencontext stack --write` to add these to AGENTS.md.")
         return 0
 
     try:
         changed, chosen = write_stack_standards(root)
     except ValueError as exc:
-        console.print(f"[red]Refusing to write:[/] {exc}")
+        eprint(f"Refusing to write: {exc}")
         return 1
 
     detected = ", ".join(chosen) if chosen else "generic"
     agents_file = root / "AGENTS.md"
+    console.header("Stack Standards")
     if changed:
-        console.print(f"[green]Updated[/] {agents_file} with stack standards ({detected}).")
+        console.success(f"Updated {agents_file} with stack standards ({detected}).")
     else:
-        console.print(f"[dim]AGENTS.md already up to date[/] ({detected}).")
+        console.dim(f"AGENTS.md already up to date ({detected}).")
     return 0

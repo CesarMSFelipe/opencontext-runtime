@@ -11,8 +11,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from rich.table import Table
-
 from opencontext_cli.output import eprint
 from opencontext_core.dx.console_styles import console
 from opencontext_core.sdd_profiles import SDDProfileManager
@@ -98,21 +96,17 @@ def _list(manager: SDDProfileManager, as_json: bool = False) -> int:
         return 0
 
     console.header("Profiles")
-    cfg_table = Table(title=f"Config profiles ({len(cfg)})")
-    cfg_table.add_column("Name", style="cyan")
-    cfg_table.add_column("Default")
-    cfg_table.add_column("Description")
-    for p in cfg:
-        cfg_table.add_row(p["name"], "✓" if p["default"] else "", p.get("description", ""))
-    console.print(cfg_table)
-
+    console.table(
+        f"Config profiles ({len(cfg)})",
+        ["Name", "Default", "Description"],
+        [[p["name"], "✓" if p["default"] else "", p.get("description", "")] for p in cfg],
+    )
     # Model profiles — per-phase model assignment family.
-    table = Table(title=f"Model profiles ({len(profiles)})")
-    table.add_column("Name", style="cyan")
-    table.add_column("Description")
-    for p in profiles:
-        table.add_row(p["name"], p.get("description", ""))
-    console.print(table)
+    console.table(
+        f"Model profiles ({len(profiles)})",
+        ["Name", "Description"],
+        [[p["name"], p.get("description", "")] for p in profiles],
+    )
     return 0
 
 
@@ -127,9 +121,10 @@ def _explain(name: str, as_json: bool) -> int:
     if "error" in info:
         eprint(str(info["error"]))
         if info.get("next_action"):
-            eprint(f"  → {info['next_action']}")
+            console.dim(f"  → {info['next_action']}")
         return 1
-    console.print(f"[bold cyan]Profile:[/] {info['id']} ({info['family']})")
+    console.header(f"Profile: {info['id']}")
+    console.print(f"  family        : {info['family']}")
     if info.get("description"):
         console.print(f"  {info['description']}")
     if info["family"] == "config":
@@ -153,20 +148,20 @@ def _show(manager: SDDProfileManager, name: str, as_json: bool) -> int:
     if as_json:
         print(json.dumps(profile.to_dict(), indent=2))
         return 0
-    table = Table(title=f"Profile: {name}")
-    table.add_column("Phase", style="cyan")
-    table.add_column("Model")
-    for phase in SDD_PHASES:
-        table.add_row(phase, profile.model_assignments.get(phase, "default"))
-    console.print(table)
+    console.header(f"Profile: {name}")
+    console.table(
+        "Per-Phase Models",
+        ["Phase", "Model"],
+        [[phase, profile.model_assignments.get(phase, "default")] for phase in SDD_PHASES],
+    )
     return 0
 
 
 def _create(manager: SDDProfileManager, name: str, description: str, base: str | None) -> int:
     if name in manager.DEFAULT_PROFILES:
-        console.print(
-            f"[yellow]'{name}' is a built-in profile.[/] Copy it under a new name: "
-            f"[cyan]opencontext profile create my-{name} --from {name}[/]"
+        eprint(f"'{name}' is a built-in profile.")
+        console.dim(
+            f"  Copy it under a new name: opencontext profile create my-{name} --from {name}"
         )
         return 1
     assignments: dict[str, str] = {}
@@ -179,16 +174,14 @@ def _create(manager: SDDProfileManager, name: str, description: str, base: str |
         if not description:
             description = f"Copied from {base}"
     manager.create_profile(name, description=description, model_assignments=assignments)
-    console.print(f"[green]Created profile[/] {name}")
+    console.success(f"Created profile {name}")
     return 0
 
 
 def _set_phase(manager: SDDProfileManager, name: str, phase: str, model: str) -> int:
     if name in manager.DEFAULT_PROFILES:
-        console.print(
-            f"[yellow]'{name}' is a built-in profile and can't be modified in place.[/] "
-            f"Copy it first: [cyan]opencontext profile create my-{name} --from {name}[/]"
-        )
+        eprint(f"'{name}' is a built-in profile and can't be modified in place.")
+        console.dim(f"  Copy it first: opencontext profile create my-{name} --from {name}")
         return 1
     profile = manager.get_profile(name)
     if profile is None:
@@ -197,16 +190,16 @@ def _set_phase(manager: SDDProfileManager, name: str, phase: str, model: str) ->
     assignments = dict(profile.model_assignments)
     assignments[phase] = model
     manager.create_profile(name, description=profile.description, model_assignments=assignments)
-    console.print(f"[green]Set[/] {name}.{phase} = {model}")
+    console.success(f"Set {name}.{phase} = {model}")
     return 0
 
 
 def _delete(manager: SDDProfileManager, name: str) -> int:
     if name in manager.DEFAULT_PROFILES:
-        console.print(f"[yellow]Cannot delete the built-in profile:[/] {name}")
+        eprint(f"Cannot delete the built-in profile: {name}")
         return 1
     if manager.delete_profile(name):
-        console.print(f"[green]Deleted profile[/] {name}")
+        console.success(f"Deleted profile {name}")
         return 0
     eprint(f"Profile not found: {name}")
     return 1

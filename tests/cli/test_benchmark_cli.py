@@ -57,7 +57,7 @@ class TestBenchmarkCliSurface:
     def test_benchmark_list_empty_category(self) -> None:
         result = _run_cli("benchmark", "list", "--category", "nonexistent")
         assert result.returncode == 0
-        assert "No benchmark cases found" in result.stdout
+        assert "No benchmark cases yet" in result.stdout
 
 
 class TestBenchmarkCliRun:

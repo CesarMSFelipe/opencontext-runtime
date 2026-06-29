@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
+
 
 def add_metaharness_parser(doctor_sub: Any) -> None:
     """Register ``metaharness`` subcommand under the ``doctor`` subparser group."""
@@ -56,18 +59,26 @@ def handle_doctor_metaharness(args: Any) -> None:
         print(_json.dumps(output, indent=2))
     else:
         status_icon = "PASS" if report.passed else "FAIL"
-        print(f"MetaHarness readiness scan [{status_icon}]  score={report.score}/100")
-        print()
-        for check in report.checks:
-            icon = "OK" if check.passed else "FAIL"
-            expl = check.explanation
-            print(f"  [{icon:4s}] {check.name:30s}  +{check.score_contribution:2d}  {expl}")
-        print()
+        console.header("MetaHarness Readiness")
+        console.print(f"Readiness scan [{status_icon}] — score {report.score}/100")
+        console.table(
+            "Checks",
+            ["Check", "Status", "Score", "Detail"],
+            [
+                [
+                    check.name,
+                    "OK" if check.passed else "FAIL",
+                    f"+{check.score_contribution}",
+                    check.explanation,
+                ]
+                for check in report.checks
+            ],
+        )
         if report.passed:
-            print(f"All checks passed - score {report.score}/100.")
+            console.success(f"All checks passed — score {report.score}/100.")
         else:
             failed = [c for c in report.checks if not c.passed]
-            print(f"{len(failed)} check(s) failed - score {report.score}/100 (gate: >=90).")
+            eprint(f"{len(failed)} check(s) failed — score {report.score}/100 (gate: >=90).")
 
     if not report.passed:
         raise SystemExit(1)

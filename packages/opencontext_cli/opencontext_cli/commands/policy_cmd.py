@@ -75,19 +75,36 @@ def _handle_presets(args: Any) -> None:
         for preset, posture in PRESET_TABLE.items()
     ]
     if getattr(args, "json", False):
-        print(json.dumps(rows, indent=2))
+        print(json.dumps(rows, indent=2))  # pure JSON to stdout
         return
-    for row in rows:
-        default = " (default)" if row["preset"] == PolicyPreset.BALANCED.value else ""
-        print(f"- {row['preset']}{default}")
-        print(
-            f"    network={row['network']} provider={row['external_provider']} "
-            f"high_risk_write={row['high_risk_write']} unknown_command={row['unknown_command']}"
-        )
-        print(
-            f"    redact_secrets={row['redact_secrets']} "
-            f"command_enforcement={row['command_enforcement']} cache_ceiling={row['cache_ceiling']}"
-        )
+    console.header("Policy Presets")
+    table_rows = [
+        [
+            row["preset"] + (" (default)" if row["preset"] == PolicyPreset.BALANCED.value else ""),
+            str(row["network"]),
+            str(row["external_provider"]),
+            str(row["high_risk_write"]),
+            str(row["unknown_command"]),
+            str(row["redact_secrets"]),
+            str(row["command_enforcement"]),
+            str(row["cache_ceiling"]),
+        ]
+        for row in rows
+    ]
+    console.table(
+        "Presets",
+        [
+            "Preset",
+            "Network",
+            "Provider",
+            "High-Risk Write",
+            "Unknown Cmd",
+            "Redact",
+            "Enforcement",
+            "Cache Ceiling",
+        ],
+        table_rows,
+    )
 
 
 def _handle_show(args: Any) -> None:
@@ -128,19 +145,20 @@ def _handle_simulate(args: Any) -> None:
     elif getattr(args, "network", False):
         operation = PolicyOperation(kind="network")
     else:
-        print("Specify one of --command, --file, or --network.", file=sys.stderr)
+        eprint("Specify one of --command, --file, or --network.")
         sys.exit(1)
 
     decision = engine.evaluate(operation)
     if getattr(args, "json", False):
-        print(decision.model_dump_json(indent=2))
+        print(decision.model_dump_json(indent=2))  # pure JSON to stdout
         return
-    print(f"operation: {decision.operation}")
-    print(f"decision:  {decision.decision}")
-    print(f"reason:    {decision.reason}")
-    print(f"policy_id: {decision.policy_id}")
-    print(f"mode:      {decision.mode}")
+    console.header("Policy Simulation")
+    console.print(f"operation:   {decision.operation}")
+    console.print(f"decision:    {decision.decision}")
+    console.print(f"reason:      {decision.reason}")
+    console.print(f"policy_id:   {decision.policy_id}")
+    console.print(f"mode:        {decision.mode}")
     if decision.evidence_refs:
-        print(f"evidence:  {', '.join(decision.evidence_refs)}")
+        console.print(f"evidence:    {', '.join(decision.evidence_refs)}")
     if decision.remediation:
-        print(f"remediation: {decision.remediation}")
+        console.print(f"remediation: {decision.remediation}")

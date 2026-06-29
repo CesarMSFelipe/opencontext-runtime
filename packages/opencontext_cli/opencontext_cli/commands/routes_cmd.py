@@ -5,12 +5,8 @@ from __future__ import annotations
 import json as _json
 from typing import Any
 
-from rich.console import Console
-from rich.table import Table
-
+from opencontext_core.dx.console_styles import console
 from opencontext_core.indexing.framework_router import FrameworkRouter
-
-console = Console()
 
 
 def add_routes_parser(subparsers: Any) -> None:
@@ -56,26 +52,29 @@ def _handle_scan(root: str, framework: str | None = None, output_json: bool = Fa
         routes = router.scan(root)
     if framework:
         routes = [r for r in routes if r.framework == framework]
-    if not routes:
-        console.print("[dim]No route definitions detected.[/]")
-        return
+
     if output_json:
         import dataclasses
 
         print(_json.dumps([dataclasses.asdict(r) for r in routes], indent=2))
         return
-    table = Table(title=f"Routes ({len(routes)} found)")
-    table.add_column("File", style="cyan", max_width=40)
-    table.add_column("Line", justify="right")
-    table.add_column("Framework", style="yellow")
-    table.add_column("Method", style="green")
-    table.add_column("Path")
-    table.add_column("Handler")
-    for r in routes:
-        table.add_row(r.source_file, str(r.line), r.framework, r.method, r.path_pattern, r.handler)
-    console.print(table)
+
+    console.header("Routes")
+    if not routes:
+        console.info("No routes yet.")
+        return
+
+    rows = [
+        [r.source_file, str(r.line), r.framework, r.method, r.path_pattern, r.handler]
+        for r in routes
+    ]
+    console.table(
+        f"Routes ({len(routes)} found)",
+        ["File", "Line", "Framework", "Method", "Path", "Handler"],
+        rows,
+    )
     fw_counts: dict[str, int] = {}
     for r in routes:
         fw_counts[r.framework] = fw_counts.get(r.framework, 0) + 1
     summary = " | ".join(f"{fw}: {c}" for fw, c in sorted(fw_counts.items()))
-    console.print(f"[dim]By framework: {summary}[/]")
+    console.dim(f"By framework: {summary}")

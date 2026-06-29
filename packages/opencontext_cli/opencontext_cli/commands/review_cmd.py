@@ -199,10 +199,10 @@ def handle_review(args: Any) -> None:
     """Handle review command."""
     import sys
 
-    from rich.console import Console as RichConsole
     from rich.status import Status
 
-    rich_console = RichConsole()
+    from opencontext_cli.output import eprint
+    from opencontext_core.dx.console_styles import console
 
     # Party mode is the only review mode, so it is the default. --party is still
     # accepted (no-op) for back-compat; previously its absence made the command a
@@ -214,10 +214,11 @@ def handle_review(args: Any) -> None:
     output_path = getattr(args, "output", None)
 
     if not context.strip():
-        rich_console.print("[red]No context provided for review.[/]")
+        eprint("No context provided for review.")
         return
 
-    rich_console.print(f"[bold]Party Mode Review[/] — {len(roles)} independent reviewers")
+    console.header("Party Mode Review")
+    console.dim(f"{len(roles)} independent reviewers")
 
     from opencontext_core.config import load_config_or_defaults
 
@@ -225,14 +226,15 @@ def handle_review(args: Any) -> None:
 
     reports: list[dict[str, Any]] = []
 
-    with Status("[bold green]Spawning reviewers...", console=rich_console):
+    # Drive the spinner through the brand console's underlying rich console so the
+    # interleaved status lines share one render surface.
+    spinner_console = getattr(console, "_console", None)
+    with Status("[bold green]Spawning reviewers...", console=spinner_console):
         for role in roles:
             prompt = generate_role_prompt(role, context)
             report = _run_reviewer(role, prompt, context=context, config=config)
             reports.append(report)
-            rich_console.print(
-                f"  [green]✓[/] {role}: {len(report.get('findings', []))} finding(s)"
-            )
+            console.success(f"{role}: {len(report.get('findings', []))} finding(s)")
 
     merged = merge_reports(reports)
 
@@ -240,9 +242,11 @@ def handle_review(args: Any) -> None:
         from pathlib import Path
 
         Path(output_path).write_text(merged, encoding="utf-8")
-        rich_console.print(f"[green]Report written to {output_path}[/]")
+        console.success(f"Report written to {output_path}")
     else:
-        rich_console.print(merged)
+        # Merged report is a markdown document (contains literal [role] tags) —
+        # write it verbatim to stdout rather than through rich markup parsing.
+        print(merged)
 
 
 def _get_adapter() -> tuple[Any, str] | None:

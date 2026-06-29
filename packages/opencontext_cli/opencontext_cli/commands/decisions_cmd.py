@@ -105,8 +105,11 @@ def handle_decisions(args: Any) -> None:
             return
         console.header("Decisions")
         if rows:
-            for row in rows:
-                print(f"{row['run_id']}\t{row['decisions']} decisions")
+            console.table(
+                "Runs",
+                ["Run ID", "Decisions"],
+                [[row["run_id"], str(row["decisions"])] for row in rows],
+            )
         else:
             console.info("No runs with recorded decisions yet.")
         return
@@ -118,23 +121,25 @@ def handle_decisions(args: Any) -> None:
             sys.exit(1)
         decision_rows = _decisions_for(show_dir) or []
         if getattr(args, "json", False):
-            print(json.dumps(decision_rows, indent=2))
-        else:
-            if not decision_rows:
-                # The run exists; it simply has no decisions (RI/decision-log off
-                # or the run produced none). Honest, not "Run not found".
-                print(
-                    f"Run {args.run_id}: no decisions recorded "
-                    "(runtime decision-log produced none)."
-                )
-                return
-            for drow in decision_rows:
-                governed = f" [governed_by={drow['governed_by']}]" if drow["governed_by"] else ""
-                print(f"- {drow['kind']}: {drow['selected']}{governed}")
-                if drow["rationale"]:
-                    print(f"    rationale: {drow['rationale']}")
-                if drow["alternatives"]:
-                    print(f"    alternatives: {', '.join(drow['alternatives'])}")
+            print(json.dumps(decision_rows, indent=2))  # pure JSON to stdout
+            return
+        console.header(f"Decisions: {args.run_id}")
+        if not decision_rows:
+            # The run exists; it simply has no decisions (RI/decision-log off
+            # or the run produced none). Honest, not "Run not found".
+            console.info(
+                f"Run {args.run_id}: no decisions recorded "
+                "(runtime decision-log produced none)."
+            )
+            return
+        for drow in decision_rows:
+            # No square brackets in the format — they collide with rich markup.
+            governed = f" governed_by={drow['governed_by']}" if drow["governed_by"] else ""
+            console.print(f"- {drow['kind']}: {drow['selected']}{governed}")
+            if drow["rationale"]:
+                console.print(f"    rationale: {drow['rationale']}")
+            if drow["alternatives"]:
+                console.print(f"    alternatives: {', '.join(drow['alternatives'])}")
         return
 
     eprint("Usage: opencontext decisions [list|show]")

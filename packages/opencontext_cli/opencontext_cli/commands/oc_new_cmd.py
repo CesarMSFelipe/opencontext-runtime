@@ -18,6 +18,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
 from opencontext_core.oc_new.conductor import OcNewConductor
 from opencontext_core.oc_new.models import OcNewRunState
 from opencontext_core.oc_new.store import OcNewStore
@@ -44,7 +46,7 @@ def _resolve_run_id(args: Any, store: OcNewStore) -> str:
     latest = store.latest()
     if latest:
         return latest.identity.run_id
-    print("No active run. Use 'opencontext oc-new start \"<task>\"'", file=sys.stderr)
+    eprint("No active run. Use 'opencontext oc-new start \"<task>\"'")
     sys.exit(1)
 
 
@@ -54,52 +56,60 @@ def _print_state(state: OcNewRunState, *, json_out: bool = False) -> None:
         return
 
     id_ = state.identity
-    print(f"\nRun {id_.run_id} — {state.task}")
-    print(f"Change: {id_.change_id}  Trace: {id_.trace_id}")
-    print()
-    for phase in state.phases:
-        icon = _STATUS_ICONS.get(phase.status, "?")
-        artifacts = ", ".join(phase.artifact_paths) if phase.artifact_paths else ""
-        artifact_str = f"  [{artifacts}]" if artifacts else ""
-        print(f"  {icon} {phase.name:<12} {phase.status:<10}{artifact_str}")
+    console.header("oc-new Run")
+    console.print(f"Run {id_.run_id} — {state.task}")
+    console.dim(f"Change: {id_.change_id}  ·  Trace: {id_.trace_id}")
 
-    print()
+    rows = [
+        [
+            _STATUS_ICONS.get(p.status, "?"),
+            p.name,
+            p.status,
+            ", ".join(p.artifact_paths),
+        ]
+        for p in state.phases
+    ]
+    console.table("Phases", ["", "Phase", "Status", "Artifacts"], rows)
+
     if state.blocked_reason:
-        print(f"Blocked: {state.blocked_reason}")
-    if state.next_action:
-        na = state.next_action
-        print(f"Next action: {na.kind}")
+        console.warning(f"Blocked: {state.blocked_reason}")
+    # Keep the per-phase next-action text intact — agents read this to drive the
+    # flow; only the surrounding chrome is branded.
+    na = state.next_action
+    if na:
+        console.section("Next Action")
+        console.print(f"  Kind        : {na.kind}")
         if na.phase:
-            print(f"  Phase   : {na.phase}")
+            console.print(f"  Phase       : {na.phase}")
         if na.persona:
-            print(f"  Persona : {na.persona}")
-        print(f"  Instruction: {na.instruction}")
+            console.print(f"  Persona     : {na.persona}")
+        console.print(f"  Instruction : {na.instruction}")
         if na.expected_artifacts:
-            print(f"  Expects : {', '.join(na.expected_artifacts)}")
+            console.print(f"  Expects     : {', '.join(na.expected_artifacts)}")
 
 
 def _watch_state(store: OcNewStore, run_id: str, *, json_out: bool = False) -> None:
     """Poll state.json every 3 seconds, refreshing output until done or interrupted."""
     last_phase: str | None = ""
-    print("Watching run state (Ctrl-C to stop)...\n")
+    console.dim("Watching run state (Ctrl-C to stop)...")
     try:
         while True:
             try:
                 state = store.load(run_id)
             except FileNotFoundError:
-                print(f"Run {run_id} not found.", file=sys.stderr)
+                eprint(f"Run {run_id} not found.")
                 break
             current = state.current_phase or "done"
             if current != last_phase:
-                print("\033[2J\033[H", end="")  # clear screen
+                print("\033[2J\033[H", end="")  # clear screen (terminal control)
                 _print_state(state, json_out=json_out)
                 last_phase = current
             if state.next_action and state.next_action.kind == "done":
-                print("\nRun complete.")
+                console.success("Run complete.")
                 break
             time.sleep(3)
     except KeyboardInterrupt:
-        print("\nStopped watching.")
+        console.dim("Stopped watching.")
 
 
 def add_oc_new_parser(subparsers: Any) -> None:
@@ -180,9 +190,10 @@ def handle_oc_new(args: Any) -> None:
         else:
             na = state.next_action
             if na:
-                print(f"{na.kind}: {na.instruction}")
+                # Minimal, agent-facing action line — no header chrome.
+                console.print(f"{na.kind}: {na.instruction}")
             else:
-                print("No next action.")
+                console.dim("No next action.")
 
     elif cmd == "done":
         run_id = _resolve_run_id(args, store)
@@ -203,12 +214,15 @@ def handle_oc_new(args: Any) -> None:
         if json_out:
             print(json.dumps([r.model_dump() for r in runs], indent=2, default=str))
         else:
+            console.header("oc-new Runs")
             if not runs:
-                print("No oc-new runs found.")
+                console.info("No oc-new runs yet.")
                 return
-            for run in runs:
-                phase = run.current_phase or "done"
-                print(f"  {run.identity.run_id}  {phase:<14}  {run.task[:60]}")
+            rows = [
+                [run.identity.run_id, run.current_phase or "done", run.task[:60]]
+                for run in runs
+            ]
+            console.table("Runs", ["Run ID", "Phase", "Task"], rows)
     else:
-        print(f"Unknown oc-new command: {cmd}", file=sys.stderr)
+        eprint(f"Unknown oc-new command: {cmd}")
         sys.exit(1)

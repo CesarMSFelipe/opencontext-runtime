@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 from typing import Any
+
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
 
 
 def add_mutation_commands(subparsers: argparse._SubParsersAction[Any]) -> None:
@@ -22,7 +24,7 @@ def handle_mutation(args: argparse.Namespace, config: object = None) -> int:
     cmd = getattr(args, "mutation_cmd", None)
     if cmd == "run":
         return _handle_mutation_run(args)
-    print("Usage: opencontext mutation run [--scope changed|all] [--threshold N]", file=sys.stderr)
+    eprint("Usage: opencontext mutation run [--scope changed|all] [--threshold N]")
     return 1
 
 
@@ -36,18 +38,22 @@ def _handle_mutation_run(args: argparse.Namespace) -> int:
         result = MutationRunner().run(root, scope=scope, threshold=threshold)
 
         if not result.available:
-            print(f"Warning: {result.error}")
-            return 0  # Not a failure — framework just not installed
+            # Not a failure — the framework is simply not installed.
+            console.warning(result.error or "Mutation framework not available.")
+            return 0
 
-        status = "PASS" if result.score >= threshold else "FAIL"
-        threshold_label = "met" if result.score >= threshold else "not met"
-        print(f"Running mutation analysis on {args.scope} files...")
-        print(
+        passed = result.score >= threshold
+        console.header("Mutation Analysis")
+        console.info(f"Running mutation analysis on {scope} files...")
+        console.print(
             f"Mutation coverage: {result.score:.1f}%"
             f" ({result.killed} killed, {result.survivors} survived)"
         )
-        print(f"{status} Threshold {threshold_label} ({threshold}%)")
-        return 0 if result.score >= threshold else 1
+        if passed:
+            console.success(f"PASS — threshold met ({threshold}%)")
+            return 0
+        eprint(f"FAIL — threshold not met ({threshold}%)")
+        return 1
     except Exception as e:
-        print(f"Error running mutation analysis: {e}", file=sys.stderr)
+        eprint(f"Error running mutation analysis: {e}")
         return 1

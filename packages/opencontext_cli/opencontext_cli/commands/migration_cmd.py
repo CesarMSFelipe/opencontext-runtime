@@ -12,6 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.output import eprint
 from opencontext_core.migration import (
     ConfigMigrator,
     KGMigrator,
@@ -58,7 +59,7 @@ def handle_migrate(domain: str, args: Any) -> int:
             backup=not getattr(args, "no_backup", False),
         )
     except MigrationError as exc:
-        print(str(exc))
+        eprint(str(exc))  # diagnostics to stderr; stdout stays machine-clean
         return 1
     if result.dry_run:
         print(result.plan.render())
@@ -83,7 +84,7 @@ def handle_memory_audit(args: Any) -> int:
     try:
         print(json.dumps(audit_memory(target), indent=2))
     except MigrationError as exc:
-        print(str(exc))
+        eprint(str(exc))  # diagnostics to stderr; stdout stays machine-clean
         return 1
     return 0
 

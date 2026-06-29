@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.output import eprint
 from opencontext_core.dx.console_styles import console
 from opencontext_core.quality.ci_checks import CheckRunner
 
@@ -96,6 +98,7 @@ def handle_ci_check(args: Any) -> None:
     runner = CheckRunner()
 
     if command == "init":
+        console.header("Initialize CI Checks")
         path = runner.init_checks_directory()
         console.success(f"Initialized checks directory: {path}")
         skip_workflow = getattr(args, "no_workflow", False)
@@ -103,6 +106,7 @@ def handle_ci_check(args: Any) -> None:
             workflow_path = _generate_contextbench_workflow()
             console.success(f"Generated ContextBench workflow: {workflow_path}")
     elif command == "github-actions":
+        console.header("ContextBench Workflow")
         force = getattr(args, "force", False)
         workflow_path = Path(".github/workflows/opencontext-contextbench.yml")
         if workflow_path.exists() and not force:
@@ -157,7 +161,8 @@ def handle_ci_check(args: Any) -> None:
         template = runner.create_check_template(name, "Custom check")
         console.print(template)
     else:
-        console.error(f"Unknown ci-check command: {command}")
+        eprint(f"Unknown ci-check command: {command}")
+        sys.exit(1)
 
 
 def _display_check_report(report: dict[str, Any]) -> None:

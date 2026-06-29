@@ -92,7 +92,7 @@ def _run_install() -> None:
 
         _install(argparse.Namespace(root=".", yes=False))
     except Exception as exc:
-        console.print(f"[red]Installation failed: {exc}[/]")
+        console.error(f"Installation failed: {exc}")
 
 
 def _run_upgrade() -> None:
@@ -100,13 +100,13 @@ def _run_upgrade() -> None:
     _action_header("Upgrade all packages")
     handle_upgrade(type("Args", (), {})())
     console.print()
-    console.print("[dim]Re-syncing environment after upgrade...[/]")
+    console.dim("Re-syncing environment after upgrade...")
     try:
         from opencontext_cli.commands.sync_cmd import handle_sync
 
         handle_sync(type("Args", (), {"sync_command": None})())
     except Exception as exc:
-        console.print(f"[yellow]Re-sync note: {exc}[/]")
+        console.warning(f"Re-sync note: {exc}")
 
 
 def _run_sync() -> None:
@@ -117,7 +117,7 @@ def _run_sync() -> None:
 
         handle_sync(type("Args", (), {"sync_command": None})())
     except Exception as exc:
-        console.print(f"[red]Sync failed: {exc}[/]")
+        console.error(f"Sync failed: {exc}")
 
 
 def _offer_engram_install() -> None:
@@ -168,7 +168,7 @@ def _offer_engram_install() -> None:
         return
 
     if res.returncode == 0 and detect_engram():
-        console.print("[green]✓ Engram installed and detected.[/]")
+        console.success("Engram installed and detected.")
     elif res.returncode == 0:
         console.print(
             "[yellow]Installed, but the 'engram' CLI isn't on PATH yet.[/] "
@@ -187,7 +187,7 @@ def _run_memory_tools() -> None:
 
         _memory(argparse.Namespace(memory_command="list", config="opencontext.yaml"))
     except Exception as exc:
-        console.print(f"[red]Memory list failed: {exc}[/]")
+        console.error(f"Memory list failed: {exc}")
 
 
 def _run_doctor() -> None:
@@ -233,7 +233,7 @@ def _run_doctor() -> None:
                 "[dim]Run 'opencontext doctor' for details and recommendations.[/dim]"
             )
     except Exception as exc:
-        console.print(f"[red]Doctor check failed: {exc}[/]")
+        console.error(f"Doctor check failed: {exc}")
 
 
 def _run_verified_context() -> None:
@@ -268,7 +268,7 @@ def _run_verified_context() -> None:
         with console.status("[cyan]Building verified context...[/]", spinner="dots"):
             result = runtime.verify_context(VerifiedContextRequest(query=query))
     except Exception as exc:
-        console.print(f"[red]Verified context failed: {exc}[/]")
+        console.error(f"Verified context failed: {exc}")
         return
 
     console.print()
@@ -312,9 +312,9 @@ def _create_backup() -> None:
         from opencontext_core.state import ConfigBackupManager
 
         backup_id = ConfigBackupManager.create_backup(description="manual")
-        console.print(f"[green]✓ Backup created: {backup_id}[/]")
+        console.success(f"Backup created: {backup_id}")
     except Exception as exc:
-        console.print(f"[red]Backup failed: {exc}[/]")
+        console.error(f"Backup failed: {exc}")
 
 
 def _list_backups() -> None:
@@ -324,14 +324,14 @@ def _list_backups() -> None:
 
         backups = ConfigBackupManager.list_backups()
         if not backups:
-            console.print("[yellow]No backups found.[/]")
+            console.info("No backups yet.")
             return
         console.print()
         for b in backups:
             console.print(f"  {b.id}  ({b.timestamp})  —  {b.description}")
         console.print(f"\n  {len(backups)} backup(s) available")
     except Exception as exc:
-        console.print(f"[red]Failed to list backups: {exc}[/]")
+        console.error(f"Failed to list backups: {exc}")
 
 
 def _restore_backup() -> None:
@@ -341,7 +341,7 @@ def _restore_backup() -> None:
 
         backups = ConfigBackupManager.list_backups()
         if not backups:
-            console.print("[yellow]No backups to restore.[/]")
+            console.info("No backups to restore yet.")
             return
 
         backup_id = prompts.select(
@@ -350,11 +350,11 @@ def _restore_backup() -> None:
             default=backups[0].id,
         )
         if ConfigBackupManager.restore_backup(backup_id):
-            console.print(f"[green]✓ Restored from: {backup_id}[/]")
+            console.success(f"Restored from: {backup_id}")
         else:
-            console.print(f"[red]Backup not found: {backup_id}[/]")
+            console.error(f"Backup not found: {backup_id}")
     except Exception as exc:
-        console.print(f"[red]Restore failed: {exc}[/]")
+        console.error(f"Restore failed: {exc}")
 
 
 def _cleanup_backups() -> None:
@@ -367,7 +367,7 @@ def _cleanup_backups() -> None:
     except (TypeError, ValueError):
         days = 30
     removed, _ = ConfigBackupManager.cleanup(days)
-    console.print(f"[green]✓ Removed {removed} backup(s) older than {days} days[/]")
+    console.success(f"Removed {removed} backup(s) older than {days} days")
 
 
 def _run_uninstall() -> None:
@@ -377,7 +377,7 @@ def _run_uninstall() -> None:
     if not prompts.confirm(
         "Remove all OpenContext configuration (project + global)?", default=False
     ):
-        console.print("[yellow]Uninstall cancelled.[/]")
+        console.warning("Uninstall cancelled.")
         return
 
     project_ok = False
@@ -392,10 +392,10 @@ def _run_uninstall() -> None:
             project_err = str(exc)
 
     if not project_ok:
-        console.print(f"[red]Project cleanup failed: {project_err}[/]")
+        console.error(f"Project cleanup failed: {project_err}")
         return
 
-    console.print("[green]✓ Project files removed[/]")
+    console.success("Project files removed")
 
     global_ok = False
     global_items: list[Any] = []
@@ -413,12 +413,12 @@ def _run_uninstall() -> None:
         except Exception as exc:
             global_ok = False
             global_items = []
-            console.print(f"[yellow]Global cleanup note: {exc}[/]")
+            console.warning(f"Global cleanup note: {exc}")
 
     if global_ok:
         for item in global_items:
-            console.print(f"  [dim]Removed: {item}[/]")
-        console.print("[green]✓ Global installation state removed[/]")
+            console.dim(f"  Removed: {item}")
+        console.success("Global installation state removed")
 
     import shutil
 
@@ -429,7 +429,7 @@ def _run_uninstall() -> None:
     config_dir = UserConfigStore.CONFIG_DIR
     if config_dir.exists():
         shutil.rmtree(config_dir, ignore_errors=True)
-        console.print(f"[green]✓ Config directory removed: {config_dir}[/]")
+        console.success(f"Config directory removed: {config_dir}")
 
     console.print()
-    console.print("[bold green]✓ OpenContext fully uninstalled[/bold green]")
+    console.success("OpenContext fully uninstalled")

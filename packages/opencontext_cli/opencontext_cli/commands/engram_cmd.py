@@ -7,6 +7,9 @@ import subprocess
 import sys
 from typing import Any
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
+
 
 def add_engram_parser(subparsers: Any) -> None:
     """Register the ``engram`` subparser tree."""
@@ -46,7 +49,7 @@ def handle_engram(args: Any) -> int:
         return _install(args)
     if cmd == "setup":
         return _setup(args)
-    print(f"Unknown engram subcommand: {cmd}", file=sys.stderr)
+    eprint(f"Unknown engram subcommand: {cmd}")
     return 1
 
 
@@ -68,13 +71,16 @@ def _doctor(args: Any) -> int:
         }
         print(json.dumps(data))
     else:
-        status = "detected" if plan.detected else "not detected"
-        print(f"Engram: {status}")
-        print(f"  {plan.message}")
+        console.header("Engram Doctor")
+        if plan.detected:
+            console.success("Engram: detected")
+        else:
+            console.warning("Engram: not detected")
+        console.info(plan.message)
         if plan.install_command:
-            print(f"  Install: {' '.join(plan.install_command)}")
+            console.dim(f"Install: {' '.join(plan.install_command)}")
         if plan.setup_command:
-            print(f"  Setup: {' '.join(plan.setup_command)}")
+            console.dim(f"Setup: {' '.join(plan.setup_command)}")
     return 0
 
 
@@ -85,14 +91,15 @@ def _install(args: Any) -> int:
     agent = getattr(args, "agent", None)
     yes = getattr(args, "yes", False)
     provisioner = EngramProvisioner()
+    console.header("Install Engram")
     try:
         result = provisioner.install(agent=agent, yes=yes)
         if result.detected:
-            print("Engram is ready.")
+            console.success("Engram is ready.")
         else:
-            print(f"Engram install result: {result.message}")
+            console.info(f"Engram install result: {result.message}")
     except RuntimeError as exc:
-        print(f"Engram install failed: {exc}", file=sys.stderr)
+        eprint(f"Engram install failed: {exc}")
         return 1
     return 0
 
@@ -101,8 +108,9 @@ def _setup(args: Any) -> int:
     """Run engram setup for an agent."""
     agent = getattr(args, "agent", "")
     if not agent:
-        print("Error: agent name required.", file=sys.stderr)
+        eprint("agent name required.")
         return 1
+    console.header("Engram Setup")
     cmd = ["engram", "setup", agent]
     result = subprocess.run(cmd, capture_output=False)
     return result.returncode

@@ -96,7 +96,7 @@ def test_explain_breakdown_adds_signal_columns(
     )
     assert handle_explain(runtime, args) == 0
     out = capsys.readouterr().out
-    assert "Why this context" in out
+    assert "Why This Context" in out
     # The breakdown surfaces a per-signal column beyond source/score/tok.
     assert "signals" in out.lower() or "trust" in out.lower()
 

@@ -13,13 +13,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from rich.console import Console
 from rich.panel import Panel
 
+from opencontext_cli.output import eprint
 from opencontext_core import prompts
 from opencontext_core.configurator import KNOWN_AGENTS, Configurator
 from opencontext_core.configurator.constants import MCP_LABEL
 from opencontext_core.configurator.mcp_strategy import McpShape
+from opencontext_core.dx.console_styles import console
 
 
 def _strip_project_managed_blocks(root: object, scope: str) -> None:
@@ -100,9 +101,6 @@ def _purge_project_artifacts(root: object) -> list[str]:
         except Exception:
             pass
     return removed
-
-
-console = Console()
 
 
 def add_uninstall_parser(subparsers: Any) -> None:
@@ -292,6 +290,7 @@ def _run_full_uninstall(
     if json_output:
         print(json.dumps(report, indent=2))
         return
+    console.header("Full Uninstall")
     console.print(
         Panel.fit(
             "[bold green]Full uninstall complete[/bold green]",
@@ -299,15 +298,15 @@ def _run_full_uninstall(
         )
     )
     if report.get("purged"):
-        console.print(f"  [dim]purged: {', '.join(report['purged'])}[/]")
+        console.dim(f"  purged: {', '.join(report['purged'])}")
     if report.get("global_removed"):
-        console.print(f"  [dim]global removed: {', '.join(report['global_removed'])}[/]")
+        console.dim(f"  global removed: {', '.join(report['global_removed'])}")
     if all_residue:
-        console.print("[yellow]Traces remain:[/]")
+        console.warning("Traces remain:")
         for trace in all_residue:
-            console.print(f"  [dim]{trace}[/]")
+            console.dim(f"  {trace}")
     else:
-        console.print("[green]verify passed[/]: no traces remain.")
+        console.success("verify passed: no traces remain.")
 
 
 def verify_no_traces(root: object) -> list[str]:
@@ -480,19 +479,20 @@ def handle_uninstall(args: Any) -> None:
                 )
             )
         else:
+            console.header("Uninstall Verification")
             if passed:
-                console.print("[green]verify passed[/]: no OpenContext traces found.")
+                console.success("verify passed: no OpenContext traces found.")
             else:
                 if residue:
-                    console.print("[yellow]verify failed[/]: project traces remain:")
+                    console.warning("verify failed: project traces remain:")
                     for p in residue:
-                        console.print(f"  [dim]{p}[/]")
+                        console.dim(f"  {p}")
                 if global_residue:
-                    console.print("[yellow]verify failed[/]: global traces remain:")
+                    console.warning("verify failed: global traces remain:")
                     for p in global_residue:
-                        console.print(f"  [dim]{p}[/]")
-                console.print(
-                    "[dim]Run 'opencontext uninstall --full --global-state --yes' to clean up.[/]"
+                        console.dim(f"  {p}")
+                console.dim(
+                    "Run 'opencontext uninstall --full --global-state --yes' to clean up."
                 )
         sys.exit(0 if passed else 1)
 
@@ -510,22 +510,23 @@ def handle_uninstall(args: Any) -> None:
             if json_output:
                 print(json.dumps({"dry_run": True, "would_remove": targets}, indent=2))
             else:
-                console.print("[bold yellow]Dry run — nothing removed.[/]")
+                console.header("Full Uninstall")
+                console.warning("Dry run — nothing removed.")
                 console.print("Would remove:")
                 for t in targets:
-                    console.print(f"  [dim]{t}[/]")
+                    console.dim(f"  {t}")
             return
         if not yes and not sys.stdin.isatty():
-            sys.stderr.write("--full requires --yes in non-interactive mode.\n")
+            eprint("--full requires --yes in non-interactive mode.")
             sys.exit(1)
         if not yes:
-            console.print(
-                "[red]--full will delete all OpenContext traces under the project root.[/]"
+            console.warning(
+                "--full will delete all OpenContext traces under the project root."
             )
             if not __import__("opencontext_core.prompts", fromlist=["confirm"]).confirm(
                 "Proceed?", default=False
             ):
-                console.print("[yellow]Full uninstall cancelled.[/]")
+                console.warning("Full uninstall cancelled.")
                 return
         _run_full_uninstall(
             root, scope, json_output, global_state=getattr(args, "global_state", False)
@@ -549,7 +550,7 @@ def handle_uninstall(args: Any) -> None:
         if json_output:
             print(json.dumps({"status": "no_agents", "agents_removed": 0, "skipped": unknown}))
         else:
-            console.print("[yellow]No configured agents to remove.[/]")
+            console.info("No configured agents to remove.")
         return
 
     if dry_run:
@@ -557,34 +558,34 @@ def handle_uninstall(args: Any) -> None:
         if json_output:
             print(json.dumps(report, indent=2))
         else:
-            console.print("[bold yellow]Dry run — nothing removed.[/]")
+            console.header("Uninstall OpenContext")
+            console.warning("Dry run — nothing removed.")
             for result in report["results"]:
                 console.print(f"  [bold]{result['agent']}[/]")
                 for action in result.get("plan", []):
                     if isinstance(action, dict):
                         verb = action.get("action", "change")
                         path = action.get("path", "")
-                        console.print(f"    [dim]{verb} {path}[/]")
+                        console.dim(f"    {verb} {path}")
                     else:
-                        console.print(f"    [dim]{action}[/]")
+                        console.dim(f"    {action}")
             if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE"):
-                console.print(f"  [dim]would purge: {', '.join(_PURGE_TARGETS)}[/]")
+                console.dim(f"  would purge: {', '.join(_PURGE_TARGETS)}")
         return
 
     # Destructive: require explicit confirmation unless --yes (or non-interactive
     # JSON). Never proceed silently on a non-TTY without --yes.
     if not yes and not json_output:
         if not sys.stdin.isatty():
-            console.print("[yellow]Refusing non-interactive uninstall; pass --yes.[/]")
+            console.warning("Refusing non-interactive uninstall; pass --yes.")
             return
         console.print(f"About to remove OpenContext from: [bold]{', '.join(valid)}[/]")
         if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE"):
-            console.print(
-                "[red]--purge will DELETE[/] "
-                f"[bold]{', '.join(_PURGE_TARGETS)}[/] under the project root."
+            console.warning(
+                f"--purge will DELETE {', '.join(_PURGE_TARGETS)} under the project root."
             )
         if not prompts.confirm("Proceed?", default=False):
-            console.print("[yellow]Uninstall cancelled.[/]")
+            console.warning("Uninstall cancelled.")
             return
 
     report = configurator.deconfigure(valid, scope=scope)
@@ -611,6 +612,7 @@ def handle_uninstall(args: Any) -> None:
         print(json.dumps(report, indent=2))
         return
     removed_n = report["agents_removed"]
+    console.header("Uninstall OpenContext")
     console.print(
         Panel.fit(
             f"[bold green]Removed OpenContext from {removed_n} agent(s)[/bold green]",
@@ -620,13 +622,13 @@ def handle_uninstall(args: Any) -> None:
     for result in report.get("results", []):
         console.print(f"  [bold]{result['agent']}[/]")
         for file_path in result.get("files", []):
-            console.print(f"    [dim]{file_path}[/]")
+            console.dim(f"    {file_path}")
     for agent in unknown:
-        console.print(f"  [yellow]- {agent} (unknown, skipped)[/]")
+        console.warning(f"- {agent} (unknown, skipped)")
     if report.get("state_cleared"):
-        console.print("  [dim]global install state cleared (reinstall will re-run setup)[/]")
+        console.dim("  global install state cleared (reinstall will re-run setup)")
     if report.get("purged"):
-        console.print(f"  [dim]purged: {', '.join(report['purged'])}[/]")
+        console.dim(f"  purged: {', '.join(report['purged'])}")
 
 
 def _parse_agents(values: list[str] | None) -> list[str]:

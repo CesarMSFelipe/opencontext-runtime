@@ -38,7 +38,7 @@ def test_demo_shows_before_after(tmp_path: Path, capsys: pytest.CaptureFixture) 
 
     assert handle_demo(runtime, args) == 0
     out = capsys.readouterr().out
-    assert "OpenContext demo" in out
+    assert "OpenContext Demo" in out
     assert "Without OpenContext" in out
     # Honest headline: a real reduction ("% less") on large repos, or a truthful
     # "no reduction at this size" on a tiny one — never a false "0.0% less".
@@ -53,4 +53,5 @@ def test_demo_rejects_missing_path(tmp_path: Path, capsys: pytest.CaptureFixture
     )
     args = SimpleNamespace(path=str(tmp_path / "nope"), query="x")
     assert handle_demo(runtime, args) == 1
-    assert "Not a directory" in capsys.readouterr().out
+    # Errors are routed to stderr (brand eprint) so --json/stdout stays clean.
+    assert "Not a directory" in capsys.readouterr().err

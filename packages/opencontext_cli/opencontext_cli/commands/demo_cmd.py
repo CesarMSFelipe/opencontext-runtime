@@ -10,12 +10,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from rich.console import Console
-
 from opencontext_cli.commands.explain_cmd import _why
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import (
+    BRAND_ERROR,
+    BRAND_SECONDARY,
+    BRAND_SUCCESS,
+    console,
+)
 from opencontext_core.evaluation.telemetry import estimate_naive_tokens
-
-console = Console()
 
 _DEFAULT_QUERY = "How does this project work?"
 
@@ -40,17 +43,17 @@ def handle_demo(runtime: Any, args: Any) -> int:
     """Render the before/after demo. Returns a process exit code."""
     root = Path(args.path)
     if not root.exists():
-        console.print(f"[red]Not a directory:[/] {root}")
+        eprint(f"Not a directory: {root}")
         return 1
 
-    console.print("\n[bold]OpenContext demo[/]")
+    console.header("OpenContext Demo")
     try:
         manifest = runtime.load_manifest()
         if not manifest or not manifest.files:
             raise ValueError("empty")
-        console.print(f"[dim]Using existing index ({len(manifest.files)} files)…[/]")
+        console.dim(f"Using existing index ({len(manifest.files)} files)…")
     except Exception:
-        console.print("[dim]Indexing the project… (run once, faster next time)[/]")
+        console.dim("Indexing the project… (run once, faster next time)")
         runtime.index_project(root)
 
     naive = estimate_naive_tokens(root)
@@ -66,22 +69,27 @@ def handle_demo(runtime: Any, args: Any) -> int:
         delta_label = "[dim]no reduction at this size — the win grows with the codebase[/]"
 
     console.print("\n[bold]Without OpenContext[/] — the agent reads the whole project:")
-    console.print(f"   [red]{naive:,} tokens[/]")
+    console.print(f"   [{BRAND_ERROR}]{naive:,} tokens[/]")
     console.print(f"\n[bold]With OpenContext[/] — task: [italic]{args.query}[/]")
-    console.print(f"   [green]{len(files)} files · {optimized:,} tokens[/]  ({delta_label})")
+    console.print(
+        f"   [{BRAND_SUCCESS}]{len(files)} files · {optimized:,} tokens[/]  ({delta_label})"
+    )
 
     if files:
-        console.print("\n[dim]The files it chose, and why:[/]")
+        console.dim("The files it chose, and why:")
         for item in files[:8]:
-            console.print(f"   [cyan]{item.source}[/]  [dim]{item.tokens:,} tok — {_why(item)}[/]")
+            console.print(
+                f"   [{BRAND_SECONDARY}]{item.source}[/]  "
+                f"[dim]{item.tokens:,} tok — {_why(item)}[/]"
+            )
         if len(files) > 8:
-            console.print(f"   [dim]… and {len(files) - 8} more[/]")
+            console.dim(f"… and {len(files) - 8} more")
 
-    console.print(
-        "\n[dim]That's the difference between an agent that skims everything and one "
-        "that reads exactly what matters.[/]"
+    console.dim(
+        "That's the difference between an agent that skims everything and one "
+        "that reads exactly what matters."
     )
-    console.print('[dim]Try it on your own task:[/] opencontext explain "your task here"\n')
+    console.dim('Try it on your own task: opencontext explain "your task here"')
 
     import sys
 

@@ -6,11 +6,13 @@ Provides add-rule, list-rules, and remove-rule subcommands for managing
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from opencontext_cli.output import eprint
 from opencontext_core.dx.console_styles import console
 from opencontext_core.harness.models import (
     AuditLevel,
@@ -110,7 +112,8 @@ def handle_privacy(args: Any) -> None:
     elif command == "remove":
         _remove_rule(args)
     else:
-        console.print(f"[red]Unknown privacy command: {command}[/]")
+        eprint(f"Unknown privacy command: {command}")
+        sys.exit(2)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -140,31 +143,40 @@ def _list_rules(json_output: bool) -> None:
     data, _ = _load_privacy_yaml()
     rules_data = data.get("privacy_rules", [])
 
-    if not rules_data:
-        console.print("[dim]No privacy rules configured.[/]")
-        console.print("[dim]Run 'opencontext privacy add --name ... --scope ...' to add one.[/]")
-        return
-
     if json_output:
         import json
 
-        console.print(json.dumps(rules_data, indent=2))
+        print(json.dumps(rules_data, indent=2))
         return
 
-    console.print(f"\n[bold]Privacy Rules ({len(rules_data)})[/]\n")
+    console.header("Privacy Rules")
+    if not rules_data:
+        console.info("No privacy rules yet.")
+        console.dim("Add one: opencontext privacy add --name ... --scope ...")
+        return
+
+    rows = []
     for r in rules_data:
         scopes = ", ".join(r.get("permission_scopes", []))
-        classification = r.get("data_classification", "?")
-        audit = r.get("audit_level", "basic")
+        classification = str(r.get("data_classification", "?"))
+        audit = str(r.get("audit_level", "basic"))
         providers = r.get("provider_restrictions") or ["(all)"]
-        console.print(f"  [cyan]{r['id']}[/]  {r.get('name', '?')}")
-        console.print(f"          Scopes: {scopes}")
-        console.print(f"          Classification: {classification}")
-        console.print(f"          Blocked providers: {', '.join(str(p) for p in providers)}")
-        console.print(f"          Audit: {audit}")
-        if r.get("description"):
-            console.print(f"          {r['description']}")
-        console.print()
+        rows.append(
+            [
+                r["id"],
+                r.get("name", "?"),
+                scopes,
+                classification,
+                ", ".join(str(p) for p in providers),
+                audit,
+            ]
+        )
+    console.table(
+        "Privacy Rules",
+        ["ID", "Name", "Scopes", "Classification", "Blocked Providers", "Audit"],
+        rows,
+    )
+    console.dim(f"{len(rules_data)} rule(s) configured")
 
 
 def _add_rule(args: Any) -> None:
@@ -174,25 +186,22 @@ def _add_rule(args: Any) -> None:
         scopes = [PermissionScope(s) for s in scope_strs]
     except ValueError:
         valid = [s.value for s in PermissionScope]
-        console.print(f"[red]Invalid scope(s): {args.scope}[/]")
-        console.print(f"  Valid: {', '.join(valid)}")
-        return
+        eprint(f"Invalid scope(s): {args.scope}. Valid: {', '.join(valid)}")
+        sys.exit(1)
 
     try:
         classification = DataClassification(args.classification)
     except ValueError:
         valid = [c.value for c in DataClassification]
-        console.print(f"[red]Invalid classification: {args.classification}[/]")
-        console.print(f"  Valid: {', '.join(valid)}")
-        return
+        eprint(f"Invalid classification: {args.classification}. Valid: {', '.join(valid)}")
+        sys.exit(1)
 
     try:
         audit_level = AuditLevel(args.audit)
     except ValueError:
         valid = [a.value for a in AuditLevel]
-        console.print(f"[red]Invalid audit level: {args.audit}[/]")
-        console.print(f"  Valid: {', '.join(valid)}")
-        return
+        eprint(f"Invalid audit level: {args.audit}. Valid: {', '.join(valid)}")
+        sys.exit(1)
 
     providers = [p.strip() for p in args.providers.split(",") if p.strip()]
 
@@ -215,14 +224,13 @@ def _add_rule(args: Any) -> None:
     data["privacy_rules"] = rules
     _save_privacy_yaml(data, privacy_path)
 
-    console.print(f"[green]✓[/] Privacy rule added: [cyan]{rule_id}[/]")
+    console.success(f"Privacy rule added: {rule_id}")
     console.print(f"  Name: {args.name}")
     console.print(f"  Scopes: {args.scope}")
     console.print(f"  Classification: {args.classification}")
     console.print(f"  Providers blocked: {args.providers or '(all)'}")
     console.print(f"  Audit: {args.audit}")
-    console.print()
-    console.print("[dim]Activate with: opencontext harness run --privacy-profile standard ...[/]")
+    console.dim("Activate with: opencontext harness run --privacy-profile standard ...")
 
 
 def _remove_rule(args: Any) -> None:
@@ -232,17 +240,16 @@ def _remove_rule(args: Any) -> None:
     rule_ids = [r["id"] for r in rules]
 
     if args.rule_id not in rule_ids:
-        console.print(f"[red]Rule not found: {args.rule_id}[/]")
-        console.print(f"  Available: {', '.join(rule_ids) or '(none)'}")
-        return
+        eprint(f"Rule not found: {args.rule_id}. Available: {', '.join(rule_ids) or '(none)'}")
+        sys.exit(1)
 
     if not args.force:
         from opencontext_core import prompts
 
         if not prompts.confirm(f"Remove rule {args.rule_id}?", default=False):
-            console.print("[dim]Cancelled.[/]")
+            console.dim("Cancelled.")
             return
 
     data["privacy_rules"] = [r for r in rules if r["id"] != args.rule_id]
     _save_privacy_yaml(data, privacy_path)
-    console.print(f"[green]✓[/] Removed: [cyan]{args.rule_id}[/]")
+    console.success(f"Removed: {args.rule_id}")

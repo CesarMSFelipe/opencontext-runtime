@@ -16,6 +16,9 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
+
 
 def add_learn_parser(subparsers: Any) -> None:
     """Register the ``learn`` command group."""
@@ -70,7 +73,8 @@ def handle_learn(args: argparse.Namespace) -> None:
     elif cmd == "patterns":
         _handle_patterns(args)
     else:
-        print("learn: unknown subcommand. Use --help for usage.")
+        eprint("learn: unknown subcommand. Use --help for usage.")
+        raise SystemExit(2)
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +105,7 @@ def _handle_status(args: argparse.Namespace) -> None:
         orch = _build_orchestrator(args)
         stats = orch.get_statistics()
     except Exception as exc:
-        print(f"learn status: could not load learning system: {exc}")
+        eprint(f"learn status: could not load learning system: {exc}")
         raise SystemExit(1) from exc
 
     as_json = getattr(args, "json", False)
@@ -113,15 +117,14 @@ def _handle_status(args: argparse.Namespace) -> None:
     budgets = stats.get("budgets", {})
     feedback = stats.get("feedback", {})
 
-    print("Learning system status")
-    print("=" * 40)
-    print(f"  Patterns known : {len(patterns)}")
-    print(f"  Budget profiles: {len(budgets)}")
+    console.header("Learning Status")
+    console.print(f"  Patterns known : {len(patterns)}")
+    console.print(f"  Budget profiles: {len(budgets)}")
     total_ops = feedback.get("total_operations", feedback.get("total", "?"))
-    print(f"  Total ops seen : {total_ops}")
+    console.print(f"  Total ops seen : {total_ops}")
     if patterns:
         avg_success = sum(v.get("success_rate", 0.0) for v in patterns.values()) / len(patterns)
-        print(f"  Avg success    : {avg_success:.0%}")
+        console.print(f"  Avg success    : {avg_success:.0%}")
 
 
 def _handle_patterns(args: argparse.Namespace) -> None:
@@ -131,7 +134,7 @@ def _handle_patterns(args: argparse.Namespace) -> None:
         orch = _build_orchestrator(args)
         all_patterns = orch.patterns.get_all_patterns()
     except Exception as exc:
-        print(f"learn patterns: could not load patterns: {exc}")
+        eprint(f"learn patterns: could not load patterns: {exc}")
         raise SystemExit(1) from exc
 
     as_json = getattr(args, "json", False)
@@ -150,19 +153,13 @@ def _handle_patterns(args: argparse.Namespace) -> None:
         print(_json.dumps(serializable, indent=2))
         return
 
+    console.header("Learning Patterns")
     if not all_patterns:
-        print("No patterns known to PatternLearner.")
+        console.info("No patterns yet.")
         return
 
-    col_type = 30
-    col_rate = 10
-    col_count = 8
-    header = f"{'TASK TYPE':<{col_type}}  {'SUCCESS':<{col_rate}}  {'COUNT':<{col_count}}"
-    print(header)
-    print("-" * len(header))
-    for task_type, pattern in sorted(all_patterns.items()):
-        print(
-            f"{task_type:<{col_type}}  "
-            f"{pattern.success_rate:.0%}{'':>{col_rate - 4}}  "
-            f"{pattern.occurrence_count:<{col_count}}"
-        )
+    rows = [
+        [task_type, f"{pattern.success_rate:.0%}", str(pattern.occurrence_count)]
+        for task_type, pattern in sorted(all_patterns.items())
+    ]
+    console.table("Patterns", ["Task Type", "Success", "Count"], rows)

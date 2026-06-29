@@ -68,9 +68,11 @@ class TestHarnessCli:
             timeout=30,
         )
         assert result.returncode == 0
-        assert "Harness Run:" in result.stdout
+        # Brand console: panel header "Harness Run", workflow line, and the
+        # explore phase rendered in the heavy-box Phases table.
+        assert "Harness Run" in result.stdout
         assert "explore-only" in result.stdout
-        assert "explore:" in result.stdout
+        assert "explore" in result.stdout
 
     def test_harness_run_invalid_workflow(self) -> None:
         result = _run_cli(

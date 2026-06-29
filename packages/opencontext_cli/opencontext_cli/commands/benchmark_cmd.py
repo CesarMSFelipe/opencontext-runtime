@@ -15,7 +15,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from opencontext_core.dx.console_styles import console
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import BrandConsole, console
 from opencontext_core.evaluation.efficiency import (
     EfficiencyBenchmark,
     format_efficiency_report,
@@ -29,6 +30,19 @@ from opencontext_core.runtime import OpenContextRuntime
 # NOTE: Resolve via importlib.resources so DEFAULT_SUITE works under editable install
 # and wheel alike. The yaml is packaged as opencontext_cli/data/contextbench.yaml.
 DEFAULT_SUITE = str(importlib.resources.files("opencontext_cli").joinpath("data/contextbench.yaml"))
+
+
+def _stderr_console() -> BrandConsole:
+    """Brand console bound to STDERR so diagnostics never pollute stdout/JSON."""
+    bc = BrandConsole()
+    if getattr(bc, "_console", None) is not None:
+        from rich.console import Console as _Console
+
+        bc._console = _Console(stderr=True)
+    return bc
+
+
+err_console = _stderr_console()
 
 
 def add_benchmark_parser(subparsers: Any) -> None:
@@ -119,6 +133,7 @@ def _handle_suite(args: Any) -> None:
 
     runner = build_default_runner()
     if args.suite_command == "list":
+        console.header("Benchmark Suites")
         for name in runner.list_suites():
             console.print(f"  - {name}")
         return
@@ -142,6 +157,7 @@ def _handle_suites(args: Any) -> None:
     from opencontext_core.runtime_intelligence.benchmarks import BenchmarkSystem
 
     system = BenchmarkSystem()
+    console.header("Benchmark Suite Taxonomy")
     console.print("[bold]Runtime Intelligence benchmark suites (13):[/]")
     for suite in system.list_suites():
         status = "implemented" if system.is_implemented(suite) else "declared (not measured)"
@@ -196,23 +212,25 @@ def _handle_head2head(args: Any) -> None:
         print(_json.dumps(payload, indent=2))
         return
 
+    console.header("Benchmark Head-To-Head")
     for r in reports:
         layer = "on" if r.semantic_layer else "off"
         console.print(f"\n[bold]{r.repo}[/]  (semantic_layer: {layer})")
-        console.print(f"  {'arm':14} {'tokens':>8} {'calls':>6} {'ms':>7}  capabilities")
+        rows = []
         for a in sorted(r.arms, key=lambda x: x.tokens):
             m = r.matrix.get(a.arm)
             flags = (
                 "".join("1" if (m and getattr(m, f)) else "0" for f in _CAP_FIELDS) if m else "-"
             )
-            console.print(
-                f"  {a.arm:14} {a.tokens:>8} {a.tool_calls:>6} {a.latency_ms:>7.0f}  {flags}"
+            rows.append(
+                [a.arm, str(a.tokens), str(a.tool_calls), f"{a.latency_ms:.0f}", flags]
             )
+        console.table("Arms", ["Arm", "Tokens", "Calls", "ms", "Capabilities"], rows)
         oc = next((a for a in r.arms if a.arm == "OC-SURGICAL"), None)
         if oc is not None:
             cheaper = [a.arm for a in r.arms if a.arm != "OC-SURGICAL" and oc.tokens < a.tokens]
-            console.print(f"  [green]OC-SURGICAL cheaper than: {', '.join(cheaper) or 'none'}[/]")
-    console.print("\n  capabilities = " + ",".join(_CAP_FIELDS))
+            console.success(f"OC-SURGICAL cheaper than: {', '.join(cheaper) or 'none'}")
+    console.dim("capabilities = " + ",".join(_CAP_FIELDS))
 
 
 def _runtime(args: Any) -> OpenContextRuntime:
@@ -228,11 +246,10 @@ def _select_cases(args: Any) -> list[Any]:
     # NOTE: REQ-07 — fail loudly when the suite path doesn't exist and the caller
     # is relying on the default (i.e. not in the development repository).
     if not Path(suite_path).exists():
-        print(
-            f"Error: --suite is required outside the development repository. "
-            f"Provide a contextbench.yaml path with --suite.\n"
-            f"(Resolved suite path does not exist: {suite_path})",
-            file=sys.stderr,
+        eprint(
+            "--suite is required outside the development repository. "
+            "Provide a contextbench.yaml path with --suite.\n"
+            f"(Resolved suite path does not exist: {suite_path})"
         )
         raise SystemExit(1)
     cases = load_context_bench_cases(suite_path)
@@ -248,25 +265,25 @@ def _select_cases(args: Any) -> list[Any]:
 def _handle_list(args: Any) -> None:
     """List available efficiency benchmark cases."""
     cases = _select_cases(args)
+    console.header("Efficiency Benchmark Cases")
     if not cases:
-        console.print("[yellow]No benchmark cases found.[/]")
+        console.info("No benchmark cases yet.")
         return
 
-    from rich.table import Table
-
-    table = Table(title=f"Efficiency Benchmark Cases ({len(cases)})")
-    table.add_column("ID", style="cyan")
-    table.add_column("Difficulty")
-    table.add_column("Target Symbol")
-    table.add_column("Min Coverage", justify="right")
-    for case in cases:
-        table.add_row(
+    rows = [
+        [
             case.id,
             case.difficulty or "-",
             case.target_symbol or "(derived)",
             f"{case.min_source_coverage:.2f}",
-        )
-    console.print(table)
+        ]
+        for case in cases
+    ]
+    console.table(
+        f"Cases ({len(cases)})",
+        ["ID", "Difficulty", "Target Symbol", "Min Coverage"],
+        rows,
+    )
 
 
 def _handle_run(args: Any) -> None:
@@ -278,7 +295,7 @@ def _handle_run(args: Any) -> None:
 
     cases = _select_cases(args)
     if not cases:
-        console.print("[yellow]No benchmark cases match the given filters.[/]")
+        eprint("No benchmark cases match the given filters.")
         sys.exit(1)
 
     runtime = _runtime(args)
@@ -301,17 +318,17 @@ def _handle_run(args: Any) -> None:
         output = _format_markdown(report)
         if args.output:
             Path(args.output).write_text(output, encoding="utf-8")
-            console.print(f"[green]Report written to {args.output}[/]")
+            console.success(f"Report written to {args.output}")
         else:
-            console.print(output)
+            print(output)
     else:
+        console.header("Efficiency Benchmark")
         console.print(format_efficiency_report(report))
 
     if args.save:
         path = save_efficiency_result(report)
-        import sys as _sys
-
-        print(f"Result saved to {path}", file=_sys.stderr)
+        # Diagnostic on stderr so --format json stdout stays pure.
+        err_console.success(f"Result saved to {path}")
 
     # Exit code gates on quality parity only (D-CI): no reduction threshold.
     if not report.all_sufficient:
@@ -322,8 +339,9 @@ def _handle_compare(args: Any) -> None:
     """Show the last saved efficiency benchmark result."""
     last = load_last_efficiency_result()
     if last is None:
-        console.print("[yellow]No saved result. Run `opencontext benchmark run --save` first.[/]")
+        eprint("No saved result. Run `opencontext benchmark run --save` first.")
         sys.exit(1)
+    console.header("Efficiency Benchmark")
     console.print(format_efficiency_report(last))
 
 

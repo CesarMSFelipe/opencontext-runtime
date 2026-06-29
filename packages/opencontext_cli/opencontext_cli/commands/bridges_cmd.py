@@ -6,12 +6,8 @@ import dataclasses
 import json
 from typing import Any
 
-from rich.console import Console
-from rich.table import Table
-
+from opencontext_core.dx.console_styles import console
 from opencontext_core.indexing.bridge_detector import BridgeDetector
-
-console = Console()
 
 
 def add_bridges_parser(subparsers: Any) -> None:
@@ -77,49 +73,43 @@ def _handle_scan(
     output_json: bool = False,
 ) -> None:
     """Scan and display all detected bridges."""
-    with console.status("[bold green]Scanning for cross-language bridges..."):
-        detector = BridgeDetector()
+    detector = BridgeDetector()
+    # Skip the live spinner under --json (keep stdout pure) and when rich is absent.
+    if output_json or not console.available:
         bridges = detector.scan(root)
+    else:
+        with console.status("Scanning for cross-language bridges..."):
+            bridges = detector.scan(root)
 
     if bridge_type:
         bridges = [b for b in bridges if b.bridge_type == bridge_type]
     if min_confidence > 0:
         bridges = [b for b in bridges if b.confidence >= min_confidence]
 
-    if not bridges:
-        console.print("[dim]No cross-language bridges detected.[/]")
-        return
-
     if output_json:
-        print(json.dumps([dataclasses.asdict(b) for b in bridges], indent=2))
+        print(json.dumps([dataclasses.asdict(b) for b in bridges], indent=2))  # pure JSON
         return
 
-    table = Table(title=f"Cross-Language Bridges ({len(bridges)} found)")
-    table.add_column("File", style="cyan", max_width=40)
-    table.add_column("Line", justify="right")
-    table.add_column("Type", style="yellow")
-    table.add_column("Confidence", justify="right")
-    table.add_column("Target Hint", max_width=40)
+    console.header("Cross-Language Bridges")
+    if not bridges:
+        console.info("No cross-language bridges detected yet.")
+        return
 
-    for b in bridges:
-        conf_style = (
-            "green" if b.confidence >= 0.85 else ("yellow" if b.confidence >= 0.7 else "dim")
-        )
-        table.add_row(
-            b.source_file,
-            str(b.line),
-            b.bridge_type,
-            f"[{conf_style}]{b.confidence:.0%}[/]",
-            b.target_hint,
-        )
-
-    console.print(table)
+    rows = [
+        [b.source_file, str(b.line), b.bridge_type, f"{b.confidence:.0%}", b.target_hint]
+        for b in bridges
+    ]
+    console.table(
+        f"Bridges ({len(bridges)} found)",
+        ["File", "Line", "Type", "Confidence", "Target Hint"],
+        rows,
+    )
 
     type_counts: dict[str, int] = {}
     for b in bridges:
         type_counts[b.bridge_type] = type_counts.get(b.bridge_type, 0) + 1
     summary = " | ".join(f"{t}: {c}" for t, c in sorted(type_counts.items()))
-    console.print(f"[dim]By type: {summary}[/]")
+    console.dim(f"By type: {summary}")
 
 
 def _handle_show(root: str, symbol: str) -> None:
@@ -135,17 +125,14 @@ def _handle_show(root: str, symbol: str) -> None:
         or sym in b.target_hint.lower()
     ]
 
+    console.header(f"Bridges: {symbol}")
     if not filtered:
-        console.print(f"[dim]No bridges found matching '{symbol}'.[/]")
+        console.info(f"No bridges found matching '{symbol}' yet.")
         return
 
-    table = Table(title=f"Bridges matching '{symbol}'")
-    table.add_column("File", style="cyan")
-    table.add_column("Line", justify="right")
-    table.add_column("Type", style="yellow")
-    table.add_column("Target Hint")
-
-    for b in filtered:
-        table.add_row(b.source_file, str(b.line), b.bridge_type, b.target_hint)
-
-    console.print(table)
+    rows = [[b.source_file, str(b.line), b.bridge_type, b.target_hint] for b in filtered]
+    console.table(
+        f"Bridges matching '{symbol}'",
+        ["File", "Line", "Type", "Target Hint"],
+        rows,
+    )

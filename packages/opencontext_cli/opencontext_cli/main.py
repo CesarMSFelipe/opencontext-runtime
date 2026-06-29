@@ -82,12 +82,13 @@ from opencontext_cli.commands.update_cmd import (
     handle_upgrade,
 )
 from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
-from opencontext_cli.output import add_output_flag
+from opencontext_cli.output import add_output_flag, eprint
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
 from opencontext_core.config import SecurityMode, default_config_data, load_config
 from opencontext_core.context.modes import ContextMode
 from opencontext_core.doctor.checks import run_doctor, run_security_doctor
 from opencontext_core.dx.checkpoints import ContextCheckpoint, fingerprint
+from opencontext_core.dx.console_styles import BrandConsole, console
 from opencontext_core.dx.instructions import import_instructions
 from opencontext_core.dx.security_reports import scan_project
 from opencontext_core.dx.tokens import build_token_report
@@ -208,6 +209,20 @@ def _get_version() -> str:
 __version__ = _get_version()
 
 
+def _stderr_console() -> BrandConsole:
+    """Brand console bound to STDERR so diagnostics never pollute stdout/JSON."""
+    bc = BrandConsole()
+    inner = getattr(bc, "_console", None)
+    if inner is not None:
+        from rich.console import Console as _Console
+
+        bc._console = _Console(stderr=True)
+    return bc
+
+
+err_console = _stderr_console()
+
+
 def _version_human() -> None:
     """Render the branded human version banner (logo + version + schema lines).
 
@@ -269,48 +284,49 @@ def main() -> None:
         except Exception:
             pass
     except OpenContextError as exc:
-        print(f"Error: {exc}", file=__import__("sys").stderr)
+        eprint(f"Error: {exc}")
         _print_suggestion(args.command if hasattr(args, "command") else "")
         raise SystemExit(1) from exc
     except FileNotFoundError as exc:
-        print(f"Error: File not found - {exc}", file=__import__("sys").stderr)
+        eprint(f"File not found - {exc}")
         raise SystemExit(1) from exc
     except PermissionError as exc:
-        print(f"Error: Permission denied - {exc}", file=__import__("sys").stderr)
+        eprint(f"Permission denied - {exc}")
         raise SystemExit(1) from exc
     except KeyboardInterrupt:
-        print("\nOperation cancelled.")
+        err_console.warning("Operation cancelled.")
         raise SystemExit(130) from None
     except Exception as exc:
         # A raw traceback is a terrible first impression. Show a friendly,
         # actionable message; OPENCONTEXT_DEBUG=1 restores the full traceback.
         if os.environ.get("OPENCONTEXT_DEBUG"):
             raise
-        print(f"Unexpected error: {exc}", file=sys.stderr)
-        print(
+        eprint(f"Unexpected error: {exc}")
+        err_console.dim(
             "  Run 'opencontext doctor' to check your setup, or re-run with "
-            "OPENCONTEXT_DEBUG=1 for the full traceback.",
-            file=sys.stderr,
+            "OPENCONTEXT_DEBUG=1 for the full traceback."
         )
         raise SystemExit(1) from exc
 
 
 def _print_suggestion(command: str) -> None:
-    """Print helpful suggestion after an error."""
+    """Print helpful suggestion after an error (stderr, alongside the error)."""
     if command == "index":
-        print("Try: opencontext install")
+        err_console.dim("Try: opencontext install")
     elif command == "pack":
-        print("Try: opencontext index . && opencontext pack . --query 'Explain this project'")
+        err_console.dim(
+            "Try: opencontext index . && opencontext pack . --query 'Explain this project'"
+        )
     elif command == "knowledge-graph":
-        print("Try: opencontext index .")
+        err_console.dim("Try: opencontext index .")
     elif command in ("install", "setup"):
-        print("Try: opencontext install")
+        err_console.dim("Try: opencontext install")
     elif command == "doctor":
-        print("Try: opencontext install")
+        err_console.dim("Try: opencontext install")
     elif command in ("explain", "demo", "verified-context"):
-        print("Try: opencontext index . first, then re-run.")
+        err_console.dim("Try: opencontext index . first, then re-run.")
     else:
-        print("Run 'opencontext --help' for usage information.")
+        err_console.dim("Run 'opencontext --help' for usage information.")
 
 
 def _check_first_run(command: str) -> None:
@@ -375,16 +391,14 @@ def _notify_outdated(args: argparse.Namespace) -> None:
         return
     check = UpdateChecker.check()
     if check.is_outdated and check.latest_version != check.current_version:
-        print(
+        err_console.warning(
             f"Update available: opencontext {check.current_version} -> {check.latest_version}."
-            " Run 'opencontext upgrade'",
-            file=sys.stderr,
+            " Run 'opencontext upgrade'"
         )
     for eco in EcosystemUpdateChecker.check_cached():
-        print(
+        err_console.warning(
             f"Update available: {eco.name} {eco.current_version} -> {eco.latest_version}."
-            f" Run 'pip install --upgrade {eco.name}'",
-            file=sys.stderr,
+            f" Run 'pip install --upgrade {eco.name}'"
         )
 
 
@@ -416,12 +430,9 @@ class _DeprecationAwareParser(argparse.ArgumentParser):
         for arg in sys.argv[1:]:
             if not arg.startswith("-"):
                 if arg in self._DEPRECATED:
-                    print(
-                        f"error: '{arg}' has been removed.",
-                        file=sys.stderr,
-                    )
-                    print("  Use 'opencontext harness run' instead.", file=sys.stderr)
-                    print("  See 'opencontext --help' for available commands.", file=sys.stderr)
+                    eprint(f"'{arg}' has been removed.")
+                    err_console.dim("  Use 'opencontext harness run' instead.")
+                    err_console.dim("  See 'opencontext --help' for available commands.")
                     raise SystemExit(2)
                 break
         super().error(message)
@@ -1680,7 +1691,7 @@ def _dispatch(args: argparse.Namespace) -> None:
             from opencontext_core.skills.registry import refresh as _skill_refresh
 
             _sr_out = _skill_refresh(_sr_root)
-            print(f"Skill registry written: {_sr_out}")
+            console.success(f"Skill registry written: {_sr_out}")
         return
     if command == "sync":
         handle_sync(args)
@@ -1864,7 +1875,8 @@ def _init(
     if profile:
         config_data["profile"] = profile
     if path.exists():
-        print(f"Config already exists: {path}")
+        console.header("OpenContext Init")
+        console.warning(f"Config already exists: {path}")
         ensure_workspace(Path("."))
         # Keep the OC state tree (.opencontext/, .storage/) out of git so a
         # freshly `init`-ed project does not surface ~100 untracked files.
@@ -1875,11 +1887,12 @@ def _init(
     # Same managed .gitignore block the wizard/install path writes, so `init`
     # alone never litters the user's repo with untracked OC artifacts.
     OnboardingService._write_gitignore_storage_block(root)
-    print(f"Created config: {path}")
-    print(f"Template: {template}")
+    console.header("OpenContext Init")
+    console.success(f"Created config: {path}")
+    console.info(f"Template: {template}")
     if profile:
-        print(f"Profile: {profile}")
-    print("Workspace: .opencontext/")
+        console.info(f"Profile: {profile}")
+    console.info("Workspace: .opencontext/")
 
 
 def _apply_profile_to_config(config_path: Path, profile: str) -> None:
@@ -1898,7 +1911,7 @@ def _apply_profile_to_config(config_path: Path, profile: str) -> None:
         return
     data["profile"] = profile
     config_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
-    print(f"Profile: {profile}")
+    console.info(f"Profile: {profile}")
 
 
 def _runtime(config_path: str) -> OpenContextRuntime:
@@ -2162,6 +2175,9 @@ def _install_dry_run(args: argparse.Namespace) -> None:
         cfg = cfg.model_copy(update=overlay)
 
     plan = build_install_plan(cfg)
+    console.header("Install Plan (Dry Run)")
+    # Payload is a pre-rendered multi-line plan — print raw so rich never tries to
+    # parse stray brackets as markup.
     print(render_dry_run(plan))
 
 
@@ -2174,7 +2190,7 @@ def _install_provision_engram(args: argparse.Namespace) -> None:
     try:
         EngramProvisioner().install(agent=agent, yes=yes)
     except RuntimeError as exc:
-        print(f"Engram provisioning: {exc}")
+        err_console.warning(f"Engram provisioning: {exc}")
 
 
 def _install(args: argparse.Namespace) -> None:
@@ -2429,14 +2445,15 @@ def _index(
         _index_json(runtime, root)
         return
     manifest = runtime.index_project(root)
-    print(f"Indexed project: {manifest.project_name}")
-    print(f"Root: {manifest.root}")
-    print(f"Files: {len(manifest.files)}")
-    print(f"Symbols: {len(manifest.symbols)}")
-    print(f"Technology profiles: {', '.join(manifest.technology_profiles)}")
-    print("Manifest: .storage/opencontext/project_manifest.json")
+    console.header("Index")
+    console.success(f"Indexed project: {manifest.project_name}")
+    console.info(f"Root: {manifest.root}")
+    console.info(f"Files: {len(manifest.files)}")
+    console.info(f"Symbols: {len(manifest.symbols)}")
+    console.info(f"Technology profiles: {', '.join(manifest.technology_profiles)}")
+    console.info("Manifest: .storage/opencontext/project_manifest.json")
     if incremental:
-        print("Incremental mode scaffold active in v0.1.")
+        console.info("Incremental mode scaffold active in v0.1.")
 
     # Auto-verify after index to catch index rot early
     try:
@@ -2445,11 +2462,11 @@ def _index(
         checks = run_doctor(runtime.config)
         failed = [c for c in checks if not c.ok]
         if failed:
-            print(
-                f"\nVerify: {len(failed)} issue(s) detected — run 'opencontext doctor' for details."
+            console.warning(
+                f"Verify: {len(failed)} issue(s) detected — run 'opencontext doctor' for details."
             )
         else:
-            print(f"Verify: {len(checks)} checks passed.")
+            console.success(f"Verify: {len(checks)} checks passed.")
     except Exception:
         pass
 
@@ -2503,14 +2520,15 @@ def _watch(
     config_path = _default_config_path()
 
     if not project_root.exists():
-        print(f"Error: path does not exist: {project_root}", file=sys.stderr)
+        eprint(f"path does not exist: {project_root}")
         raise SystemExit(1)
 
-    print(f"OpenContext Watch — {project_root}")
-    print(f"  Mode: {'polling' if poll else 'watchdog (OS-native)'}")
-    print(f"  Debounce: {debounce}s")
-    print("  Press Ctrl+C to stop.")
-    print()
+    console.header("OpenContext Watch")
+    console.info(f"Path: {project_root}")
+    console.info(f"Mode: {'polling' if poll else 'watchdog (OS-native)'}")
+    console.info(f"Debounce: {debounce}s")
+    console.dim("Press Ctrl+C to stop.")
+    console.print()
 
     # Use a mutable container so the closure can update it
     runtime_holder: list[OpenContextRuntime | None] = [None]
@@ -2522,9 +2540,11 @@ def _watch(
         rt = runtime_holder[0]
         assert rt is not None, "runtime failed to initialize"
         manifest = rt.index_project(project_root)
-        print(f"  Initial index: {len(manifest.files)} files, {len(manifest.symbols)} symbols")
+        console.success(
+            f"Initial index: {len(manifest.files)} files, {len(manifest.symbols)} symbols"
+        )
     except Exception as exc:
-        print(f"  Warning: initial index failed: {exc}", file=sys.stderr)
+        err_console.warning(f"initial index failed: {exc}")
 
     def _reindex(changed: set[str] | None) -> None:
         """Incrementally re-index changed files, or full rebuild when changed is None."""
@@ -2534,22 +2554,22 @@ def _watch(
                 rt = _runtime_for_root(config_path, project_root)
                 runtime_holder[0] = rt
             except Exception as exc:
-                print(f"  Re-index failed (runtime init error): {exc}", file=sys.stderr)
+                eprint(f"Re-index failed (runtime init error): {exc}")
                 return
         try:
             if changed:
                 stats = rt.reindex_files(changed, project_root)
-                print(
-                    f"  Re-indexed {stats.get('files', 0)} file(s)"
+                console.success(
+                    f"Re-indexed {stats.get('files', 0)} file(s)"
                     f" — {stats.get('nodes', 0)} nodes, {stats.get('edges', 0)} edges"
                 )
             else:
                 manifest = rt.index_project(project_root)
-                print(
-                    f"  Full re-index: {len(manifest.files)} files, {len(manifest.symbols)} symbols"
+                console.success(
+                    f"Full re-index: {len(manifest.files)} files, {len(manifest.symbols)} symbols"
                 )
         except Exception as exc:
-            print(f"  Re-index failed: {exc}", file=sys.stderr)
+            eprint(f"Re-index failed: {exc}")
 
     # Set up watch service
     service = WatchService(
@@ -2565,7 +2585,8 @@ def _watch(
     shutdown_event = threading.Event()
 
     def _handle_sigint(signum: int, _frame: object) -> None:
-        print("\nShutting down...")
+        console.print()
+        console.info("Shutting down...")
         shutdown_event.set()
 
     signal.signal(signal.SIGINT, _handle_sigint)
@@ -2576,7 +2597,7 @@ def _watch(
         pass
     finally:
         service.stop()
-        print("Watch service stopped.")
+        console.success("Watch service stopped.")
 
 
 def _onboard(
@@ -2704,7 +2725,8 @@ def _onboard(
 def _instructions(action: str) -> None:
     items = import_instructions(Path("."))
     if action == "import":
-        print(f"Imported {len(items)} instruction file(s).")
+        # Status to stderr so stdout stays a clean JSON document.
+        err_console.success(f"Imported {len(items)} instruction file(s).")
     print(
         json.dumps([{"source": item.source, "trusted": item.trusted} for item in items], indent=2)
     )
@@ -2717,7 +2739,7 @@ def _clarify(idea: str, output: str | None) -> None:
 
         idea = prompts.text("Describe your idea or feature").strip()
     if not idea:
-        print("No idea provided.")
+        err_console.warning("No idea provided.")
         return
 
     brief = f"""# Clarification Brief
@@ -2763,8 +2785,9 @@ opencontext loop --task "<objective>" --flow full
 """
     if output:
         Path(output).write_text(brief, encoding="utf-8")
-        print(f"Brief written: {output}")
+        console.success(f"Brief written: {output}")
     else:
+        # Payload (markdown brief) — print raw so rich never parses its brackets.
         print(brief)
 
 
@@ -3126,16 +3149,18 @@ def _clean(root: str, dry_run: bool, force: bool) -> None:
         if path.exists():
             candidates.append(path)
 
+    console.header("Clean")
     if not candidates:
-        print("No OpenContext data found.")
+        console.info("No OpenContext data found.")
         return
 
-    print(f"OpenContext data in {project_root}:")
+    console.section(f"OpenContext data in {project_root}")
     for c in candidates:
-        print(f"  - {c}")
+        console.print(f"  - {c}")
 
     if dry_run:
-        print("\nDry run: no files were removed.")
+        console.print()
+        console.info("Dry run: no files were removed.")
         return
 
     # confirm (unless --force)
@@ -3143,7 +3168,7 @@ def _clean(root: str, dry_run: bool, force: bool) -> None:
         from opencontext_core import prompts
 
         if not prompts.confirm("Remove all OpenContext data?", default=False):
-            print("Aborted.")
+            console.warning("Aborted.")
             return
 
     for c in candidates:
@@ -3152,7 +3177,8 @@ def _clean(root: str, dry_run: bool, force: bool) -> None:
         else:
             c.unlink(missing_ok=True)
 
-    print(f"\nRemoved {len(candidates)} items.")
+    console.print()
+    console.success(f"Removed {len(candidates)} items.")
 
 
 def _tokens(
@@ -3172,7 +3198,7 @@ def _tokens(
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(rendered, encoding="utf-8")
-        print(f"Wrote token report: {path}")
+        console.success(f"Wrote token report: {path}")
         return
     print(rendered)
 
@@ -3217,7 +3243,7 @@ def _security(
             path = Path(output_path)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
-            print(f"Wrote security scan: {path}")
+            console.success(f"Wrote security scan: {path}")
             return
         if json_out:
             print(result.model_dump_json(indent=2))
@@ -3225,14 +3251,17 @@ def _security(
         # Human-readable output
         findings = result.findings
         warnings = getattr(result, "warnings", [])
+        console.header("Security Scan")
         if not findings:
-            print("✓ No secret leakage patterns found.")
+            console.success("No secret leakage patterns found.")
         else:
-            print(f"Security Scan — {len(findings)} finding(s)\n")
+            console.warning(f"{len(findings)} finding(s)")
+            # Findings/warnings are arbitrary text — print raw so rich never tries
+            # to parse stray brackets as markup.
             for f in findings:
-                print(f"  ⚠  {f}")
+                print(f"  ! {f}")
         for w in warnings:
-            print(f"\n  i  {w}")
+            print(f"  i {w}")
         return
     _unreachable(action)
 
@@ -3354,11 +3383,13 @@ def _agent_context(
     content = "\n".join(parts)
     if copy:
         copied = _copy_to_clipboard(content)
-        print(
-            "  ✓ Copied to clipboard."
-            if copied
-            else "  ✗ No clipboard (install xclip or wl-clipboard). Printed output instead."
-        )
+        if copied:
+            err_console.success("Copied to clipboard.")
+        else:
+            err_console.warning(
+                "No clipboard (install xclip or wl-clipboard). Printed output instead."
+            )
+    # Payload (markdown context) — print raw so rich never parses its brackets.
     print(content)
 
 
@@ -3436,7 +3467,7 @@ def _setup_mcp_for_opencode() -> None:
             pass
 
     mcp_config_path.write_text(json.dumps(mcp_config, indent=2), encoding="utf-8")
-    print(f"MCP config written to: {mcp_config_path}")
+    console.success(f"MCP config written to: {mcp_config_path}")
 
 
 def _prompt(args: argparse.Namespace, config_path: str) -> None:
@@ -3480,7 +3511,7 @@ def _prompt(args: argparse.Namespace, config_path: str) -> None:
             path = Path(args.output)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(rendered, encoding="utf-8")
-            print(f"Wrote prompt/context SBOM: {path}")
+            console.success(f"Wrote prompt/context SBOM: {path}")
             return
         print(rendered)
         return
@@ -3585,7 +3616,7 @@ def _release(args: argparse.Namespace) -> None:
         path = Path(args.output)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(rendered, encoding="utf-8")
-        print(f"Wrote release evidence: {path}")
+        console.success(f"Wrote release evidence: {path}")
         return
     _unreachable(args.release_command)
 
@@ -3731,13 +3762,12 @@ def _harness(
         if json_output:
             print(json.dumps(workflows, indent=2))
         else:
-            print("Available Harness Workflows")
-            print("=" * 50)
-            for name, info in workflows.items():
-                print(f"\n  {name}")
-                print(f"    {info['description']}")
-                print(f"    Phases: {' -> '.join(info['phases'])}")
-            print()
+            console.header("Harness Workflows")
+            rows = [
+                [name, str(info["description"]), " -> ".join(info["phases"])]
+                for name, info in workflows.items()
+            ]
+            console.table("Workflows", ["Workflow", "Description", "Phases"], rows)
         return
 
     if command == "run":
@@ -3795,28 +3825,31 @@ def _harness(
             if json_output:
                 print(json.dumps(output, indent=2))
             else:
-                print(f"Harness Run: {result.run_id}")
-                print(f"  Workflow: {result.workflow}")
+                console.header("Harness Run")
+                console.success(f"Run: {result.run_id}")
+                console.info(f"Workflow: {result.workflow}")
+                # Task is user-supplied — print raw so rich never parses its brackets.
                 print(f"  Task: {result.task}")
-                print(f"  Status: {result.status}")
+                console.info(f"Status: {result.status}")
                 if privacy_profile != "off":
-                    print(f"  Privacy: {privacy_profile} (enforced)")
-                print(f"  Phases: {len(result.ledgers)}")
-                for ledger in result.ledgers:
-                    status_str = (
-                        ledger.status.value
-                        if hasattr(ledger.status, "value")
-                        else str(ledger.status)
-                    )
-                    print(
-                        f"    {ledger.phase}: {ledger.used_tokens}"
-                        f"/{ledger.budget_tokens} tokens — {status_str}"
-                    )
-                print(f"  Gates: {len(result.gates)}")
-                print(f"  Trace IDs: {len(result.trace_ids)}")
-                if result.warnings:
-                    for w in result.warnings:
-                        print(f"  ⚠ {w}")
+                    console.info(f"Privacy: {privacy_profile} (enforced)")
+                phase_rows = [
+                    [
+                        ledger.phase,
+                        f"{ledger.used_tokens}/{ledger.budget_tokens}",
+                        (
+                            ledger.status.value
+                            if hasattr(ledger.status, "value")
+                            else str(ledger.status)
+                        ),
+                    ]
+                    for ledger in result.ledgers
+                ]
+                console.table("Phases", ["Phase", "Tokens", "Status"], phase_rows)
+                console.info(f"Gates: {len(result.gates)}")
+                console.info(f"Trace IDs: {len(result.trace_ids)}")
+                for w in result.warnings:
+                    console.warning(str(w))
 
             if budget_mode == "strict" and result.status in ("failed",):
                 sys.exit(1)
@@ -3827,10 +3860,10 @@ def _harness(
             if json_output:
                 print(json.dumps(output, indent=2))
             else:
-                print(f"Error: {error_msg}")
+                eprint(error_msg)
                 if hint:
-                    print(f"Hint: {hint}")
-                print("Run 'opencontext harness run --help' for usage.")
+                    err_console.dim(f"Hint: {hint}")
+                err_console.dim("Run 'opencontext harness run --help' for usage.")
     elif command == "report":
         _harness_report(run_id, root=root, json_output=json_output)
     else:
@@ -3850,12 +3883,12 @@ def _harness_report(run_id: str | None, root: str = ".", json_output: bool = Fal
     if run_id:
         target = runs_dir / run_id
         if not target.exists():
-            print(f"Error: Run not found: {run_id}")
+            eprint(f"Run not found: {run_id}")
             return
     else:
         # Find the most recent run by modification time
         if not runs_dir.exists():
-            print("Error: No runs found. Run 'opencontext harness run' first.")
+            eprint("No runs found. Run 'opencontext harness run' first.")
             return
         runs = sorted(
             (d for d in runs_dir.iterdir() if d.is_dir()),
@@ -3863,7 +3896,7 @@ def _harness_report(run_id: str | None, root: str = ".", json_output: bool = Fal
             reverse=True,
         )
         if not runs:
-            print("Error: No runs found. Run 'opencontext harness run' first.")
+            eprint("No runs found. Run 'opencontext harness run' first.")
             return
         target = runs[0]
 
@@ -3885,10 +3918,10 @@ def _harness_report(run_id: str | None, root: str = ".", json_output: bool = Fal
         report_label = "run"
 
     if not report_file:
-        print(f"Error: No report found in {target}")
-        print("Available files:")
+        eprint(f"No report found in {target}")
+        err_console.dim("Available files:")
         for f in sorted(target.iterdir()):
-            print(f"  {f.name}")
+            print(f"  {f.name}", file=sys.stderr)
         return
 
     with open(report_file, encoding="utf-8") as fh:
@@ -3899,68 +3932,74 @@ def _harness_report(run_id: str | None, root: str = ".", json_output: bool = Fal
         return
 
     # Human-readable summary
-    print(f"\n{'=' * 60}")
-    print(f"  Harness Run Report — {target.name}")
-    print(f"  Report: {report_label}")
-    print(f"{'=' * 60}")
+    console.header("Harness Run Report")
+    console.info(f"Run: {target.name}")
+    console.info(f"Report: {report_label}")
 
     if data.get("task"):
-        print(f"\n  Task: {data['task']}")
+        # Task is user-supplied — print raw so rich never parses its brackets.
+        print(f"  Task: {data['task']}")
 
     if "created_at" in data:
-        print(f"  Created: {data['created_at']}")
+        console.info(f"Created: {data['created_at']}")
 
     if "summary" in data:
-        print(f"\n  Summary: {data['summary']}")
+        print(f"  Summary: {data['summary']}")
 
     # Phases table
     if data.get("phases"):
-        print(f"\n  Phases ({len(data['phases'])} completed)")
-        print(f"  {'Phase':<12} {'Status':<10} {'Budget':>8} {'Used':>8}")
-        print(f"  {'-' * 40}")
-        for phase_name, phase_info in data["phases"].items():
-            status = phase_info.get("status", "unknown")
-            budget = phase_info.get("budget_tokens", 0)
-            used = phase_info.get("used_tokens", 0)
-            print(f"  {phase_name:<12} {status:<10} {budget:>7} {used:>7}")
+        console.section(f"Phases ({len(data['phases'])} completed)")
+        phase_rows = [
+            [
+                str(phase_name),
+                str(phase_info.get("status", "unknown")),
+                str(phase_info.get("budget_tokens", 0)),
+                str(phase_info.get("used_tokens", 0)),
+            ]
+            for phase_name, phase_info in data["phases"].items()
+        ]
+        console.table("Phases", ["Phase", "Status", "Budget", "Used"], phase_rows)
 
     # Gates summary
     if "gates" in data:
-        print("\n  Gates")
-        print(f"  {'Passed':<10} {'Warning':<10} {'Failed':<10}")
-        print(f"  {'-' * 32}")
         g = data["gates"]
-        print(f"  {g.get('passed', 0):<10} {g.get('warning', 0):<10} {g.get('failed', 0):<10}")
+        console.section("Gates")
+        console.table(
+            "Gates",
+            ["Passed", "Warning", "Failed"],
+            [[str(g.get("passed", 0)), str(g.get("warning", 0)), str(g.get("failed", 0))]],
+        )
 
     # Warnings
     if data.get("warnings"):
         warnings_list = data["warnings"]
-        print(f"\n  Warnings ({len(warnings_list)})")
+        console.section(f"Warnings ({len(warnings_list)})")
+        # Warning text is arbitrary — print raw so rich never parses its brackets.
         for w in warnings_list[:10]:
-            print(f"    ⚠ {w}")
+            print(f"    ! {w}")
         if len(warnings_list) > 10:
             print(f"    ... and {len(warnings_list) - 10} more")
 
     # Artifacts
     if "artifacts" in data:
         artifacts = data["artifacts"]
-        print(f"\n  Artifacts ({len(artifacts)})")
+        console.section(f"Artifacts ({len(artifacts)})")
         for a in artifacts[:15]:
             kind = a.get("kind", "?")
             phase = a.get("phase", "?")
             path = a.get("path", "")
             short_path = Path(path).name if path else "(none)"
             desc = a.get("description", "")[:40]
+            # Arbitrary artifact fields — print raw to avoid rich markup parsing.
             print(f"    [{phase:<8}] {kind:<16} {short_path}")
             if desc:
                 print(f"               {desc}")
 
     # Missing artifacts (archive)
     if data.get("missing_artifacts"):
-        print(f"\n  Missing artifacts: {', '.join(data['missing_artifacts'])}")
+        console.warning(f"Missing artifacts: {', '.join(data['missing_artifacts'])}")
 
-    print(f"\n  Report file: {report_file}")
-    print(f"{'=' * 60}\n")
+    console.info(f"Report file: {report_file}")
 
 
 def _workflow_resume(run_id: str, root: str = ".") -> None:
@@ -4164,7 +4203,7 @@ def _inspect(
                 path = Path(output_path)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(rendered, encoding="utf-8")
-                print(f"Wrote repo map: {path}")
+                console.success(f"Wrote repo map: {path}")
                 return
             print(rendered)
             return
@@ -4206,13 +4245,14 @@ def _ask(runtime: OpenContextRuntime, question: str, output_mode: str | None = N
         else ["code", "commands", "paths", "symbols", "warnings", "numbers"],
     )
     output_result = budget.apply(safe_answer, mode=output_mode)
+    # Answer payload — print raw so rich never parses its brackets.
     print(output_result.content)
-    print()
-    print(f"Trace ID: {result.trace_id}")
-    print(f"Selected context items: {result.selected_context_count}")
-    print("Token usage:")
+    console.section("Details")
+    console.info(f"Trace ID: {result.trace_id}")
+    console.info(f"Selected context items: {result.selected_context_count}")
+    console.print("[bold]Token usage:[/]")
     for key, value in result.token_usage.items():
-        print(f"  {key}: {value}")
+        console.print(f"  {key}: {value}")
 
 
 def _verified_context(runtime: OpenContextRuntime, args: argparse.Namespace) -> None:
@@ -4230,12 +4270,14 @@ def _verified_context(runtime: OpenContextRuntime, args: argparse.Namespace) -> 
     if args.json:
         print(json.dumps(body, indent=2, sort_keys=True))
     else:
+        # Context payload — print raw so rich never parses its brackets.
         print(body["context"])
-        print(f"Risk: {body['risk_level']}")
-        print(f"Trace ID: {body['trace_id']}")
+        console.section("Verified Context")
+        console.info(f"Risk: {body['risk_level']}")
+        console.info(f"Trace ID: {body['trace_id']}")
         failed = [gate for gate in body["gates"] if not gate["passed"]]
         if failed:
-            print("Failed gates:")
+            console.warning("Failed gates:")
             for gate in failed:
                 print(f"  {gate['name']}: {gate['reason']}")
     if not args.allow_failed_gates and any(not gate["passed"] for gate in body["gates"]):
@@ -4263,15 +4305,17 @@ def _pack(
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(rendered, encoding="utf-8")
-        print(f"Wrote context pack: {path}")
+        console.success(f"Wrote context pack: {path}")
     if copy:
         copied = _copy_to_clipboard(rendered)
-        print(
-            "  ✓ Copied to clipboard."
-            if copied
-            else "  ✗ No clipboard (install xclip or wl-clipboard). Printed output instead."
-        )
+        if copied:
+            err_console.success("Copied to clipboard.")
+        else:
+            err_console.warning(
+                "No clipboard (install xclip or wl-clipboard). Printed output instead."
+            )
     if output_path is None:
+        # Pack payload — print raw so rich never parses its brackets.
         print(rendered)
 
     # Record telemetry — estimate naive tokens from all project text files
@@ -4439,7 +4483,7 @@ def _trace(
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(trace.model_dump_json(indent=2), encoding="utf-8")
-        print(f"Wrote trace: {path}")
+        console.success(f"Wrote trace: {path}")
         return
     summary = {
         "run_id": trace.run_id,
@@ -4508,7 +4552,7 @@ def _eval_records(args: argparse.Namespace) -> None:
     if args.eval_command == "report":
         records = load_records()
         if not records:
-            print("No evaluation records. Run an AI-eval suite to populate them.")
+            err_console.info("No evaluation records yet. Run an AI-eval suite to populate them.")
             return
         print(
             json.dumps(
@@ -4574,7 +4618,7 @@ def _eval(
     if eval_command != "run":
         _unreachable(eval_command)
     if path is None:
-        print(
+        console.warning(
             "No eval file provided. Create a YAML or JSON file and run "
             "`opencontext eval run <path>`."
         )
@@ -4603,13 +4647,11 @@ def _memory(args: argparse.Namespace) -> None:
     repo = ContextRepository(Path("."))
     if command == "init":
         created = repo.init_layout()
-        print("Initialized context repository.")
+        console.success("Initialized context repository.")
         for path in created:
-            print(f"- {path}")
+            print(f"  - {path}")
         return
     if command == "list":
-        from opencontext_core.dx.console_styles import console
-
         console.header("Memory")
         # Canonical SQLite store first (what the agent recalls), markdown second.
         shown = False
@@ -4633,7 +4675,9 @@ def _memory(args: argparse.Namespace) -> None:
         if store is not None:
             results = store.search(args.query, limit=10)
             if results:
-                print("Use `memory get <id>` for full content.\n")
+                console.dim("Use `memory get <id>` for full content.")
+            # Record lines embed arbitrary content/keys — print raw so rich never
+            # parses their brackets as markup.
             for rec in results:
                 seen.add(rec.id)
                 ts = rec.updated_at.strftime("%Y-%m-%d %H:%M") if rec.updated_at else "?"
@@ -4646,7 +4690,7 @@ def _memory(args: argparse.Namespace) -> None:
             print(f"{item.id} [{item.kind}]: {item.content[:100]}... [md]")
             hit = True
         if not hit:
-            print(f"No memories match '{args.query}'.")
+            console.info(f"No memories match '{args.query}'.")
         return
     if command == "show":
         store = _agent_memory_store(args)
@@ -4667,28 +4711,31 @@ def _memory(args: argparse.Namespace) -> None:
             store = _agent_memory_store(args)
             rec = store.get(args.memory_id) if store is not None and hasattr(store, "get") else None
             if rec is not None:
+                # Message embeds a literal "[md]" token — print raw so rich does
+                # not parse it as markup.
                 print(
                     f"'{args.memory_id}' is an agent (SQLite) memory record; "
                     f"{command} operates on markdown memory ([md] items in 'memory list'). "
                     "Agent records support reinforce/supersede/decay, not pin/promote."
                 )
             else:
-                print(f"Memory item not found: {args.memory_id}")
+                console.warning(f"Memory item not found: {args.memory_id}")
             return
 
     if command == "expand":
         expansion = MemoryExpansionTool(repo)
         item = expansion.expand(args.memory_id)
+        # Memory content payload — print raw so rich never parses its brackets.
         print(item.content)
         return
     manager = PinnedMemoryManager(repo)
     if command == "pin":
         item = manager.pin(args.memory_id)
-        print(f"Pinned: {item.id}")
+        console.success(f"Pinned: {item.id}")
         return
     if command == "unpin":
         item = manager.unpin(args.memory_id)
-        print(f"Unpinned: {item.id}")
+        console.success(f"Unpinned: {item.id}")
         return
     recorder = SessionMemoryRecorder(repo, require_approval=not getattr(args, "yes", False))
     if command in ("collect", "harvest"):
@@ -4701,7 +4748,7 @@ def _memory(args: argparse.Namespace) -> None:
                 trace = runtime.latest_trace()
             except MemoryStoreError:
                 # Empty state, not a failure: no agentic runs have produced traces.
-                print(
+                console.info(
                     "No traces to harvest yet. Run an agentic flow first "
                     '(e.g. `opencontext loop -t "..."`), then harvest.'
                 )
@@ -4713,44 +4760,46 @@ def _memory(args: argparse.Namespace) -> None:
             trace_data = json.loads(trace_path.read_text(encoding="utf-8"))
             trace = RuntimeTrace.model_validate(trace_data)
         result = recorder.harvest(trace)
-        print(f"Harvested {len(result.candidates)} candidates, stored {len(result.stored)} items.")
+        console.success(
+            f"Harvested {len(result.candidates)} candidates, stored {len(result.stored)} items."
+        )
         if result.approval_required:
-            print("Approval required for some items.")
+            console.warning("Approval required for some items.")
         return
     if command == "promote":
         item = repo.move(args.memory_id, args.to)
-        print(f"Promoted: {item.id} -> {args.to}")
+        console.success(f"Promoted: {item.id} -> {args.to}")
         return
     if command == "demote":
         item = repo.move(args.memory_id, args.to)
-        print(f"Demoted: {item.id} -> {args.to}")
+        console.success(f"Demoted: {item.id} -> {args.to}")
         return
     if command == "prune":
         gc = MemoryGarbageCollector(repo)
         report = gc.run()
-        print(f"Pruned {len(report.pruned_ids)} items: {report.reason}")
+        console.success(f"Pruned {len(report.pruned_ids)} items: {report.reason}")
         return
     if command == "gc":
         dry_run = getattr(args, "dry_run", False)
         gc = MemoryGarbageCollector(repo)
         report = gc.run(dry_run=dry_run)
         if dry_run:
-            print(f"Dry run: {len(report.pruned_ids)} item(s) would be pruned.")
+            console.info(f"Dry run: {len(report.pruned_ids)} item(s) would be pruned.")
             for mid in report.pruned_ids:
-                print(f"  {mid}")
+                console.print(f"  {mid}")
         else:
-            print(f"Garbage collected {len(report.pruned_ids)} items.")
+            console.success(f"Garbage collected {len(report.pruned_ids)} items.")
         return
     if command == "maintain":
         from opencontext_core.memory.graph import LocalMemoryStore
 
         db_path = Path(".storage/opencontext/memory.db")
         if not db_path.exists():
-            print(f"No memory store at {db_path} yet — nothing to maintain.")
+            console.info(f"No memory store at {db_path} yet — nothing to maintain.")
             return
         store = LocalMemoryStore(db_path)
         m = store.maintain()
-        print(
+        console.success(
             f"Memory maintenance: scanned {m.keys_scanned} keys, "
             f"consolidated {m.keys_consolidated}, pruned {m.records_pruned} stale records."
         )
@@ -4759,12 +4808,14 @@ def _memory(args: argparse.Namespace) -> None:
             from opencontext_core.memory.project_files import generate as _gen_project_files
 
             written = _gen_project_files(store, Path("."))
-            print(f"Regenerated {len(written)} project-memory files under .opencontext/memory/.")
+            console.success(
+                f"Regenerated {len(written)} project-memory files under .opencontext/memory/."
+            )
         except Exception as exc:
-            print(f"(project-memory files not regenerated: {exc})")
+            eprint(f"project-memory files not regenerated: {exc}")
         if m.reviews_due:
-            print(
-                f"  {m.reviews_due} high-stakes memories due for review "
+            console.warning(
+                f"{m.reviews_due} high-stakes memories due for review "
                 f"— run 'opencontext memory review'."
             )
         return
@@ -4776,20 +4827,23 @@ def _memory(args: argparse.Namespace) -> None:
 
         db_path = Path(".storage/opencontext/memory.db")
         if not db_path.exists():
-            print(f"No memory store at {db_path} yet — nothing to review.")
+            console.info(f"No memory store at {db_path} yet — nothing to review.")
             return
         store = LocalMemoryStore(db_path)
         if args.confirm:
             ok = store.mark_reviewed(args.confirm)
-            print(f"Confirmed: {args.confirm}" if ok else f"Not found: {args.confirm}")
+            if ok:
+                console.success(f"Confirmed: {args.confirm}")
+            else:
+                console.warning(f"Not found: {args.confirm}")
             return
         if args.supersede:
             if not args.content:
-                print("--supersede requires --content with the corrected memory.")
+                console.warning("--supersede requires --content with the corrected memory.")
                 return
             old = store.get(args.supersede)
             if old is None:
-                print(f"Not found: {args.supersede}")
+                console.warning(f"Not found: {args.supersede}")
                 return
             now = datetime.now(UTC)
             replacement = old.model_copy(
@@ -4805,17 +4859,19 @@ def _memory(args: argparse.Namespace) -> None:
                 }
             )
             new_id = store.supersede(args.supersede, replacement)
-            print(f"Superseded {args.supersede} -> {new_id}")
+            console.success(f"Superseded {args.supersede} -> {new_id}")
             return
         due = store.review_due()
         if not due:
-            print("No memories due for review.")
+            console.info("No memories due for review.")
             return
-        print(f"{len(due)} memories due for review:")
+        console.section(f"{len(due)} memories due for review")
+        # Record lines embed arbitrary content — print raw so rich never parses
+        # their brackets as markup.
         for rec in due:
             kind = next((t.split(":", 1)[1] for t in rec.tags if t.startswith("kind:")), "?")
             print(f"  {rec.id} [{kind}] {rec.content[:80]}")
-        print("Confirm with 'memory review --confirm <id>' or correct with --supersede <id>.")
+        console.dim("Confirm with 'memory review --confirm <id>' or correct with --supersede <id>.")
         return
     if command == "export":
         _memory_export(repo, args.output)
@@ -4843,7 +4899,7 @@ def _memory_export(repo: Any, output: str) -> None:
     out = Path(output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    print(f"Exported {len(items)} memory item(s) to {out}")
+    console.success(f"Exported {len(items)} memory item(s) to {out}")
 
 
 def _memory_import(repo: Any, path: str) -> None:
@@ -4852,7 +4908,7 @@ def _memory_import(repo: Any, path: str) -> None:
 
     source = Path(path)
     if not source.exists():
-        print(f"Error: file not found: {source}")
+        eprint(f"file not found: {source}")
         raise SystemExit(1)
     payload = json.loads(source.read_text(encoding="utf-8"))
     items = payload.get("items", []) if isinstance(payload, dict) else []
@@ -4875,7 +4931,7 @@ def _memory_import(repo: Any, path: str) -> None:
             metadata=entry.get("metadata") or {},
         )
         imported += 1
-    print(f"Imported {imported} item(s), skipped {skipped} (already present or invalid).")
+    console.success(f"Imported {imported} item(s), skipped {skipped} (already present or invalid).")
 
 
 def _memory_doctor() -> None:
@@ -4928,14 +4984,17 @@ def _memory_doctor() -> None:
         checks.append(("conflict_check", False, f"Conflict check failed: {exc}"))
 
     # Print results
+    console.header("Memory Doctor")
     all_ok = all(ok for _, ok, _ in checks)
+    # Detail text is arbitrary (may include exception text) — print raw so rich
+    # never parses its brackets as markup.
     for name, ok, msg in checks:
         status = "OK  " if ok else "FAIL"
         print(f"  [{status}] {name}: {msg}")
     if all_ok:
-        print("\nmemory doctor: all checks passed.")
+        console.success("memory doctor: all checks passed.")
     else:
-        print("\nmemory doctor: some checks failed. Review above.")
+        console.warning("memory doctor: some checks failed. Review above.")
 
 
 def _memory_audit(args: argparse.Namespace) -> int:
@@ -4958,7 +5017,7 @@ def _memory_audit(args: argparse.Namespace) -> int:
     report["markdown_items"] = markdown_items
 
     if report["total"] == 0 and markdown_items == 0:
-        print(
+        console.info(
             "No memory store yet. Run 'opencontext memory harvest' or an agentic "
             "loop to populate it, then audit."
         )

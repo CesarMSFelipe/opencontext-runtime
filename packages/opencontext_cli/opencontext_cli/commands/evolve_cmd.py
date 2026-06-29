@@ -19,6 +19,9 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
+
 if TYPE_CHECKING:
     from opencontext_core.learning.evolution_store import EvolutionStore
 
@@ -97,7 +100,8 @@ def handle_evolve(args: argparse.Namespace) -> None:
     elif cmd == "apply":
         sys.exit(_handle_apply(args))
     else:
-        print("evolve: unknown subcommand. Use --help for usage.")
+        eprint("evolve: unknown subcommand. Use --help for usage.")
+        sys.exit(2)
 
 
 # ---------------------------------------------------------------------------
@@ -128,27 +132,21 @@ def _handle_proposals(args: argparse.Namespace) -> None:
         print(_json.dumps([p.model_dump(mode="json") for p in proposals], indent=2))
         return
 
+    console.header("Evolution Proposals")
     if not proposals:
-        print("No evolution proposals found.")
+        console.info("No evolution proposals yet.")
         return
 
-    # Table output
-    col_id = 16
-    col_kind = 22
-    col_status = 10
-    col_title = 40
-    header = (
-        f"{'ID':<{col_id}}  {'KIND':<{col_kind}}  {'STATUS':<{col_status}}  {'TITLE':<{col_title}}"
-    )
-    print(header)
-    print("-" * len(header))
-    for p in proposals:
-        title = p.title if len(p.title) <= col_title else p.title[: col_title - 3] + "..."
-        line = (
-            f"{p.proposal_id:<{col_id}}  {p.kind:<{col_kind}}"
-            f"  {p.status:<{col_status}}  {title:<{col_title}}"
-        )
-        print(line)
+    rows = [
+        [
+            p.proposal_id,
+            str(p.kind),
+            str(p.status),
+            p.title if len(p.title) <= 60 else p.title[:57] + "...",
+        ]
+        for p in proposals
+    ]
+    console.table("Proposals", ["ID", "Kind", "Status", "Title"], rows)
 
 
 def _handle_approve(args: argparse.Namespace) -> None:
@@ -161,12 +159,12 @@ def _handle_approve(args: argparse.Namespace) -> None:
         if getattr(args, "json", False):
             print(_json.dumps({"id": proposal_id, "status": "not_found"}))
         else:
-            print(f"evolve approve: proposal '{proposal_id}' not found.")
+            eprint(f"evolve approve: proposal '{proposal_id}' not found.")
         raise SystemExit(1)
     if getattr(args, "json", False):
         print(_json.dumps({"id": proposal_id, "status": "approved"}))
         return
-    print(f"Proposal {proposal_id} approved.")
+    console.success(f"Proposal {proposal_id} approved.")
 
 
 def _handle_reject(args: argparse.Namespace) -> None:
@@ -179,12 +177,12 @@ def _handle_reject(args: argparse.Namespace) -> None:
         if getattr(args, "json", False):
             print(_json.dumps({"id": proposal_id, "status": "not_found"}))
         else:
-            print(f"evolve reject: proposal '{proposal_id}' not found.")
+            eprint(f"evolve reject: proposal '{proposal_id}' not found.")
         raise SystemExit(1)
     if getattr(args, "json", False):
         print(_json.dumps({"id": proposal_id, "status": "rejected"}))
         return
-    print(f"Proposal {proposal_id} rejected.")
+    console.warning(f"Proposal {proposal_id} rejected.")
 
 
 def _handle_apply(args: argparse.Namespace) -> int:
@@ -200,17 +198,16 @@ def _handle_apply(args: argparse.Namespace) -> int:
         if getattr(args, "json", False):
             print(_json.dumps({"id": proposal_id, "status": "not_found"}))
         else:
-            print(f"Evolution proposal not found: {proposal_id}", file=sys.stderr)
+            eprint(f"Evolution proposal not found: {proposal_id}")
         return 1
 
     if proposal.status != "approved":
         if getattr(args, "json", False):
             print(_json.dumps({"id": proposal_id, "status": "not_approved"}))
         else:
-            print(
+            eprint(
                 f"Proposal {proposal_id} is not approved. "
-                f"Run: opencontext evolve approve {proposal_id}",
-                file=sys.stderr,
+                f"Run: opencontext evolve approve {proposal_id}"
             )
         return 1
 
@@ -224,10 +221,10 @@ def _handle_apply(args: argparse.Namespace) -> int:
         return 0 if result.applied else 1
 
     if result.applied:
-        print(f"Applied: {proposal.proposal_id}")
+        console.success(f"Applied: {proposal.proposal_id}")
         for f in result.changed_files:
-            print(f"  modified: {f}")
+            console.dim(f"  modified: {f}")
         return 0
     else:
-        print(f"Not applied: {result.reason}")
+        eprint(f"Not applied: {result.reason}")
         return 1

@@ -7,6 +7,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
+
 FLOWS = {
     "quick": "quick",
     "standard": "standard",
@@ -83,14 +86,15 @@ def handle_loop(args: argparse.Namespace, config: object = None) -> int:
             phases = runner.schedule_phases(workflow)
         except Exception:
             phases = []
-        print("\nDry run — phases that would execute:")
+        console.print()
+        console.info("Dry run — phases that would execute:")
         for p in phases:
-            print(f"  - {p.upper()}")
+            console.print(f"  - {p.upper()}")
         return 0
 
     manifest_path = root / ".storage" / "opencontext" / "project_manifest.json"
     if not manifest_path.exists():
-        print("No index found. Run 'opencontext index .' first, then retry.")
+        eprint("No index found. Run 'opencontext index .' first, then retry.")
         return 1
 
     try:
@@ -102,15 +106,15 @@ def handle_loop(args: argparse.Namespace, config: object = None) -> int:
 
     for round_num in range(1, max_rounds + 1):
         if max_rounds > 1:
-            print(f"\n-- Round {round_num}/{max_rounds} --")
+            console.section(f"Round {round_num}/{max_rounds}")
 
         success = _run_loop(task, workflow, root, config, compressor, autonomous)
         if success:
             break
         if round_num < max_rounds:
-            print(f"\nRound {round_num} incomplete. Retrying...")
+            console.warning(f"Round {round_num} incomplete. Retrying...")
         else:
-            print(f"\nLoop did not complete after {max_rounds} round(s).")
+            eprint(f"Loop did not complete after {max_rounds} round(s).")
             return 1
 
     return 0
@@ -128,7 +132,7 @@ def _run_loop(
     try:
         from opencontext_core.harness.runner import HarnessRunner
     except ImportError as e:
-        print(f"Runtime not available: {e}", file=sys.stderr)
+        eprint(f"Runtime not available: {e}")
         return False
 
     runner = HarnessRunner(root=root)
@@ -136,31 +140,29 @@ def _run_loop(
     try:
         result = runner.run(workflow, task)
     except Exception as e:
-        print(f"error: {e}", file=sys.stderr)
+        eprint(f"error: {e}")
         return False
 
     _print_run_summary(result)
     status = getattr(result, "status", None)
     passed = status is not None and getattr(status, "value", str(status)) in ("passed", "warning")
     if passed:
-        print("\nLoop complete.")
+        console.success("Loop complete.")
     elif not passed:
-        print("\nLoop did not complete — check warnings above.")
+        console.warning("Loop did not complete — check warnings above.")
     return passed
 
 
 def _print_header(task: str, flow: str, compress: str) -> None:
-    width = 60
-    print("-" * width)
-    print(f"  OpenContext Loop  [{flow}]  compress:{compress}")
-    print(f"  Task: {task[: width - 8]}")
-    print("-" * width)
+    console.header("OpenContext Loop")
+    console.dim(f"flow: {flow}  ·  compress: {compress}")
+    console.dim(f"task: {task}")
 
 
 def _print_run_summary(result: Any) -> None:
     """Print a human-readable run summary with per-phase breakdown."""
     if result is None:
-        print("  no result")
+        console.dim("  no result")
         return
 
     ledgers = getattr(result, "ledgers", [])
@@ -181,7 +183,7 @@ def _print_run_summary(result: Any) -> None:
         phase = getattr(g, "phase", "?")
         gates_by_phase.setdefault(phase, []).append(g)
 
-    print()
+    console.print()
     for ledger in ledgers:
         phase = getattr(ledger, "phase", "?")
         used = getattr(ledger, "used_tokens", 0)
@@ -201,12 +203,14 @@ def _print_run_summary(result: Any) -> None:
         parts = [f"  {phase_status} {phase.upper():<12}  {used}/{budget} tokens"]
         if phase_artifacts:
             kinds = ", ".join(getattr(a, "kind", "artifact") for a in phase_artifacts[:3])
-            parts.append(f"  [{kinds}]")
+            # Parentheses, not brackets — brackets are rich markup and would be
+            # swallowed when routed through the brand console.
+            parts.append(f"  ({kinds})")
         if failed_gates:
             parts.append(f"  FAILED: {', '.join(g.id for g in failed_gates)}")
         elif warn_gates:
             parts.append(f"  warn: {', '.join(g.id for g in warn_gates[:2])}")
-        print("".join(parts))
+        console.print("".join(parts))
 
     # LLM-absent warnings surfaced directly to user
     for w in warnings:
@@ -217,7 +221,7 @@ def _print_run_summary(result: Any) -> None:
             or "executor" in w
             or "planned" in w.lower()
         ):
-            print(f"\n  ⚠  {w}")
+            console.warning(w)
 
     # Be honest about whether the loop actually wrote source. In-process apply
     # only runs when an executor produced concrete edits; otherwise the loop plans
@@ -225,9 +229,11 @@ def _print_run_summary(result: Any) -> None:
     # "code written" when it wasn't.
     apply_note = _apply_outcome(artifacts)
     if apply_note is not None:
-        print(f"\n  {apply_note}")
+        console.print(f"\n  {apply_note}")
 
-    print(f"\n  Status: {status_str}  |  {len(artifacts)} artifact(s)  |  {len(gates)} gate(s)")
+    console.print(
+        f"\n  Status: {status_str}  |  {len(artifacts)} artifact(s)  |  {len(gates)} gate(s)"
+    )
 
 
 def _apply_outcome(artifacts: list[Any]) -> str | None:

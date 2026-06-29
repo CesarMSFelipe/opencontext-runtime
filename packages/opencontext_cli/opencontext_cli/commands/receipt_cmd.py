@@ -14,6 +14,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
 from opencontext_core.operating_model.receipts import RunReceiptStore
 
 
@@ -59,31 +61,37 @@ def handle_receipt(args: Any) -> None:
         store = _store(args)
         receipts = store.list()
         if args.json:
-            print(json.dumps([r.run_id for r in receipts], indent=2))
-        else:
-            for r in receipts:
-                print(r.run_id)
+            print(json.dumps([r.run_id for r in receipts], indent=2))  # pure JSON to stdout
+            return
+        console.header("Run Receipts")
+        if not receipts:
+            console.info("No receipts yet.")
+            return
+        console.table("Receipts", ["Run ID"], [[r.run_id] for r in receipts])
 
     elif action == "show":
         store = _store(args)
         try:
             receipt = store.load(args.run_id)
         except FileNotFoundError:
-            print(f"Receipt not found: {args.run_id}", file=sys.stderr)
+            eprint(f"Receipt not found: {args.run_id}")
             sys.exit(1)
         data = json.loads(receipt.model_dump_json())
         if args.json:
-            print(json.dumps(data, indent=2))
-        else:
-            print(json.dumps(data, indent=2))
+            print(json.dumps(data, indent=2))  # pure JSON to stdout
+            return
+        console.header(f"Receipt: {args.run_id}")
+        # The receipt body is structured data; emit it as indented JSON beneath
+        # the brand header so the payload stays faithful and copy-pasteable.
+        print(json.dumps(data, indent=2))
 
     elif action == "verify":
         store = _store(args)
         result = store.verify(args.run_id)
         if result.get("ok"):
-            print(f"OK  {args.run_id}")
+            console.success(f"{args.run_id}: receipt verified")
         else:
-            print(f"INVALID  {args.run_id}  {result.get('error', '')}", file=sys.stderr)
+            eprint(f"{args.run_id}: invalid — {result.get('error', '')}")
             sys.exit(1)
 
     elif action == "export":
@@ -91,8 +99,10 @@ def handle_receipt(args: Any) -> None:
         try:
             receipt = store.load(args.run_id)
         except FileNotFoundError:
-            print(f"Receipt not found: {args.run_id}", file=sys.stderr)
+            eprint(f"Receipt not found: {args.run_id}")
             sys.exit(1)
+        # Export emits the artifact itself (JSON or a Markdown table) to stdout
+        # for redirection/piping — intentionally unbranded machine output.
         fmt = getattr(args, "format", "markdown")
         if fmt == "json":
             print(receipt.model_dump_json(indent=2))
@@ -105,5 +115,5 @@ def handle_receipt(args: Any) -> None:
             print("| " + " | ".join(values) + " |")
 
     else:
-        print("Usage: opencontext receipt [list|show|verify|export]")
+        eprint("Usage: opencontext receipt [list|show|verify|export]")
         sys.exit(1)

@@ -69,7 +69,8 @@ def test_migration_error_is_actionable(tmp_path: Path) -> None:
     missing = tmp_path / "nope.yaml"
     result = _run_cli("config", "migrate", str(missing), cwd=tmp_path)
     assert result.returncode == 1
-    assert "Suggested fix" in result.stdout
+    # Errors are diagnostics: they go to stderr so stdout stays machine-clean.
+    assert "Suggested fix" in result.stderr
 
 
 def test_memory_migrate_marks_stale_never_deletes(tmp_path: Path) -> None:

@@ -10,10 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from rich.console import Console
-from rich.table import Table
-
-console = Console()
+from opencontext_core.dx.console_styles import console
 
 
 def add_explain_parser(subparsers: Any) -> None:
@@ -113,36 +110,35 @@ def handle_explain(runtime: Any, args: Any) -> int:
         return 0
 
     breakdown = bool(getattr(args, "breakdown", False))
-    console.print(f"\n[bold]Why this context[/] — [italic]{args.query}[/]")
+    console.header("Why This Context")
+    console.print(f"[italic]{args.query}[/]")
     redacted = sum(1 for it in included if getattr(it, "redacted", False))
     summary = f"{len(included)} files · {pack.used_tokens:,} tokens"
     if redacted:
         summary += f" · {redacted} with secrets redacted"
-    console.print(f"[dim]{summary}[/]\n")
+    console.dim(summary)
 
     if included:
-        table = Table(show_edge=False, pad_edge=False, box=None)
-        table.add_column("file", style="cyan", no_wrap=False)
-        table.add_column("score", justify="right", style="green")
-        table.add_column("tok", justify="right", style="dim")
+        columns = ["File", "Score", "Tok"]
         if breakdown:
-            table.add_column("signals", style="dim")
-        table.add_column("why")
+            columns.append("Signals")
+        columns.append("Why")
+        rows: list[list[str]] = []
         for item in included:
             row = [item.source, f"{item.score:.2f}", f"{item.tokens:,}"]
             if breakdown:
                 row.append(_breakdown(item))
             row.append(_why(item))
-            table.add_row(*row)
-        console.print(table)
+            rows.append(row)
+        console.table("Included", columns, rows)
     else:
-        console.print("[yellow]No files selected for this task.[/]")
+        console.warning("No files selected for this task.")
 
     if omitted:
-        console.print("\n[dim]Kept out (and why):[/]")
+        console.dim("Kept out (and why):")
         for item in omitted:
             reason = reasons.get(item.id, "below the budget/diversity cut")
-            console.print(f"  [dim]✗[/] {item.source}  [dim]{item.tokens:,} tok — {reason}[/]")
+            console.dim(f"  ✗ {item.source}  {item.tokens:,} tok — {reason}")
 
     freshness_nudge(runtime, root)
     return 0
@@ -158,10 +154,11 @@ def _render_why_file(why_file: str, included: list[Any]) -> None:
     matches = [
         it for it in included if it.source == needle or Path(it.source).name == Path(needle).name
     ]
-    console.print(f"\n[bold]Why this file[/] — [italic]{needle}[/]\n")
+    console.header("Why This File")
+    console.print(f"[italic]{needle}[/]")
     if not matches:
-        console.print(
-            f"[yellow]✗ {needle} is not included[/] in the context for this task "
+        console.warning(
+            f"{needle} is not included in the context for this task "
             "(below the budget/diversity cut, or not retrieved)."
         )
         return
@@ -170,7 +167,7 @@ def _render_why_file(why_file: str, included: list[Any]) -> None:
         console.print(
             f"  [green]score[/] {item.score:.2f} · [dim]{item.tokens:,} tok[/] · {_why(item)}"
         )
-        console.print(f"  [dim]signals:[/] {_breakdown(item)}")
+        console.dim(f"  signals: {_breakdown(item)}")
 
 
 def freshness_nudge(runtime: Any, root: Path) -> None:
@@ -180,7 +177,7 @@ def freshness_nudge(runtime: Any, root: Path) -> None:
     except Exception:
         return
     if report.total:
-        console.print(
-            f"\n[yellow]⚠ Index is {report.total} files behind the working tree[/] — "
-            "run [cyan]opencontext index .[/] for fresh context."
+        console.warning(
+            f"Index is {report.total} files behind the working tree — "
+            "run `opencontext index .` for fresh context."
         )

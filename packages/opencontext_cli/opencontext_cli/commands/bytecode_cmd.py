@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
 
 if TYPE_CHECKING:
     from opencontext_core.retrieval.contracts import EvidencePlan
@@ -50,7 +52,7 @@ def handle_bytecode(args: argparse.Namespace) -> int:
         return _inspect(args)
     if cmd == "decode":
         return _decode(args)
-    print(f"Unknown bytecode subcommand: {cmd}", file=sys.stderr)
+    eprint(f"Unknown bytecode subcommand: {cmd}")
     return 1
 
 
@@ -76,18 +78,24 @@ def _compile(args: argparse.Namespace) -> int:
     report = AICXValidator().validate(bc)
     metrics = compute_metrics(plan, bc)
 
+    saved_path: Path | None = None
     if args.save:
-        save_path = Path(args.save)
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        save_path.write_text(AICXRenderer().render_json(bc), encoding="utf-8")
-        print(f"Saved: {save_path}")
+        saved_path = Path(args.save)
+        saved_path.parent.mkdir(parents=True, exist_ok=True)
+        saved_path.write_text(AICXRenderer().render_json(bc), encoding="utf-8")
 
     if args.as_json:
+        # --json: pure bytecode JSON to stdout, no brand chrome.
         print(AICXRenderer().render_json(bc))
         return 0
 
+    console.header("Bytecode Compile")
+    if saved_path is not None:
+        console.success(f"Saved: {saved_path}")
+    # The rendered AICX text is a literal payload (instruction args may contain
+    # markup-like characters) — keep it on raw stdout, unbranded.
     print(AICXRenderer().render_text(bc))
-    print()
+    console.section("Metrics")
     _print_metrics(metrics, report)
     return 0 if report.passed else 1
 
@@ -170,30 +178,34 @@ def _inspect(args: argparse.Namespace) -> int:
     decoded = AICXDecoder().decode(bc)
     metrics = compute_metrics(decoded, bc)
 
-    print(f"Version          : {bc.version}")
-    print(f"Request ID       : {bc.request_id}")
-    print(f"Checksum         : {bc.checksum}  {'✓' if report.checksum_valid else '✗ INVALID'}")
-    print(f"Valid            : {'yes' if report.passed else 'no'}")
-    print(f"Instructions     : {metrics.instruction_count}")
-    print(f"Evidence items   : {metrics.evidence_count}")
-    print(f"Gates            : {metrics.gate_count}")
-    print(f"Dictionary keys  : {metrics.dictionary_entries}")
-    print(f"Original tokens  : {metrics.original_tokens}")
-    print(f"Bytecode tokens  : {metrics.bytecode_tokens}")
-    print(f"Token reduction  : {metrics.token_reduction_pct:.1f}%")
-    print(f"Compression ratio: {metrics.compression_ratio:.1f}x")
+    console.header("Bytecode Inspect")
+    console.print(f"Version          : {bc.version}")
+    console.print(f"Request ID       : {bc.request_id}")
+    console.print(
+        f"Checksum         : {bc.checksum}  {'✓' if report.checksum_valid else '✗ INVALID'}"
+    )
+    console.print(f"Valid            : {'yes' if report.passed else 'no'}")
+    console.print(f"Instructions     : {metrics.instruction_count}")
+    console.print(f"Evidence items   : {metrics.evidence_count}")
+    console.print(f"Gates            : {metrics.gate_count}")
+    console.print(f"Dictionary keys  : {metrics.dictionary_entries}")
+    console.print(f"Original tokens  : {metrics.original_tokens}")
+    console.print(f"Bytecode tokens  : {metrics.bytecode_tokens}")
+    console.print(f"Token reduction  : {metrics.token_reduction_pct:.1f}%")
+    console.print(f"Compression ratio: {metrics.compression_ratio:.1f}x")
 
     if report.errors:
-        print("\nErrors:")
+        console.section("Errors")
         for e in report.errors:
-            print(f"  ✗ {e}")
+            console.error(e)
     if report.warnings:
-        print("\nWarnings:")
+        console.section("Warnings")
         for w in report.warnings:
-            print(f"  ! {w}")
+            console.warning(w)
 
-    print("\nInstructions:")
+    console.section("Instructions")
     for instr in bc.instructions:
+        # Instruction args are literal data (may contain markup chars) — raw print.
         print(f"  {instr.op:<8} {' '.join(instr.args)}")
 
     return 0 if report.passed else 1
@@ -212,9 +224,13 @@ def _decode(args: argparse.Namespace) -> int:
     plan = AICXDecoder().decode(bc)
 
     if getattr(args, "as_json", False):
+        # --json: pure plan JSON to stdout, no brand chrome.
         print(plan.model_dump_json(indent=2))
         return 0
 
+    console.header("Bytecode Decode")
+    # Decoded fields are literal data (queries/IDs/sources may contain markup
+    # characters) — keep them on raw stdout so the payload is not corrupted.
     print(f"Query     : {plan.request.query}")
     print(f"Surface   : {plan.request.surface.value}")
     print(f"Risk      : {plan.request.risk_level}")
@@ -242,13 +258,13 @@ def _load_bc(path: str | None) -> Any:
     if path:
         p = Path(path)
         if not p.exists():
-            print(f"File not found: {p}", file=sys.stderr)
+            eprint(f"File not found: {p}")
             return None
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
             return ContextBytecode(**_normalize_bc_json(data))
         except Exception as exc:
-            print(f"Failed to parse bytecode: {exc}", file=sys.stderr)
+            eprint(f"Failed to parse bytecode: {exc}")
             return None
 
     # Try last_bytecode.json (written by `bytecode compile`)
@@ -273,7 +289,7 @@ def _load_bc(path: str | None) -> Any:
     except Exception:
         pass
 
-    print("No AICX bytecode found. Run 'opencontext bytecode compile' first.")
+    eprint("No AICX bytecode found. Run 'opencontext bytecode compile' first.")
     return None
 
 
@@ -296,11 +312,11 @@ def _normalize_bc_json(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _print_metrics(metrics: Any, report: Any) -> None:
-    print(f"instructions     : {metrics.instruction_count}")
-    print(f"evidence items   : {metrics.evidence_count}")
-    print(f"dictionary keys  : {metrics.dictionary_entries}")
-    print(f"original tokens  : {metrics.original_tokens}")
-    print(f"bytecode tokens  : {metrics.bytecode_tokens}")
-    print(f"token reduction  : {metrics.token_reduction_pct:.1f}%")
+    console.print(f"instructions     : {metrics.instruction_count}")
+    console.print(f"evidence items   : {metrics.evidence_count}")
+    console.print(f"dictionary keys  : {metrics.dictionary_entries}")
+    console.print(f"original tokens  : {metrics.original_tokens}")
+    console.print(f"bytecode tokens  : {metrics.bytecode_tokens}")
+    console.print(f"token reduction  : {metrics.token_reduction_pct:.1f}%")
     status = "✓ valid" if report.passed else f"✗ {'; '.join(report.errors)}"
-    print(f"checksum         : {status}")
+    console.print(f"checksum         : {status}")

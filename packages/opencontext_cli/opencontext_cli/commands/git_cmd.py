@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import sys
 from typing import Any
 
+from opencontext_cli.output import eprint
 from opencontext_core.dx.console_styles import console
 from opencontext_core.indexing.git_context import GitContextProvider
 
@@ -42,8 +44,8 @@ def handle_git(args: Any) -> None:
 
     provider = GitContextProvider()
     if not provider.available:
-        console.error("Not a git repository")
-        return
+        eprint("Not a git repository")
+        sys.exit(1)
 
     if command == "status":
         stats = provider.get_repo_stats()
@@ -70,7 +72,8 @@ def handle_git(args: Any) -> None:
                 console.header(f"Git History: {file}")
                 console.print(_format_git_history(info))
         else:
-            console.error(f"Could not get history for {file}")
+            eprint(f"Could not get history for {file}")
+            sys.exit(1)
     elif command == "recent":
         diffs = provider.get_recent_changes(days=days, max_commits=max_commits)
         if json_output:
@@ -96,7 +99,8 @@ def handle_git(args: Any) -> None:
             console.header(f"Blame: {file} (lines {start}-{end})")
             console.print(_format_git_blame(lines))
     else:
-        console.error(f"Unknown git command: {command}")
+        eprint(f"Unknown git command: {command}")
+        sys.exit(1)
 
 
 def _format_git_status(stats: dict[str, Any]) -> str:

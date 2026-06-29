@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.output import eprint
 from opencontext_core import prompts
 from opencontext_core.dx.console_styles import console
 from opencontext_core.skills.scaffolder import scaffold_skill
@@ -114,15 +115,16 @@ def _handle_list(args: Any) -> None:
         print(_json.dumps(skills, indent=2))
         return
 
+    console.header(f"Skills ({len(skills)})")
     if not skills:
-        console.print("[dim]No skills found. Run 'opencontext skill-registry refresh' to scan.[/]")
+        console.info("No skills yet.")
+        console.dim("Run 'opencontext skill-registry refresh' to scan.")
         return
 
-    console.header(f"Skills ({len(skills)})")
     rows = [
         [s.get("name", "?"), s.get("source", "?"), s.get("description", "")[:60]] for s in skills
     ]
-    console.table("", ["Name", "Source", "Description"], rows)
+    console.table("Skills", ["Name", "Source", "Description"], rows)
 
 
 def _handle_create(args: Any) -> None:
@@ -141,6 +143,7 @@ def _handle_create(args: Any) -> None:
     if author is None:
         author = prompts.text("Author name")
 
+    console.header("Create Skill")
     try:
         result = scaffold_skill(
             name=name,
@@ -150,9 +153,9 @@ def _handle_create(args: Any) -> None:
             author=author,
             force=args.force,
         )
-        console.print(f"[green]Created skill at[/] {result}")
+        console.success(f"Created skill at {result}")
     except FileExistsError as exc:
-        console.error(str(exc))
+        eprint(str(exc))
         raise SystemExit(1) from exc
 
 
@@ -165,7 +168,7 @@ def _handle_validate(args: Any) -> None:
         skill_file = path
 
     if not skill_file.exists():
-        console.error(f"File not found: {skill_file}")
+        eprint(f"File not found: {skill_file}")
         raise SystemExit(1)
 
     content = skill_file.read_text(encoding="utf-8")
@@ -187,19 +190,19 @@ def _handle_validate(args: Any) -> None:
     checks.append(("section: Implementation", has_implementation))
     checks.append(("section: Common Mistakes", has_common_mistakes))
 
-    all_pass = True
-    for label, passed in checks:
-        if passed:
-            console.print(f"  [green]PASS[/]  {label}")
-        else:
-            console.print(f"  [red]FAIL[/]  {label}")
-            all_pass = False
+    console.header("Validate Skill")
+    all_pass = all(passed for _, passed in checks)
+    console.table(
+        str(skill_file),
+        ["Check", "Result"],
+        [[label, "✓ pass" if passed else "✗ fail"] for label, passed in checks],
+    )
 
     if all_pass:
-        console.print(f"[green]All checks passed for[/] {skill_file}")
+        console.success(f"All checks passed for {skill_file}")
         raise SystemExit(0)
     else:
-        console.print(f"[red]Some checks failed for[/] {skill_file}")
+        eprint(f"Some checks failed for {skill_file}")
         raise SystemExit(1)
 
 
@@ -211,7 +214,7 @@ def _handle_explain(args: Any) -> None:
     try:
         explanation = explain_skill(args.path)
     except FileNotFoundError as exc:
-        console.error(str(exc))
+        eprint(str(exc))
         raise SystemExit(1) from exc
 
     if getattr(args, "json", False):
@@ -238,16 +241,20 @@ def _handle_lint(args: Any) -> None:
         print(_json.dumps(report.model_dump(), indent=2))
         raise SystemExit(0 if report.ok() else 1)
 
+    console.header("Lint Skill")
     if not report.findings:
-        console.print(f"[green]No issues[/] {report.path}")
+        console.success(f"No issues — {report.path}")
         raise SystemExit(0)
 
-    _styles = {"error": "red", "warning": "yellow", "info": "cyan"}
-    for finding in report.findings:
-        style = _styles.get(finding.severity, "white")
-        console.print(
-            f"  [{style}]{finding.severity.upper()}[/]  {finding.code}: {finding.message}"
-        )
+    _labels = {"error": "✗ error", "warning": "⚠ warning", "info": "i info"}
+    console.table(
+        str(report.path),
+        ["Severity", "Code", "Message"],
+        [
+            [_labels.get(f.severity, f.severity), f.code, f.message]
+            for f in report.findings
+        ],
+    )
     raise SystemExit(0 if report.ok() else 1)
 
 
