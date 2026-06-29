@@ -63,6 +63,14 @@ def add_plugin_parser(subparsers: Any) -> None:
         "--ver", default="", help="Specific version to install (e.g. 0.1.0)."
     )
     install_parser.add_argument("--registry", default="", help="Custom registry URL.")
+    install_parser.add_argument(
+        "--marketplace",
+        default="",
+        help="Install a marketplace bundle (archive or dir) with full enforcement.",
+    )
+    install_parser.add_argument(
+        "--key", default="", help="Signing/verification key for a marketplace bundle."
+    )
 
     remove_parser = plugin_sub.add_parser("remove", help="Remove a plugin.")
     remove_parser.add_argument("name", help="Plugin name.")
@@ -79,6 +87,35 @@ def add_plugin_parser(subparsers: Any) -> None:
 
     disable_parser = plugin_sub.add_parser("disable", help="Disable a plugin.")
     disable_parser.add_argument("name", help="Plugin name.")
+
+    # PR-015: lifecycle subcommands over the typed-contract pipeline.
+    activate_parser = plugin_sub.add_parser(
+        "activate", help="Run a plugin through the full lifecycle."
+    )
+    activate_parser.add_argument("name", help="Plugin name.")
+    activate_parser.add_argument("--json", action="store_true", help="Output as JSON.")
+
+    health_parser = plugin_sub.add_parser("health", help="Activate and report plugin health.")
+    health_parser.add_argument("name", help="Plugin name.")
+
+    benchmark_parser = plugin_sub.add_parser(
+        "benchmark", help="Run the plugin's benchmark gate (before activation)."
+    )
+    benchmark_parser.add_argument("name", help="Plugin name.")
+
+    # PR-016: marketplace publish flow (build → leak gate → validate → sign).
+    publish_parser = plugin_sub.add_parser(
+        "publish", help="Build, leak-scan, validate, version, and sign a marketplace package."
+    )
+    publish_parser.add_argument("src", help="Package source directory (with marketplace.json).")
+    publish_parser.add_argument("--key", default="", help="HMAC signing key.")
+    publish_parser.add_argument(
+        "--allow",
+        action="store_true",
+        help="Acknowledge and bypass leak-detection findings.",
+    )
+    publish_parser.add_argument("--out", default="", help="Output directory for the archive.")
+    publish_parser.add_argument("--registry", default="", help="Reserved: target registry URL.")
 
 
 def handle_plugin(args: Any) -> None:
@@ -104,6 +141,14 @@ def handle_plugin(args: Any) -> None:
         _plugin_enable(args)
     elif command == "disable":
         _plugin_disable(args)
+    elif command == "activate":
+        _plugin_activate(args)
+    elif command == "health":
+        _plugin_health(args)
+    elif command == "benchmark":
+        _plugin_benchmark(args)
+    elif command == "publish":
+        _plugin_publish(args)
 
 
 def _plugin_list(args: Any) -> None:
@@ -302,6 +347,10 @@ def _plugin_init(args: Any) -> None:
 def _plugin_install(args: Any) -> None:
     """Install a plugin."""
 
+    if getattr(args, "marketplace", ""):
+        _plugin_install_marketplace(args)
+        return
+
     installer = PluginInstaller()
 
     if args.github:
@@ -315,6 +364,66 @@ def _plugin_install(args: Any) -> None:
         result = installer.install_from_registry(args.name, version=version)
 
     _print_install_result(result)
+
+
+def _plugin_install_marketplace(args: Any) -> None:
+    """Install a marketplace bundle with full PR-016 enforcement."""
+
+    host = _host_config()
+    if not getattr(host, "marketplace_enabled", False):
+        print(
+            "\n  ✗ Marketplace install is disabled. Enable plugins.marketplace_enabled"
+            " in opencontext.yaml to use multi-asset bundles.\n"
+        )
+        return
+
+    from opencontext_core.marketplace import MarketplaceInstaller
+
+    installer = MarketplaceInstaller()
+    result = installer.install(args.marketplace, verify_key=(args.key or None))
+
+    icon = {"installed": "✓", "refused": "✗", "failed": "✗"}.get(result.status, "?")
+    print()
+    print(f"  {icon} {result.message}")
+    if result.trust_level:
+        print(f"     Trust:     {result.trust_level}")
+    if result.signature_verified:
+        print("     Signature: verified")
+    if result.receipt_path:
+        print(f"     Receipt:   {result.receipt_path}")
+    for kind, ids in result.contributions:
+        print(f"     provides {kind}: {', '.join(ids)}")
+    print()
+
+
+def _plugin_publish(args: Any) -> None:
+    """Build, leak-scan, validate, version, and sign a marketplace package."""
+
+    from opencontext_core.marketplace import publish_package
+
+    result = publish_package(
+        args.src,
+        key=(args.key or None),
+        allow=getattr(args, "allow", False),
+        out_dir=(args.out or None),
+    )
+
+    print()
+    if result.ok:
+        print(f"  ✓ {result.message}")
+        if result.archive_path:
+            print(f"     Archive: {result.archive_path}")
+        print(f"     Signed:  {'yes' if result.signed else 'no (no --key)'}")
+        if result.findings:
+            print(f"     Note:    {len(result.findings)} secret finding(s) acknowledged (--allow)")
+    else:
+        print(f"  ✗ {result.message or 'publish failed'}")
+        for err in result.errors:
+            print(f"     {err}")
+        for finding in result.findings:
+            # Fingerprint-only — never the raw secret value.
+            print(f"     leak: {finding.kind} fp={finding.fingerprint} {finding.redacted_value}")
+    print()
 
 
 def _plugin_remove(args: Any) -> None:
@@ -474,9 +583,35 @@ def _plugin_info(args: Any) -> None:
     print(f"  Entry point:  {info.entry_point}")
     print(f"  Installed at: {info.installed_at or '—'}")
     print(f"  Updated at:   {info.updated_at or '—'}")
+    # PR-016: surface marketplace trust/publisher + a compatibility marker.
+    meta = _marketplace_meta(registry, args.name)
+    if meta.get("trust_level"):
+        print(f"  Trust:        {meta['trust_level']}")
+    if meta.get("publisher"):
+        print(f"  Publisher:    {meta['publisher']}")
+    if info.incompatible:
+        print(f"  Compat:       ✗ {info.incompatible}")
+    else:
+        print("  Compat:       ✓ compatible")
     if info.hooks:
         print(f"  Hooks:        {', '.join(info.hooks)}")
     print()
+
+
+def _marketplace_meta(registry: PluginRegistry, name: str) -> dict[str, str]:
+    """Read marketplace metadata (trust/publisher) from an installed plugin.json."""
+    manifest_path = registry.plugins_dir / name / "plugin.json"
+    if not manifest_path.exists():
+        return {}
+    try:
+        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return {
+        "trust_level": str(raw.get("trust_level", "")),
+        "publisher": str(raw.get("publisher", "")),
+        "package_id": str(raw.get("package_id", "")),
+    }
 
 
 def _plugin_enable(args: Any) -> None:
@@ -497,6 +632,102 @@ def _plugin_disable(args: Any) -> None:
         print(f"  ○ '{args.name}' disabled.\n")
     else:
         print(f"  ✗ Plugin '{args.name}' not found.\n")
+
+
+def _host_config() -> Any:
+    """Load the plugin host config, falling back to defaults (zero-config)."""
+    try:
+        from opencontext_core.config import load_config_or_defaults
+
+        return load_config_or_defaults().plugins
+    except Exception:
+        from opencontext_core.config import PluginHostConfig
+
+        return PluginHostConfig()
+
+
+def _plugin_activate(args: Any) -> None:
+    """Run a plugin through the full PR-015 lifecycle."""
+
+    registry = PluginRegistry()
+    if registry.get_info(args.name) is None:
+        print(f"\n  Plugin '{args.name}' not found.\n")
+        return
+    result = registry.activate(args.name, host_config=_host_config())
+
+    if getattr(args, "json", False):
+        print(
+            json.dumps(
+                {
+                    "plugin": result.plugin,
+                    "status": str(result.status),
+                    "stage": str(result.stage),
+                    "reason": result.reason,
+                    "contributions": [
+                        {"extension_point": c.extension_point, "id": c.contribution_id}
+                        for c in result.contributions
+                    ],
+                },
+                indent=2,
+            )
+        )
+        return
+
+    icon = "✓" if result.active else "✗"
+    print(f"\n  {icon} {result.plugin}: {result.status} (stage: {result.stage})")
+    if result.reason:
+        print(f"     {result.reason}")
+    for c in result.contributions:
+        print(f"     contributes {c.extension_point}: {c.contribution_id}")
+    print()
+
+
+def _plugin_health(args: Any) -> None:
+    """Activate a plugin and report its health-check verdict."""
+
+    registry = PluginRegistry()
+    if registry.get_info(args.name) is None:
+        print(f"\n  Plugin '{args.name}' not found.\n")
+        return
+    result = registry.activate(args.name, host_config=_host_config())
+    healthy = result.active
+    icon = "✓" if healthy else "✗"
+    print(f"\n  {icon} {result.plugin}: {'healthy' if healthy else result.status}")
+    if not healthy:
+        print(f"     {result.reason}  (stage: {result.stage})")
+    print()
+
+
+def _plugin_benchmark(args: Any) -> None:
+    """Run the plugin's benchmark gate (declared suite before activation)."""
+
+    registry = PluginRegistry()
+    info = registry.get_info(args.name)
+    if info is None:
+        print(f"\n  Plugin '{args.name}' not found.\n")
+        return
+    try:
+        import json as _json
+        from pathlib import Path
+
+        from opencontext_core.plugins.benchmark_gate import benchmark_gate
+        from opencontext_core.plugins.manifest import PluginManifest
+
+        raw = _json.loads(
+            (Path(registry.plugins_dir) / args.name / "plugin.json").read_text(encoding="utf-8")
+        )
+        manifest = PluginManifest.from_plugin_json(raw)
+        host = _host_config()
+        gate = benchmark_gate(
+            manifest, enabled=getattr(host, "benchmark_on_install", True), runner=None
+        )
+    except Exception as exc:
+        print(f"\n  ✗ Benchmark gate error: {exc}\n")
+        return
+
+    icon = "✓" if gate.passed else "✗"
+    state = "ran" if gate.ran else "skipped"
+    print(f"\n  {icon} {args.name}: benchmark {state} — {gate.reason}\n")
 
 
 def _print_install_result(result: Any) -> None:

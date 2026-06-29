@@ -23,16 +23,19 @@ from opencontext_cli.commands.capabilities_cmd import (
 from opencontext_cli.commands.ci_check_cmd import add_ci_check_parser, handle_ci_check
 from opencontext_cli.commands.config_cmd import add_config_parser, handle_config
 from opencontext_cli.commands.contract_cmd import add_contract_commands, handle_contract
+from opencontext_cli.commands.decisions_cmd import add_decisions_parser, handle_decisions
 from opencontext_cli.commands.demo_cmd import add_demo_parser, handle_demo
 from opencontext_cli.commands.engram_cmd import add_engram_parser, handle_engram
 from opencontext_cli.commands.evolve_cmd import add_evolve_parser, handle_evolve
 from opencontext_cli.commands.explain_cmd import add_explain_parser, handle_explain
 from opencontext_cli.commands.extension_cmd import add_extension_parser, handle_extension
 from opencontext_cli.commands.git_cmd import add_git_parser, handle_git
+from opencontext_cli.commands.health_cmd import add_health_parser, handle_health
 from opencontext_cli.commands.hints_cmd import add_hints_parser, handle_hints
 from opencontext_cli.commands.kg_cmd import add_kg_parser, handle_kg
 from opencontext_cli.commands.learn_cmd import add_learn_parser, handle_learn
 from opencontext_cli.commands.loop_cmd import add_loop_commands, handle_loop
+from opencontext_cli.commands.maturity_cmd import add_maturity_parser, handle_maturity
 from opencontext_cli.commands.memory_benchmark_cmd import (
     add_memory_benchmark_parser,
     handle_memory_benchmark,
@@ -40,20 +43,36 @@ from opencontext_cli.commands.memory_benchmark_cmd import (
 from opencontext_cli.commands.metaharness_cmd import (
     handle_doctor_metaharness,
 )
+from opencontext_cli.commands.migration_cmd import (
+    add_migrate_subparser,
+    handle_memory_audit,
+    handle_migrate,
+    handle_version,
+)
 from opencontext_cli.commands.models_cmd import add_models_parser, handle_models
 from opencontext_cli.commands.mutation_cmd import add_mutation_commands, handle_mutation
 from opencontext_cli.commands.oc_new_cmd import add_oc_new_parser, handle_oc_new
 from opencontext_cli.commands.persona_cmd import add_persona_parser, handle_persona
 from opencontext_cli.commands.plugin_cmd import add_plugin_parser, handle_plugin
+from opencontext_cli.commands.policy_cmd import add_policy_parser, handle_policy
 from opencontext_cli.commands.privacy_cmd import add_privacy_parser, handle_privacy
 from opencontext_cli.commands.profile_cmd import add_profile_parser, handle_profile
 from opencontext_cli.commands.receipt_cmd import add_receipt_parser, handle_receipt
 from opencontext_cli.commands.review_cmd import add_review_parser, handle_review
 from opencontext_cli.commands.routes_cmd import add_routes_parser, handle_routes
-from opencontext_cli.commands.run_cmd import add_run_parser, handle_run_inspect
+from opencontext_cli.commands.run_cmd import (
+    add_run_exec_parser,
+    add_run_parser,
+    add_simulate_parser,
+    handle_run_exec,
+    handle_run_inspect,
+    handle_simulate,
+)
+from opencontext_cli.commands.session_cmd import add_session_parser, handle_session
 from opencontext_cli.commands.setup_cmd import add_setup_parser, handle_setup
 from opencontext_cli.commands.skill_cmd import add_skill_parser, handle_skill
 from opencontext_cli.commands.stack_cmd import add_stack_parser, handle_stack
+from opencontext_cli.commands.studio_cmd import add_studio_parser, handle_studio
 from opencontext_cli.commands.sync_cmd import add_sync_parser, handle_sync
 from opencontext_cli.commands.telemetry_cmd import add_telemetry_parser, handle_telemetry
 from opencontext_cli.commands.uninstall_cmd import add_uninstall_parser, handle_uninstall
@@ -347,7 +366,8 @@ class _DeprecationAwareParser(argparse.ArgumentParser):
 
     _DEPRECATED: frozenset[str] = frozenset(
         {
-            "run",
+            # NOTE: 'run' is no longer deprecated — it is the PR-007 OC Flow
+            # execution command (`opencontext run "<task>" --workflow oc-flow`).
             "orchestrate",
             "validate",
             "propose",
@@ -655,6 +675,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--incremental", action="store_true", help="Scaffold incremental mode."
     )
     index_parser.add_argument("--mode", choices=["normal", "deep"], default="normal")
+    index_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a machine-readable JSON index report (N1/AVH-018).",
+    )
     watch_parser = subparsers.add_parser(
         "watch",
         help=argparse.SUPPRESS,
@@ -809,6 +834,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     recall_parser.add_argument("--root", default=".", help="Project root.")
     recall_parser.add_argument("--json", action="store_true", help="Emit JSON.")
+
+    eval_subparsers.add_parser(
+        "report", help="Summarize persisted AI-evaluation records (personas/skills/harnesses)."
+    )
+    eval_compare = eval_subparsers.add_parser(
+        "compare", help="Diff two AI-evaluation records by id and flag regressions."
+    )
+    eval_compare.add_argument("old", help="Old record file (JSON).")
+    eval_compare.add_argument("new", help="New record file (JSON).")
+
     workflows_parser = subparsers.add_parser("workflows", help=argparse.SUPPRESS)
     workflows_sub = workflows_parser.add_subparsers(dest="workflows_command", required=True)
     workflows_sub.add_parser("list", help="List local workflow packs.")
@@ -845,9 +880,25 @@ def _build_parser() -> argparse.ArgumentParser:
     add_stack_parser(subparsers)
     add_profile_parser(subparsers)
     add_receipt_parser(subparsers)
+    add_run_exec_parser(subparsers)
     add_run_parser(subparsers)
+    add_simulate_parser(subparsers)
+    add_session_parser(subparsers)
+    add_maturity_parser(subparsers)
+    add_decisions_parser(subparsers)
+    # decision-log: thin alias over the shipped `decisions` Decision Log (CLI-CONV).
+    decision_log_parser = subparsers.add_parser(
+        "decision-log", help="List/show a run's Runtime Brain decisions (alias of `decisions`)."
+    )
+    decision_log_parser.add_argument(
+        "run_id", nargs="?", default=None, help="Run ID (omit to list runs with decisions)."
+    )
+    decision_log_parser.add_argument("--root", default=None, help="Project root.")
+    decision_log_parser.add_argument("--json", action="store_true", help="JSON output.")
+    add_policy_parser(subparsers)
     add_oc_new_parser(subparsers)
     add_capabilities_parser(subparsers)
+    add_studio_parser(subparsers)
     add_aicx_parser(subparsers)
     add_models_parser(subparsers)
     add_persona_parser(subparsers)
@@ -946,7 +997,22 @@ def _build_parser() -> argparse.ArgumentParser:
     release_sub = release_parser.add_subparsers(dest="release_command", required=True)
     release_audit = release_sub.add_parser("audit", help="Audit release artifacts.")
     release_audit.add_argument("--dist", default=".")
-    release_sub.add_parser("gate", help="Run release gate.")
+    release_sub.add_parser("gate", help="Run release gate (leak scan + DoD regression gates).")
+    release_acceptance = release_sub.add_parser(
+        "acceptance", help="Evaluate the doc-57 1.0 acceptance gates (A/B/C/D) honestly."
+    )
+    release_acceptance.add_argument("--root", default=".", help="Repo root.")
+    release_acceptance.add_argument(
+        "--smoke", action="store_true", help="Run the benchmark smoke subset."
+    )
+    release_acceptance.add_argument(
+        "--json", action="store_true", help="JSON output (the default for this command)."
+    )
+    release_acceptance.add_argument(
+        "--release",
+        action="store_true",
+        help="Release mode: an unproven e2e DoD gate FAILS (not NOT_MEASURED).",
+    )
     release_evidence = release_sub.add_parser("evidence", help="Create release evidence.")
     release_evidence.add_argument("--dist", default=".")
     release_evidence.add_argument("--output", default=".opencontext/reports/release-evidence.json")
@@ -1195,6 +1261,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     memory_import.add_argument("path", help="Path to an exported memory JSON file.")
     add_memory_benchmark_parser(memory_sub)
+    add_migrate_subparser(memory_sub, "memory", extras=("audit",))
+
+    version_parser = subparsers.add_parser(
+        "version", help="Show the aggregate runtime/schema version block."
+    )
+    del version_parser  # no args; handled in dispatch
 
     status_parser = subparsers.add_parser("status", help="Show project status.")
     status_parser.add_argument("root", nargs="?", default=".", help="Project root.")
@@ -1207,6 +1279,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_bridges_parser(subparsers)
     add_routes_parser(subparsers)
     add_telemetry_parser(subparsers)
+    add_health_parser(subparsers)
     add_contract_commands(subparsers)
     add_mutation_commands(subparsers)
     add_bytecode_commands(subparsers)
@@ -1361,6 +1434,8 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command == "agent":
         _agent(args.agent_command, args.target, args.root, args.force)
         return
+    if command == "version":
+        raise SystemExit(handle_version())
     if command == "memory":
         _memory(args)
         return
@@ -1390,7 +1465,7 @@ def _dispatch(args: argparse.Namespace) -> None:
         wf_cmd = getattr(args, "workflow_command", None)
         if wf_cmd == "resume":
             _workflow_resume(getattr(args, "run_id", ""), getattr(args, "root", "."))
-        elif wf_cmd in {"start", "status", "approve", "receipt"}:
+        elif wf_cmd in {"start", "status", "approve", "receipt", "explain"}:
             from opencontext_cli.commands.ux_cmd import handle_workflow_ux
 
             handle_workflow_ux(args)
@@ -1470,6 +1545,9 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command == "telemetry":
         handle_telemetry(args)
         return
+    if command == "health":
+        handle_health(args)
+        return
     if command == "status":
         _status(getattr(args, "root", "."))
         return
@@ -1496,14 +1574,44 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command == "receipt":
         handle_receipt(args)
         return
+    if command == "run":
+        handle_run_exec(args)
+        return
     if command == "runs":
         handle_run_inspect(args)
+        return
+    if command == "simulate":
+        handle_simulate(args)
+        return
+    if command == "session":
+        handle_session(args)
+        return
+    if command == "maturity":
+        handle_maturity(args)
+        return
+    if command == "decisions":
+        handle_decisions(args)
+        return
+    if command == "decision-log":
+        # Alias surface for the shipped `decisions` Decision Log (CLI-CONV).
+        # `decision-log <run_id>` -> `decisions show <run_id>`; bare -> `list`.
+        if getattr(args, "run_id", None):
+            args.decisions_action = "show"
+        else:
+            args.decisions_action = "list"
+        handle_decisions(args)
+        return
+    if command == "policy":
+        handle_policy(args)
         return
     if command == "oc-new":
         handle_oc_new(args)
         return
     if command == "capabilities":
         handle_capabilities(args)
+        return
+    if command == "studio":
+        handle_studio(args)
         return
     if command == "aicx":
         handle_aicx(args)
@@ -1563,7 +1671,7 @@ def _dispatch(args: argparse.Namespace) -> None:
         return
     runtime = _runtime(args.config)
     if command == "index":
-        _index(runtime, args.root, args.incremental)
+        _index(runtime, args.root, args.incremental, json_output=getattr(args, "json", False))
     elif command == "watch":
         _watch(
             args.root,
@@ -1625,6 +1733,8 @@ def _dispatch(args: argparse.Namespace) -> None:
     elif command == "eval":
         if args.eval_command == "recall":
             _eval_recall(runtime, args.path, args.root, getattr(args, "json", False))
+        elif args.eval_command in {"compare", "report"}:
+            _eval_records(args)
         else:
             _eval(
                 runtime,
@@ -2204,7 +2314,16 @@ def _install(args: argparse.Namespace) -> None:
     console.print("[dim]For help: opencontext --help[/]")
 
 
-def _index(runtime: OpenContextRuntime, root: str, incremental: bool = False) -> None:
+def _index(
+    runtime: OpenContextRuntime,
+    root: str,
+    incremental: bool = False,
+    *,
+    json_output: bool = False,
+) -> None:
+    if json_output:
+        _index_json(runtime, root)
+        return
     manifest = runtime.index_project(root)
     print(f"Indexed project: {manifest.project_name}")
     print(f"Root: {manifest.root}")
@@ -2229,6 +2348,38 @@ def _index(runtime: OpenContextRuntime, root: str, incremental: bool = False) ->
             print(f"Verify: {len(checks)} checks passed.")
     except Exception:
         pass
+
+
+def _index_json(runtime: OpenContextRuntime, root: str) -> None:
+    """Emit a machine-readable index report (N1 / AVH-018).
+
+    On success: ``{indexed_files, symbol_count, duration_s, status: "ok", error: null}``.
+    On failure: ``{..., status: "error", error: "<message>"}`` with a non-zero exit.
+    Human-readable output stays the default; this branch prints ONLY the JSON object.
+    """
+    import time
+
+    start = time.perf_counter()
+    try:
+        manifest = runtime.index_project(root)
+    except Exception as exc:
+        report = {
+            "indexed_files": 0,
+            "symbol_count": 0,
+            "duration_s": round(time.perf_counter() - start, 3),
+            "status": "error",
+            "error": str(exc),
+        }
+        print(json.dumps(report))
+        raise SystemExit(1) from exc
+    report = {
+        "indexed_files": len(manifest.files),
+        "symbol_count": len(manifest.symbols),
+        "duration_s": round(time.perf_counter() - start, 3),
+        "status": "ok",
+        "error": None,
+    }
+    print(json.dumps(report))
 
 
 def _watch(
@@ -3202,13 +3353,53 @@ def _release(args: argparse.Namespace) -> None:
         print(report.model_dump_json(indent=2))
         return
     if args.release_command == "gate":
+        from opencontext_core.operating_model.release_gate import (
+            ReleaseBaselineStore,
+            ReleaseGateRunner,
+            ReleaseMetrics,
+        )
+
         report = ReleaseLeakScanner().scan(".")
+        # The four DoD regression gates vs a stored baseline (first run seeds it).
+        store = ReleaseBaselineStore(Path(".opencontext/release-baseline.json"))
+        baseline = store.load()
+        current = ReleaseMetrics()
+        dod = ReleaseGateRunner().evaluate(current, baseline)
+        if baseline is None:
+            store.save(current)
+        blocked_dod = [g for g in dod if g.status.value == "failed"]
         payload = {
-            "status": "blocked" if report.blocked else "passed",
-            "blocked": report.blocked,
-            "findings": [finding.model_dump(mode="json") for finding in report.findings],
+            "status": "blocked" if (report.blocked or blocked_dod) else "passed",
+            "blocked": bool(report.blocked or blocked_dod),
+            "leak_findings": [finding.model_dump(mode="json") for finding in report.findings],
+            "dod_gates": [g.model_dump(mode="json") for g in dod],
         }
         print(json.dumps(payload, indent=2))
+        if payload["blocked"]:
+            raise SystemExit(1)
+        return
+    if args.release_command == "acceptance":
+        from opencontext_core.operating_model.release_gate import AcceptanceEvaluator
+
+        root = Path(getattr(args, "root", "."))
+        verdict = AcceptanceEvaluator(repo_root=root).evaluate(
+            bench_root=getattr(args, "root", "."),
+            smoke=getattr(args, "smoke", False),
+            release_mode=getattr(args, "release", False),
+        )
+        rendered = verdict.model_dump_json(indent=2)
+        print(rendered)
+        # Persist the last verdict so read-only Studio can surface the release-gate
+        # panel (N2/AVH-019) without re-running the evaluator.
+        try:
+            report_path = root / ".opencontext" / "reports" / "acceptance.json"
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text(rendered, encoding="utf-8")
+        except OSError:
+            pass
+        # An honest verdict never blocks on NOT_MEASURED — only a real FAILED gate.
+        if verdict.failed:
+            raise SystemExit(1)
         return
     if args.release_command == "evidence":
         evidence = ReleaseEvidenceBuilder().build(args.dist)
@@ -4131,6 +4322,39 @@ def _eval_recall(runtime: OpenContextRuntime, path: str, root: str, json_output:
         print(format_recall_report(report))
 
 
+def _eval_records(args: argparse.Namespace) -> None:
+    """`eval report` (summarize persisted records) and `eval compare` (diff two)."""
+    from opencontext_core.evaluation.ai_eval import compare_records, load_records
+    from opencontext_core.evaluation.models import EvaluationRecord
+
+    if args.eval_command == "report":
+        records = load_records()
+        if not records:
+            print("No evaluation records. Run an AI-eval suite to populate them.")
+            return
+        print(
+            json.dumps(
+                [
+                    {
+                        "target": f"{r.target_kind}:{r.target_id}",
+                        "success_rate": r.success_rate,
+                        "local_validation_pass_rate": r.local_validation_pass_rate,
+                        "benchmark_version": r.benchmark_version,
+                    }
+                    for r in records
+                ],
+                indent=2,
+            )
+        )
+        return
+    old = EvaluationRecord.model_validate_json(Path(args.old).read_text(encoding="utf-8"))
+    new = EvaluationRecord.model_validate_json(Path(args.new).read_text(encoding="utf-8"))
+    deltas = compare_records(old, new)
+    print(json.dumps([d.model_dump() for d in deltas], indent=2))
+    if any(d.regressed for d in deltas):
+        raise SystemExit(1)
+
+
 def _eval(
     runtime: OpenContextRuntime,
     eval_command: str,
@@ -4194,6 +4418,10 @@ def _agent_memory_store(args: argparse.Namespace) -> Any:
 def _memory(args: argparse.Namespace) -> None:
     """Handle memory subcommands."""
     command = args.memory_command
+    if command == "migrate":
+        raise SystemExit(handle_migrate("memory", args))
+    if command == "audit":
+        raise SystemExit(handle_memory_audit(args))
     repo = ContextRepository(Path("."))
     if command == "init":
         created = repo.init_layout()
@@ -4345,6 +4573,14 @@ def _memory(args: argparse.Namespace) -> None:
             f"Memory maintenance: scanned {m.keys_scanned} keys, "
             f"consolidated {m.keys_consolidated}, pruned {m.records_pruned} stale records."
         )
+        # PR-009: regenerate the eight curated project-memory files from the store.
+        try:
+            from opencontext_core.memory.project_files import generate as _gen_project_files
+
+            written = _gen_project_files(store, Path("."))
+            print(f"Regenerated {len(written)} project-memory files under .opencontext/memory/.")
+        except Exception as exc:
+            print(f"(project-memory files not regenerated: {exc})")
         if m.reviews_due:
             print(
                 f"  {m.reviews_due} high-stakes memories due for review "
