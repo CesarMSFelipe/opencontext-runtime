@@ -41,6 +41,9 @@ def get_host_sampler() -> HostSampler | None:
     return _host_sampler
 
 
+# DEPRECATED(2.0): legacy provider/sampling path; superseded by the unified
+# providers.gateway.ProviderGateway (PR-012). Still the live default; remove when
+# runtime.gateway_enabled is default + legacy removed (milestone-E).
 class SamplingGateway:
     """Adapts a host sampler callback to ``LLMGateway.generate``."""
 

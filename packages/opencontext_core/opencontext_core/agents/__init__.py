@@ -29,6 +29,8 @@ from .orchestrator import AgentOrchestrator, AgentResult
 from .security_audit_agent import SecurityAuditAgent
 from .tdd_enforcer_agent import TDDEnforcerAgent
 
+# DEPRECATED(2.0): dead registry of the deprecated agent SDK
+# (no reader outside this package/tests). Remove in 2.0.
 AGENT_REGISTRY: dict[str, type] = {
     "context-planner": ContextPlannerAgent,
     "tdd-enforcer": TDDEnforcerAgent,

@@ -152,6 +152,9 @@ from opencontext_core.workflow.steps import WorkflowServices
 from opencontext_core.workspace.layout import ensure_workspace
 
 
+# DEPRECATED(2.0): legacy budget gateway; superseded by providers.gateway.ProviderGateway
+# (PR-012, budget-gate parity). Still the live default; remove when runtime.gateway_enabled
+# is default + legacy removed (milestone-E).
 class BudgetAwareLLMGateway:
     """Wraps an LLMGateway to provide budget-aware routing and tracking."""
 

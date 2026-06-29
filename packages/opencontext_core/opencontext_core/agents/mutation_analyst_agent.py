@@ -8,6 +8,8 @@ from opencontext_core.agents.base import BaseAgent
 from opencontext_core.mutation.runner import MutationRunner
 
 
+# DEPRECATED(2.0): dead agent SDK spine (no live caller;
+# superseded by opencontext_core.harness). Remove in 2.0.
 class MutationAnalystAgent(BaseAgent):
     """Runs mutation analysis and reports coverage. Pure local."""
 

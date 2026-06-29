@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from typing import Any
 
 
+# DEPRECATED(2.0): dead agent SDK helper (used only by the deprecated AgentOrchestrator;
+# not the live memory subsystem). Remove in 2.0.
 @dataclass
 class MemoryEntry:
     """Single memory entry."""

@@ -447,6 +447,9 @@ class HarnessRunner:
     # ------------------------------------------------------------------
 
     # Maps a runner ``workflow`` name to a declared WORKFLOW_TRACKS track.
+    # DEPRECATED(2.0): legacy workflow alias resolution; superseded by the PR-003
+    # WorkflowRegistry. runtime.registry_enabled is now default but this rollback path
+    # remains; remove when the legacy track scheduler is removed (milestone-C).
     _WORKFLOW_TRACK_ALIASES: ClassVar[dict[str, str]] = {
         "sdd": "full",
         "full": "full",

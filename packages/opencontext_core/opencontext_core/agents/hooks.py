@@ -17,6 +17,8 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+# DEPRECATED(2.0): dead agent SDK hook system (used only by the deprecated AgentOrchestrator;
+# not the live hooks.models.HookEvent). Remove in 2.0.
 class HookEvent(enum.Enum):
     """Agent lifecycle events that can be hooked into."""
 

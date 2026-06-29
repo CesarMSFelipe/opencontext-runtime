@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -57,6 +58,10 @@ PHASE_DEPENDENCIES: dict[str, list[str]] = {
 }
 
 # Workflow tracks: each track defines its own phase order and dependencies
+# DEPRECATED(2.0): legacy workflow-track declaration; superseded by the PR-003
+# WorkflowRegistry/builtins. Still consumed by the HarnessRunner DAG + explain.py while the
+# runtime.registry_enabled rollback exists; remove when registry-driven scheduling replaces
+# the legacy DAG (milestone-C).
 WORKFLOW_TRACKS: dict[str, dict[str, object]] = {
     "quick": {
         "phases": ["explore", "apply", "verify"],
@@ -148,10 +153,19 @@ def sdd_definition_source() -> tuple[list[str], dict[str, list[str]], dict[str, 
     return list(PHASE_ORDER), dict(PHASE_DEPENDENCIES), dict(PHASE_PERSONAS)
 
 
+# DEPRECATED(2.0): dead class (0 instantiations outside tests; folded into HarnessRunner).
+# The module-level WORKFLOW_TRACKS/PHASE_* tables + functions above stay live. Remove in 2.0.
 class SDDOrchestrator:
     """Orchestrates the full SDD lifecycle."""
 
     def __init__(self, config: SDDConfig | None = None) -> None:
+        warnings.warn(
+            "SDDOrchestrator is deprecated and will be removed in 2.0; the live SDD "
+            "flow runs through opencontext_core.harness (the WORKFLOW_TRACKS/PHASE_* "
+            "tables in this module remain).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.config = config or SDDConfig()
         self.store = self._create_store()
         self.state: DAGState | None = None

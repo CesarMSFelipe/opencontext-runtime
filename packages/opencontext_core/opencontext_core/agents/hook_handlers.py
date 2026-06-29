@@ -16,6 +16,8 @@ from .hooks import HookContext, HookEvent
 logger = logging.getLogger(__name__)
 
 
+# DEPRECATED(2.0): dead agent SDK handlers (registered only by the
+# deprecated AgentOrchestrator). Remove in 2.0.
 def on_session_start(context: HookContext) -> None:
     """Log session start with project and event info."""
     project = context.data.get("project", Path(context.project_root).name)

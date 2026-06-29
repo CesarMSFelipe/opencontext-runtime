@@ -351,6 +351,9 @@ class VectorRetrievalSource:
         return bool(project == self._project_name)
 
 
+# DEPRECATED(2.0): legacy retrieval planner; superseded by the PR-008 KG v2 path + PR-010
+# ContextEngine. Still the live default; remove when runtime.kg_v2_enabled +
+# context_engine_enabled are default + legacy removed (milestone-D).
 class RetrievalPlanner:
     """Composes retrieval sources and returns deduplicated context candidates."""
 

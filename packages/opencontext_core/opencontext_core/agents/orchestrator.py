@@ -31,6 +31,8 @@ class AgentResult(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
 
+# DEPRECATED(2.0): dead second agent spine (no live caller; superseded by
+# opencontext_core.harness). Already emits DeprecationWarning; remove in 2.0.
 class AgentOrchestrator:
     """Orchestrates agent execution with automatic token and memory management.
 

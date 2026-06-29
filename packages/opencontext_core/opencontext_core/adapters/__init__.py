@@ -32,6 +32,9 @@ _DEPRECATED: dict[str, tuple[str, str]] = {
 __all__ = list(_DEPRECATED)
 
 
+# DEPRECATED(2.0): package-level SDK access to the adapter layer (emits DeprecationWarning
+# below). The submodule classes themselves stay live (used by verify/doctor health checks).
+# Remove the public surface in 2.0.
 def __getattr__(name: str) -> Any:
     """Lazily resolve a public adapter name, warning that the layer is deprecated.
 

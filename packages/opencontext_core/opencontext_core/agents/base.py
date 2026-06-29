@@ -42,6 +42,8 @@ class AgentMetadata:
     status: str = "running"  # running, completed, failed
 
 
+# DEPRECATED(2.0): dead agent SDK spine (no live caller; superseded by
+# opencontext_core.harness). Already emits DeprecationWarning; remove in 2.0.
 class BaseAgent(ABC):
     """Base class for all OpenContext agents.
 
