@@ -65,6 +65,20 @@ def add_benchmark_parser(subparsers: Any) -> None:
 
     bm_sub.add_parser("compare", help="Show the last saved efficiency benchmark result.")
 
+    suite_parser = bm_sub.add_parser(
+        "suite", help="Run the unified cognitive benchmark suites (the ten 1.0 gates)."
+    )
+    suite_sub = suite_parser.add_subparsers(dest="suite_command", required=True)
+    suite_sub.add_parser("list", help="List the registered benchmark suites.")
+    suite_run = suite_sub.add_parser("run", help="Run one suite or all suites.")
+    suite_run.add_argument("name", nargs="?", default=None, help="Suite name (default: all).")
+    suite_run.add_argument("--root", default=".", help="Repo root to benchmark.")
+    suite_run.add_argument("--smoke", action="store_true", help="Run the fast smoke subset.")
+
+    bm_sub.add_parser(
+        "suites", help="List the Runtime Intelligence benchmark suite taxonomy (13 suites)."
+    )
+
     h2h = bm_sub.add_parser(
         "head2head",
         help=(
@@ -89,8 +103,45 @@ def handle_benchmark(args: Any) -> None:
         _handle_run(args)
     elif command == "compare":
         _handle_compare(args)
+    elif command == "suites":
+        _handle_suites(args)
+    elif command == "suite":
+        _handle_suite(args)
     elif command == "head2head":
         _handle_head2head(args)
+
+
+def _handle_suite(args: Any) -> None:
+    """`benchmark suite list|run` over the unified BenchmarkRunner (the ten 1.0 gates)."""
+    import json as _json
+
+    from opencontext_core.evaluation.runner import build_default_runner
+
+    runner = build_default_runner()
+    if args.suite_command == "list":
+        for name in runner.list_suites():
+            console.print(f"  - {name}")
+        return
+    # run
+    smoke = bool(getattr(args, "smoke", False))
+    root = getattr(args, "root", ".")
+    name = getattr(args, "name", None)
+    reports = [runner.run(name, root, smoke=smoke)] if name else runner.run_all(root, smoke=smoke)
+    print(_json.dumps([r.model_dump(mode="json") for r in reports], indent=2))
+    # Honest exit: only a real FAILED gate is a failure; NOT_MEASURED never blocks.
+    if any(r.status.value == "failed" for r in reports):
+        sys.exit(1)
+
+
+def _handle_suites(args: Any) -> None:
+    """List the 13-suite benchmark taxonomy and which suites have an honest runner."""
+    from opencontext_core.runtime_intelligence.benchmarks import BenchmarkSystem
+
+    system = BenchmarkSystem()
+    console.print("[bold]Runtime Intelligence benchmark suites (13):[/]")
+    for suite in system.list_suites():
+        status = "implemented" if system.is_implemented(suite) else "declared (not measured)"
+        console.print(f"  - {suite}: {status}")
 
 
 _CAP_FIELDS = (

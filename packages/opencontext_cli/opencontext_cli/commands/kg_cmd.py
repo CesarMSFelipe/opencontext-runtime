@@ -66,6 +66,11 @@ def add_kg_parser(subparsers: Any) -> None:
 
     kg_sub.add_parser("status", help="Check index status.")
 
+    from opencontext_cli.commands.migration_cmd import add_migrate_subparser
+
+    add_migrate_subparser(kg_sub, "kg")
+    kg_sub.add_parser("rebuild", help="Rebuild the KG from source (`index .`).")
+
     kg_trace = kg_sub.add_parser("trace", help="Trace path between two symbols.")
     kg_trace.add_argument("source", help="Source symbol name.")
     kg_trace.add_argument("target", help="Target symbol name.")
@@ -103,6 +108,14 @@ def add_kg_parser(subparsers: Any) -> None:
 def handle_kg(args: Any) -> None:
     """Handle knowledge-graph commands."""
     command = args.kg_command
+
+    if command == "migrate":
+        from opencontext_cli.commands.migration_cmd import handle_migrate
+
+        raise SystemExit(handle_migrate("kg", args))
+    if command == "rebuild":
+        print("KG rebuild: run `opencontext index .` to rebuild the graph from source.")
+        return
     query = getattr(args, "query", "")
     symbol = getattr(args, "symbol", "")
     task = getattr(args, "task", "")

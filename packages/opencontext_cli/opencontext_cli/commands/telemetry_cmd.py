@@ -17,6 +17,10 @@ def add_telemetry_parser(subparsers: Any) -> None:
     show_parser.add_argument("--root", default=".", help="Project root.")
     show_parser.add_argument("--last", type=int, default=None, help="Show only last N events.")
     tel_sub.add_parser("clear", help="Clear telemetry data.").add_argument("--root", default=".")
+    export_parser = tel_sub.add_parser(
+        "export", help="Export telemetry to the canonical .opencontext/telemetry/ layout."
+    )
+    export_parser.add_argument("--root", default=".", help="Project root.")
 
 
 def handle_telemetry(args: Any) -> None:
@@ -26,6 +30,30 @@ def handle_telemetry(args: Any) -> None:
         _handle_show(root, last=getattr(args, "last", None))
     elif command == "clear":
         _handle_clear(root)
+    elif command == "export":
+        _handle_export(root)
+
+
+def _handle_export(root: str) -> None:
+    """Mirror legacy savings telemetry into the canonical OC-OBS layout."""
+    from opencontext_core.evaluation.telemetry import load_telemetry
+    from opencontext_core.runtime_intelligence import telemetry_layout
+
+    store = load_telemetry(root)
+    directory = telemetry_layout.telemetry_dir(root)
+    for event in store.events:
+        telemetry_layout.append_event(
+            "telemetry.savings.recorded",
+            {
+                "task": event.task,
+                "naive_tokens": event.naive_tokens,
+                "optimized_tokens": event.optimized_tokens,
+                "reduction_pct": event.reduction_pct,
+                "scenario": event.scenario,
+            },
+            root,
+        )
+    console.print(f"[green]Exported {len(store.events)} event(s) to[/] {directory}")
 
 
 def _handle_show(root: str, last: int | None = None) -> None:

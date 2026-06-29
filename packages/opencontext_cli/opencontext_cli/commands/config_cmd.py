@@ -64,11 +64,30 @@ def add_config_parser(subparsers: Any) -> None:
         "--keep-days", type=int, default=30, help="Keep backups newer than this many days."
     )
 
+    # Doctor — validate the project's opencontext.yaml (PR-013, SPEC-CLI-013-05).
+    doctor_parser = config_sub.add_parser(
+        "doctor", help="Validate opencontext.yaml (schema/keys/profile/providers/refs)."
+    )
+    doctor_parser.add_argument("--root", default=".", help="Project root.")
+    doctor_parser.add_argument("--json", action="store_true", help="JSON output.")
+    doctor_parser.add_argument(
+        "--strict", action="store_true", help="Exit non-zero if any check fails."
+    )
+
+    from opencontext_cli.commands.migration_cmd import add_migrate_subparser
+
+    add_migrate_subparser(config_sub, "config")
+
 
 def handle_config(args: Any) -> None:
     """Handle config commands."""
 
     command = getattr(args, "config_command", None)
+
+    if command == "migrate":
+        from opencontext_cli.commands.migration_cmd import handle_migrate
+
+        raise SystemExit(handle_migrate("config", args))
 
     if command is None:
         # No subcommand — open the single configuration menu by default.
@@ -109,6 +128,49 @@ def handle_config(args: Any) -> None:
         _config_restore(args.id)
     elif command == "cleanup":
         _config_cleanup(args.keep_days)
+    elif command == "doctor":
+        _config_doctor(args)
+
+
+def _config_doctor(args: Any) -> None:
+    """Validate the project's opencontext.yaml and report each finding."""
+    import json as _json
+
+    from opencontext_core.config_doctor import validate
+
+    diags = validate(getattr(args, "root", "."))
+    failed = sum(1 for d in diags if d.status in ("failed", "error"))
+
+    if getattr(args, "json", False):
+        print(
+            _json.dumps(
+                {
+                    "ok": failed == 0,
+                    "failed": failed,
+                    "findings": [
+                        {
+                            "name": d.name,
+                            "status": d.status,
+                            "message": d.message,
+                            "details": d.details,
+                            "recommendation": d.recommendation,
+                        }
+                        for d in diags
+                    ],
+                },
+                indent=2,
+            )
+        )
+    else:
+        for d in diags:
+            symbol = {"passed": "✓", "warning": "!", "failed": "✗", "error": "✗"}.get(d.status, "·")
+            print(f"  {symbol} [{d.status}] {d.name}: {d.message}")
+            if d.recommendation:
+                print(f"      → {d.recommendation}")
+        print(f"\n  {len(diags)} check(s), {failed} failed.")
+
+    if getattr(args, "strict", False) and failed:
+        sys.exit(1)
 
 
 # ── Dot-notation config paths ──────────────────────────────────────────────

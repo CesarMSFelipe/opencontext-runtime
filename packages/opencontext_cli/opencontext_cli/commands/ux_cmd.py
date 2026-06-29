@@ -172,6 +172,39 @@ def add_workflow_ux_parser(workflow_subparsers: Any) -> None:
     receipt_p.add_argument("--root", default=None, help="Project root (default: cwd).")
     receipt_p.add_argument("--json", dest="json_out", action="store_true", help="JSON output.")
 
+    explain_p = workflow_subparsers.add_parser(
+        "explain", help="Explain a workflow (when/when-not/cost/phases/harnesses)."
+    )
+    explain_p.add_argument("workflow", help="Workflow id, e.g. 'sdd' or 'oc-flow'.")
+    explain_p.add_argument("--root", default=None, help="Project root (default: cwd).")
+    explain_p.add_argument("--json", dest="json_out", action="store_true", help="JSON output.")
+
+
+def _handle_explain(args: Any) -> None:
+    """Explain a workflow via the shared explain logic (SPEC-CLI-013-10)."""
+    from opencontext_core.explain import explain_workflow
+
+    info = explain_workflow(str(getattr(args, "workflow", "")), str(_root(args)))
+    if getattr(args, "json_out", False):
+        print(json.dumps(info, indent=2))
+        if "error" in info:
+            sys.exit(1)
+        return
+    if "error" in info:
+        print(info["error"], file=sys.stderr)
+        if info.get("next_action"):
+            print(f"  {info['next_action']}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Workflow  : {info['id']}")
+    print(f"When      : {info['when']}")
+    print(f"When not  : {info['when_not']}")
+    print(f"Cost      : {info['cost']}")
+    print(f"Risk      : {info['risk']}")
+    print(f"Phases    : {', '.join(info['phases']) or '-'}")
+    print(f"Harnesses : {', '.join(info['harnesses']) or '-'}")
+    if info["outputs"]:
+        print(f"Outputs   : {', '.join(info['outputs'])}")
+
 
 def handle_workflow_ux(args: Any) -> None:
     """Dispatch one of the four UX verbs."""
@@ -184,6 +217,8 @@ def handle_workflow_ux(args: Any) -> None:
         _handle_approve(args)
     elif cmd == "receipt":
         _handle_receipt(args)
+    elif cmd == "explain":
+        _handle_explain(args)
     else:
         print(f"Unknown workflow subcommand: {cmd}", file=sys.stderr)
         sys.exit(2)

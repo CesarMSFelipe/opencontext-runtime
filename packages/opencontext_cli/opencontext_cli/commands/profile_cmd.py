@@ -37,7 +37,13 @@ def add_profile_parser(subparsers: Any) -> None:
     )
     sub = parser.add_subparsers(dest="profile_command", required=True)
 
-    sub.add_parser("list", help="List available profiles.")
+    sub.add_parser("list", help="List config profiles and per-phase model profiles.")
+
+    explain = sub.add_parser(
+        "explain", help="Explain a profile (security/budget/approvals/observability)."
+    )
+    explain.add_argument("name")
+    explain.add_argument("--json", action="store_true", help="Emit as JSON.")
 
     show = sub.add_parser("show", help="Show a profile's per-phase model assignments.")
     show.add_argument("name")
@@ -66,6 +72,8 @@ def handle_profile(args: Any) -> int:
 
     if command == "list":
         return _list(manager)
+    if command == "explain":
+        return _explain(args.name, getattr(args, "json", False))
     if command == "show":
         return _show(manager, args.name, getattr(args, "json", False))
     if command == "create":
@@ -78,13 +86,55 @@ def handle_profile(args: Any) -> int:
 
 
 def _list(manager: SDDProfileManager) -> int:
+    from opencontext_core import config_profiles
+
+    # Config profiles (PR-013) — governance/routing posture.
+    cfg = config_profiles.list_profiles()
+    cfg_table = Table(title=f"Config profiles ({len(cfg)})")
+    cfg_table.add_column("Name", style="cyan")
+    cfg_table.add_column("Default")
+    cfg_table.add_column("Description")
+    for p in cfg:
+        cfg_table.add_row(p["name"], "✓" if p["default"] else "", p.get("description", ""))
+    console.print(cfg_table)
+
+    # Model profiles — per-phase model assignment family.
     profiles = manager.list_profiles()
-    table = Table(title=f"SDD profiles ({len(profiles)})")
+    table = Table(title=f"Model profiles ({len(profiles)})")
     table.add_column("Name", style="cyan")
     table.add_column("Description")
     for p in profiles:
         table.add_row(p["name"], p.get("description", ""))
     console.print(table)
+    return 0
+
+
+def _explain(name: str, as_json: bool) -> int:
+    """Explain a profile's defaults via the shared explain logic."""
+    from opencontext_core.explain import explain_profile
+
+    info = explain_profile(name)
+    if as_json:
+        print(json.dumps(info, indent=2))
+        return 0 if "error" not in info else 1
+    if "error" in info:
+        console.print(f"[red]{info['error']}[/]")
+        if info.get("next_action"):
+            console.print(f"  → {info['next_action']}")
+        return 1
+    console.print(f"[bold cyan]Profile:[/] {info['id']} ({info['family']})")
+    if info.get("description"):
+        console.print(f"  {info['description']}")
+    if info["family"] == "config":
+        console.print(f"  security      : {info['security']}")
+        console.print(f"  policy        : {info['policy']}")
+        console.print(f"  providers     : {info['providers']}")
+        console.print(f"  approvals     : {info['approvals']}")
+        console.print(f"  budget        : {info['budget']}")
+        console.print(f"  observability : {info['observability']}")
+    else:
+        for phase, model in info.get("model_assignments", {}).items():
+            console.print(f"  {phase:<10} {model}")
     return 0
 
 
