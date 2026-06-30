@@ -149,6 +149,7 @@ def test_workspace_install_writes_nothing_under_home_integration(tmp_path, monke
 
     env = dict(**{k: v for k, v in __import__("os").environ.items()})
     env["HOME"] = str(fake_home)
+    env["OPENCONTEXT_STORAGE_MODE"] = "local"
     env.pop("XDG_CONFIG_HOME", None)
     proc = subprocess.run(
         [
