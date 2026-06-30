@@ -33,6 +33,7 @@ def _save_install_ledger(report: dict[str, Any]) -> None:
         from opencontext_core.install_manager import InstallationManager, InstallState
 
         all_files = [f for r in report.get("results", []) for f in r.get("files", [])]
+        all_files.extend(report.get("extra_files_written", []))
         if not all_files:
             return
         mgr = InstallationManager()
@@ -322,7 +323,10 @@ def _run_configurator(args: Any) -> None:
         return
 
     if dry_run:
-        _report_dry_run(valid, unknown, scope, root, json_output)
+        report = configurator.configure(valid, scope=scope, dry_run=True)
+        if unknown:
+            report["skipped"] = unknown
+        _report_dry_run(report, unknown, json_output)
         return
 
     yes = _resolve_flag(getattr(args, "yes", False), "OPENCONTEXT_YES")
@@ -333,13 +337,18 @@ def _run_configurator(args: Any) -> None:
     report = configurator.configure(valid, scope=scope)
     if unknown:
         report["skipped"] = unknown
-    _maybe_write_stack_standards(root, scope, report)
-    _maybe_write_gitignore(root, scope)
+    _record_extra_files(report, _maybe_write_stack_standards(root, scope, report))
+    _record_extra_files(report, _maybe_write_gitignore(root, scope))
     _save_install_ledger(report)
     _report_configured(report, unknown, json_output)
 
 
-def _maybe_write_gitignore(root: Any, scope: str) -> None:
+def _record_extra_files(report: dict[str, Any], files: list[str]) -> None:
+    if files:
+        report.setdefault("extra_files_written", []).extend(files)
+
+
+def _maybe_write_gitignore(root: Any, scope: str) -> list[str]:
     """Keep the local index/memory out of git so teammates don't clone a stale
     binary graph — while the shareable config (opencontext.yaml, AGENTS.md) stays
     committed. Managed block, project scope only, best-effort.
@@ -349,7 +358,7 @@ def _maybe_write_gitignore(root: Any, scope: str) -> None:
     skipped because no in-repo state is written.
     """
     if scope != "local":
-        return
+        return []
     try:
         from pathlib import Path
 
@@ -367,7 +376,7 @@ def _maybe_write_gitignore(root: Any, scope: str) -> None:
             # Only skip the .gitignore block when we know mode=user and there are
             # no legacy dirs (in-repo state is not written in user mode).
             if _cfg.storage.mode != StorageMode.local and detect_legacy(root_path) is None:
-                return
+                return []
         # No config found yet (first-time setup) — write the block as a safe default.
 
         path = root_path / ".gitignore"
@@ -375,29 +384,34 @@ def _maybe_write_gitignore(root: Any, scope: str) -> None:
         merged = inject_managed_lines(existing, "storage", [".storage/", ".opencontext/"])
         if write_text_atomic(path, merged):
             console.success("Updated .gitignore (keeps the local index out of git).")
+            return [str(path)]
     except Exception:
-        return
+        return []
+    return []
 
 
-def _maybe_write_stack_standards(root: Any, scope: str, report: dict[str, Any]) -> None:
+def _maybe_write_stack_standards(root: Any, scope: str, report: dict[str, Any]) -> list[str]:
     """Prepare configured agents for the detected stack by writing AGENTS.md.
 
     Best-effort and project-scoped: stack standards are project-specific, so only
     write them for a local (in-project) configuration. Never fail setup over it.
     """
     if scope != "local":
-        return
+        return []
     try:
         from pathlib import Path
 
         from opencontext_cli.commands.stack_cmd import write_stack_standards
 
+        path = Path(root) / "AGENTS.md"
         changed, chosen = write_stack_standards(Path(root))
     except Exception:
-        return
+        return []
     if changed and chosen:
         report["stack_standards"] = chosen
         console.success(f"Prepared AGENTS.md with standards for: {', '.join(chosen)}")
+        return [str(path)]
+    return []
 
 
 def _confirm_configure(agents: list[str], scope: str, *, yes: bool, json_output: bool) -> bool:
@@ -436,28 +450,17 @@ def _report_no_agents(source: str, unknown: list[str], json_output: bool) -> Non
     console.dim(f"  Name an agent or use --all. Known agents: {', '.join(KNOWN_AGENTS)}")
 
 
-def _report_dry_run(
-    agents: list[str], unknown: list[str], scope: str, root: str, json_output: bool
-) -> None:
+def _report_dry_run(report: dict[str, Any], unknown: list[str], json_output: bool) -> None:
     if json_output:
-        print(
-            json.dumps(
-                {
-                    "status": "dry_run",
-                    "scope": scope,
-                    "project": str(root),
-                    "would_configure": agents,
-                    "skipped": unknown,
-                },
-                indent=2,
-            )
-        )
+        print(json.dumps(report, indent=2))
         return
     console.warning("Dry run — no changes made.")
-    console.print(f"  Scope: [cyan]{scope}[/]")
+    console.print(f"  Scope: [cyan]{report.get('scope')}[/]")
     console.print("  Would configure:")
-    for agent in agents:
-        console.print(f"    • {agent}")
+    for result in report.get("results", []):
+        console.print(f"    • {result['agent']}")
+        for entry in result.get("plan", []):
+            console.print(f"      [dim]{entry['action']}: {entry['path']}[/]")
     for agent in unknown:
         console.print(f"    [dim]- {agent} (unknown, skipped)[/]")
 

@@ -112,10 +112,12 @@ class Configurator:
         targets = [path for path, content in plan if content is not None]
 
         if dry_run:
+            planned = plan_actions(targets)
             return {
                 "agent": agent_id,
                 "status": "planned",
-                "plan": plan_actions(targets),
+                "plan": planned,
+                **self._classified_file_report([entry["path"] for entry in planned], scope),
             }
 
         # project_only: write nothing under $HOME — no home backup. Write every
@@ -128,6 +130,7 @@ class Configurator:
                 "agent": agent_id,
                 "status": "configured",
                 "files": files,
+                **self._classified_file_report(files, scope),
                 "backup_id": None,
             }
 
@@ -145,8 +148,35 @@ class Configurator:
             "agent": agent_id,
             "status": "configured",
             "files": files,
+            **self._classified_file_report(files, scope),
             "backup_id": backup.id if backup is not None else None,
         }
+
+    def _classified_file_report(self, files: list[str], scope: str) -> dict[str, Any]:
+        """Classify writes so `--scope local` cannot hide home/global changes."""
+        root = self.project_root.resolve()
+        local: list[str] = []
+        global_: list[str] = []
+        for file in files:
+            path = Path(file)
+            try:
+                resolved = path.resolve()
+            except OSError:
+                resolved = path
+            if root == resolved or root in resolved.parents:
+                local.append(file)
+            else:
+                global_.append(file)
+        report: dict[str, Any] = {
+            "local_files_written": local,
+            "global_files_written": global_,
+        }
+        if scope == "local" and global_:
+            report["global_write_reason"] = (
+                "Host-constrained local setup: this agent stores MCP/persona config "
+                "under its home config directory."
+            )
+        return report
 
     def _write_project_local_only(self, adapter: Adapter) -> list[str]:
         """Write every planned file under the project root; touch nothing under $HOME."""

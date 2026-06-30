@@ -23,9 +23,9 @@ OpenContext gives you a semantic knowledge graph + verified context for this pro
 
 ## Recommended workflow
 
-1. Use `/context`, `/impact`, `/search` commands in OpenCode
+1. For context: call `opencontext_context` with your task description
 2. Before any edit: call `opencontext_impact` on the symbol you're about to change
-3. For context: call `opencontext_context` with your task description
+3. Use host-native commands only when your OpenCode setup actually provides them
 
 ## Keep the index fresh
 
