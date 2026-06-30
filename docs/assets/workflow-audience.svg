@@ -19,7 +19,7 @@
         font-size="10" fill="#606978">Claude Code · Cursor · Copilot · Windsurf</text>
   <text x="34" y="98"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="11" fill="#9DA6B0">Replace 4–8 grep+read rounds with one</text>
+        font-size="11" fill="#9DA6B0">Replace many grep+read rounds with one</text>
   <text x="34" y="111"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
         font-size="11" fill="#9DA6B0">deterministic call, call graph included.</text>
