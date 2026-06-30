@@ -2,7 +2,7 @@
 # One-liner: irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 | iex
 
 param(
-    [string]$Version = "1.5.0",
+    [string]$Version = "1.6.0",
     [string]$RepoUrl = "https://github.com/CesarMSFelipe/OpenContext-Runtime",
     [switch]$Yes = $false
 )
