@@ -14,4 +14,4 @@ Sleep 600ms
 Type `opencontext explain "how does authentication work"`
 Sleep 500ms
 Enter
-Sleep 5s
+Sleep 11s

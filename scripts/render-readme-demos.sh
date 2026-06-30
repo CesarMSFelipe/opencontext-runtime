@@ -66,14 +66,14 @@ echo "==> rendering tapes"
 # Home (`opencontext`) and config (`opencontext config`) are now the unified Textual
 # app; demo-config walks every setting through that menu (in-place selects + native
 # modals), so the old per-setting cfg-* command gifs are retired as redundant.
-for name in explain kept-out install menu config uninstall; do
+for name in explain kept-out install menu config uninstall graph; do
   echo "  - $name"
   vhs "docs/demos/tapes/$name.tape"
 done
 
 echo "==> sizes (hard limit 10 MB, target < 5 MB)"
 status=0
-for name in demo-explain demo-kept-out demo-install demo-menu demo-config demo-uninstall; do
+for name in demo-explain demo-kept-out demo-install demo-menu demo-config demo-uninstall demo-graph; do
   f="docs/assets/$name.gif"
   sz=$(stat -c%s "$f")
   printf "  %-28s %6s KiB\n" "$f" "$((sz / 1024))"

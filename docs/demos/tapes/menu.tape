@@ -34,6 +34,5 @@ Sleep 1300ms
 Up
 Sleep 1500ms
 
-# Quit.
-Type "q"
-Sleep 1500ms
+# Linger on the screen so the final frame is readable (no blank exit frame).
+Sleep 4500ms
