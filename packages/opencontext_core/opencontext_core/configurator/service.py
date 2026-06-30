@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from opencontext_core.agents.template_renderer import (
-    HOST_CONSTRAINED_LOCAL_REASON,
     RENDER_SCOPE_LOCAL_REASON,
     render_agent_instructions,
 )
@@ -553,6 +552,7 @@ class Configurator:
             entries.append((path, _content_if_changed(path, content)))
         return entries
 
+
 def _mcp_config_is_empty(path: Path, shape: McpShape) -> bool:
     """True when an MCP config holds no remaining configuration of its declared shape.
 
@@ -650,4 +650,3 @@ def _default_instructions(agent_id: str) -> str:
     """
 
     return render_agent_instructions(agent_id)
-

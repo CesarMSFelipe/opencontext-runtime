@@ -8,7 +8,6 @@ report claims, and what the dry-run plan says.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -34,9 +33,7 @@ def project(tmp_path: Path) -> Path:
 # --------------------------------------------------------------------------- #
 
 
-def test_setup_claude_code_local_emits_local_and_global_split(
-    home: Path, project: Path
-) -> None:
+def test_setup_claude_code_local_emits_local_and_global_split(home: Path, project: Path) -> None:
     """Claude Code writes a project-root .mcp.json plus global CLAUDE.md/settings."""
     report = Configurator(project_root=project).configure(["claude-code"], scope="local")
     result = report["results"][0]
@@ -104,9 +101,7 @@ def test_setup_claude_code_dry_run_matches_real_run(
     )
 
 
-def test_setup_claude_code_dry_run_json_has_per_file_action(
-    home: Path, project: Path
-) -> None:
+def test_setup_claude_code_dry_run_json_has_per_file_action(home: Path, project: Path) -> None:
     """Spec 8.11: dry-run JSON includes per-file plan from Configurator."""
     report = Configurator(project_root=project).configure(
         ["claude-code"], scope="local", dry_run=True
@@ -150,9 +145,7 @@ def test_setup_codex_dry_run_matches_real_run(
         ["codex"], scope="local", dry_run=False
     )
     monkeypatch.setattr(Path, "home", lambda: dry_home)
-    dry = Configurator(project_root=dry_project).configure(
-        ["codex"], scope="local", dry_run=True
-    )
+    dry = Configurator(project_root=dry_project).configure(["codex"], scope="local", dry_run=True)
     real_paths = set(real["results"][0]["local_files_written"])
     real_paths.update(real["results"][0]["global_files_written"])
     dry_paths = {entry["path"] for entry in dry["results"][0]["plan"]}
@@ -173,9 +166,7 @@ def test_setup_codex_dry_run_matches_real_run(
 # --------------------------------------------------------------------------- #
 
 
-def test_setup_opencode_local_writes_project_agents_md(
-    home: Path, project: Path
-) -> None:
+def test_setup_opencode_local_writes_project_agents_md(home: Path, project: Path) -> None:
     """OpenCode honors AGENTS.md and writes global mcp.json + personas."""
     report = Configurator(project_root=project).configure(["opencode"], scope="local")
     result = report["results"][0]
@@ -227,9 +218,7 @@ def test_setup_opencode_dry_run_matches_real_run(
     )
 
 
-def test_setup_opencode_dry_run_does_not_emit_dead_format(
-    home: Path, project: Path
-) -> None:
+def test_setup_opencode_dry_run_does_not_emit_dead_format(home: Path, project: Path) -> None:
     """Spec 8.14: dry-run also drops the dead sdd-orchestrator.json / wildcards."""
     report = Configurator(project_root=project).configure(["opencode"], scope="local", dry_run=True)
     planned = {entry["path"] for entry in report["results"][0]["plan"]}
@@ -241,9 +230,7 @@ def test_setup_opencode_dry_run_does_not_emit_dead_format(
 # --------------------------------------------------------------------------- #
 
 
-def test_setup_json_classifies_local_vs_global_writes(
-    home: Path, project: Path
-) -> None:
+def test_setup_json_classifies_local_vs_global_writes(home: Path, project: Path) -> None:
     """Spec 8.10: classified local_files_written / global_files_written / reason."""
     report = Configurator(project_root=project).configure(["opencode"], scope="local")
     # Top-level status: configured (not dry-run).

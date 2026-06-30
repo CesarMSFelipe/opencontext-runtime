@@ -25,7 +25,7 @@ Design rules (AHE-008):
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 # --------------------------------------------------------------------------- #
 # Constants

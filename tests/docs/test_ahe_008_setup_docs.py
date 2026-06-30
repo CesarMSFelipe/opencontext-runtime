@@ -1,6 +1,6 @@
 """PR-AHE-008 docs-pin tests.
 
-Spec 8.5–8.8: generated docs must include required topics, the OC Flow vs SDD
+Spec 8.5-8.8: generated docs must include required topics, the OC Flow vs SDD
 decision, the TDD mode/gate wording, and the memory/Engram opt-in contract.
 Spec 8.9: --scope=local is Host-Constrained Local.
 
@@ -101,9 +101,7 @@ def test_renderer_no_stale_opencode_slash_commands() -> None:
     """Spec 8.16: opencode profile must not claim /context /impact /search."""
     body = render_agent_instructions("opencode")
     for stale in ("/context", "/impact", "/search"):
-        assert f"`{stale}`" not in body, (
-            f"opencode renderer still claims slash command {stale}"
-        )
+        assert f"`{stale}`" not in body, f"opencode renderer still claims slash command {stale}"
 
 
 def test_renderer_no_hardcoded_tool_counts() -> None:

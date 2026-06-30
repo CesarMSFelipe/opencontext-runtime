@@ -18,8 +18,6 @@ QWEN.md). It must:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 
@@ -135,9 +133,7 @@ def test_render_does_not_claim_obsolete_init_in_sdd_section() -> None:
     if "opencontext init" in body:
         # The mention is only OK if it is in a non-SDD context — assert the
         # SDD section does not carry the obsolete direction.
-        assert "initialize SDD" not in body or "opencontext init" not in body.split(
-            "## SDD", 1
-        )[-1]
+        assert "initialize SDD" not in body or "opencontext init" not in body.split("## SDD", 1)[-1]
 
 
 def test_scope_local_decision_constant_is_host_constrained() -> None:
