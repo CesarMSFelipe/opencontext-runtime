@@ -112,7 +112,15 @@ phase, gates, and next action.
 
 ### What runs offline — and what needs a model
 
-OpenContext separates **local context operations** (always offline, deterministic — no LLM in the retrieval path) from **generative phases** (which need a model).
+OpenContext separates **local context operations** (always offline, deterministic — no LLM in the retrieval path) from **generative work** (new code, specs, designs, patches, reviews). Generative work requires a **generative executor** — an LLM provider, local model, or MCP host model.
+
+<p align="center">
+  <img src="docs/assets/runtime-boundary.svg" alt="OpenContext engineering runtime split into offline deterministic operations and generative work that requires a generative executor such as MCP sampling, Claude/GPT, Ollama, or another provider" width="100%">
+</p>
+
+<p align="center">
+  <sub>Runtime boundary · OpenContext governs and verifies · generation needs a model-capable executor</sub>
+</p>
 
 | Capability | Needs a model? | How it runs |
 |---|---|---|
@@ -164,15 +172,28 @@ Run the demo on your actual repository, then wire OpenContext into your editor.
 </p>
 
 <p align="center">
-  <sub>Setup · pip install → demo on your repo → editor wizard → MCP wired</sub>
+  <sub>Setup · installer script or pipx → demo on your repo → editor wizard → MCP wired</sub>
 </p>
 
+**Linux / Ubuntu / macOS**
+
 ```bash
-pipx install opencontext-cli   # recommended — isolated, on PATH
+curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh | bash
 cd your-project
 opencontext install            # stack detection · editor setup · index repo
 opencontext demo               # see the token + call reduction on your repo
 ```
+
+**Windows PowerShell**
+
+```powershell
+irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 | iex
+cd your-project
+opencontext install
+opencontext demo
+```
+
+Prefer Python tooling? Use `pipx install opencontext-cli` instead.
 
 <p align="center">
   <img src="docs/assets/demo-install.gif" alt="Real recording of opencontext install: stack detection, editor setup, and repository indexing in one command" width="100%">
@@ -365,7 +386,11 @@ opencontext setup --all
 
 The execution harness runs structured multi-agent workflows. Each phase is isolated: it reads what it needs, does its work, passes gates, then hands off. No phase can skip a gate.
 
-**Generative phases need a model.** Inside an MCP host, `opencontext_run` uses the host agent's model via sampling — no key needed. Standalone (`opencontext loop` / `harness run`) needs a configured provider or local model; without one the harness stays honest planned-only — it emits a structured plan, never fakes output.
+**OpenContext is not an LLM.** It is an engineering runtime: it finds context, plans the flow, applies policy, writes receipts, and verifies results. New code, specs, designs, or patches still need a **generative executor** — either the host agent via MCP sampling or a configured provider/local model.
+
+**SDD generative phases** work the same way at a larger scale. `spec`, `design`, `tasks`, and code-producing `apply` need text/code generation. Without an executor, standalone runs stay honest planned-only — they emit the plan and stop.
+
+Inside an MCP host, `opencontext_run` uses the host agent's model via sampling — no key needed. Standalone (`opencontext loop` / `harness run`) needs a configured provider or local model.
 
 ```bash
 opencontext clarify "add OAuth2 login"
@@ -402,6 +427,16 @@ The base flow ends with `review` (the final quality gate) then `archive`. The `q
   <sub>TDD Workflow · test first · implement minimum · verify green · refactor · verify again</sub>
 </p>
 
+<p align="center">
+  <img src="docs/assets/oc-flow.svg" alt="OC Flow for focused fixes: task, context, generative executor, ApplyEdit, policy, receipts, tests, and verified result" width="100%">
+</p>
+
+<p align="center">
+  <sub>OC Flow · focused fixes · only generation needs a model · policy + receipts + tests stay governed</sub>
+</p>
+
+**OC Flow** is the fast path behind `opencontext run` for localized work such as “fix this failing test”. It builds the context, chooses the small mutation path, asks a generative executor for a structured `ApplyEdit`, blocks unsafe edits, applies behind a checkpoint, then runs verification. If no executor exists, it returns `needs_executor`; it does not invent a patch or fake completion.
+
 <!-- ─────────────── OFFLINE BY DEFAULT ─────────────── -->
 
 ### Offline by Default
@@ -428,11 +463,14 @@ opencontext preset apply privacy    # air-gapped · fail-closed · no egress
 
 **Requirements:** Python 3.12+
 
-```bash
-pipx install opencontext-cli      # recommended — isolated, always on PATH
-```
+| Platform / preference | Command |
+|---|---|
+| Linux / Ubuntu / macOS | `curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh \| bash` |
+| Windows PowerShell | `irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 \| iex` |
+| Python tooling | `pipx install opencontext-cli` |
+| Plain pip | `pip install opencontext-cli` |
 
-Other options — `pip`, `uv`, the `curl` / PowerShell bootstrap scripts, and the portable `.pyz` binary — are in the [installation guide](docs/getting-started/installation.md).
+`pipx` is still the recommended Python-native install because it is isolated and always on PATH. More options (`uv`, source install, portable `.pyz`) are in the [installation guide](docs/getting-started/installation.md).
 
 After installing, run the setup wizard in your project:
 

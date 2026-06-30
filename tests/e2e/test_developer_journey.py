@@ -190,6 +190,158 @@ def _collect_functional_governance(
     except Exception:
         pass
 
+    # New 1.0 safety gates: prove bad provider output does NOT look successful and
+    # secret-bearing edits do not stay in the workspace.
+    try:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as _d:
+            bad = Path(_d)
+            (bad / "buggy_add.py").write_text(
+                "def add(a, b):\n    return a + b + 1\n", encoding="utf-8"
+            )
+            (bad / "test_buggy_add.py").write_text(
+                "from buggy_add import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n",
+                encoding="utf-8",
+            )
+            wrong = (
+                '[{"path":"buggy_add.py","operation":"replace_range","start_line":2,'
+                '"end_line":2,"content":"    return a + b + 2","reason":"wrong",'
+                '"requirement_refs":["fix test"]}]'
+            )
+            result = OCFlowRunner(
+                root=bad,
+                executor=ProviderBackedNodeExecutor(
+                    gateway=_StubGateway(wrong), root=bad, provider="mock"
+                ),
+            ).run("Fix failing test")
+            if result.status != "completed":
+                functional["wrong-edit-not-completed"] = _met(
+                    f"wrong edit ended as {result.status}"
+                )
+    except Exception:
+        pass
+
+    try:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as _d:
+            sec = Path(_d)
+            (sec / "buggy_add.py").write_text(
+                "def add(a, b):\n    return a + b + 1\n", encoding="utf-8"
+            )
+            (sec / "test_buggy_add.py").write_text(
+                "from buggy_add import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n",
+                encoding="utf-8",
+            )
+            secret = (
+                '[{"path":".env","operation":"create_file",'
+                '"content":"OPENAI_API_KEY=sk-12345678901234567890","reason":"bad",'
+                '"requirement_refs":["x"]}]'
+            )
+            OCFlowRunner(
+                root=sec,
+                executor=ProviderBackedNodeExecutor(
+                    gateway=_StubGateway(secret), root=sec, provider="mock"
+                ),
+            ).run("Fix failing test")
+            if not (sec / ".env").exists():
+                functional["secret-edit-rolled-back"] = _met("secret edit blocked before apply")
+    except Exception:
+        pass
+
+    try:
+        from opencontext_core.errors import ProviderError
+
+        class _FailingGateway:
+            def generate(self, request: object) -> object:
+                raise ProviderError(
+                    "provider_fallback_exhausted: HTTPConnectionPool(host='localhost', port=11434)"
+                )
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as _d:
+            fail = Path(_d)
+            (fail / "buggy_add.py").write_text(
+                "def add(a, b):\n    return a + b + 1\n", encoding="utf-8"
+            )
+            (fail / "test_buggy_add.py").write_text(
+                "from buggy_add import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n",
+                encoding="utf-8",
+            )
+            result = OCFlowRunner(
+                root=fail,
+                executor=ProviderBackedNodeExecutor(
+                    gateway=_FailingGateway(), root=fail, provider="mock"
+                ),
+            ).run("Fix failing test")
+            if (
+                "HTTPConnectionPool" not in result.completion_reason
+                and "localhost" not in result.completion_reason
+            ):
+                functional["provider-error-redacted"] = _met("provider transport detail redacted")
+    except Exception:
+        pass
+
+    try:
+        pyz = Path.cwd() / "dist" / "opencontext.pyz"
+        if pyz.is_file():
+            import tempfile
+
+            with tempfile.TemporaryDirectory() as _d:
+                smoke = Path(_d)
+                (smoke / "buggy_add.py").write_text(
+                    "def add(a, b):\n    return a + b + 1\n", encoding="utf-8"
+                )
+                (smoke / "test_buggy_add.py").write_text(
+                    "from buggy_add import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n",
+                    encoding="utf-8",
+                )
+                (smoke / "provider_stub.json").write_text(
+                    '[{"path":"buggy_add.py","operation":"replace_range","start_line":2,'
+                    '"end_line":2,"content":"    return a + b","reason":"fix",'
+                    '"requirement_refs":["fix test"]}]',
+                    encoding="utf-8",
+                )
+                (smoke / "opencontext.yaml").write_text(
+                    "runtime:\n"
+                    "  oc_flow_enabled: true\n"
+                    "  gateway_enabled: true\n"
+                    "  durable_artifacts: true\n"
+                    "provider: test_stub\n"
+                    "edits_file: provider_stub.json\n",
+                    encoding="utf-8",
+                )
+                run = subprocess.run(
+                    [
+                        sys.executable,
+                        str(pyz),
+                        "run",
+                        "Fix failing test",
+                        "--workflow",
+                        "auto",
+                        "--root",
+                        str(smoke),
+                        "--json",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=180,
+                    check=False,
+                )
+                test = subprocess.run(
+                    [sys.executable, "-m", "pytest", "-q", str(smoke / "test_buggy_add.py")],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    check=False,
+                )
+                if run.returncode == 0 and test.returncode == 0:
+                    functional["pyz-artifact-smoke"] = _met("dist/opencontext.pyz run works")
+    except Exception:
+        pass
+
     # D1: receipts reconstructable — the run's apply receipts parse + carry entries.
     receipts_path = _artifact("apply-receipts.json")
     if receipts_path is not None:

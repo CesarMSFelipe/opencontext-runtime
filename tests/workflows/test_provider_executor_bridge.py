@@ -240,3 +240,47 @@ def test_detected_provider_autowires_full_pipeline(tmp_path, monkeypatch):
     assert summary["status"] == "completed"
     assert (tmp_path / "calc.py").read_text(encoding="utf-8") == _FIXED
     assert _run_seeded_test(tmp_path).returncode == 0
+
+
+def test_wrong_provider_edit_does_not_complete(tmp_path):
+    _seed_buggy_calc(tmp_path)
+    wrong = (
+        '[{"path":"calc.py","operation":"replace_range","start_line":2,"end_line":2,'
+        '"content":"    return a + b + 2","reason":"wrong fix",'
+        '"requirement_refs":["add returns the sum"]}]'
+    )
+    summary = run_oc_flow_cli(
+        "Fix failing test",
+        root=tmp_path,
+        workflow="auto",
+        lane="fast",
+        executor=ProviderBackedNodeExecutor(
+            gateway=_StubGateway(wrong), root=tmp_path, provider="mock"
+        ),
+    )
+
+    assert summary["status"] != "completed"
+    assert summary["verification_outcome"] == "failed"
+    assert _run_seeded_test(tmp_path).returncode != 0
+
+
+def test_secret_provider_edit_blocked_before_apply(tmp_path):
+    _seed_buggy_calc(tmp_path)
+    secret = (
+        '[{"path":".env","operation":"create_file",'
+        '"content":"OPENAI_API_KEY=sk-12345678901234567890","reason":"bad",'
+        '"requirement_refs":["x"]}]'
+    )
+    summary = run_oc_flow_cli(
+        "Fix failing test",
+        root=tmp_path,
+        workflow="auto",
+        lane="fast",
+        executor=ProviderBackedNodeExecutor(
+            gateway=_StubGateway(secret), root=tmp_path, provider="mock"
+        ),
+    )
+
+    assert summary["status"] != "completed"
+    assert not (tmp_path / ".env").exists()
+    assert "sk-12345678901234567890" not in str(summary)
