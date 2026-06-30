@@ -155,7 +155,7 @@ def test_decision_receipt_persisted_per_transition(tmp_path: Path) -> None:
         "fix.py", content="ok = 1\n", reason="fix", requirement_ref="task addressed"
     )
     result = OCFlowRunner(root=tmp_path).run(
-        "Fix failing test", lane=Lane.FAST, requested_edits=[edit]
+        "Fix a null-pointer bug", lane=Lane.FAST, requested_edits=[edit]
     )
     # One decision receipt per node transition on the happy path
     # (init->gather->plan->mutate->inspect->consolidation->completed = 6 transitions).
@@ -187,7 +187,7 @@ def test_balanced_profile_localized_bugfix_under_ceiling(tmp_path: Path) -> None
         "fix.py", content="ok = 1\n", reason="fix", requirement_ref="task addressed"
     )
     result = OCFlowRunner(root=tmp_path).run(
-        "Fix failing test", lane=Lane.FAST, profile="balanced", requested_edits=[edit]
+        "Fix a null-pointer bug", lane=Lane.FAST, profile="balanced", requested_edits=[edit]
     )
     assert result.status == "completed"
     assert result.total_tokens < OC_FLOW_TOTAL_CEILING
