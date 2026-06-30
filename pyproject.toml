@@ -25,6 +25,7 @@ indent-style = "space"
 addopts = "-q"
 testpaths = ["tests"]
 pythonpath = [
+  ".",
   "packages/opencontext_api",
   "packages/opencontext_cli",
   "packages/opencontext_core",
