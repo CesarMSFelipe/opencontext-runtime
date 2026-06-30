@@ -293,6 +293,11 @@ class OpenContextRuntime:
         # explicit ``storage_path`` retain full backward compatibility — their
         # value wins and the resolver is NOT called.
         _root = Path(self.config.project_index.root)
+        # Store root explicitly so subcomponents (e.g. RunReceiptStore) that
+        # need the project root can use self.root instead of path math on
+        # storage_path — which breaks in user mode because storage_path is
+        # under XDG, not the repo.
+        self.root: Path = _root.resolve()
 
         if storage_path is OpenContextRuntime._STORAGE_PATH_UNSET:
             # No explicit override — use the resolver.
@@ -416,11 +421,12 @@ class OpenContextRuntime:
             from opencontext_core.learning.feed import record_outcome
 
             self.cost_ledger = CostLedger()
-            # RunReceiptStore appends ``.opencontext/receipts`` to its root, so it
-            # must receive the PROJECT root, not the storage dir. storage_path is
-            # ``<root>/.storage/opencontext``; passing it directly produced the
-            # double-nested ``.storage/opencontext/.opencontext/receipts``.
-            self.provider_receipts = RunReceiptStore(self.storage_path.parent.parent)
+            # RunReceiptStore appends ``.opencontext/receipts`` to its root.
+            # Use self.root (the project root) directly so the path is correct
+            # in both local mode (where storage_path is <root>/.storage/opencontext)
+            # and user mode (where storage_path is in XDG and .parent.parent would
+            # point to the wrong XDG ancestor directory).
+            self.provider_receipts = RunReceiptStore(self.root)
             self.provider_decisions = DecisionRecorder()
             self.provider_events = ProviderEventEmitter()
             # PR-000.3 provider-response cache seam, plugged in but conservative
