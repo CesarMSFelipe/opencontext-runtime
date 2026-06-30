@@ -127,6 +127,8 @@ def run_oc_flow_cli(
         "graph_status": result.graph_status,
         "completion_reason": result.completion_reason,
         "mutation_required": result.mutation_required,
+        "verified_by": result.verified_by,
+        "verification_outcome": result.verification_outcome,
         "selection_reason": result.workflow_selection.get("reason", selection_reason),
         "artifacts_dir": str(result.artifacts_dir) if result.artifacts_dir else None,
     }

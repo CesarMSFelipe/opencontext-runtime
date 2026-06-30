@@ -158,6 +158,8 @@ class InspectionReport(BaseModel):
     outcome: Literal["passed", "failed_recoverable", "failed_blocking", "skipped_with_reason"]
     gate_results: list[dict[str, Any]] = Field(default_factory=list)
     failure_summary: str = Field(default="", description="Why it failed, if it did.")
+    verified_by: list[str] = Field(default_factory=list, description="Commands that verified it.")
+    verification_outcome: str = Field(default="not_run", description="passed|failed|not_run.")
     llm_tokens: int = Field(default=0, description="Always 0 — local inspection is LLM-free.")
 
     @field_validator("llm_tokens")

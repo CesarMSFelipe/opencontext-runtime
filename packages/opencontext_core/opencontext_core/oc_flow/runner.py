@@ -16,6 +16,7 @@ Layering (doc 58): L9 composing L1 ids, L2 stores, L8 brain (via port), L6 regis
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,6 +38,7 @@ from opencontext_core.oc_flow.completion import (
     completion_reason,
     mutation_required,
     resolve_completion,
+    verification_required,
 )
 from opencontext_core.oc_flow.definition import oc_flow_definition, resolve_next_node
 from opencontext_core.oc_flow.models import (
@@ -92,6 +94,8 @@ class OCFlowRunResult:
     completion_reason: str = ""
     mutation_required: bool = False
     workflow_selection: dict[str, Any] = field(default_factory=dict)
+    verified_by: list[str] = field(default_factory=list)
+    verification_outcome: str = "not_run"
 
 
 # --------------------------------------------------------------------- workflow selector
@@ -112,6 +116,20 @@ def should_escalate_to_sdd(contract: TaskContract, *, max_changed_areas: int = 5
     risk = {r.lower() for r in contract.risk_flags}
     high_risk = {"public_api", "schema", "architecture", "security", "migration", "breaking_change"}
     return bool(risk & high_risk)
+
+
+def _discover_test_command(root: Path) -> list[str] | None:
+    """Small pytest discovery for test-fix tasks."""
+    tests = sorted(
+        p.relative_to(root)
+        for pattern in ("test_*.py", "*_test.py")
+        for p in root.rglob(pattern)
+        if ".opencontext" not in p.parts
+    )
+    if not tests:
+        return None
+    # NOTE: caps at 10 to avoid running the full suite on auto-discovery; pass explicit test_command for large repos.
+    return [sys.executable, "-m", "pytest", "-q", *[str(p) for p in tests[:10]]]
 
 
 # ------------------------------------------------------------------------------- runner
@@ -224,6 +242,10 @@ class OCFlowRunner:
         # B1 / AVH-011: classify whether this task implies a mutation; threaded into
         # the inspection scope gate and the post-graph completion gate.
         mut_required = mutation_required(task)
+        verify_required = verification_required(task)
+        if verify_required and test_command is None:
+            test_command = _discover_test_command(self.root)
+        run_external_inspection = run_external_inspection or bool(test_command)
         ctx = OCFlowContext(
             root=self.root,
             artifacts_dir=artifacts_dir,
@@ -312,6 +334,7 @@ class OCFlowRunner:
             ctx,
             mutation_required=mut_required,
             provider_available=provider_available,
+            verification_required=verify_required,
         )
         status = completion.value
         reason = (
@@ -348,6 +371,10 @@ class OCFlowRunner:
             graph_status=graph_status,
             completion_reason=reason,
             mutation_required=mut_required,
+            verified_by=list(ctx.inspection.verified_by) if ctx.inspection else [],
+            verification_outcome=(
+                ctx.inspection.verification_outcome if ctx.inspection else "not_run"
+            ),
             workflow_selection={
                 "workflow": selection.workflow,
                 "reason": selection.reason,
@@ -464,6 +491,10 @@ class OCFlowRunner:
             "graph_status": graph_status,
             "completion_reason": completion_reason,
             "mutation_required": mutation_required,
+            "verified_by": list(ctx.inspection.verified_by) if ctx.inspection else [],
+            "verification_outcome": (
+                ctx.inspection.verification_outcome if ctx.inspection else "not_run"
+            ),
             "workflow_selection": (
                 {
                     "workflow": selection.workflow,

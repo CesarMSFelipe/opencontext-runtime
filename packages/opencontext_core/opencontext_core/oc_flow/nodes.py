@@ -45,6 +45,7 @@ from opencontext_core.oc_flow.models import (
     NodeOutcome,
     TaskContract,
 )
+from opencontext_core.safety.secrets import SecretScanner
 
 
 class OCFlowError(RuntimeError):
@@ -100,6 +101,7 @@ class OCFlowContext:
     contract: TaskContract | None = None
     changed_files: list[str] = field(default_factory=list)
     checkpoint_id: str | None = None
+    checkpoint: Any | None = None
     inspection: InspectionReport | None = None
     diagnosis_attempts: list[DiagnosisAttempt] = field(default_factory=list)
     failed_strategies: list[str] = field(default_factory=list)
@@ -301,6 +303,19 @@ def _parse_apply_edit_set(text: str) -> list[ApplyEdit] | None:
     return edits
 
 
+def _unsafe_edit_reason(edit: ApplyEdit) -> str | None:
+    """Pre-apply denylist + proposed-content secret scan."""
+    path = Path(edit.path)
+    parts = path.parts
+    if path.name == ".env" or path.suffix in {".pem", ".key"} or (parts and parts[0] == "secrets"):
+        return "forbidden secret-bearing path"
+    findings = SecretScanner().scan_secret_findings(edit.content or "")
+    if findings:
+        kinds = ", ".join(sorted({f.kind for f in findings}))
+        return f"secret(s) detected in proposed content ({kinds})"
+    return None
+
+
 class ProviderBackedNodeExecutor:
     """Productive :class:`NodeExecutor` that mutates via a provider gateway (AVH-015).
 
@@ -373,19 +388,15 @@ class ProviderBackedNodeExecutor:
         )
         try:
             response = self._gateway.generate(request)
-        except ProviderError as exc:
+        except ProviderError:
             # Provider fallback chain exhausted (or no adapter / unsupported capability)
             # at runtime. Catch it here so the failure flows node_mutate ->
             # resolve_completion as a structured `needs_provider`, never a raw traceback
             # in user-visible output. The redacted detail is honest about the failure
             # mode; the raw exception is reserved for --strict.
-            detail = (
-                _redact_provider_error(exc).removeprefix("provider_fallback_exhausted:").strip()
-            )
             self.block_reason = (
-                f"provider_fallback_exhausted: {detail}"
-                if detail
-                else "provider_fallback_exhausted"
+                "configured provider failed and fallback unavailable; "
+                "next_action=configure a valid provider, disable fallback, or enable MCP sampling"
             )
             # Mark the provider unavailable so the completion gate emits needs_provider
             # (a provider-backed run that produced nothing because the provider failed),
@@ -405,6 +416,9 @@ class ProviderBackedNodeExecutor:
             decision = self._policy_decision(edit)
             if not decision.allowed:
                 self.block_reason = f"policy denied write to {edit.path}: {decision.reason}"
+                return []
+            if reason := _unsafe_edit_reason(edit):
+                self.block_reason = f"policy denied write to {edit.path}: {reason}"
                 return []
         # Carry a reason + acceptance-criterion ref on every edit (FLOW-7).
         prepared: list[ApplyEdit] = []
@@ -687,13 +701,24 @@ def node_mutate(ctx: OCFlowContext) -> NodeResult:
     store = CheckpointStore(ctx.root)
     checkpoint = store.create(changed_paths, source="oc-flow-mutate") if changed_paths else None
     ctx.checkpoint_id = checkpoint.id if checkpoint is not None else "empty"
+    ctx.checkpoint = checkpoint
 
     receipts: list[dict[str, Any]] = []
-    for edit in edits:
-        applied = apply_edit(ctx.root, edit)
-        receipts.append(applied.model_dump())
-        if edit.path not in ctx.changed_files:
-            ctx.changed_files.append(edit.path)
+    try:
+        for edit in edits:
+            applied = apply_edit(ctx.root, edit)
+            receipts.append(applied.model_dump())
+            if edit.path not in ctx.changed_files:
+                ctx.changed_files.append(edit.path)
+    except Exception as exc:
+        if checkpoint is not None:
+            checkpoint.restore()
+            _write_json(
+                ctx.artifacts_dir / "rollback-report.json",
+                {"checkpoint_id": checkpoint.id, "reason": f"apply failed: {type(exc).__name__}"},
+            )
+        ctx.block_reason = f"apply failed: {type(exc).__name__}"
+        raise
 
     patch_lines = [f"# {e.operation.value} {e.path} :: {e.reason}" for e in edits] or [
         "# no edits proposed (honest no-op mutation)"
@@ -731,6 +756,17 @@ def node_local_inspection(ctx: OCFlowContext) -> NodeResult:
     )
     ctx.inspection = report
     name = _write_json(ctx.artifacts_dir / "inspection-report.json", report.model_dump())
+    rollback_name = None
+    if report.outcome == "failed_blocking" and ctx.checkpoint is not None:
+        ctx.checkpoint.restore()
+        rollback_name = _write_json(
+            ctx.artifacts_dir / "rollback-report.json",
+            {
+                "checkpoint_id": ctx.checkpoint.id,
+                "reason": report.failure_summary or "blocking inspection failure",
+                "restored_files": list(ctx.changed_files),
+            },
+        )
     outcome_map = {
         "passed": NodeOutcome.PASSED,
         "failed_recoverable": NodeOutcome.FAILED_RECOVERABLE,
@@ -742,7 +778,7 @@ def node_local_inspection(ctx: OCFlowContext) -> NodeResult:
         outcome=outcome_map[report.outcome],
         outputs={"outcome": report.outcome, "gates": len(report.gate_results)},
         llm_tokens=0,
-        artifacts=[name],
+        artifacts=[a for a in [name, rollback_name] if a],
     )
 
 
