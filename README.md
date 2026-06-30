@@ -311,6 +311,8 @@ SQLite + FTS5, fully offline. Indexes symbols, call chains, imports, and framewo
 
 Symbols are surfaced from the **call graph**, not just the query text — a caller is pulled in because it *calls* a matched symbol (the way `prepare_auth` links in `HTTPBasicAuth`), so you get what the code actually depends on, not only string matches.
 
+> **Call-graph scope**: call edges are extracted via tree-sitter for Python, JavaScript/TypeScript, Go, Rust, Java, and PHP. For languages without a loaded tree-sitter grammar the index falls back to regex symbol extraction (no call edges); context packs for those files are query-match ranked only, not call-graph traced.
+
 ```bash
 opencontext index .
 opencontext explain "how does authentication work"

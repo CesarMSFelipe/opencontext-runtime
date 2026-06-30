@@ -148,6 +148,23 @@ The runtime-first path keeps the same defaults as the CLI:
 - Secrets redacted before context export and trace persistence.
 - Omission reasons and token usage recorded for audit.
 
+## Known Measurement Gaps
+
+The following quality dimensions are tracked but not yet enforced by automated gate tests:
+
+- **Call-graph precision**: the context pack's `retrieval_source` field distinguishes
+  `call_graph` traversal items from `query_match` items, but there is no gate-tested
+  precision metric for call-graph coverage across all supported languages. Python call
+  edges are extracted; other languages have partial support.
+- **Token budget accuracy**: `token_budget` (the budget given to the packer) and
+  `tokens_used` (tokens consumed by included items) are always present in serialized
+  packs, but the accuracy of the underlying token estimator is not gate-tested against
+  a reference tokenizer. Estimates may drift by up to 15 percent for non-English or
+  heavily formatted content.
+
+These gaps are deferred to a future hardening milestone. Do not rely on call-graph
+provenance or token estimates as hard correctness guarantees in security-sensitive gates.
+
 ## What To Commit
 
 For open source projects, commit source code, reusable docs, tests, configs, and examples. Do not

@@ -48,6 +48,77 @@ def test_design_and_tasks_validators_accept_contract_outputs() -> None:
     ).passed
 
 
+def test_tasks_validator_rejects_missing_file_mapping() -> None:
+    """Tasks without file/verification mapping must fail (task 3.6)."""
+    # Missing file_paths/files/verification/acceptance_criteria
+    result = validate_phase(
+        "tasks",
+        '{"tasks":[{"id":"1","description":"do something"}]}',
+    )
+    assert result.passed is False
+    assert result.reason == "phase output failed contract validation"
+
+
+def test_tasks_validator_accepts_verification_mapping() -> None:
+    """Tasks with verification field pass even without file_paths."""
+    result = validate_phase(
+        "tasks",
+        '{"tasks":[{"id":"1","description":"do something","verification":"pytest passes"}]}',
+    )
+    assert result.passed is True
+
+
+def test_explore_validator_rejects_ok() -> None:
+    result = validate_phase("explore", "ok")
+    assert result.passed is False
+
+
+def test_explore_validator_accepts_context_summary() -> None:
+    result = validate_phase("explore", "Context summary: project has files and symbols. unknowns: none.")
+    assert result.passed is True
+
+
+def test_proposal_validator_rejects_missing_scope() -> None:
+    """proposal without scope must fail (task 3.3)."""
+    result = validate_phase("proposal", "intent: add feature. risks: high")
+    assert result.passed is False
+
+
+def test_proposal_validator_accepts_full_fields() -> None:
+    result = validate_phase("proposal", "intent: add feature. scope: x.py. risks: high")
+    assert result.passed is True
+
+
+def test_apply_validator_rejects_empty_output() -> None:
+    result = validate_phase("apply", "")
+    assert result.passed is False
+
+
+def test_apply_validator_accepts_planned_only_status() -> None:
+    result = validate_phase("apply", "planned_only: no executor wired")
+    assert result.passed is True
+
+
+def test_verify_validator_rejects_ok() -> None:
+    result = validate_phase("verify", "ok")
+    assert result.passed is False
+
+
+def test_verify_validator_accepts_required_fields() -> None:
+    result = validate_phase("verify", "command: pytest. outcome: passed")
+    assert result.passed is True
+
+
+def test_review_validator_accepts_required_fields() -> None:
+    result = validate_phase("review", "finding: none. severity: low")
+    assert result.passed is True
+
+
+def test_archive_validator_accepts_required_fields() -> None:
+    result = validate_phase("archive", "status: done. artifact: archive-report.json")
+    assert result.passed is True
+
+
 def test_sdd_harness_surfaces_junk_spec_output_as_warning(tmp_path, monkeypatch) -> None:
     """Junk spec output raises a phase_contract WARNING (not FAILED).
 

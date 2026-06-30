@@ -73,4 +73,14 @@ def _valid_tasks(text: str) -> PhaseValidationResult:
             return PhaseValidationResult(False, "phase output failed contract validation")
         if not (task.get("id") and task.get("description")):
             return PhaseValidationResult(False, "phase output failed contract validation")
+        # Each task must have a file/verification mapping so it is actionable.
+        # Accept any of: file_paths, files, verification, acceptance_criteria.
+        has_file_map = bool(
+            task.get("file_paths")
+            or task.get("files")
+            or task.get("verification")
+            or task.get("acceptance_criteria")
+        )
+        if not has_file_map:
+            return PhaseValidationResult(False, "phase output failed contract validation")
     return PhaseValidationResult(True)

@@ -141,6 +141,17 @@ class ContextOmission(BaseModel):
     score: float = Field(ge=0.0, description="Ranking or retrieval score of the omitted item.")
 
 
+class CompressionPackMetadata(BaseModel):
+    """Pack-level compression metadata. Only present when compression actually ran."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(description="True only when compression ran on at least one item.")
+    tokens_before: int = Field(ge=0, description="Sum of original token estimates before compression.")
+    tokens_after: int = Field(ge=0, description="Sum of token estimates after compression.")
+    items_compressed: int = Field(ge=0, description="Number of items that were compressed.")
+
+
 class ContextPackResult(BaseModel):
     """Result of token-aware context packing."""
 
@@ -151,6 +162,23 @@ class ContextPackResult(BaseModel):
     used_tokens: int = Field(ge=0, description="Tokens used by included items.")
     available_tokens: int = Field(ge=0, description="Budget available to the packer.")
     omissions: list[ContextOmission] = Field(description="Traceable omission records.")
+    compression: CompressionPackMetadata | None = Field(
+        default=None,
+        description=(
+            "Pack-level compression metadata. Emitted only when compression actually ran "
+            "on at least one item; absent (null) when no compression was applied."
+        ),
+    )
+
+    @property
+    def token_budget(self) -> int:
+        """Alias for available_tokens — explicit budget given to the packer."""
+        return self.available_tokens
+
+    @property
+    def tokens_used(self) -> int:
+        """Alias for used_tokens — tokens consumed by included items."""
+        return self.used_tokens
 
 
 class TokenBudget(BaseModel):
