@@ -220,6 +220,10 @@ FUNCTIONAL_BEHAVIOURS: tuple[str, ...] = (
     "update-memory-kg-consolidation",
     "actionable-summary",
     "resume-if-interrupted",
+    "wrong-edit-not-completed",
+    "secret-edit-rolled-back",
+    "provider-error-redacted",
+    "pyz-artifact-smoke",
 )
 
 #: doc-57 §D — governance gates.

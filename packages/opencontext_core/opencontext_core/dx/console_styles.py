@@ -125,7 +125,7 @@ class BrandConsole:
         every command surface (install, status, doctor, uninstall…) carries the
         same brand chrome as the interactive menus, not a bare title rule."""
         if self._console:
-            for line in _RICH_COMPACT_LOGO:
+            for line in _RICH_LOGO:
                 self._console.print(line)
             if title:
                 self._console.print(
@@ -136,7 +136,7 @@ class BrandConsole:
                     )
                 )
         else:
-            for line in _RICH_COMPACT_LOGO:
+            for line in _RICH_LOGO:
                 print(line)
             if title:
                 print(f"\n{'=' * 60}")

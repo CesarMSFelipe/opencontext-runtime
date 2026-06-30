@@ -39,13 +39,16 @@ _DefinitionList = list[WorkflowDefinition]
 _IdList = list[str]
 
 
-def load_definition_from_yaml(path: str | Path) -> WorkflowDefinition:
+def load_definition_from_yaml(path: Any) -> WorkflowDefinition:
     """Parse and validate a workflow definition from a YAML template (spec YAML1).
 
     Nodes are authored as a list (ordered, human-readable); duplicate node ids are
     rejected here before the list is collapsed into the keyed ``nodes`` map.
     """
-    raw_text = Path(path).read_text(encoding="utf-8")
+    if hasattr(path, "read_text"):
+        raw_text = path.read_text(encoding="utf-8")
+    else:
+        raw_text = Path(path).read_text(encoding="utf-8")
     data = yaml.safe_load(raw_text)
     if not isinstance(data, dict):
         raise WorkflowValidationError(f"workflow template {path} is not a mapping")
@@ -152,7 +155,7 @@ class WorkflowRegistry:
         from opencontext_core.workflows.builtins.legacy import build_sdd_quality
 
         sdd_path = builtins_dir() / "sdd.yaml"
-        if sdd_path.exists():
+        if sdd_path.is_file():
             sdd = load_definition_from_yaml(sdd_path)
             self.register(sdd)
             self.register(build_sdd_quality(sdd))
