@@ -162,6 +162,20 @@ def _guardrail_gate(phase: str, content: str, *, strict: bool = False) -> PhaseG
     return PhaseGate(id="guardrails", phase=phase, status=GateStatus.WARNING, message=msg)
 
 
+def _phase_contract_gate(phase: str, content: str, *, enabled: bool) -> PhaseGate:
+    if not enabled:
+        return PhaseGate(id="phase_contract", phase=phase, status=GateStatus.SKIPPED)
+    from opencontext_core.sdd.validators import validate_phase
+
+    result = validate_phase(phase, content)
+    return PhaseGate(
+        id="phase_contract",
+        phase=phase,
+        status=GateStatus.PASSED if result.passed else GateStatus.FAILED,
+        message=result.reason,
+    )
+
+
 def _is_scaffold_content(content: str) -> bool:
     """Detect a static SCAFFOLD template in a phase's produced content.
 
@@ -1800,6 +1814,7 @@ _None._
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(spec_path),
             _guardrail_gate("spec", spec_content, strict=bool(getattr(state, "sdd_strict", False))),
+            _phase_contract_gate("spec", spec_content, enabled=outcome.is_real),
         ]
         ledger = self._token_ledger(
             "spec", estimate_tokens(outcome.output or "") if outcome.is_real else 0
@@ -1930,6 +1945,7 @@ This section describes the high-level architecture for implementing: {task}.
             _guardrail_gate(
                 "design", design_content, strict=bool(getattr(state, "sdd_strict", False))
             ),
+            _phase_contract_gate("design", design_content, enabled=outcome.is_real),
         ]
         ledger = self._token_ledger(
             "design", estimate_tokens(outcome.output or "") if outcome.is_real else 0
@@ -2081,6 +2097,9 @@ class TasksPhase(HarnessPhase):
                 "tasks",
                 tasks_path.read_text(encoding="utf-8"),
                 strict=bool(getattr(state, "sdd_strict", False)),
+            ),
+            _phase_contract_gate(
+                "tasks", tasks_path.read_text(encoding="utf-8"), enabled=outcome.is_real
             ),
         ]
         ledger = self._token_ledger(

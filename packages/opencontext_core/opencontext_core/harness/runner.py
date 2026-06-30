@@ -895,8 +895,12 @@ class HarnessRunner:
             scaffold_blocked = getattr(state, "sdd_strict", False) and any(
                 g.id == "guardrails" and g.status == GateStatus.FAILED for g in result.gates
             )
+            contract_blocked = any(
+                g.id == "phase_contract" and g.status == GateStatus.FAILED
+                for g in result.gates
+            )
             if result.status == GateStatus.FAILED:
-                if budget_mode is BudgetMode.STRICT or scaffold_blocked:
+                if budget_mode is BudgetMode.STRICT or scaffold_blocked or contract_blocked:
                     final_status = GateStatus.FAILED
                     hard_failed = True
                     break
@@ -1363,17 +1367,22 @@ class HarnessRunner:
             elif tdd_mode == "off":
                 # tdd off: do not gate apply on tests at all.
                 pass
-            else:  # "ask": surface as a non-blocking signal
+            else:  # "ask": non-interactive harness cannot ask, so fail closed.
                 if gate.status == GateStatus.FAILED:
                     gates.append(
                         PhaseGate(
                             id=gate.id,
                             phase="apply",
-                            status=GateStatus.WARNING,
-                            message=gate.message,
+                            status=GateStatus.FAILED,
+                            message=(
+                                "TDD gate requires a failing test. Continue, add test, "
+                                "or switch mode? Non-interactive run blocked. "
+                                + gate.message
+                            ),
                             metadata=gate.metadata,
                         )
                     )
+                    blocked = True
                 else:
                     gates.append(gate)
 
