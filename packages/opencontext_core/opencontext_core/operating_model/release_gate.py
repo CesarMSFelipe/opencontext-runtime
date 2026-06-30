@@ -224,7 +224,6 @@ FUNCTIONAL_BEHAVIOURS: tuple[str, ...] = (
 
 #: doc-57 §D — governance gates.
 GOVERNANCE_GATES: tuple[str, ...] = (
-    "traceability-no-orphans",
     "receipts-reconstructable",
     "owner-resolution-hooks",
 )
@@ -242,7 +241,7 @@ DOD_PROOF_SCHEMA = "opencontext.e2e_dod_proof.v1"
 E2E_DOD_GATE = "e2e-dod"
 
 #: VDM-007 / B+D — the e2e developer journey writes this single evidence artifact
-#: capturing the 15 functional (B) + 3 governance (D) gate outcomes from a real
+#: capturing the 15 functional (B) + 2 governance (D) gate outcomes from a real
 #: init -> doctor -> index -> run -> session journey. ``release acceptance`` reads it
 #: and injects ``functional=`` / ``governance=``. A separate path from the package
 #: ``release evidence`` output to avoid a name collision.

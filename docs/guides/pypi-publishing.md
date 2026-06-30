@@ -86,7 +86,7 @@ echo "All packages published!"
 |---------|--------|-------|
 | 1.5.0 | Previous | Code-economy + quality (test-gaps, quality trend, project profile) |
 | 1.6.0 | Current | vNext agentic runtime (KG/memory/context v2, providers, plugins, marketplace, studio) |
-| 2.0.0 | Planned | Removal of deprecated `agents`/`adapters` layers (see `REMOVE-IN-2.0.md`) |
+| 2.0.0 | Planned | Removal of deprecated `agents`/`adapters` layers (see the CHANGELOG "Deprecated" notes) |
 
 ## Dependencies Per Package
 

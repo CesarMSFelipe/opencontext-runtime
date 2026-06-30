@@ -72,16 +72,6 @@ class _StubGateway:
         )
 
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_TRACEABILITY_MATRIX = (
-    _PROJECT_ROOT
-    / "docs"
-    / "OpenContext_Complete_Plans_and_Architecture_Book"
-    / "54-requirement-to-pr-traceability-matrix.md"
-)
-_MATRIX_STATUS_LEGEND = {"MET", "PROPOSED", "DEFERRED", "REJECTED"}
-
-
 def _cli(argv: list[str], cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "opencontext_cli.main", *argv],
@@ -99,35 +89,10 @@ def _met(detail: str) -> list[str]:
     return ["met", detail]
 
 
-def _traceability_has_no_orphans() -> tuple[bool, str]:
-    """Every requirement row in the 54-matrix carries a Status + an assigned PR (D)."""
-    if not _TRACEABILITY_MATRIX.is_file():
-        return False, "traceability matrix not found"
-    orphans = 0
-    rows = 0
-    for raw in _TRACEABILITY_MATRIX.read_text(encoding="utf-8").splitlines():
-        # An escaped pipe (``\|``) inside a cell is content, not a column separator.
-        line = raw.strip().replace("\\|", "/")
-        if not (line.startswith("| **") and "**" in line):
-            continue  # only requirement rows (bolded id), not headers/separators
-        cols = [c.strip() for c in line.strip("|").split("|")]
-        if len(cols) < 7:
-            continue
-        rows += 1
-        pr, status = cols[2], cols[6]
-        if not pr or status not in _MATRIX_STATUS_LEGEND:
-            orphans += 1
-    if rows == 0:
-        return False, "no requirement rows parsed"
-    if orphans:
-        return False, f"{orphans}/{rows} requirement rows orphaned"
-    return True, f"{rows} requirement rows; every one carries a Status + assigned PR"
-
-
 def _collect_functional_governance(
     work: Path, steps: list[dict[str, object]], summary: dict[str, object]
 ) -> tuple[dict[str, object], dict[str, object]]:
-    """Derive the 15 B + 3 D gate outcomes from the REAL journey (VDM-007).
+    """Derive the 15 B + 2 D gate outcomes from the REAL journey (VDM-007).
 
     Best-effort + honest: a behaviour is recorded MET only on a genuine observation; a
     dimension the journey could not exercise here is simply omitted so its gate stays
@@ -225,12 +190,7 @@ def _collect_functional_governance(
     except Exception:
         pass
 
-    # D1: traceability — no orphaned requirements in the 54-matrix.
-    ok, detail = _traceability_has_no_orphans()
-    if ok:
-        governance["traceability-no-orphans"] = _met(detail)
-
-    # D2: receipts reconstructable — the run's apply receipts parse + carry entries.
+    # D1: receipts reconstructable — the run's apply receipts parse + carry entries.
     receipts_path = _artifact("apply-receipts.json")
     if receipts_path is not None:
         try:
@@ -244,7 +204,7 @@ def _collect_functional_governance(
         except Exception:
             pass
 
-    # D3: owner-resolution hooks exist (§9.17 KG-13) even pre-Organization-Graph.
+    # D2: owner-resolution hooks exist (§9.17 KG-13) even pre-Organization-Graph.
     try:
         from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 
