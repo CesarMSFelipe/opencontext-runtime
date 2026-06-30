@@ -72,7 +72,7 @@ _FLOW_CAPS: dict[str, dict[str, object]] = {
         "recommended_flow": "native_oc_new",
     },
     "opencode": {
-        "supports_slash_commands": True,
+        "supports_slash_commands": False,
         "supports_subagents": True,
         "supports_task_tool": False,
         "supports_sampling": True,

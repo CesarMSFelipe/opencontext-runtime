@@ -4,7 +4,7 @@
 - writes the MCP server entry in the agent's native shape,
 - injects a managed instructions block into the agent's rules file
   (AGENTS.md / CLAUDE.md / GEMINI.md / QWEN.md, project- or home-scoped),
-- writes any agent-specific extras (claude permissions, opencode profile),
+- writes any agent-specific extras (claude permissions, personas, ignores),
 
 all through the safe-merge primitives so user-owned content is never clobbered.
 """
@@ -439,8 +439,6 @@ class Configurator:
         entries: list[PlanEntry] = []
         if adapter.agent_id == "claude-code":
             entries.append(self._plan_claude_permissions(adapter))
-        if adapter.agent_id == "opencode":
-            entries.append(self._plan_opencode_profile(adapter))
         if constants.global_agents_subdir(adapter.agent_id):
             entries.extend(self._plan_global_personas(adapter))
         if constants.ignore_filename(adapter.agent_id):
@@ -548,18 +546,6 @@ class Configurator:
             content = _render_persona(persona)
             entries.append((path, _content_if_changed(path, content)))
         return entries
-
-    def _plan_opencode_profile(self, adapter: Adapter) -> PlanEntry:
-        profile = {
-            "name": "sdd-orchestrator",
-            "description": "OpenContext SDD orchestrator with knowledge graph",
-            "system_prompt": _orchestrator_prompt(),
-            "tools": ["mcp__opencontext__*"],
-        }
-        path = adapter.config_dir / "agents" / "sdd-orchestrator.json"
-        content = json.dumps(profile, indent=2) + "\n"
-        return path, _content_if_changed(path, content)
-
 
 def _mcp_config_is_empty(path: Path, shape: McpShape) -> bool:
     """True when an MCP config holds no remaining configuration of its declared shape.
@@ -737,44 +723,3 @@ def _default_instructions(agent_id: str) -> str:
         + _SECURITY_SECTION
     )
 
-
-def _orchestrator_prompt() -> str:
-    return """You are the OpenContext SDD Orchestrator.
-
-Your role is to coordinate Spec-Driven Development workflows using
-the OpenContext knowledge graph and persistent memory.
-
-## Principles
-
-1. **Thin orchestrator thread**: Delegate all real work to sub-agents
-2. **Context-aware**: Use the knowledge graph to understand code before planning
-3. **Security-first**: All actions go through approval gates
-4. **Teaching-oriented**: Explain WHY, not just WHAT
-
-## SDD Workflow
-
-```
-explore -> propose -> spec -> design -> tasks -> apply -> verify -> archive
-```
-
-For each phase:
-1. Load relevant context from the knowledge graph
-2. Delegate to appropriate sub-agent
-3. Verify results before proceeding
-4. Save decisions to persistent memory
-
-## Delegation Rules
-
-- Reading 4+ files -> Delegate exploration
-- Touching 2+ files -> Use one writer + review
-- Commits/PRs -> Fresh review required
-- Security changes -> Additional approval gate
-
-## Memory
-
-Use persistent memory:
-- Save architectural decisions
-- Record bug fixes with root cause
-- Document patterns and conventions
-- Capture gotchas and edge cases
-"""

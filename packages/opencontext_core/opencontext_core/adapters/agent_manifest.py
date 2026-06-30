@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -112,10 +111,7 @@ def _files_for_target(
         AgentTarget.CONTINUE,
         AgentTarget.OPENHANDS,
     }:
-        files = [(root / "AGENTS.md", _agents_md(target))]
-        if target in {AgentTarget.OPENCODE, AgentTarget.KILO_CODE}:
-            files.append((root / "opencode.json", _opencode_json()))
-        return [_write(path, content, target, force) for path, content in files]
+        return [_write(root / "AGENTS.md", _agents_md(target), target, force)]
     if target is AgentTarget.CLAUDE_CODE:
         return [_write(root / "CLAUDE.md", _claude_md(), target, force)]
     if target is AgentTarget.CURSOR:
@@ -281,19 +277,3 @@ def _kiro_md() -> str:
         + "\n\nKiro: keep specs in `.kiro/specs/<change>/` when using native spec workflows.\n"
     )
 
-
-def _opencode_json() -> str:
-    return (
-        json.dumps(
-            {
-                "instructions": [
-                    "AGENTS.md",
-                    ".opencontext/sdd/context.json",
-                    ".opencontext/project.md",
-                    ".opencontext/architecture.md",
-                ]
-            },
-            indent=2,
-        )
-        + "\n"
-    )
