@@ -287,6 +287,46 @@ _JUDGE_RELATIONS: tuple[str, ...] = ("reinforce", "contradict")
 # Default layer for a save when the caller omits ``layer`` (RD3).
 _DEFAULT_MEMORY_LAYER_VALUE = "episodic"
 
+# Spec scenario 7.2 — the wording agents parse off the unavailable response.
+# Centralized here so every memory handler emits the same exact string and the
+# docs/tests can pin it verbatim.
+_MEMORY_UNAVAILABLE_REASON = "memory backend unavailable; start the runtime-backed MCP server"
+
+
+def _memory_unavailable_envelope() -> dict[str, Any]:
+    """The structured ``available=false`` response every memory handler
+    returns when the runtime is not attached (or the memory store is None).
+
+    Centralized so the shape stays stable: ``available=False``, the actionable
+    ``reason`` string, and a backwards-compatible ``error`` key with the same
+    text so older callers (and the test in
+    ``test_mcp_safe_defaults.py``) that grep ``error`` keep working.
+    """
+
+    return {
+        "error": _MEMORY_UNAVAILABLE_REASON,
+        "available": False,
+        "reason": _MEMORY_UNAVAILABLE_REASON,
+    }
+
+
+def _is_composite_store(store: Any) -> bool:
+    """True when ``store`` is a ``CompositeMemoryStore`` (has an engram leg).
+
+    Used by the status probe to surface composite routing to agents without
+    coupling the test surface to the class identity directly.
+    """
+
+    return hasattr(store, "_engram") and hasattr(store, "_local")
+
+
+def _local_layer_values() -> set[str]:
+    """Layer values routed to the local store (single source of truth)."""
+
+    from opencontext_core.memory.composite import _LOCAL_LAYERS
+
+    return {layer.value for layer in _LOCAL_LAYERS}
+
 
 def _make_memory_record(params: dict[str, Any]) -> Any:
     """Build a ``MemoryRecord`` from ``opencontext_memory_save`` params (A-T2).
@@ -1293,6 +1333,41 @@ class MCPServer:
             return None
         return getattr(runtime, "_v2_memory_store", None)
 
+    def _memory_status(self) -> dict[str, Any]:
+        """Snapshot of the live memory backend for the ``opencontext_status`` probe.
+
+        Mirrors PR-AHE-007 task 7.3 — agents can detect availability from the
+        status tool without first issuing a save and getting an error. The shape
+        is small and additive so existing callers keep working.
+
+        Returns a dict with at minimum ``available`` (bool), ``backend`` (one
+        of ``local``/``composite``), and ``reason`` (actionable text when
+        ``available`` is False; empty when it is True).
+        """
+
+        store = self._memory_store()
+        if store is None:
+            return {
+                "available": False,
+                "backend": "none",
+                "reason": _MEMORY_UNAVAILABLE_REASON,
+            }
+        if _is_composite_store(store):
+            return {
+                "available": True,
+                "backend": "composite",
+                "engram_layers": sorted(_engram_layer_values()),
+                "local_layers": sorted(_local_layer_values()),
+                "live_engram": _store_has_live_engram(store),
+                "reason": "",
+            }
+        # Plain LocalMemoryStore (no engram leg at all).
+        return {
+            "available": True,
+            "backend": "local",
+            "reason": "",
+        }
+
     @staticmethod
     def _serialize_record(record: Any) -> dict[str, Any]:
         """Project a ``MemoryRecord`` to a JSON-safe result dict."""
@@ -1319,7 +1394,7 @@ class MCPServer:
 
         store = self._memory_store()
         if store is None:
-            return {"error": "memory store unavailable", "available": False}
+            return _memory_unavailable_envelope()
 
         try:
             record = _make_memory_record(params)
@@ -1348,7 +1423,7 @@ class MCPServer:
 
         store = self._memory_store()
         if store is None:
-            return {"error": "memory store unavailable", "available": False}
+            return _memory_unavailable_envelope()
 
         from opencontext_core.models.agent_memory import MemoryLayer
 
@@ -1371,7 +1446,7 @@ class MCPServer:
 
         store = self._memory_store()
         if store is None:
-            return {"error": "memory store unavailable", "available": False}
+            return _memory_unavailable_envelope()
 
         query = str(params.get("query", ""))
         records = store.search(query, scope=None, limit=10)
@@ -1387,7 +1462,7 @@ class MCPServer:
 
         store = self._memory_store()
         if store is None:
-            return {"error": "memory store unavailable", "available": False}
+            return _memory_unavailable_envelope()
 
         memory_id = str(params.get("memory_id", ""))
         relation = str(params.get("relation", ""))
@@ -1704,7 +1779,13 @@ class MCPServer:
         return {"files": files}
 
     def _handle_status(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle status tool."""
+        """Handle status tool.
+
+        Returns the live KG snapshot plus a ``memory`` section so an agent can
+        detect memory availability without first issuing a save (PR-AHE-007
+        task 7.3). The memory section is keyed off the same ``_v2_memory_store``
+        the memory handlers reach, so it always reflects the live wiring.
+        """
 
         stats = self.db.get_stats()
         return {
@@ -1712,6 +1793,7 @@ class MCPServer:
             "nodes": stats.get("nodes", 0),
             "edges": stats.get("edges", 0),
             "files": stats.get("files", 0),
+            "memory": self._memory_status(),
         }
 
     def _handle_quality(self, params: dict[str, Any]) -> dict[str, Any]:
