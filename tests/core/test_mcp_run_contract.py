@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
@@ -64,3 +65,77 @@ def test_run_requires_task(server: MCPServer) -> None:
     assert "error" in out
     assert out["code"] == "output_contract_failed"
     assert out["next_action"]
+
+
+def test_oc_flow_run_without_executor_cannot_complete(server: MCPServer, tmp_path: Path) -> None:
+    out = server._handle_run(
+        {"task": "Fix failing test", "workflow": "oc-flow", "root": str(tmp_path)}
+    )
+    assert _CONTRACT_KEYS <= set(out)
+    assert out["workflow"] == "oc-flow"
+    assert out["status"] == "needs_executor"
+    assert out["status"] != "completed"
+    assert out["oc_flow"]["mutation_required"] is True
+
+
+def test_mcp_run_dispatcher_imports_without_server_side_effects() -> None:
+    from opencontext_core.mcp.run_dispatcher import dispatch_mcp_run
+
+    assert dispatch_mcp_run is not None
+
+
+def test_auto_run_uses_oc_flow_selector_result(server: MCPServer, tmp_path: Path) -> None:
+    out = server._handle_run(
+        {"task": "Fix lint error in one file", "workflow": "auto", "root": str(tmp_path)}
+    )
+    assert out["selected_workflow"] == "oc-flow"
+    assert out["status"] == "needs_executor"
+
+
+def test_sdd_run_includes_phase_metadata(server: MCPServer, tmp_path: Path, monkeypatch) -> None:
+    from opencontext_core.models.trace import RunEvent
+
+    class _Result:
+        run_id = "sdd-id"
+        status = "passed"
+        artifacts: ClassVar[list] = []
+        gates: ClassVar[list] = []
+        warnings: ClassVar[list] = []
+        events: ClassVar[list] = [
+            RunEvent(index=0, phase="explore", action="run_phase", status="passed"),
+            RunEvent(index=1, phase="verify", action="run_phase", status="warning"),
+        ]
+
+    captured: dict[str, str] = {}
+
+    def _fake_run(self, workflow, task, *a, **k):
+        captured["workflow"] = workflow
+        return _Result()
+
+    from opencontext_core.harness import runner as runner_mod
+
+    monkeypatch.setattr(runner_mod.HarnessRunner, "run", _fake_run)
+
+    out = server._handle_run({"task": "do formal work", "workflow": "standard", "root": str(tmp_path)})
+
+    assert captured["workflow"] == "standard"
+    assert out["selected_workflow"] == "standard"
+    assert out["phases"] == ["explore", "verify"]
+    assert out["phase_status"]["verify"] == "warning"
+    assert out["verification_outcome"] == "warning"
+
+
+def test_mcp_sdd_junk_phase_output_blocks(server: MCPServer, tmp_path: Path, monkeypatch) -> None:
+    class _JunkDelegate:
+        def delegate(self, phase: str, context: dict[str, object]) -> object:
+            return SimpleNamespace(status="success", output="ok")
+
+    from opencontext_core.harness import runner as runner_mod
+
+    monkeypatch.setattr(runner_mod.HarnessRunner, "_build_executor", lambda self: _JunkDelegate())
+
+    out = server._handle_run({"task": "do formal work", "workflow": "standard", "root": str(tmp_path)})
+
+    assert out["status"] == "blocked"
+    assert out["phase_status"]["spec"] == "failed"
+    assert any(g["status"] == "failed" for g in out["gates"].values())

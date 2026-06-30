@@ -855,6 +855,10 @@ class RuntimeApi:
         text = str(value).lower() if value is not None else "completed"
         if text in ("failed", "blocked", "error"):
             return "failed"
+        if text == "warning":
+            return "completed_with_warnings"
+        if text == "skipped":
+            return "scaffolded"
         return "completed"
 
     def _config_snapshot(self) -> dict[str, Any]:

@@ -300,6 +300,21 @@ def test_report_to_report_dict_counts_match_findings_and_verdicts() -> None:
 def test_report_to_report_dict_success_true_when_status_ok() -> None:
     out = _report(GateStatus.PASSED, (), ()).to_report_dict()
     assert out["summary"]["success"] is True
+    assert out["status"] == "not_applicable"
+
+
+def test_report_to_report_dict_failed_checks_make_success_false() -> None:
+    verdicts = (RuleVerdict(rule="r", status=CheckStatus.FAILED, severity=CheckSeverity.ERROR),)
+    out = _report(GateStatus.SKIPPED, (), verdicts).to_report_dict()
+    assert out["summary"]["failed"] == 1
+    assert out["summary"]["success"] is False
+
+
+def test_report_to_report_dict_skipped_checks_not_failed() -> None:
+    verdicts = (RuleVerdict(rule="r", status=CheckStatus.SKIPPED, severity=CheckSeverity.WARNING),)
+    out = _report(GateStatus.SKIPPED, (), verdicts).to_report_dict()
+    assert out["status"] == "not_applicable"
+    assert out["summary"]["failed"] == 0
 
 
 def test_report_to_report_dict_delta_reflects_baseline() -> None:

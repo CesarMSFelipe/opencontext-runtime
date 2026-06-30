@@ -181,7 +181,7 @@ class QualityReport:
         """
         total_checks = len(self.verdicts)
         passed = sum(1 for v in self.verdicts if v.status == CheckStatus.PASSED)
-        failed = sum(1 for v in self.verdicts if v.status != CheckStatus.PASSED)
+        failed = sum(1 for v in self.verdicts if v.status in (CheckStatus.FAILED, CheckStatus.ERROR))
 
         warnings = 0
         errors = 0
@@ -204,15 +204,19 @@ class QualityReport:
             )
 
         delta = self.health.delta(self.baseline_health) if self.baseline_health is not None else 0
+        applicable = passed + failed
+        status = "not_applicable" if applicable == 0 else self.status.value
 
         return {
+            "status": status,
             "summary": {
                 "total_checks": total_checks,
                 "passed": passed,
                 "failed": failed,
                 "warnings": warnings,
                 "errors": errors,
-                "success": self.status.is_ok,
+                "success": failed == 0 and self.status.is_ok,
+                "status": status,
             },
             "results": results,
             "health": {
