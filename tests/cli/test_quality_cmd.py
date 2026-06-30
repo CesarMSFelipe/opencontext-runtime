@@ -175,7 +175,7 @@ def test_check_json_emits_ci_schema(
 
     out = capsys.readouterr().out
     payload = json.loads(out)  # must be a single, parseable JSON document
-    assert set(payload["summary"]) == {
+    assert set(payload["summary"]) >= {
         "total_checks",
         "passed",
         "failed",

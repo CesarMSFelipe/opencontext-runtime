@@ -1,8 +1,8 @@
 # OpenCode & Kilo Code
 
 ## Purpose
-OpenCode and Kilo Code share a compatible config format. OpenContext
-generates MCP config, SDD orchestrator profile, and AGENTS.md instructions.
+OpenContext generates MCP config, persona files, and AGENTS.md instructions for
+OpenCode and Kilo Code.
 
 ## Setup
 
@@ -14,7 +14,7 @@ opencontext setup kilo-code
 
 For OpenCode (`--scope global`) this creates:
 - `~/.config/opencode/mcp.json` — MCP server config
-- `~/.config/opencode/agents/sdd-orchestrator.json` — SDD orchestrator profile (plus oc-*.md agent profiles)
+- `~/.config/opencode/agents/oc-*.md` — OpenContext persona profiles
 - `AGENTS.md` (project root) — Instructions
 
 For Kilo Code (`--scope global`):

@@ -29,6 +29,7 @@ def test_opencode_recommended_flow():
     assert cap is not None
     assert cap.recommended_flow == "mcp_run"
     assert cap.supports_sampling is True
+    assert cap.supports_slash_commands is False
 
 
 def test_codex_recommended_flow():

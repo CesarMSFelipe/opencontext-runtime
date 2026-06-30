@@ -11,7 +11,7 @@ from opencontext_cli.commands.uninstall_cmd import _strip_project_managed_blocks
 def test_gitignore_block_added_local_preserving_user_lines(tmp_path: Path) -> None:
     (tmp_path / ".gitignore").write_text("*.log\nmy_secrets/\n", encoding="utf-8")
 
-    _maybe_write_gitignore(str(tmp_path), "local")
+    assert _maybe_write_gitignore(str(tmp_path), "local") == [str(tmp_path / ".gitignore")]
 
     body = (tmp_path / ".gitignore").read_text(encoding="utf-8")
     assert "*.log" in body and "my_secrets/" in body  # user lines preserved
@@ -20,7 +20,7 @@ def test_gitignore_block_added_local_preserving_user_lines(tmp_path: Path) -> No
 
 
 def test_gitignore_skipped_for_global_scope(tmp_path: Path) -> None:
-    _maybe_write_gitignore(str(tmp_path), "global")
+    assert _maybe_write_gitignore(str(tmp_path), "global") == []
     assert not (tmp_path / ".gitignore").exists()
 
 

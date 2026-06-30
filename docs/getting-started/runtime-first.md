@@ -93,7 +93,7 @@ same:
 | --- | --- | --- |
 | Codex | `AGENTS.md` | Use OpenContext context as task evidence; preserve trace ids. |
 | Claude Code | `CLAUDE.md` | Keep instructions concise and avoid full-repo dumps. |
-| OpenCode | `AGENTS.md`, `opencode.json` | `opencode.json` can point to OpenContext instructions. |
+| OpenCode | `AGENTS.md` | Uses project instructions plus configured MCP/persona files. |
 | Cursor | `.cursor/rules/opencontext.mdc` | Use an always-applied rule. |
 | Windsurf | `.windsurf/rules/opencontext.md` | Use workspace-scoped rules. |
 | Custom agent | Host-defined | Call `setup_project()` once and `prepare_context()` per task. |

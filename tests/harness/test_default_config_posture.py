@@ -41,21 +41,21 @@ def test_default_tdd_pre_gate_actually_runs_on_apply(tmp_path: Path) -> None:
     assert tdd, "failing_test_exists must run as an apply pre-gate in the default config"
 
 
-def test_default_tdd_is_advisory_not_blocking(tmp_path: Path) -> None:
-    """Default ``tdd_mode='ask'``: missing test warns but does not block the write."""
+def test_default_tdd_ask_blocks_noninteractive_apply(tmp_path: Path) -> None:
+    """Default ``tdd_mode='ask'`` fails closed in non-interactive harness runs."""
     result, target = _apply_run(tmp_path)
     tdd = [g for g in result.gates if g.id == "failing_test_exists"]
-    assert tdd[0].status == GateStatus.WARNING  # advisory, not FAILED
-    assert target.read_text(encoding="utf-8") == "x = 2\n"  # write proceeded
+    assert tdd[0].status == GateStatus.FAILED
+    assert "Non-interactive run blocked" in tdd[0].message
+    assert target.read_text(encoding="utf-8") == "x = 1\n"
 
 
 def test_default_approval_is_not_required(tmp_path: Path) -> None:
-    """Default ``approval_required_for_writes=False``: gate passes, write proceeds.
+    """Default ``approval_required_for_writes=False``: approval gate passes.
 
-    Documents the advisory-by-default stance: a caller wanting hard enforcement
-    must opt in via config; the default never silently blocks.
+    TDD ask may still block non-interactive apply; this assertion only pins
+    approval posture.
     """
-    result, target = _apply_run(tmp_path)
+    result, _target = _apply_run(tmp_path)
     approval = [g for g in result.gates if g.id == "approval_required_for_writes"]
     assert approval and approval[0].status == GateStatus.PASSED
-    assert target.read_text(encoding="utf-8") == "x = 2\n"

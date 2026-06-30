@@ -78,12 +78,13 @@ def test_explore_propagates_trace_id_so_propose_gate_passes(tmp_path: Path) -> N
     assert all(g.status == GateStatus.PASSED for g in trace_gates)
 
 
-def test_run_records_acon_feedback_outcome_with_omissions(tmp_path: Path) -> None:
+def test_run_records_acon_feedback_outcome_with_omissions(tmp_path: Path, monkeypatch) -> None:
     # ACON-lite needs the outcome and the retrieval omissions co-recorded on one
     # operation. A harness run must record a 'context_pack' metric with success set
     # (not None) so the token optimizer can later widen the budget.
     from opencontext_core.learning.feedback_collector import FeedbackCollector
 
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
     _git_init(tmp_path)
     (tmp_path / "calc.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
     (tmp_path / "opencontext.yaml").write_text(

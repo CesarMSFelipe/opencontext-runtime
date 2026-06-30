@@ -129,6 +129,7 @@ def test_opencode_local_scope_reports_home_writes(home: Path, tmp_path: Path) ->
     assert any(".config/opencode/mcp.json" in p for p in result["global_files_written"])
     assert any(".config/opencode/agents" in p for p in result["global_files_written"])
     assert result["global_write_reason"].startswith("Host-constrained local setup")
+    assert not (home / ".config" / "opencode" / "agents" / "sdd-orchestrator.json").exists()
 
 
 def test_dry_run_reports_exact_opencode_file_plan(home: Path, tmp_path: Path) -> None:
@@ -139,6 +140,7 @@ def test_dry_run_reports_exact_opencode_file_plan(home: Path, tmp_path: Path) ->
 
     assert str(project / "AGENTS.md") in planned_paths
     assert any(path.endswith(".config/opencode/mcp.json") for path in planned_paths)
+    assert not any(path.endswith("sdd-orchestrator.json") for path in planned_paths)
     assert result["local_files_written"]
     assert result["global_files_written"]
     assert result["global_write_reason"].startswith("Host-constrained local setup")

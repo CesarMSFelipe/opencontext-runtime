@@ -81,7 +81,8 @@ class TestAgentInstaller:
         # Check files were created
         config_dir = tmp_path / ".config" / "opencode"
         assert (config_dir / "mcp.json").exists()
-        assert (config_dir / "agents" / "sdd-orchestrator.json").exists()
+        assert (config_dir / "agents" / "oc-orchestrator.md").exists()
+        assert not (config_dir / "agents" / "sdd-orchestrator.json").exists()
 
     def test_all_agents_supported(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """All 14 agents now have config generators."""

@@ -66,7 +66,7 @@ OpenContext is the layer **between your coding agent and your codebase** — it 
 | **Your model, per persona** | Pick the model for each SDD phase in `opencontext.yaml`; it is sent to your agent as an MCP sampling hint. |
 | **Persistent memory** | Local store by default (seven layers); co-resident Engram coexistence is opt-in. Progressive, token-aware recall. |
 | **Security by default** | Redaction, secret scanning, fail-closed posture, offline-first. |
-| **Live MCP tool registry** | Search, context, call graph, impact, symbol edits, memory, quality, session steps, workflow/profile explain, config doctor — inside Claude Code, OpenCode, Codex. |
+| **Live MCP tool registry** | 32 tools: search, context, call graph, impact, symbol edits, memory, quality, session steps, workflow/profile explain, config doctor — inside Claude Code, OpenCode, Codex. |
 
 <p align="center">
   <img src="docs/assets/all-systems.svg" alt="OpenContext, all systems at a glance: it sits between your coding agent and your codebase. The runtime holds six systems — context and code graph, controlled SDD loop, model per persona, persistent memory, security by default, and the live MCP tool registry. The codebase is indexed once and queried offline." width="100%">
