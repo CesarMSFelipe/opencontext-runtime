@@ -9,6 +9,8 @@ from dataclasses import field as _field
 from pathlib import Path
 from typing import Any
 
+from typing import Protocol, runtime_checkable
+
 from opencontext_core.registries.base import Registry, RegistryNotFound
 from opencontext_core.registries.loader import load_defs_from_dir
 from opencontext_core.skills.builtins import builtins_dir
@@ -434,3 +436,36 @@ class SkillRegistryV2(Registry[SkillDefinition]):
         for defn in load_defs_from_dir(builtins_dir(), SkillDefinition):
             registry.register(defn)
         return registry
+
+
+# ---------------------------------------------------------------------------
+# match_skills Protocol — re-export from opencontext_sdd when available
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class MatchSkillsFn(Protocol):
+    """Signature that both core and sdd match_skills implement."""
+
+    def __call__(
+        self,
+        entries: list,
+        keywords: list[str] | None = None,
+        *,
+        name: str | None = None,
+    ) -> list:
+        ...
+
+
+def match_skills_v2(entries: list, keywords: list[str] | None = None, *, name: str | None = None) -> list:
+    """Delegate to ``opencontext_sdd.skill_registry.match_skills`` when installed.
+
+    Falls back to the core's legacy match_skills when the v2 package is
+    not available.
+    """
+    try:
+        from opencontext_sdd.skill_registry import match_skills as _v2
+
+        return _v2(entries, keywords=keywords, name=name)
+    except ImportError:
+        return match_skills(entries, keywords=keywords, name=name)
