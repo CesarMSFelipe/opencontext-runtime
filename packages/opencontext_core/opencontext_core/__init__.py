@@ -12,7 +12,6 @@ from opencontext_core.config import (
     StorageConfig,
     load_config,
 )
-from opencontext_core.paths import StorageMode
 from opencontext_core.doctor.deep import (
     DeepDiagnostic,
     DeepReport,
@@ -23,6 +22,7 @@ from opencontext_core.evaluation.benchmark_suite import (
     ContextScorer,
     QualityDimension,
 )
+from opencontext_core.paths import StorageMode
 from opencontext_core.plugin_system import (
     InstallResult,
     Plugin,

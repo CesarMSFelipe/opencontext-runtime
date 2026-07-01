@@ -5,7 +5,7 @@ from __future__ import annotations
 
 class TestAllModules:
     def test_cache_leaf_all_strategies(self) -> None:
-        from opencontext_core.cache.v2 import SemanticCache, CacheStrategy
+        from opencontext_core.cache.v2 import CacheStrategy, SemanticCache
         for s in CacheStrategy:
             c = SemanticCache(s, max_entries=3)
             c.set("k", 42)
@@ -23,7 +23,10 @@ class TestAllModules:
 
     def test_decision_log_full(self) -> None:
         from opencontext_core.decision_log.recorder import (
-            DecisionRecorder, DecisionLogEntry, NoCoTExtractor, brain_no_write_port_guard
+            DecisionLogEntry,
+            DecisionRecorder,
+            NoCoTExtractor,
+            brain_no_write_port_guard,
         )
         assert brain_no_write_port_guard() is True
         ext = NoCoTExtractor()
@@ -35,7 +38,10 @@ class TestAllModules:
 
     def test_context_v2_full(self) -> None:
         from opencontext_core.context.v2.envelope import (
-            ContextEnvelope, ContextRanker, ContextRouter, ContextCompressor, usefulness_score
+            ContextCompressor,
+            ContextEnvelope,
+            ContextRanker,
+            usefulness_score,
         )
         e = ContextEnvelope(task="auth bug", items=[
             {"content": "login returns 500", "id": "i1"},
@@ -52,11 +58,14 @@ class TestAllModules:
 
     def test_runtime_intel_full(self) -> None:
         from opencontext_core.runtime.intel.calibration import (
-            CalibrationEntry, ConfidenceCalibrator,
+            CalibrationEntry,
+            ConfidenceCalibrator,
         )
         from opencontext_core.runtime.intel.simulator import (
-            WorkflowSimulator, CostEstimator,
-            RuntimeProfiler, HealthChecker,
+            CostEstimator,
+            HealthChecker,
+            RuntimeProfiler,
+            WorkflowSimulator,
         )
         ws = WorkflowSimulator()
         r = ws.simulate("sdd", "add auth")
@@ -76,7 +85,10 @@ class TestAllModules:
 
     def test_provider_gateway_full(self) -> None:
         from opencontext_core.providers.v2.gateway import (
-            ProviderGateway, ProviderCapability, FallbackRouter, StructuredOutputAdapter,
+            FallbackRouter,
+            ProviderCapability,
+            ProviderGateway,
+            StructuredOutputAdapter,
         )
         gw = ProviderGateway()
         gw.register("mock", ProviderCapability(name="mock", models=["mock-llm"]))
@@ -87,14 +99,18 @@ class TestAllModules:
         assert adapt.adapt({"a": 1, "b": 2}, {"a": None}) == {"a": 1}
 
     def test_studio_full(self) -> None:
-        from opencontext_core.studio.server import StudioServer, TIMELINE_NAMES, VIEW_NAMES
+        from opencontext_core.studio.server import StudioServer
         s = StudioServer()
         assert len(s.list_timelines()) == 11
         assert len(s.list_views()) == 6
 
     def test_plugins_full(self) -> None:
         from opencontext_core.plugins.sdk import (
-            PluginRegistry, PluginManifest, PluginState, PluginConformance, PluginError
+            PluginConformance,
+            PluginError,
+            PluginManifest,
+            PluginRegistry,
+            PluginState,
         )
         pr = PluginRegistry()
         m = PluginManifest(name="test", version="1.0", endpoints=1, permissions=["read"])
@@ -109,7 +125,11 @@ class TestAllModules:
         assert not conf.check(m)
 
     def test_marketplace_full(self) -> None:
-        from opencontext_core.marketplace.registry import MarketRegistry, MarketPackage, OFFICIAL_PACKS
+        from opencontext_core.marketplace.registry import (
+            OFFICIAL_PACKS,
+            MarketPackage,
+            MarketRegistry,
+        )
         mr = MarketRegistry()
         mr.register(MarketPackage(name="bench-tool", version="1.0"))
         mr.benchmark_on_install("bench-tool", 0.95)
@@ -118,7 +138,7 @@ class TestAllModules:
         assert "bench-tool" in OFFICIAL_PACKS
 
     def test_benchmarks_full(self) -> None:
-        from opencontext_core.benchmarks.runner import BenchRunner, SUITE_A_NAMES
+        from opencontext_core.benchmarks.runner import BenchRunner
         br = BenchRunner()
         results = br.run_all_suites(runs=10)
         assert len(results) == 7

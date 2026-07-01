@@ -42,9 +42,9 @@ def __getattr__(name: str):  # PEP 562 lazy re-export
 
 
 __all__ = [
+    "ContextCompressor",
     "ContextEnvelope",
     "ContextRanker",
     "ContextRouter",
-    "ContextCompressor",
     "usefulness_score",
 ]

@@ -9,7 +9,7 @@ from opencontext_core.cache.base import CacheEntry, CacheType
 
 def ast_key(file_path: str, symbol_path: str) -> str:
     """Deterministic key: ``sha256(file_path + symbol_path)``."""
-    payload = f"{file_path}\x00{symbol_path}".encode("utf-8")
+    payload = f"{file_path}\x00{symbol_path}".encode()
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -34,7 +34,7 @@ class AstCacheEntry(CacheEntry):
         file_hash: str,
         symbol_path: str,
         value_ref: str,
-    ) -> "AstCacheEntry":
+    ) -> AstCacheEntry:
         return cls(
             key=ast_key(file_path, symbol_path),
             value_ref=value_ref,

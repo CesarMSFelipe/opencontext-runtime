@@ -7,7 +7,6 @@ store and returns a ContextSubgraph with structured omissions.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from opencontext_core.graph.v2.planner import KgQueryPlan
 from opencontext_core.graph.v2.store import KgStore

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from opencontext_core.graph.v2.evidence import EvidenceRef, new_kg_id
 
 

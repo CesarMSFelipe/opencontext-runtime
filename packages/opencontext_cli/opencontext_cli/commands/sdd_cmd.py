@@ -18,7 +18,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 SUBCOMMANDS = [
     "init",
     "new",
@@ -119,7 +118,7 @@ def handle_sdd(args: Any) -> None:
 
 def _handle_status(change: str | None, cwd: Path, verbose: bool) -> None:
     """Resolve and print the SDD status."""
-    from opencontext_sdd.status import Resolve, Status
+    from opencontext_sdd.status import Resolve
 
     status = Resolve(change or "", cwd=str(cwd))
     _print_json(status.model_dump(mode="json", exclude_none=True), verbose)

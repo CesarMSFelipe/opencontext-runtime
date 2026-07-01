@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from opencontext_core.plugins.v2.manifest import PluginManifest
-
 
 CATEGORIES: tuple[str, ...] = (
     "manifest_schema",

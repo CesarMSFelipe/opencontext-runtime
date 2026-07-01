@@ -6,8 +6,8 @@ import pytest
 
 from opencontext_core.marketplace.v2.package import (
     MarketplacePackage,
-    install_package,
     TrustLevelRejected,
+    install_package,
 )
 from opencontext_core.marketplace.v2.trust import TrustLevel
 

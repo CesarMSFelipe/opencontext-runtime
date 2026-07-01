@@ -12,11 +12,8 @@ LB 2026 — memory v2 CLI surface.
 
 from __future__ import annotations
 
-import json
-import sys
 from pathlib import Path
 from typing import Any
-
 
 SUBCOMMANDS_V2: list[str] = [
     "save",

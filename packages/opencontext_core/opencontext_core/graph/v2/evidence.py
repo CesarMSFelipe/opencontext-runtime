@@ -7,8 +7,7 @@ pointing to the concrete source location that produced it.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,7 +22,7 @@ class EvidenceRef(BaseModel):
     source_column: int = Field(default=0, ge=0, description="Column, 0 when unknown.")
     source_commit: str | None = Field(default=None, description="Git commit SHA.")
     source_timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
+        default_factory=lambda: datetime.now(tz=UTC)
     )
     content_hash: str = Field(default="", description="SHA-256 of the source content.")
 

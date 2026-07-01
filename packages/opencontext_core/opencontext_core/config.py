@@ -1533,7 +1533,7 @@ class StorageConfig(BaseModel):
         cls,
         mode: StorageMode = StorageMode.user,
         custom_path: str | None = None,
-    ) -> "StorageConfig":
+    ) -> StorageConfig:
         """Build a StorageConfig, honouring OPENCONTEXT_STORAGE_MODE env var."""
         import os
 

@@ -50,6 +50,13 @@ from opencontext_core.operating_model.events import ProviderEventEmitter
 from opencontext_core.operating_model.performance import CostLedger, ModelRoleRouter
 from opencontext_core.operating_model.quality import PreLLMQualityGate
 from opencontext_core.operating_model.receipts import RunReceiptStore
+from opencontext_core.paths import (
+    StorageMode,
+    detect_legacy,
+    resolve_storage_path,
+    resolve_workspace_path,
+    write_manifest,
+)
 from opencontext_core.project.profiles import TechnologyProfile
 from opencontext_core.providers.gateway import ProviderGateway as UnifiedProviderGateway
 from opencontext_core.retrieval.contracts import (
@@ -143,13 +150,6 @@ from opencontext_core.runtime.workflow_runner import (
     NodeSpec,
     WorkflowRunner,
     WorkflowSpec,
-)
-from opencontext_core.paths import (
-    StorageMode,
-    detect_legacy,
-    resolve_storage_path,
-    resolve_workspace_path,
-    write_manifest,
 )
 from opencontext_core.safety.firewall import ContextFirewall
 from opencontext_core.safety.trace_sanitizer import TraceSanitizer
@@ -276,7 +276,7 @@ class OpenContextRuntime:
         self,
         config_path: str | Path | None = None,
         config: OpenContextConfig | None = None,
-        storage_path: "str | Path | object" = _STORAGE_PATH_UNSET,
+        storage_path: str | Path | object = _STORAGE_PATH_UNSET,
         memory_store: ProjectMemoryStore | None = None,
         llm_gateway: LLMGateway | None = None,
         technology_profiles: list[TechnologyProfile] | None = None,

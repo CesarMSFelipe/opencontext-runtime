@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 
 @dataclass
@@ -18,7 +19,7 @@ class BenchmarkResult:
 @dataclass
 class BenchmarkTask:
     name: str
-    run: Callable[[], "BenchmarkResult"]
+    run: Callable[[], BenchmarkResult]
 
 
 @dataclass

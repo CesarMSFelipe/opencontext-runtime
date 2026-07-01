@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from opencontext_core.plugins.v2.conformance import (
-    ConformanceSuite,
     ConformanceReport,
+    ConformanceSuite,
 )
 from opencontext_core.plugins.v2.manifest import PluginManifest
 

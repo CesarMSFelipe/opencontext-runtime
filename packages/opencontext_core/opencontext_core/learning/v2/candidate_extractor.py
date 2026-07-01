@@ -14,7 +14,6 @@ gated responsibility of :mod:`opencontext_core.learning.v2.improvement_proposal`
 from __future__ import annotations
 
 import hashlib
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 

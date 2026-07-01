@@ -41,7 +41,7 @@ class ProviderCacheEntry(CacheEntry):
         value_ref: str,
         provider: str = "",
         model_name: str = "",
-    ) -> "ProviderCacheEntry":
+    ) -> ProviderCacheEntry:
         return cls(
             key=provider_key(spec, payload),
             value_ref=value_ref,

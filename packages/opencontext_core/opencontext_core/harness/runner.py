@@ -203,7 +203,7 @@ class HarnessRunner:
                 getattr(getattr(oc_config, "runtime", None), "memory_v2_enabled", False)
             )
             try:
-                from opencontext_core.paths import StorageMode, resolve_storage_path
+                from opencontext_core.paths import resolve_storage_path
 
                 storage_path = resolve_storage_path(
                     self.root,
@@ -682,9 +682,6 @@ class HarnessRunner:
         When ``_sdd_runner_v2`` is True, delegate to
         :func:`opencontext_sdd.runner.run_phase` for the SDD lifecycle
         instead of using the legacy inline phase loop.
-        """
-        if self._sdd_runner_v2:
-            return self._run_v2(workflow, task)
 
         Args:
             workflow: Workflow name (sdd / explore-only / apply-only / ...).
@@ -705,6 +702,9 @@ class HarnessRunner:
                 # resumed mid-flow finds the earlier phase's output and runs to
                 # completion.
         """
+        if self._sdd_runner_v2:
+            return self._run_v2(workflow, task)
+
         state = self.create_run(workflow, task)
         if apply_edits:
             state.apply_edits = list(apply_edits)
@@ -934,7 +934,7 @@ class HarnessRunner:
         # Best-effort — learning must never block a run.
         try:
             from opencontext_core.learning.feedback_collector import FeedbackCollector
-            from opencontext_core.paths import StorageMode, resolve_storage_path
+            from opencontext_core.paths import resolve_storage_path
 
             try:
                 from opencontext_core.config import load_config_or_defaults
@@ -1064,7 +1064,7 @@ class HarnessRunner:
 
                 try:
                     from opencontext_core.config import load_config_or_defaults
-                    from opencontext_core.paths import StorageMode, resolve_storage_path
+                    from opencontext_core.paths import resolve_storage_path
 
                     _lrc = load_config_or_defaults(state.root / "opencontext.yaml", auto_detect=False)
                     _ls = resolve_storage_path(state.root, _lrc.storage.mode, _lrc.storage.custom_path)
@@ -1126,7 +1126,7 @@ class HarnessRunner:
                 # Canonical KG db name — same as runtime/explore (context_graph.db).
                 try:
                     from opencontext_core.config import load_config_or_defaults
-                    from opencontext_core.paths import StorageMode, resolve_storage_path
+                    from opencontext_core.paths import resolve_storage_path
 
                     _krc = load_config_or_defaults(state.root / "opencontext.yaml", auto_detect=False)
                     _ks = resolve_storage_path(state.root, _krc.storage.mode, _krc.storage.custom_path)
@@ -1589,7 +1589,7 @@ class HarnessRunner:
             return _local
         try:
             from opencontext_core.config import load_config_or_defaults
-            from opencontext_core.paths import StorageMode, resolve_storage_path
+            from opencontext_core.paths import resolve_storage_path
 
             _qrc = load_config_or_defaults(_oc_yaml, auto_detect=False)
             _resolved = resolve_storage_path(root, _qrc.storage.mode, _qrc.storage.custom_path) / "context_graph.db"
@@ -2306,7 +2306,7 @@ class HarnessRunner:
             if _oc_yaml.exists():
                 try:
                     from opencontext_core.config import load_config_or_defaults
-                    from opencontext_core.paths import StorageMode, resolve_storage_path
+                    from opencontext_core.paths import resolve_storage_path
 
                     _crc = load_config_or_defaults(_oc_yaml, auto_detect=False)
                     _cs = resolve_storage_path(self.root, _crc.storage.mode, _crc.storage.custom_path)

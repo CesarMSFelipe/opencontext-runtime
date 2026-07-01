@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from opencontext_core.providers.v2.spec import (
+    CAPABILITY_FLAGS,
     CapabilityModel,
     ProviderSpec,
-    CAPABILITY_FLAGS,
 )
 
 

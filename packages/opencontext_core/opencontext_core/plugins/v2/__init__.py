@@ -18,11 +18,11 @@ from opencontext_core.plugins.v2.manifest import (
 )
 
 __all__ = [
+    "PLUGIN_SCHEMA_VERSION",
     "ConformanceReport",
     "ConformanceSuite",
     "IllegalTransitionError",
     "ManifestSchemaError",
-    "PLUGIN_SCHEMA_VERSION",
     "PluginManifest",
     "PluginState",
     "PluginStateMachine",

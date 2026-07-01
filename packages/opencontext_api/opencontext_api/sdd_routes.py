@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from opencontext_api.schemas import SDDContinueRequest, SDDPhaseRequest, SDDStatusResponse
+from opencontext_api.schemas import SDDContinueRequest, SDDPhaseRequest
 
 router = APIRouter(prefix="/v1/sdd", tags=["sdd"])
 

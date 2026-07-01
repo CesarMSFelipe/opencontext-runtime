@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from opencontext_studio.server import StudioServer, StudioConfig
+from opencontext_studio.server import StudioConfig, StudioServer
 
 
 def test_REQ_studio_mvp_001_local_binds() -> None:

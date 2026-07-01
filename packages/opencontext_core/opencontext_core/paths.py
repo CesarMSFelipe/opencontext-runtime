@@ -18,6 +18,7 @@ import json
 import os
 import warnings
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -26,15 +27,15 @@ import platformdirs
 from opencontext_core.compat import StrEnum
 
 __all__ = [
+    "LegacyState",
     "StorageMode",
+    "detect_legacy",
+    "is_owned",
     "project_id",
+    "read_manifest",
     "resolve_storage_path",
     "resolve_workspace_path",
-    "LegacyState",
-    "detect_legacy",
     "write_manifest",
-    "read_manifest",
-    "is_owned",
 ]
 
 _MANIFEST_FILENAME = "oc-manifest.json"
@@ -165,7 +166,7 @@ def write_manifest(path: Path, root: Path, version: str) -> None:
     Idempotent — safe to call on every runtime start; the file is overwritten
     with the current values so version is always up-to-date.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     path.mkdir(parents=True, exist_ok=True)
     manifest: dict[str, Any] = {
@@ -174,7 +175,7 @@ def write_manifest(path: Path, root: Path, version: str) -> None:
         "project_id": project_id(root),
         "created_by": "runtime",
         "version": version,
-        "created_at": datetime.now(tz=timezone.utc).isoformat(),
+        "created_at": datetime.now(tz=UTC).isoformat(),
     }
     manifest_file = path / _MANIFEST_FILENAME
     manifest_file.write_text(json.dumps(manifest, indent=2), encoding="utf-8")

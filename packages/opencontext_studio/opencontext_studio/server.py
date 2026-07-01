@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import socket
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Callable
 
 
 @dataclass

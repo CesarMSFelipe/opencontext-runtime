@@ -13,7 +13,7 @@ class TestCompatFlag:
 
     def test_v2_modules_importable(self) -> None:
         """All v2 modules import without error."""
-        from opencontext_core.graph.v2 import schema, evidence, store
+        from opencontext_core.graph.v2 import evidence, schema, store
         assert schema.KgNodeType is not None
         assert evidence.EvidenceRef is not None
         assert store.KgStore is not None

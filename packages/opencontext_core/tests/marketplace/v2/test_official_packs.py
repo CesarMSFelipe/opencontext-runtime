@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from opencontext_core.marketplace.v2.official_packs import (
     OFFICIAL_PACK_IDS,
-    get_pack,
     all_packs,
+    get_pack,
 )
 
 

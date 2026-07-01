@@ -7,7 +7,6 @@ from typing import Any
 
 from opencontext_core.marketplace.v2.trust import TrustLevel
 
-
 SCHEMA_VERSION = "opencontext.marketplace_package.v1"
 
 

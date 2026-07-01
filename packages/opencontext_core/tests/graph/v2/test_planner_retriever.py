@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from opencontext_core.graph.v2.planner import ContextQueryPlanner, BudgetExceededError, KgQueryPlan
-from opencontext_core.graph.v2.retriever import ContextSubgraph
-from opencontext_core.graph.v2.capability import CapabilityGraph, OwnerResolver
-from opencontext_core.graph.v2.freshness import compute_freshness, compute_confidence
+from opencontext_core.graph.v2.capability import OwnerResolver
 from opencontext_core.graph.v2.events import emit_unknown_owner
+from opencontext_core.graph.v2.freshness import compute_confidence, compute_freshness
+from opencontext_core.graph.v2.planner import BudgetExceededError, ContextQueryPlanner, KgQueryPlan
+from opencontext_core.graph.v2.retriever import ContextSubgraph
 
 
 def test_planner_within_budget() -> None:
@@ -34,7 +34,7 @@ def test_owner_resolver_stub() -> None:
     assert ref.path == "src/x.py"
 
 def test_freshness_new() -> None:
-    fs = compute_freshness(datetime.now(tz=timezone.utc))
+    fs = compute_freshness(datetime.now(tz=UTC))
     assert fs.score > 0.9
 
 def test_confidence_diverse() -> None:

@@ -166,7 +166,7 @@ def mark_setup_complete(prefs: UserPreferences) -> UserPreferences:
     return prefs
 
 
-def storage_config_from_prefs(prefs: UserPreferences) -> "object":
+def storage_config_from_prefs(prefs: UserPreferences) -> object:
     """Translate legacy user-pref path fields into a ``StorageConfig`` instance.
 
     This is the single bridge between the deprecated flat ``custom_storage_path``

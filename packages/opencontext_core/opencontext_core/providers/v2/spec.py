@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 CAPABILITY_FLAGS: tuple[str, ...] = (
     "structured_output",
     "tool_use",

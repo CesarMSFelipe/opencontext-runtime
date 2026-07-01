@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 from opencontext_core.marketplace.v2.package import MarketplacePackage
 from opencontext_core.marketplace.v2.trust import TrustLevel
-
 
 OFFICIAL_PACK_IDS: tuple[str, ...] = (
     "python-pytest",

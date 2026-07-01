@@ -6,7 +6,7 @@ a TemporalMetadata envelope for soft-deletion and audit.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -84,7 +84,7 @@ class TemporalMetadata(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
     superseded_at: datetime | None = Field(default=None)
     source_commit: str | None = Field(default=None)
     source_author: str | None = Field(default=None)

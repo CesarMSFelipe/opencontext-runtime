@@ -44,6 +44,7 @@ from opencontext_cli.commands.memory_benchmark_cmd import (
     add_memory_benchmark_parser,
     handle_memory_benchmark,
 )
+from opencontext_cli.commands.memory_v2_cmd import add_memory_v2_parser, handle_memory_v2
 from opencontext_cli.commands.metaharness_cmd import (
     handle_doctor_metaharness,
 )
@@ -71,6 +72,7 @@ from opencontext_cli.commands.run_cmd import (
     handle_run_inspect,
     handle_simulate,
 )
+from opencontext_cli.commands.sdd_cmd import add_sdd_parser, handle_sdd
 from opencontext_cli.commands.session_cmd import add_session_parser, handle_session
 from opencontext_cli.commands.setup_cmd import add_setup_parser, handle_setup
 from opencontext_cli.commands.skill_cmd import add_skill_parser, handle_skill
@@ -85,8 +87,6 @@ from opencontext_cli.commands.update_cmd import (
     handle_update,
     handle_upgrade,
 )
-from opencontext_cli.commands.memory_v2_cmd import add_memory_v2_parser, handle_memory_v2
-from opencontext_cli.commands.sdd_cmd import add_sdd_parser, handle_sdd
 from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
 from opencontext_cli.output import add_output_flag, eprint
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget

@@ -5,11 +5,10 @@ Each suite is a callable returning a :class:`BenchmarkResult`.
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from opencontext_core.benchmarks.v2.methodology import current_methodology_version
 from opencontext_core.benchmarks.v2.runner import BenchmarkResult
-
 
 SUITE_IDS: tuple[str, ...] = (
     "A1",  # first_run

@@ -14,17 +14,12 @@ from fastapi import APIRouter, HTTPException, Query
 from opencontext_api.schemas import (
     MemoryCompareRequest,
     MemoryDeleteRequest,
-    MemoryDoctorResponse,
-    MemoryGetResponse,
     MemoryJudgeRequest,
     MemoryMergeProjectsRequest,
     MemoryPinRequest,
-    MemoryReviewResponse,
     MemorySaveRequest,
-    MemorySearchRequest,
     MemorySessionRequest,
     MemorySessionSummaryRequest,
-    MemoryStatsResponse,
     MemoryTimelineRequest,
 )
 

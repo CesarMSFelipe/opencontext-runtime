@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime
 
 
 @dataclass
@@ -18,7 +18,7 @@ class KgFreshnessScore:
 
 
 def compute_freshness(last_updated: datetime, now: datetime | None = None) -> KgFreshnessScore:
-    now = now or datetime.now(tz=timezone.utc)
+    now = now or datetime.now(tz=UTC)
     days = (now - last_updated).days
     score = max(0.0, 1.0 - (days / 365.0))
     return KgFreshnessScore(score=round(score, 3), last_updated=last_updated, staleness_days=days)

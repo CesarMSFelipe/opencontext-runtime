@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 
 from opencontext_core.plugins.v2.manifest import (
-    PluginManifest,
-    ManifestSchemaError,
     PLUGIN_SCHEMA_VERSION,
+    ManifestSchemaError,
+    PluginManifest,
 )
 
 

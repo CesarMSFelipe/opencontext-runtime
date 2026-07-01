@@ -211,7 +211,7 @@ def _sync_kg(prefs: Any, dry_run: bool) -> dict[str, Any]:
 
     try:
         from opencontext_core.config import load_config_or_defaults
-        from opencontext_core.paths import StorageMode, resolve_storage_path
+        from opencontext_core.paths import resolve_storage_path
 
         _cfg = load_config_or_defaults()
         _storage = resolve_storage_path(

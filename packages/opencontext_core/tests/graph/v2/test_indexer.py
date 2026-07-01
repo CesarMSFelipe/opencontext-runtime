@@ -6,7 +6,6 @@ from opencontext_core.graph.v2.indexer import (
     GraphDelta,
     IncrementalIndexer,
     IndexOptions,
-    IndexResult,
 )
 
 

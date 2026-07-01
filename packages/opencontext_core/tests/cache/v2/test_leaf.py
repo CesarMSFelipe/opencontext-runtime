@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import time
-from datetime import datetime, timezone, timedelta
-
-from opencontext_core.cache.v2 import CacheEntry, CacheStrategy, SemanticCache
+from opencontext_core.cache.v2 import CacheStrategy, SemanticCache
 
 
 class TestTTL:

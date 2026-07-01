@@ -36,7 +36,7 @@ class ToolCacheEntry(CacheEntry):
         args: dict[str, object],
         value_ref: str,
         source_file_mtime: float = 0.0,
-    ) -> "ToolCacheEntry":
+    ) -> ToolCacheEntry:
         return cls(
             key=tool_key(tool_name, args),
             value_ref=value_ref,

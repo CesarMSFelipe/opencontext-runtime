@@ -6,7 +6,6 @@ import hashlib
 import json
 
 from opencontext_core.cache.base import CacheEntry, CacheType
-from opencontext_core.cache.v2.provenance import Provenance
 
 
 def key_by_embedding(text: str, *, producer: str) -> str:

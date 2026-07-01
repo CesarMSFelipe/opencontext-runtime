@@ -19,7 +19,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 # ── Gate definitions ────────────────────────────────────────────────────────
 #
@@ -262,9 +262,9 @@ def render_verdict_json(verdict: AcceptanceVerdict) -> str:
 
 
 __all__ = [
+    "GATES",
     "AcceptanceVerdict",
     "AgentHarnessAcceptanceEvaluator",
-    "GATES",
     "GateOutcome",
     "render_verdict_json",
 ]

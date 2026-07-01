@@ -7,9 +7,7 @@ from dataclasses import dataclass
 from dataclasses import dataclass as _dc
 from dataclasses import field as _field
 from pathlib import Path
-from typing import Any
-
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from opencontext_core.registries.base import Registry, RegistryNotFound
 from opencontext_core.registries.loader import load_defs_from_dir

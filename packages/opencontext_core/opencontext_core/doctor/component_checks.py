@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from opencontext_core.config import OpenContextConfig
-from opencontext_core.paths import StorageMode, resolve_storage_path
+from opencontext_core.paths import resolve_storage_path
 
 
 @dataclass

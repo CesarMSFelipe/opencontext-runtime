@@ -6,9 +6,7 @@ REQ_kg_v2_001: schema round-trip + temporal metadata.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-
-import pytest
+from datetime import UTC, datetime
 
 from opencontext_core.graph.v2.schema import (
     KgEdge,
@@ -49,10 +47,10 @@ class TestSchemaRoundTrip:
 class TestTemporalMetadata:
     def test_temporal_superseded(self) -> None:
         """REQ_kg_v2_001: temporal metadata tracks superseded_at."""
-        ts1 = TemporalMetadata(created_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+        ts1 = TemporalMetadata(created_at=datetime(2026, 1, 1, tzinfo=UTC))
         ts2 = TemporalMetadata(
-            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            superseded_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            superseded_at=datetime(2026, 6, 1, tzinfo=UTC),
         )
         assert ts1.superseded_at is None
         assert ts1.is_active is True
@@ -60,7 +58,7 @@ class TestTemporalMetadata:
         assert ts2.is_active is False
 
     def test_temporal_json_serializable(self) -> None:
-        ts = TemporalMetadata(created_at=datetime.now(tz=timezone.utc))
+        ts = TemporalMetadata(created_at=datetime.now(tz=UTC))
         data = json.loads(ts.model_dump_json())
         assert "created_at" in data
 

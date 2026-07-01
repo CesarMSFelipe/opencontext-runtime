@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -39,7 +40,8 @@ class TestInsertQuery:
         assert len(results) >= 1
 
     def test_superseded_filtered(self, store: KgStore) -> None:
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         from opencontext_core.graph.v2.schema import TemporalMetadata
 
         node = KgNode(
@@ -47,8 +49,8 @@ class TestInsertQuery:
             type=KgNodeType.FUNCTION,
             name="old_func",
             temporal=TemporalMetadata(
-                created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-                superseded_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                superseded_at=datetime(2026, 6, 1, tzinfo=UTC),
             ),
         )
         store.insert_node(node)

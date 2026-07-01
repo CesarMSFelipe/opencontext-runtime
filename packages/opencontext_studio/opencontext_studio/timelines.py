@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # Eleven RuntimeEvent.family values (doc 59 §Event hierarchy).
 LANE_FAMILIES: tuple[str, ...] = (
     "lifecycle",

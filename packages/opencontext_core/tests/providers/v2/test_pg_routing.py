@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 
 from opencontext_core.providers.v2.routing import (
+    NoProviderAvailable,
     RoutingEngine,
     RoutingStrategy,
-    NoProviderAvailable,
 )
 from opencontext_core.providers.v2.spec import (
     CapabilityModel,

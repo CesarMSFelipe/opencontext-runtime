@@ -10,7 +10,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from opencontext_core.graph.v2.schema import KgEdge, KgNode, TemporalMetadata
+from opencontext_core.graph.v2.schema import KgEdge, KgNode
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS kg_nodes (

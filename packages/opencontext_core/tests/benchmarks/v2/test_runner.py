@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from opencontext_core.benchmarks.v2.runner import (
-    BenchmarkRunner,
-    BenchmarkTask,
-    BenchmarkResult,
-)
 from opencontext_core.benchmarks.v2.methodology import (
     current_methodology_version,
     validate_methodology_version,
+)
+from opencontext_core.benchmarks.v2.runner import (
+    BenchmarkResult,
+    BenchmarkRunner,
+    BenchmarkTask,
 )
 
 

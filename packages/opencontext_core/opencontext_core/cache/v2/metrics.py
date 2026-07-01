@@ -8,8 +8,7 @@ through PR-014's port.
 
 from __future__ import annotations
 
-from typing import Callable
-
+from collections.abc import Callable
 
 EmitFamilyFn = Callable[[str, str], None]
 

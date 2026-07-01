@@ -8,7 +8,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from opencontext_api.memory_routes import router as memory_router
-from opencontext_api.sdd_routes import router as sdd_router
 from opencontext_api.schemas import (
     AgentContextRequest,
     ContextPackRequest,
@@ -30,6 +29,7 @@ from opencontext_api.schemas import (
     VerifiedContextRequestBody,
     VerifiedContextResponse,
 )
+from opencontext_api.sdd_routes import router as sdd_router
 from opencontext_core.actions import ActionRequest, ActionType, evaluate_action
 from opencontext_core.doctor.checks import run_doctor
 from opencontext_core.dx.security_reports import scan_project

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -25,15 +25,15 @@ class CacheStrategy(str, Enum):
 class _StrategyEntry:
     key: str
     value: Any
-    created_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
-    last_accessed: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
+    last_accessed: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     ttl_seconds: int = 3600
     priority: int = 0
     access_count: int = 0
 
     @property
     def expired(self) -> bool:
-        return (datetime.now(tz=timezone.utc) - self.created_at).total_seconds() > self.ttl_seconds
+        return (datetime.now(tz=UTC) - self.created_at).total_seconds() > self.ttl_seconds
 
 
 # Re-use the existing dataclass name ``CacheEntry`` from v2.__init__ for the
@@ -57,7 +57,7 @@ class SemanticCache:
         if entry is None or (self._strategy == CacheStrategy.TTL and entry.expired):
             self._misses += 1
             return None
-        entry.last_accessed = datetime.now(tz=timezone.utc)
+        entry.last_accessed = datetime.now(tz=UTC)
         entry.access_count += 1
         self._hits += 1
         if self._strategy == CacheStrategy.LRU:
@@ -69,7 +69,7 @@ class SemanticCache:
             entry = self._store[key]
             entry.value = value
             entry.ttl_seconds = ttl_seconds
-            entry.created_at = datetime.now(tz=timezone.utc)
+            entry.created_at = datetime.now(tz=UTC)
             entry.priority = priority
             return
         if len(self._store) >= self._max_entries:

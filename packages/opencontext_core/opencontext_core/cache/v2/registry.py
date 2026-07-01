@@ -12,7 +12,6 @@ from typing import Final
 
 from opencontext_core.cache.base import CacheType
 
-
 _CACHE_TYPES: Final[tuple[str, ...]] = (
     CacheType.semantic.value,
     CacheType.prompt_context.value,

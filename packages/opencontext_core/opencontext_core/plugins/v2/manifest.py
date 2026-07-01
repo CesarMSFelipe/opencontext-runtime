@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from typing import Any
-
 
 PLUGIN_SCHEMA_VERSION = "opencontext.plugin.v1"
 
@@ -28,7 +27,7 @@ class PluginManifest:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PluginManifest":
+    def from_dict(cls, data: dict[str, Any]) -> PluginManifest:
         if data.get("schema_version") != PLUGIN_SCHEMA_VERSION:
             raise ManifestSchemaError(
                 f"schema_version mismatch: expected {PLUGIN_SCHEMA_VERSION}, "

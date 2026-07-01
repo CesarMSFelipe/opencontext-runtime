@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
-
 
 SCHEMA_VERSION = "opencontext.simulation_report.v1"
 
@@ -28,5 +27,5 @@ def build_simulation_report(
         "estimated_duration_ms": estimated_duration_ms,
         "estimator": estimator,
         "notes": list(notes or []),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
     }

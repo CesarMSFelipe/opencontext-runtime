@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 DASHBOARD_FIELDS: tuple[str, ...] = (
     "session_id",
     "run_id",

@@ -5,11 +5,11 @@ from __future__ import annotations
 import pytest
 
 from opencontext_core.benchmarks.v2.methodology import (
-    current_methodology_version,
-    bump_methodology_version,
-    regression_check,
-    MethodologyRegression,
     METHODOLOGY_VERSION_FORMAT,
+    MethodologyRegression,
+    bump_methodology_version,
+    current_methodology_version,
+    regression_check,
 )
 
 

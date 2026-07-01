@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-
 METHODOLOGY_VERSION_FORMAT = re.compile(r"^\d{4}\.\d{2}\.\d{2}$")
 
 

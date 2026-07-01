@@ -9,7 +9,7 @@ from opencontext_core.cache.base import CacheEntry, CacheType
 
 def memory_query_fingerprint(query: str, *, profile: str) -> str:
     """Deterministic fingerprint: ``sha256(profile + query)``."""
-    payload = f"{profile}\x00{query}".encode("utf-8")
+    payload = f"{profile}\x00{query}".encode()
     return hashlib.sha256(payload).hexdigest()[:24]
 
 
@@ -23,7 +23,7 @@ class MemoryRetrievalCacheEntry(CacheEntry):
     @classmethod
     def build(
         cls, *, query: str, profile: str, value_ref: str
-    ) -> "MemoryRetrievalCacheEntry":
+    ) -> MemoryRetrievalCacheEntry:
         fp = memory_query_fingerprint(query, profile=profile)
         return cls(
             key=f"mem_{fp}",
