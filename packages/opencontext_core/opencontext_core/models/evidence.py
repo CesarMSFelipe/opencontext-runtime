@@ -54,3 +54,19 @@ class EvidenceRef(BaseModel):
     def is_kg_v2_source_type(self) -> bool:
         """True when ``source_type`` is one of the OC-KG-001 §11 v2 categories."""
         return self.source_type in EVIDENCE_SOURCE_TYPES
+
+
+# ---------------------------------------------------------------------------
+# PR-008.a: re-export from graph.v2.evidence for backward compatibility
+# ---------------------------------------------------------------------------
+
+
+def EvidenceRef_v2(**kwargs: object) -> object:
+    """Re-export shim — delegates to ``graph.v2.evidence.EvidenceRef``.
+
+    Existing callers that import from ``models.evidence`` can still access
+    the new L0 contract without changing their import path.
+    """
+    from opencontext_core.graph.v2.evidence import EvidenceRef
+
+    return EvidenceRef(**kwargs)  # type: ignore[arg-type]

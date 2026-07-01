@@ -12,6 +12,7 @@ lexicographic = chronological ordering without a third-party ``ulid`` dependency
 
 from __future__ import annotations
 
+import hashlib
 import os
 import time
 
@@ -54,3 +55,14 @@ def new_session_id() -> str:
 def new_run_id() -> str:
     """Mint a ``run_<ulid>`` run id (doc 59)."""
     return new_id("run")
+
+
+def new_kg_id(content_hash: bytes | str) -> str:
+    """Derive a stable KG identifier from content (PR-008.a).
+
+    Uses SHA-256 truncated to 16 hex chars so node/edge IDs are
+    deterministic across re-index runs.
+    """
+    if isinstance(content_hash, str):
+        content_hash = content_hash.encode("utf-8")
+    return hashlib.sha256(content_hash).hexdigest()[:16]
