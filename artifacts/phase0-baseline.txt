@@ -1,0 +1,21 @@
+OpenContext Runtime — Phase 0 environment baseline
+schema_version: 1.0
+created_at: 2026-07-01T18:02:36.212828+00:00
+git_head: c8effdeaba4e07f1d74bce854efcdf35639afb49
+python_version: 3.12.3
+platform: Linux-6.17.0-35-generic-x86_64-with-glibc2.39
+runner.py path: /home/zenix/projects/OpenContext Runtime/packages/opencontext_core/opencontext_core/harness/runner.py
+runner.py sha256: df42ce2b1b260403cc0e81b43a79f2c32c2a5e0f39f037553f7673dbfd0c6379
+runner.py py_compile_ok: True
+compileall_ok: True
+
+git status --short:
+M packages/opencontext_core/opencontext_core/compat/migration.py
+?? artifacts/
+?? packages/opencontext_core/opencontext_core/runtime/spine.py
+?? packages/opencontext_core/tests/runtime/
+?? scripts/environment_proof.py
+?? tests/environment/
+
+notes:
+  (none)
