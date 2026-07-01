@@ -1,4 +1,10 @@
-"""PR-014 StudioServer — stdlib-only local HTTP server on 127.0.0.1:random_port."""
+"""PR-014 StudioServer — stdlib-only local HTTP server on 127.0.0.1:random_port.
+
+Preserved (and unchanged) from PR-014 so the original local-MVP tests keep
+passing under commit-012. The new v2 FastAPI surface lives in
+:mod:`opencontext_studio.server_v2`; both are exposed from
+:mod:`opencontext_studio.server` for a single import surface.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +12,8 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from opencontext_studio.server_v2 import V2StudioServer, create_v2_app
 
 
 @dataclass
@@ -68,3 +76,11 @@ def _default_handler() -> BaseHTTPRequestHandler:
             return
 
     return _Handler
+
+
+__all__ = [
+    "StudioConfig",
+    "StudioServer",
+    "V2StudioServer",
+    "create_v2_app",
+]

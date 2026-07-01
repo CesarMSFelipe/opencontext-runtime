@@ -152,6 +152,38 @@ def is_migrated(
     return (ledger or MIGRATION_LEDGER).is_migrated(module, root=root)
 
 
+def is_migrated_flag(
+    flag: str, *, ledger: MigrationLedger | None = None
+) -> bool:
+    """Flag-level convenience for the v2 migration flags (commit-006).
+
+    Looks up the ledger entry whose ``flag`` field equals *flag* and returns
+    ``True`` only when the subsystem is fully migrated (vNext-only reach,
+    legacy shimmed, parity green, no direct importers). An unknown flag or a
+    flag whose entry is not ``migrated``/``removed`` returns ``False`` --
+    subsystems move forward via an accepted flip bundle, never by a default
+    flip (CL-005).
+
+    Accepts the bare flag (``"rt-spine"``) or the dotted name
+    (``"runtime.rt-spine"``); the ledger stores the dotted form, so we
+    strip a leading ``"runtime."`` before matching.
+
+    This is the public seam for the v2 migration (``rt-spine``,
+    ``mcp-runtime``, ``rt-budget``, ``skills-v2``, ``studio-control-plane``)
+    so consumers (CLI, MCP, TUI) can write
+    ``compat.is_migrated_flag("rt-spine")`` instead of fishing for module
+    paths.
+    """
+    target = ledger or MIGRATION_LEDGER
+    bare = flag[len("runtime.") :] if flag.startswith("runtime.") else flag
+    for entry in target.modules:
+        stored = entry.flag or ""
+        stored_bare = stored[len("runtime.") :] if stored.startswith("runtime.") else stored
+        if stored == flag or stored_bare == bare:
+            return entry.state in {MigrationState.migrated, MigrationState.removed}
+    return False
+
+
 def _evaluate_migrated(
     entry: ModuleMigration, *, root: Path | str | None
 ) -> tuple[bool, list[str]]:
@@ -363,14 +395,18 @@ MIGRATION_LEDGER = MigrationLedger(
             removal_milestone="milestone-I",
             flag="runtime.skills-v2",
         ),
-        # CL-V2 (commit 012) studio control plane — Phase 11.
+        # CL-V2 (commit 012) studio control plane — Phase 11. Flipped to migrated
+        # at commit-013m: v2 endpoints + 12-screen TUI are live, the legacy
+        # stdlib StudioServer is preserved as a backwards-compatible alias.
         ModuleMigration(
             module="opencontext_studio/server.py",
             legacy_symbol="StudioServer",
-            state=MigrationState.legacy,
+            state=MigrationState.migrated,
             superseded_by="PR-012",
             removal_milestone="milestone-J",
             flag="runtime.studio-control-plane",
+            vnext_only=True,
+            legacy_shimmed=True,
         ),
     ],
 )

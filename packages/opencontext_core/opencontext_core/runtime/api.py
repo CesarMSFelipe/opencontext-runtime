@@ -779,6 +779,36 @@ class RuntimeApi:
         )
         return ArchiveResult(session_id=session_id, archived=True, status=str(session.status))
 
+    # ------------------------------------------------------------- method 9
+    def status(self, session_id: str) -> SessionStatus:
+        """Return the current ``SessionStatus`` for *session_id* (commit-017).
+
+        The 9th and final session method (amendment A1). It is the canonical
+        "what state is this session in?" read -- cheap, side-effect free,
+        and returns the StrEnum directly so callers can compare to the
+        lifecycle values without string-parsing.
+        """
+        session = self._store.load_session(session_id)
+        return session.status
+
+    # ----------------------------------------------------------- auxiliaries (commit-006)
+    # Amendment A1: the three auxiliaries ``simulate``, ``get_health``,
+    # ``decide`` ride alongside the 8-method session contract. They are
+    # NOT a replacement for the session-first API; they are additional
+    # helpers whose real bodies land in follow-up work. Stubs here raise
+    # ``NotImplementedError`` so callers learn at call time, not at import.
+    def simulate(self, plan: Any) -> Any:
+        """Provider-free dry-run preview (commit-006 stub)."""
+        raise NotImplementedError("RuntimeApi.simulate: stub in commit-006")
+
+    def get_health(self) -> dict[str, Any]:
+        """Aggregated runtime health snapshot (commit-006 stub)."""
+        raise NotImplementedError("RuntimeApi.get_health: stub in commit-006")
+
+    def decide(self, prompt: Any) -> dict[str, Any]:
+        """Advisory decision request (commit-006 stub)."""
+        raise NotImplementedError("RuntimeApi.decide: stub in commit-006")
+
     # ----------------------------------------------------------- internals
     def _finalize(
         self,

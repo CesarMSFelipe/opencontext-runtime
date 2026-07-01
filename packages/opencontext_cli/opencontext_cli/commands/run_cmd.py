@@ -94,7 +94,16 @@ def add_run_exec_parser(subparsers: Any) -> None:
 
 
 def handle_run_exec(args: Any) -> None:
-    """Dispatch the ``run`` execution command to the OC Flow runner (FLOW-16)."""
+    """Dispatch the ``run`` execution command.
+
+    Two paths (commit-007 / amendment A1):
+
+    * ``compat.is_migrated_flag("rt-spine") is True`` -- route through
+      :class:`~opencontext_core.runtime.api.RuntimeApi`:
+      ``start_session()`` then ``run()``. NEVER ``run_workflow``.
+    * otherwise -- keep the legacy OC Flow path byte-identical (FLOW-16).
+    """
+    from opencontext_core.compat import is_migrated_flag
     from opencontext_core.config import load_config_or_defaults
     from opencontext_core.config_resolver import missing_config_hint, resolve_config_path
     from opencontext_core.oc_flow.cli import run_oc_flow_cli
@@ -110,6 +119,40 @@ def handle_run_exec(args: Any) -> None:
         # summary — in --json mode that is ONLY the JSON object, keeping
         # `json.load(stdout)` clean.
         print(missing_config_hint(root), file=sys.stderr)
+
+    if is_migrated_flag("rt-spine"):
+        # Spine path (commit-007): start_session -> run. NO run_workflow.
+        from opencontext_core.runtime.api import (
+            RunRequest,
+            RuntimeApi,
+            StartSessionRequest,
+        )
+
+        task = getattr(args, "task", None) or ""
+        workflow = getattr(args, "workflow", "oc-flow")
+        profile = getattr(args, "profile", "balanced")
+        api = RuntimeApi(root)
+        session = api.start_session(
+            StartSessionRequest(task=task, root=str(root), profile=profile)
+        )
+        result = api.run(
+            RunRequest(session_id=session.session_id, workflow_id=workflow, task=task)
+        )
+        summary = {
+            "status": result.status,
+            "session_id": session.session_id,
+            "run_id": result.run_id,
+            "workflow": workflow,
+        }
+        if getattr(args, "json", False):
+            print(json.dumps(summary, indent=2))
+        else:
+            print(f"OC Flow (spine): {summary.get('status')}")
+            print(f"  workflow: {summary.get('workflow')}")
+            print(f"  session_id: {summary.get('session_id')}")
+            print(f"  run_id: {summary.get('run_id')}")
+        return
+
     enabled = True
     try:
         config = load_config_or_defaults(config_path, auto_detect=False)
