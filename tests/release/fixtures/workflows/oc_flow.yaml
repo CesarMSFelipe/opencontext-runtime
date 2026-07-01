@@ -1,0 +1,17 @@
+schema_version: opencontext.workflow.v1
+id: oc-flow
+version: "1"
+label: OC Flow
+kind: oc_flow
+start_node: bootstrap
+terminal_nodes:
+  - shutdown
+strategy: careful
+expected_cost: medium
+risk_level: low
+default_profile: full
+nodes:
+  - id: bootstrap
+    role: bootstrap
+  - id: shutdown
+    role: shutdown

@@ -1,0 +1,10 @@
+schema_version: opencontext.policy.v1
+kind: blocked_paths
+blocked:
+  - /etc/passwd
+  - /etc/shadow
+  - /root
+warn:
+  - /tmp
+allow:
+  - $workspace

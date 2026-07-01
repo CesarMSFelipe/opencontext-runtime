@@ -1,0 +1,5 @@
+schema_version: opencontext.plugin.v1
+id: malformed
+entry: bad
+  - this is invalid yaml
+   broken: indent
