@@ -779,6 +779,18 @@ class RuntimeApi:
         )
         return ArchiveResult(session_id=session_id, archived=True, status=str(session.status))
 
+    # ------------------------------------------------------------- method 9
+    def status(self, session_id: str) -> SessionStatus:
+        """Return the current ``SessionStatus`` for *session_id* (commit-017).
+
+        The 9th and final session method (amendment A1). It is the canonical
+        "what state is this session in?" read -- cheap, side-effect free,
+        and returns the StrEnum directly so callers can compare to the
+        lifecycle values without string-parsing.
+        """
+        session = self._store.load_session(session_id)
+        return session.status
+
     # ----------------------------------------------------------- auxiliaries (commit-006)
     # Amendment A1: the three auxiliaries ``simulate``, ``get_health``,
     # ``decide`` ride alongside the 8-method session contract. They are

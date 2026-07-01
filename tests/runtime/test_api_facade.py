@@ -27,9 +27,9 @@ class _FakeHarness:
 
 class TestFacadeSurface:
     def test_exactly_eight_public_methods(self, tmp_path: Path) -> None:
-        # Commit-006: 3 aux stubs (simulate, get_health, decide) join the 8
-        # session methods. The 9th session method ``status`` lands in
-        # commit-017, so the count goes 8 -> 11 here, then 12 in commit-017.
+        # Commit-017: 9 session methods + 3 aux stubs (commit-006) = 12
+        # public methods on RuntimeApi. Amendment A1 keeps the aux stubs
+        # as helpers; A2 keeps them in the same class (no spine.py).
         api = RuntimeApi(tmp_path)
         public = sorted(
             name for name in dir(api) if not name.startswith("_") and callable(getattr(api, name))
@@ -47,6 +47,7 @@ class TestFacadeSurface:
                 "run",
                 "simulate",
                 "start_session",
+                "status",
             ]
         )
 
