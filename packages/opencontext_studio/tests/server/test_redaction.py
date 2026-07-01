@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-
 from opencontext_studio.server_v2 import create_v2_app
 
 

@@ -21,13 +21,14 @@ from opencontext_core.compat.migration import (
     is_migrated_flag,
 )
 
-# The 5 v2 subsystem flags (commit-006/008/010/011/012).
+# The 4 v2 subsystem flags still in legacy state.
+# ``studio-control-plane`` was flipped to migrated at commit-013m (12-screen
+# TUI live + v2 FastAPI surface); it is no longer in the pending set.
 V2_FLAGS = (
     "rt-spine",
     "mcp-runtime",
     "rt-budget",
     "skills-v2",
-    "studio-control-plane",
 )
 
 

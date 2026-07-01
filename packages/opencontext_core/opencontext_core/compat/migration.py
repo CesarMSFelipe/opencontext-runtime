@@ -395,14 +395,18 @@ MIGRATION_LEDGER = MigrationLedger(
             removal_milestone="milestone-I",
             flag="runtime.skills-v2",
         ),
-        # CL-V2 (commit 012) studio control plane — Phase 11.
+        # CL-V2 (commit 012) studio control plane — Phase 11. Flipped to migrated
+        # at commit-013m: v2 endpoints + 12-screen TUI are live, the legacy
+        # stdlib StudioServer is preserved as a backwards-compatible alias.
         ModuleMigration(
             module="opencontext_studio/server.py",
             legacy_symbol="StudioServer",
-            state=MigrationState.legacy,
+            state=MigrationState.migrated,
             superseded_by="PR-012",
             removal_milestone="milestone-J",
             flag="runtime.studio-control-plane",
+            vnext_only=True,
+            legacy_shimmed=True,
         ),
     ],
 )
