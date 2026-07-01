@@ -15,6 +15,7 @@ from typing import Any
 import yaml
 
 from opencontext_core.config_resolver import resolve_config_path
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 from opencontext_core.context.planning.workflow_selector import select_workflow
 from opencontext_core.llm.provider_gateway import build_adapter, build_provider_gateway
 from opencontext_core.oc_flow.models import Lane
@@ -233,7 +234,7 @@ def _within(root: Path, candidate: Path) -> bool:
 
 
 def _latest_session(root: Path) -> str:
-    sessions = root / ".opencontext" / "sessions"
+    sessions = resolve_workspace_path(root, StorageMode.local) / "sessions"
     if not sessions.is_dir():
         return ""
     candidates = sorted((d for d in sessions.iterdir() if d.is_dir()), key=lambda d: d.name)

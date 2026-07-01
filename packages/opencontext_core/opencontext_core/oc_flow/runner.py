@@ -63,6 +63,7 @@ from opencontext_core.runtime.decisions import (
     RuntimeDecision,
     summarize_decision_log,
 )
+from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.runtime.ids import new_run_id, new_session_id
 
 # Safety cap on total node steps (the diagnosis attempt budget already bounds the
@@ -195,7 +196,7 @@ class OCFlowRunner:
         ``kg_first_subgraph`` returns None for a missing DB, so kg_v2 stays active but
         non-fatal on an unindexed project (the gather falls back to the legacy path).
         """
-        storage = self.root / ".storage" / "opencontext"
+        storage = resolve_storage_path(self.root, StorageMode.local)
         for name in ("context_graph.db", "codegraph.db"):
             candidate = storage / name
             if candidate.exists():
@@ -204,7 +205,7 @@ class OCFlowRunner:
 
     # -- paths ----------------------------------------------------------------
     def _run_dir(self, session_id: str, run_id: str) -> Path:
-        return self.root / ".opencontext" / "sessions" / session_id / "runs" / run_id
+        return resolve_workspace_path(self.root, StorageMode.local) / "sessions" / session_id / "runs" / run_id
 
     def _artifacts_dir(self, session_id: str, run_id: str) -> Path:
         return self._run_dir(session_id, run_id) / "artifacts" / "oc-flow"
