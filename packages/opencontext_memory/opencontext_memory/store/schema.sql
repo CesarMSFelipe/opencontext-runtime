@@ -71,5 +71,13 @@ CREATE TABLE sessions (
     directory TEXT,
     project TEXT,
     started_at TEXT NOT NULL,
-    ended_at TEXT
+    ended_at TEXT,
+    -- PR2.c.i — mem_session_summary structured fields (REQ-OMT-004)
+    goal TEXT NOT NULL DEFAULT '',
+    instructions TEXT NOT NULL DEFAULT '',
+    discoveries TEXT NOT NULL DEFAULT '[]',
+    accomplished TEXT NOT NULL DEFAULT '[]',
+    next_steps TEXT NOT NULL DEFAULT '[]',
+    relevant_files TEXT NOT NULL DEFAULT '[]',
+    summary_created_at TEXT
 );
