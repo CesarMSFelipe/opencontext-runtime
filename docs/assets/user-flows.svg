@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="280" viewBox="0 0 720 280" role="img" aria-label="OpenContext user flows: explore, propose, apply, verify, archive">
+  <title>User Flows</title>
+  <rect width="720" height="280" rx="18" fill="#0B0F14"/>
+  <text x="28" y="36" fill="#E6EDF3" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" font-weight="700">User flows</text>
+  <text x="28" y="58" fill="#6C757D" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13">The five primary flows a user walks through on a 1.0 release.</text>
+
+  <g font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13" fill="#E6EDF3">
+    <rect x="28"  y="84"  width="120" height="48" rx="10" fill="#11161D" stroke="#00C9A7"/>
+    <text x="46"  y="106">1. Explore</text>
+    <text x="46"  y="124" fill="#6C757D" font-size="11">/ocnew → /sdd-explore</text>
+
+    <rect x="166" y="84"  width="120" height="48" rx="10" fill="#11161D" stroke="#00A8E8"/>
+    <text x="184" y="106">2. Propose</text>
+    <text x="184" y="124" fill="#6C757D" font-size="11">/sdd-propose</text>
+
+    <rect x="304" y="84"  width="120" height="48" rx="10" fill="#11161D" stroke="#845EC2"/>
+    <text x="322" y="106">3. Apply</text>
+    <text x="322" y="124" fill="#6C757D" font-size="11">/sdd-apply (TDD)</text>
+
+    <rect x="442" y="84"  width="120" height="48" rx="10" fill="#11161D" stroke="#FFC75F"/>
+    <text x="460" y="106">4. Verify</text>
+    <text x="460" y="124" fill="#6C757D" font-size="11">/sdd-verify</text>
+
+    <rect x="580" y="84"  width="112" height="48" rx="10" fill="#11161D" stroke="#F87171"/>
+    <text x="598" y="106">5. Archive</text>
+    <text x="598" y="124" fill="#6C757D" font-size="11">/sdd-archive</text>
+
+    <path d="M148 108 L166 108" stroke="#6C757D" stroke-width="2" fill="none"/>
+    <path d="M286 108 L304 108" stroke="#6C757D" stroke-width="2" fill="none"/>
+    <path d="M424 108 L442 108" stroke="#6C757D" stroke-width="2" fill="none"/>
+    <path d="M562 108 L580 108" stroke="#6C757D" stroke-width="2" fill="none"/>
+  </g>
+
+  <g font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" fill="#E6EDF3">
+    <rect x="28"  y="156" width="664" height="100" rx="10" fill="#11161D" stroke="#1F2937"/>
+    <text x="46"  y="180" font-weight="700">Verification loop (commit 021)</text>
+    <text x="46"  y="202" fill="#9CA3AF">1. Seed a failing test in a temp project.</text>
+    <text x="46"  y="220" fill="#9CA3AF">2. Run pytest — assert RED.</text>
+    <text x="46"  y="238" fill="#9CA3AF">3. Invoke opencontext init / index / run.</text>
+    <text x="46"  y="252" fill="#9CA3AF">4. Re-run pytest — PASS or honest block (no silent green).</text>
+  </g>
+</svg>

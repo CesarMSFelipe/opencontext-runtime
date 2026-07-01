@@ -1,6 +1,20 @@
-"""PR-017 §A gate suites (10). 7 implemented in-tree; A4/A5/A7 inherit upstream.
+"""PR-017 §A gate suites (12) for the 1.0 release verdict.
 
-Each suite is a callable returning a :class:`BenchmarkResult`.
+Each suite is a callable returning a :class:`BenchmarkResult`. The
+twelve §A suites are:
+
+* A1  first_run              — end-to-end first-run probe
+* A2  oc_flow_bugfix         — bugfix flow on a seeded project
+* A3  sdd_feature            — SDD feature flow (propose → spec → apply)
+* A4  context_token_efficiency
+* A5  kg_retrieval_precision
+* A6  memory_usefulness
+* A7  policy_security
+* A8  plugin_compatibility
+* A9  provider_fallback
+* A10 resume_rollback
+* A11 benchmark_evidence     — benchmark evidence is published
+* A12 release_signature      — release signature is signed + verified
 """
 
 from __future__ import annotations
@@ -14,13 +28,15 @@ SUITE_IDS: tuple[str, ...] = (
     "A1",  # first_run
     "A2",  # oc_flow_bugfix
     "A3",  # sdd_feature
-    "A4",  # context_token_efficiency (inherits PR-010/PR-011)
-    "A5",  # kg_retrieval_precision (inherits PR-008)
+    "A4",  # context_token_efficiency
+    "A5",  # kg_retrieval_precision
     "A6",  # memory_usefulness
-    "A7",  # policy_security (inherits PR-005/PR-012)
+    "A7",  # policy_security
     "A8",  # plugin_compatibility
     "A9",  # provider_fallback
     "A10",  # resume_rollback
+    "A11",  # benchmark_evidence
+    "A12",  # release_signature
 )
 
 

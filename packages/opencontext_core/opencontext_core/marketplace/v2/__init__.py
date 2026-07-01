@@ -1,6 +1,8 @@
-"""PR-016 Marketplace v1 public surface."""
+"""PR-017 Marketplace v1 public surface."""
 
 from __future__ import annotations
+
+__capability__ = "marketplace.v2"
 
 from opencontext_core.marketplace.v2.package import (
     MarketplacePackage,

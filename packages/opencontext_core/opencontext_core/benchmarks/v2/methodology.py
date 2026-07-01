@@ -1,4 +1,9 @@
-"""PR-017 Methodology versioning — schema-style version + regression guard."""
+"""PR-017 Methodology versioning — schema-style version + regression guard.
+
+The module exposes the canonical methodology stamp
+(``STAMP = "2026.07.01"``) the 1.0 release verdict is signed with,
+plus the regression guard that prevents silent stamp rollbacks.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +16,12 @@ class MethodologyRegression(Exception):
     """Methodology version went backwards — regression blocks the verdict."""
 
 
-_CURRENT_METHODOLOGY_VERSION = "2026.07.01"
+# Canonical methodology stamp for the 1.0 release. Bump this constant
+# when the benchmark methodology changes in a way that invalidates prior
+# results. The stamp is part of the public release evidence; do not
+# move it without updating the audit trail.
+STAMP: str = "2026.07.01"
+_CURRENT_METHODOLOGY_VERSION: str = STAMP
 
 
 def current_methodology_version() -> str:

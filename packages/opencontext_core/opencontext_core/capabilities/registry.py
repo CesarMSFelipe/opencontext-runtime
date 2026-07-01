@@ -30,6 +30,25 @@ KNOWN_TOOLING_CAPABILITIES: tuple[str, ...] = (
     STRICT_HARNESS,
 )
 
+# Closed set of v2 leaf capabilities tracked by the architecture
+# coverage report. Each id corresponds to a v2 subpackage under
+# ``opencontext_core/<x>/v2/`` whose ``__init__.py`` declares the same
+# id via its ``__capability__`` annotation. Adding a new v2 module is
+# intentional work: change both this tuple and the corresponding
+# subpackage in the same commit, with a SPEC/PR reference.
+REGISTERED_V2_CAPABILITIES: frozenset[str] = frozenset(
+    {
+        "graph.v2",
+        "context.v2",
+        "memory.v2",
+        "learning.v2",
+        "cache.v2",
+        "plugins.v2",
+        "marketplace.v2",
+        "providers.v2",
+    }
+)
+
 # The five built-in execution profiles (CP-008). Each binds a distinct budget /
 # retry / strictness / routing posture.
 BUILTIN_PROFILES: dict[str, ExecutionProfile] = {

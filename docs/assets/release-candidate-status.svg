@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="180" viewBox="0 0 720 180" role="img" aria-label="OpenContext product status: stable, release candidate, host dependent, opt-in">
+  <title>Release Candidate Status</title>
   <rect width="720" height="180" rx="18" fill="#0B0F14"/>
   <text x="28" y="36" fill="#E6EDF3" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" font-weight="700">OpenContext status</text>
   <g font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13">

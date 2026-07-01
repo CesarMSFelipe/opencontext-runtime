@@ -1,4 +1,4 @@
-"""Cache leaf v2 — public exports (PR-000.3).
+"""Cache leaf v2 — public exports (PR-016 / SPEC §3.2 cache).
 
 Re-exports the unified typed-cache primitives from ``cache.base`` (book
 doc 58, doc 59) plus the L4 strategy-aware in-memory cache used by the
@@ -7,6 +7,8 @@ Context / Provider — enforced by ``leaf_guard`` + ``tests/cache/v2/test_leaf.p
 """
 
 from __future__ import annotations
+
+__capability__ = "cache.v2"
 
 from opencontext_core.cache.base import (
     CACHE_CONTRACT_VERSION,

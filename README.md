@@ -32,6 +32,51 @@
   <img src="docs/assets/release-candidate-status.svg" alt="OpenContext product status: stable, release candidate, host dependent, opt-in" width="100%">
 </p>
 
+## Product surface
+
+The five canonical diagrams below show the user-facing surface of the 1.0 release. Every
+SVG has a matching `<title>` element and is referenced by an exact filename in this README.
+
+### TUI Cockpit
+
+![TUI Cockpit](docs/assets/tui-cockpit.svg)
+
+The interactive TUI cockpit — runtime state, run phase, and the next action the agent
+will take, with the keyboard hints (g Graph, h Harness, r Receipt, n New change, k Context,
+b Budget) that drive the four-key workflow.
+
+### Config Menu
+
+![Config Menu](docs/assets/config-menu.svg)
+
+The configuration menu that explains impact before it asks for input — project setup,
+runtime posture, workflow strictness, memory location, and maintenance. Each option shows
+its downstream effect on a real run, not a marketing blurb.
+
+### Graph Viewer
+
+![Graph Viewer](docs/assets/graph-viewer.svg)
+
+The local code-graph viewer — nodes for symbols, files, and run phases; edges for
+calls, imports, and evidence. Built from the index the runtime produces during
+`opencontext index`, queryable from the TUI and the CLI.
+
+### Release Candidate Status
+
+![Release Candidate Status](docs/assets/release-candidate-status.svg)
+
+What is stable, what is a release candidate, what is host-dependent, and what is opt-in
+in the 1.0 release. The status is enforced by the 12-gate release verdict
+(`opencontext benchmark release --profile balanced`).
+
+### User Flows
+
+![User Flows](docs/assets/user-flows.svg)
+
+The five primary user flows: **Explore → Propose → Apply → Verify → Archive**. The bottom
+panel shows the verification loop from commit 021: seed a failing test, run pytest,
+invoke OpenContext, re-run pytest, and pass or honestly block.
+
 ### Product status
 
 | Stable | Release candidate | Host dependent | Opt-in |

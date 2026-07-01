@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+__capability__ = "providers.v2"
+
 from opencontext_core.providers.v2.adapter import ProviderAdapter
 from opencontext_core.providers.v2.fallback import (
     FallbackChain,

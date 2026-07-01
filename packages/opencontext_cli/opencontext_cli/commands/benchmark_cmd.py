@@ -107,6 +107,20 @@ def add_benchmark_parser(subparsers: Any) -> None:
     )
     h2h.add_argument("--format", choices=["text", "json"], default="text")
 
+    release_parser = bm_sub.add_parser(
+        "release",
+        help="Run the 1.0 release verdict (12 gates + 12 §A suites).",
+    )
+    release_parser.add_argument(
+        "--profile",
+        default="balanced",
+        choices=["balanced", "fastest", "cheapest", "highest_quality"],
+        help="Verdict profile (default: balanced).",
+    )
+    release_parser.add_argument(
+        "--format", choices=["text", "json"], default="text", help="Output format."
+    )
+
 
 def handle_benchmark(args: Any) -> None:
     """Handle benchmark commands."""
@@ -123,6 +137,18 @@ def handle_benchmark(args: Any) -> None:
         _handle_suite(args)
     elif command == "head2head":
         _handle_head2head(args)
+    elif command == "release":
+        _handle_release(args)
+
+
+def _handle_release(args: Any) -> None:
+    """`benchmark release` — run the 1.0 release verdict."""
+    from opencontext_core.cli.benchmark_release import main as release_main
+
+    argv = ["--profile", getattr(args, "profile", "balanced")]
+    if getattr(args, "format", None):
+        argv.extend(["--format", args.format])
+    raise SystemExit(release_main(argv))
 
 
 def _handle_suite(args: Any) -> None:
