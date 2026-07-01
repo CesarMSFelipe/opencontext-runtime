@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+__capability__ = "plugins.v2"
+
 from opencontext_core.plugins.v2.conformance import (
     ConformanceReport,
     ConformanceSuite,

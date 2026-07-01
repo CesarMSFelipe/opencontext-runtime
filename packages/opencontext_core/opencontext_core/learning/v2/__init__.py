@@ -1,4 +1,4 @@
-"""OpenContext learning layer v2 (PR-000.4 / SPEC DL-003 / DL-004 / DL-009).
+"""OpenContext learning layer v2 (PR-018 / SPEC §3.2 learning).
 
 Advisory L8 — proposes only, never mutates a target. The three exported
 modules combine to:
@@ -11,6 +11,8 @@ Brain-adjacent layers; promotion is the destination harness's job.
 """
 
 from __future__ import annotations
+
+__capability__ = "learning.v2"
 
 from opencontext_core.learning.v2.candidate_extractor import (
     LearningCandidate,
