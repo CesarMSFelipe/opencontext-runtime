@@ -146,7 +146,12 @@ def _string_contains_forbidden(node: ast.AST | None) -> str | None:
         return None
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         for token in _FORBIDDEN_TOKENS:
-            if token in node.value:
+            # Exact segment match: the constant IS the token or is the token
+            # followed by a path separator. This avoids false positives on
+            # strings like ".opencontext-delegates" or ".storage-bak" which
+            # contain a forbidden token as a substring but are unrelated
+            # directory names.
+            if node.value == token or node.value.startswith(token + "/"):
                 return token
         return None
     if isinstance(node, ast.JoinedStr):

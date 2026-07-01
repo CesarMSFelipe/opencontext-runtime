@@ -27,6 +27,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
+
 from opencontext_core.studio.views import (
     StudioBenchmarkCoverageView,
     StudioBenchmarkSuiteCoverage,
@@ -104,7 +106,7 @@ class StudioReader:
         return OcNewStore(self._root)
 
     def _session_ids(self) -> list[str]:
-        path = self._root / ".opencontext" / "sessions"
+        path = resolve_workspace_path(self._root, StorageMode.local) / "sessions"
         if not path.exists():
             return []
         return [p.name for p in path.iterdir() if (p / "session.json").exists()]
@@ -126,7 +128,7 @@ class StudioReader:
         """Directories that may hold ``receipt.json`` / ``harness-report.json``."""
         if kind == "run":
             return [self._oc_store().run_dir(sid)]
-        base = self._root / ".opencontext" / "sessions" / sid
+        base = resolve_workspace_path(self._root, StorageMode.local) / "sessions" / sid
         dirs = [base]
         runs = base / "runs"
         if runs.exists():
@@ -284,7 +286,7 @@ class StudioReader:
         )
 
     def _read_events(self, sid: str) -> list[dict[str, Any]]:
-        path = self._root / ".opencontext" / "sessions" / sid / "events.jsonl"
+        path = resolve_workspace_path(self._root, StorageMode.local) / "sessions" / sid / "events.jsonl"
         if not path.exists():
             return []
         events: list[dict[str, Any]] = []
@@ -360,7 +362,7 @@ class StudioReader:
         try:
             from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 
-            db = self._root / ".storage" / "opencontext" / "context_graph.db"
+            db = resolve_storage_path(self._root, StorageMode.local) / "context_graph.db"
             kg = KnowledgeGraph(db_path=str(db))
             if kg.get_stats().get("nodes", 0) == 0:
                 return StudioKgView(session_id=sid, available=False, query=session.task)
@@ -556,7 +558,7 @@ class StudioReader:
         kind, _ = self._resolve(sid)
         if kind != "session":
             return None
-        base = self._root / ".opencontext" / "sessions" / sid / "runs"
+        base = resolve_workspace_path(self._root, StorageMode.local) / "sessions" / sid / "runs"
         if not base.exists():
             return None
         out: list[StudioDecision] = []
@@ -648,7 +650,7 @@ class StudioReader:
     # ------------------------------------------------------------- learning
     def learning(self, sid: str) -> StudioLearningView:
         """Learning candidates view with benchmark evidence (STU-CONV)."""
-        path = self._root / ".opencontext" / "learning" / "candidates.jsonl"
+        path = resolve_workspace_path(self._root, StorageMode.local) / "learning" / "candidates.jsonl"
         if not path.exists():
             return StudioLearningView(session_id=sid, available=False)
         candidates: list[StudioLearningCandidate] = []
@@ -736,7 +738,7 @@ class StudioReader:
         Reads the OC Flow per-run ``state.json`` (B1/AVH-011) across every session
         so a no-op mutation run is surfaced honestly with its blocking reason.
         """
-        base = self._root / ".opencontext" / "sessions"
+        base = resolve_workspace_path(self._root, StorageMode.local) / "sessions"
         tasks: list[StudioTaskStatus] = []
         if base.exists():
             for state_json in base.glob("*/runs/*/state.json"):
@@ -771,7 +773,7 @@ class StudioReader:
         Reads the persisted ``.opencontext/reports/acceptance.json`` snapshot; a
         missing snapshot degrades to ``available=False`` (no fabricated verdict).
         """
-        path = self._root / ".opencontext" / "reports" / "acceptance.json"
+        path = resolve_workspace_path(self._root, StorageMode.local) / "reports" / "acceptance.json"
         data = self._load_json(path) if path.exists() else None
         if not isinstance(data, dict):
             return StudioReleaseGateView(available=False)

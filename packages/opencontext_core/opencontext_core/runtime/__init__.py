@@ -338,7 +338,7 @@ class OpenContextRuntime:
         else:
             # Explicit storage_path passed — backward-compat path; resolver skipped.
             self.storage_path = Path(storage_path)  # type: ignore[arg-type]
-            self.workspace_path = _root / ".opencontext"
+            self.workspace_path = resolve_workspace_path(_root, StorageMode.local)
         self.memory_store = memory_store or LocalProjectMemoryStore(self.storage_path)
         # Parsed-manifest cache (stat-signature keyed). Parsing the whole-repo
         # manifest JSON through Pydantic is query-independent and was repeated on
@@ -658,7 +658,7 @@ class OpenContextRuntime:
         return ProjectSetupResult(
             root=str(project_root),
             config_path=str(config_path),
-            workspace_path=str(project_root / ".opencontext"),
+            workspace_path=str(resolve_workspace_path(project_root, StorageMode.local)),
             manifest_path=str(self.storage_path / "project_manifest.json"),
             files=len(manifest.files),
             symbols=len(manifest.symbols),
