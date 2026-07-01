@@ -30,12 +30,13 @@ pythonpath = [
   "packages/opencontext_cli",
   "packages/opencontext_core",
   "packages/opencontext_profiles",
+  "packages/opencontext_sdd",
 ]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
-mypy_path = "packages/opencontext_core:packages/opencontext_profiles"
+mypy_path = "packages/opencontext_core:packages/opencontext_profiles:packages/opencontext_sdd"
 warn_unreachable = true
 exclude = [
   "packages/.*/build/",
