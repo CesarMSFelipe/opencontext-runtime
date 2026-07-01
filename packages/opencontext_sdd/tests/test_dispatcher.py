@@ -7,6 +7,7 @@ from opencontext_sdd.dispatcher import (
     RenderNativePhasePrompt,
 )
 from opencontext_sdd.status import Status
+from opencontext_sdd.telemetry import emit_trace_id
 
 # ---------------------------------------------------------------------------
 # REQ-OSS-004 — RenderDispatcherMarkdown
@@ -108,3 +109,16 @@ def test_REQ_GAS_005_prompt_contains_trace_id_and_tdd_rule_when_strict() -> None
     assert "trace_id=tr-xyz" in prompt
     assert "phase=apply" in prompt
     assert "tdd-strict: write the closest failing test first" in prompt
+
+
+def test_native_phase_prompt_deterministic() -> None:
+    """Same inputs → byte-identical output (strictness invariant across trace_id sources)."""
+    base = {"change": "demo", "trace_id": "tr-fixed", "tdd_mode": "strict"}
+    a = RenderNativePhasePrompt("apply", **base)
+    b = RenderNativePhasePrompt("apply", **base)
+    assert a == b
+    # And with a trace_id sourced from the telemetry module
+    tid = emit_trace_id()
+    c = RenderNativePhasePrompt("apply", change="demo", trace_id=tid, tdd_mode="strict")
+    d = RenderNativePhasePrompt("apply", change="demo", trace_id=tid, tdd_mode="strict")
+    assert c == d
