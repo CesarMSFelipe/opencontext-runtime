@@ -277,6 +277,26 @@ def _dedupe_capabilities(items: list[TestCapability]) -> list[TestCapability]:
     return unique
 
 
+# ---------------------------------------------------------------------------
+# PR4.a: optional Resolve delegation when sdd_runner_v2 is active
+# ---------------------------------------------------------------------------
+
+
+def resolve_v2(change: str, cwd: str | None = None) -> dict:
+    """Resolve SDD status via opencontext_sdd when sdd_runner_v2 is active.
+
+    Falls back to a minimal empty status when the v2 package is not
+    installed — keeps the legacy path clean.
+    """
+    try:
+        from opencontext_sdd.status import Resolve
+
+        status = Resolve(change, cwd=cwd or ".")
+        return status.model_dump(mode="json", exclude_none=True)
+    except ImportError:
+        return {"schemaName": "opencontext.sdd-status", "changeName": change}
+
+
 def _render_testing_markdown(context: SDDContext) -> str:
     lines = [
         "# OpenContext SDD/TDD Context",

@@ -16,6 +16,8 @@ from opencontext_sdd.dispatcher import (
     RenderDispatcherMarkdown,
     RenderNativePhasePrompt,
 )
+from opencontext_sdd.overlay import get_agent_for_phase, get_overlay, get_phase_list
+from opencontext_sdd.runner import PhaseResultEnvelope, build_phase_prompt, run_phase
 from opencontext_sdd.skill_registry import (
     get_skill_paths,
     refresh_skill_registry,
@@ -28,11 +30,17 @@ from opencontext_sdd.status import (
 
 __all__ = [
     "Catalog",
+    "PhaseResultEnvelope",
     "RenderDispatcherMarkdown",
     "RenderNativePhasePrompt",
     "Resolve",
     "Status",
+    "build_phase_prompt",
+    "get_agent_for_phase",
+    "get_overlay",
+    "get_phase_list",
     "get_skill_paths",
     "parse_verify_report",
     "refresh_skill_registry",
+    "run_phase",
 ]
