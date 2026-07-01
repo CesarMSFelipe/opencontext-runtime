@@ -41,7 +41,7 @@ def _ext_for(media_type: str) -> str:
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".opencontext.tmp")
+    tmp = path.with_suffix(path.suffix + ".oc-atomic.tmp")
     tmp.write_bytes(data)
     os.replace(tmp, path)
 

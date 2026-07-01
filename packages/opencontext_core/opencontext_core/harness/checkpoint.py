@@ -52,7 +52,7 @@ class FileChange:
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".opencontext.tmp")
+    tmp = path.with_suffix(path.suffix + ".oc-atomic.tmp")
     tmp.write_bytes(data)
     os.replace(tmp, path)
 
@@ -133,7 +133,9 @@ class CheckpointStore:
 
     def __init__(self, root: Path) -> None:
         # Checkpoints live alongside other run artifacts, scoped to this root.
-        self.root = Path(root) / ".opencontext" / "checkpoints"
+        from opencontext_core.paths import StorageMode, resolve_workspace_path
+
+        self.root = resolve_workspace_path(root, StorageMode.local) / "checkpoints"
 
     def create(self, paths: Iterable[Path], *, source: str = "apply") -> Checkpoint | None:
         """Snapshot ``paths`` before they change. Return ``None`` if empty.
