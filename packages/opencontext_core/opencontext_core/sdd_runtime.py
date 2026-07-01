@@ -14,6 +14,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from opencontext_core.paths import StorageMode, resolve_workspace_path
+
 
 class TestCapability(BaseModel):
     """Detected local test or validation command."""
@@ -222,7 +224,7 @@ def write_sdd_context(
         execution_mode=execution_mode,
         artifact_mode=artifact_mode,
     )
-    out_dir = base / ".opencontext" / "sdd"
+    out_dir = resolve_workspace_path(base, StorageMode.local) / "sdd"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     context_path = out_dir / "context.json"

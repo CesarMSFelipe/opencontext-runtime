@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from opencontext_core.compat import UTC
 from opencontext_core.models.project import DependencyEdge, ProjectManifest
+from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 
 
 class CrossProjectEdge(BaseModel):
@@ -166,10 +167,10 @@ def discover_tunnels_from_manifest(
             continue
 
         # Check if this absolute path contains a manifest
-        candidate_manifest = target_abs / ".storage" / "opencontext" / "project_manifest.json"
+        candidate_manifest = resolve_storage_path(target_abs, StorageMode.local) / "project_manifest.json"
         if not candidate_manifest.exists():
             # Try legacy location
-            candidate_manifest = target_abs / ".opencontext" / "manifest.json"
+            candidate_manifest = resolve_workspace_path(target_abs, StorageMode.local) / "manifest.json"
             if not candidate_manifest.exists():
                 continue
 

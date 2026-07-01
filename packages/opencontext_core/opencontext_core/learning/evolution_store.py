@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 
 from opencontext_core.learning.evolution import EvolutionProposal
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 
 
 class EvolutionStore:
@@ -34,7 +35,7 @@ class EvolutionStore:
         if root.name == "evolution" and root.parent.name == "learning":
             self._store_dir = root
         else:
-            self._store_dir = root / ".opencontext" / "learning" / "evolution"
+            self._store_dir = resolve_workspace_path(root, StorageMode.local) / "learning" / "evolution"
 
     def _ensure_dir(self) -> None:
         self._store_dir.mkdir(parents=True, exist_ok=True)

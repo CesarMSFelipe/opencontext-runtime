@@ -28,6 +28,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.learning import candidate_extractor
 from opencontext_core.learning.candidate_extractor import (
     LearningCandidate,
@@ -156,7 +157,7 @@ class LearningLoop:
 
     def _build_decision_log(self, run_result: Any, result: LearningLoopResult) -> DecisionRecorder:
         run_id = str(getattr(run_result, "run_id", "") or "")
-        path = self.root / ".opencontext" / "learning" / "decisions" / f"{run_id or 'run'}.jsonl"
+        path = resolve_workspace_path(self.root, StorageMode.local) / "learning" / "decisions" / f"{run_id or 'run'}.jsonl"
         log = DecisionRecorder(path=path)
         try:
             for decision in list(getattr(run_result, "decisions", None) or []):
@@ -178,7 +179,7 @@ class LearningLoop:
             from opencontext_core.learning.feedback_collector import FeedbackCollector
 
             collector = FeedbackCollector(
-                storage_path=self.root / ".storage" / "opencontext" / "learning"
+                storage_path=resolve_storage_path(self.root, StorageMode.local) / "learning"
             )
             return [RuntimeFeedback.from_metrics(m) for m in collector.load_metrics(limit=50)]
         except Exception as exc:
@@ -269,7 +270,7 @@ class LearningLoop:
             return
         try:
             run_id = result.run_id or "run"
-            path = self.root / ".opencontext" / "learning" / "candidates" / f"{run_id}.json"
+            path = resolve_workspace_path(self.root, StorageMode.local) / "learning" / "candidates" / f"{run_id}.json"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(
                 json.dumps(
