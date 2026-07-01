@@ -62,7 +62,7 @@ OpenContext is the layer **between your coding agent and your codebase** — it 
 | Pillar | What it does |
 |--------|--------------|
 | **Context packs + code graph** | Call-graph-traced, token-budgeted context in one deterministic call — no grep loops, no full-file reads. |
-| **Controlled SDD loop** | `explore → … → archive`, a dedicated persona per phase, gates and strict TDD — bounded and human-in-the-loop, not "go do everything". |
+| **Controlled SDD loop** | `explore → … → archive`, a dedicated persona per phase, gates and TDD-as-mode/gate (strict / ask / off) — bounded and human-in-the-loop, not "go do everything". |
 | **Your model, per persona** | Pick the model for each SDD phase in `opencontext.yaml`; it is sent to your agent as an MCP sampling hint. |
 | **Persistent memory** | Local store by default (seven layers); co-resident Engram coexistence is opt-in. Progressive, token-aware recall. |
 | **Security by default** | Redaction, secret scanning, fail-closed posture, offline-first. |
@@ -422,11 +422,11 @@ The base flow ends with `review` (the final quality gate) then `archive`. The `q
 </p>
 
 <p align="center">
-  <img src="docs/assets/tdd-phases.svg" alt="TDD workflow: explore (offline), write test (red — failing), implement, verify (green — passing), refactor, verify (offline). Repeat write test → verify until green." width="100%">
+  <img src="docs/assets/tdd-phases.svg" alt="TDD as mode/gate inside SDD and OC Flow — strict requires a failing test before mutation, ask fails closed non-interactive, off disables the gate. Not a standalone workflow." width="100%">
 </p>
 
 <p align="center">
-  <sub>TDD Workflow · test first · implement minimum · verify green · refactor · verify again</sub>
+  <sub>TDD as mode/gate (strict · ask · off) · failing test before mutation · not a standalone workflow</sub>
 </p>
 
 <p align="center">
