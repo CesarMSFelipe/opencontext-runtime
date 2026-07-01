@@ -104,7 +104,7 @@ def insert(
     connection: sqlite3.Connection,
     source_id: int,
     target_id: int,
-    verb: RelationVerbs | VerbValue,
+    verb: RelationVerbs | VerbValue | str,
     *,
     status: JudgmentStatuses | StatusValue = "pending",
     marked_by_actor: str,
@@ -149,7 +149,7 @@ def JudgeBySemantic(
     connection: sqlite3.Connection,
     source_id: int,
     target_id: int,
-    verb: RelationVerbs | VerbValue,
+    verb: RelationVerbs | VerbValue | str,
     *,
     confidence: float,
     reasoning: str,
@@ -217,3 +217,50 @@ def query_by_pair(
         (int(source_id), int(target_id)),
     ).fetchall()
     return [_row_to_dict(r) for r in rows]
+
+
+def update_judgment(
+    connection: sqlite3.Connection,
+    *,
+    judgment_id: str,
+    relation: RelationVerbs | VerbValue | str,
+    confidence: float = 1.0,
+    reasoning: str | None = None,
+) -> int:
+    """Promote a relation row to ``judgment_status='judged'``.
+
+    Returns the row id when the update lands, or ``0`` when no row
+    matches ``judgment_id``. The :func:`mem_judge` tool (PR2.c.ii)
+    surfaces the missing-row case as ``LookupError`` so the host gets a
+    clear "judgment_not_found:<id>" message instead of a silent no-op.
+    """
+    verb_value = _coerce_verb(relation)
+    cur = connection.execute(
+        """
+        UPDATE memory_relations
+        SET relation = ?,
+            judgment_status = 'judged',
+            confidence = ?,
+            reasoning = COALESCE(?, reasoning)
+        WHERE judgment_id = ?
+        """,
+        (verb_value, float(confidence), reasoning, judgment_id),
+    )
+    return int(cur.lastrowid or 0)
+
+
+def fetch_by_judgment_id(
+    connection: sqlite3.Connection,
+    judgment_id: str,
+) -> dict[str, Any] | None:
+    """Return the row for ``judgment_id`` as a dict, or ``None``."""
+    row = connection.execute(
+        """
+        SELECT id, source_id, target_id, relation, judgment_status, marked_by_actor,
+               confidence, reasoning, model, judgment_id, created_at
+        FROM memory_relations
+        WHERE judgment_id = ?
+        """,
+        (judgment_id,),
+    ).fetchone()
+    return _row_to_dict(row) if row is not None else None
