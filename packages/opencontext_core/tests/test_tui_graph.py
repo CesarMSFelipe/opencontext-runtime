@@ -184,19 +184,27 @@ class TestGraphViewport:
 
 class TestGraphScreenLoadFunctions:
     def test_load_graph_for_kg_empty_dir(self) -> None:
+        # Empty project root → no KG DB → pick_focus returns None.
+        # The interface evolved: graph.py exposes pick_focus/load_node_neighbors
+        # rather than a load_graph_for_kg() aggregate. The new entry point
+        # for "give me a focus to land on" is pick_focus(root).
         import tempfile
 
         mod = _get_graph_screen()
         with tempfile.TemporaryDirectory() as tmp:
-            state = mod.load_graph_for_kg(Path(tmp))
-            assert hasattr(state, "nodes")
-            assert isinstance(state.nodes, list)
+            focus_id = mod.pick_focus(Path(tmp))
+            assert focus_id is None
 
     def test_load_graph_for_run_missing_run(self) -> None:
+        # No KG DB present → load_node_neighbors returns (None, []).
+        # Missing run id cannot resolve to any node; the lookup must
+        # degrade gracefully (no exception, empty neighbor list).
         import tempfile
 
         mod = _get_graph_screen()
         with tempfile.TemporaryDirectory() as tmp:
-            state = mod.load_graph_for_run("nonexistent-run-id", root=Path(tmp))
-            assert hasattr(state, "nodes")
-            assert isinstance(state.nodes, list)
+            focus, neighbors = mod.load_node_neighbors(
+                "nonexistent-run-id", root=Path(tmp)
+            )
+            assert focus is None
+            assert neighbors == []
