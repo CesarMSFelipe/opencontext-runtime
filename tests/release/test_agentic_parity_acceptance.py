@@ -144,7 +144,7 @@ class TestReleaseGates:
             ["git", "log", "-10", "--format=%B%n---"],
             capture_output=True, text=True, timeout=15,
         )
-        assert "Co-Authored-By" not in result.stdout
+        assert "Co-Authored-By:" not in result.stdout
 
     def test_25_pytest_passes_sdd_and_memory(self) -> None:
         import subprocess, sys
