@@ -478,4 +478,10 @@ __all__ = [
     "get_skill_paths",
     "match_skills",
     "refresh",
+    "refresh_skill_registry",
 ]
+
+
+# Canonical public name expected by design.md §Public Python API. Kept as
+# an alias of the internal ``refresh`` so existing callers keep working.
+refresh_skill_registry = refresh
