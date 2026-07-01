@@ -20,7 +20,12 @@ SNAPSHOT_FILENAME = "config-snapshot.yaml"
 
 
 def snapshot_path(root: str | Path, session_id: str) -> Path:
-    return resolve_workspace_path(root, StorageMode.local) / "sessions" / session_id / SNAPSHOT_FILENAME
+    return (
+        resolve_workspace_path(root, StorageMode.local)
+        / "sessions"
+        / session_id
+        / SNAPSHOT_FILENAME
+    )
 
 
 def write_snapshot(

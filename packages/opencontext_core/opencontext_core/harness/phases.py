@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from opencontext_core.workflow.phase_result import PhaseResultEnvelope
 
 from opencontext_core.context.budgeting import estimate_tokens
-from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.harness.budget import TokenBudgetEnforcer
 from opencontext_core.harness.checkpoint import CheckpointStore
 from opencontext_core.harness.config import PhaseConfig
@@ -34,6 +33,7 @@ from opencontext_core.harness.models import (
     PhaseGate,
     PhaseLedger,
 )
+from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 
 
 @dataclass
@@ -467,7 +467,12 @@ class ExplorePhase(HarnessPhase):
             HarnessArtifact(
                 id=f"explore-pack-{state.run_id[:8]}",
                 phase="explore",
-                path=str(resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id / "context-pack.json"),
+                path=str(
+                    resolve_workspace_path(state.root, StorageMode.local)
+                    / "runs"
+                    / state.run_id
+                    / "context-pack.json"
+                ),
                 kind="context-pack",
                 description=f"Context pack with {len(pack.included)} items",
             )
@@ -859,10 +864,16 @@ class ProposePhase(HarnessPhase):
         # nothing downstream has to fall back to the bare task text.
         evidence = {
             "explore_pack": str(
-                resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id / "context-pack.json"
+                resolve_workspace_path(state.root, StorageMode.local)
+                / "runs"
+                / state.run_id
+                / "context-pack.json"
             ),
             "contract_path": str(
-                resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id / "contract.yaml"
+                resolve_workspace_path(state.root, StorageMode.local)
+                / "runs"
+                / state.run_id
+                / "contract.yaml"
             ),
             "affected_files": impacted_files,
             "affected_tests": impacted_tests,

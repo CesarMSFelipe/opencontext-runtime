@@ -167,10 +167,14 @@ def discover_tunnels_from_manifest(
             continue
 
         # Check if this absolute path contains a manifest
-        candidate_manifest = resolve_storage_path(target_abs, StorageMode.local) / "project_manifest.json"
+        candidate_manifest = (
+            resolve_storage_path(target_abs, StorageMode.local) / "project_manifest.json"
+        )
         if not candidate_manifest.exists():
             # Try legacy location
-            candidate_manifest = resolve_workspace_path(target_abs, StorageMode.local) / "manifest.json"
+            candidate_manifest = (
+                resolve_workspace_path(target_abs, StorageMode.local) / "manifest.json"
+            )
             if not candidate_manifest.exists():
                 continue
 

@@ -97,7 +97,9 @@ def build_lockfile(root: str | Path = ".") -> AICXLockfile:
     )
 
     # 3. Knowledge-graph shape — the indexed surface a run grounds on.
-    graph = compute_graph_health(resolve_storage_path(Path(root), StorageMode.local) / "context_graph.db")
+    graph = compute_graph_health(
+        resolve_storage_path(Path(root), StorageMode.local) / "context_graph.db"
+    )
     graph_sig = json.dumps(
         {
             "status": graph.status,

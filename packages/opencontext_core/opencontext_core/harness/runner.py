@@ -20,7 +20,6 @@ from opencontext_core.agents.sdd_orchestrator import (
     WORKFLOW_TRACKS,
 )
 from opencontext_core.harness.budget import TokenBudgetEnforcer
-from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.harness.config import HarnessConfig
 from opencontext_core.harness.gates import (
     ApprovalRequiredForWritesGate,
@@ -63,6 +62,7 @@ from opencontext_core.harness.phases import (
     VerifyPhase,
 )
 from opencontext_core.models.trace import RunEvent
+from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.workflow.delegation_validator import (
     DelegationValidationError,
     DelegationValidator,
@@ -156,7 +156,9 @@ class HarnessRunner:
         llm_gateway: Any = None,
     ) -> None:
         self.root = root.resolve()
-        self.config = config or HarnessConfig.from_yaml_file(resolve_workspace_path(root, StorageMode.local) / "harness.yaml")
+        self.config = config or HarnessConfig.from_yaml_file(
+            resolve_workspace_path(root, StorageMode.local) / "harness.yaml"
+        )
         self.enforcer = TokenBudgetEnforcer()
         # Optional explicit LLM gateway. When provided (and not the mock
         # provider) the runner builds a live executor from it and attaches it to
@@ -204,8 +206,6 @@ class HarnessRunner:
                 getattr(getattr(oc_config, "runtime", None), "memory_v2_enabled", False)
             )
             try:
-                from opencontext_core.paths import resolve_storage_path
-
                 storage_path = resolve_storage_path(
                     self.root,
                     oc_config.storage.mode,
@@ -651,7 +651,9 @@ class HarnessRunner:
         """
         import json as _json
 
-        events_path = resolve_workspace_path(self.root, StorageMode.local) / "runs" / run_id / "events.json"
+        events_path = (
+            resolve_workspace_path(self.root, StorageMode.local) / "runs" / run_id / "events.json"
+        )
         if not events_path.exists():
             return set()
         try:
@@ -795,7 +797,11 @@ class HarnessRunner:
             if self.config.privacy_profile is not PrivacyProfile.OFF:
                 privacy_rules = self._load_privacy_rules()
                 if privacy_rules:
-                    run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+                    run_dir = (
+                        resolve_workspace_path(state.root, StorageMode.local)
+                        / "runs"
+                        / state.run_id
+                    )
                     for rule in privacy_rules:
                         privacy_gate = PrivacyGate()
                         # Operation is determined by phase type
@@ -934,7 +940,6 @@ class HarnessRunner:
         # Best-effort — learning must never block a run.
         try:
             from opencontext_core.learning.feedback_collector import FeedbackCollector
-            from opencontext_core.paths import resolve_storage_path
 
             try:
                 from opencontext_core.config import load_config_or_defaults
@@ -1066,7 +1071,6 @@ class HarnessRunner:
 
                 try:
                     from opencontext_core.config import load_config_or_defaults
-                    from opencontext_core.paths import resolve_storage_path
 
                     _lrc = load_config_or_defaults(
                         state.root / "opencontext.yaml", auto_detect=False
@@ -1132,7 +1136,6 @@ class HarnessRunner:
                 # Canonical KG db name — same as runtime/explore (context_graph.db).
                 try:
                     from opencontext_core.config import load_config_or_defaults
-                    from opencontext_core.paths import resolve_storage_path
 
                     _krc = load_config_or_defaults(
                         state.root / "opencontext.yaml", auto_detect=False
@@ -1142,7 +1145,9 @@ class HarnessRunner:
                     )
                     db_path = _ks / "context_graph.db"
                 except Exception:
-                    db_path = resolve_storage_path(state.root, StorageMode.local) / "context_graph.db"
+                    db_path = (
+                        resolve_storage_path(state.root, StorageMode.local) / "context_graph.db"
+                    )
                 kg_changed = {p for p in changed if (state.root / p).suffix in _KG_EXTENSIONS}
                 if db_path.exists() and kg_changed:
                     kg = KnowledgeGraph(db_path=db_path)
@@ -1600,7 +1605,6 @@ class HarnessRunner:
             return _local
         try:
             from opencontext_core.config import load_config_or_defaults
-            from opencontext_core.paths import resolve_storage_path
 
             _qrc = load_config_or_defaults(_oc_yaml, auto_detect=False)
             _resolved = (
@@ -2320,7 +2324,6 @@ class HarnessRunner:
             if _oc_yaml.exists():
                 try:
                     from opencontext_core.config import load_config_or_defaults
-                    from opencontext_core.paths import resolve_storage_path
 
                     _crc = load_config_or_defaults(_oc_yaml, auto_detect=False)
                     _cs = resolve_storage_path(

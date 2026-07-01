@@ -57,13 +57,13 @@ from opencontext_core.oc_flow.nodes import (
     can_exit,
 )
 from opencontext_core.oc_flow.personas import persona_id_for_oc_flow_node
+from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.runtime.brain import NullRuntimeBrain, RuntimeBrainPort
 from opencontext_core.runtime.decisions import (
     DecisionLog,
     RuntimeDecision,
     summarize_decision_log,
 )
-from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.runtime.ids import new_run_id, new_session_id
 
 # Safety cap on total node steps (the diagnosis attempt budget already bounds the
@@ -205,7 +205,13 @@ class OCFlowRunner:
 
     # -- paths ----------------------------------------------------------------
     def _run_dir(self, session_id: str, run_id: str) -> Path:
-        return resolve_workspace_path(self.root, StorageMode.local) / "sessions" / session_id / "runs" / run_id
+        return (
+            resolve_workspace_path(self.root, StorageMode.local)
+            / "sessions"
+            / session_id
+            / "runs"
+            / run_id
+        )
 
     def _artifacts_dir(self, session_id: str, run_id: str) -> Path:
         return self._run_dir(session_id, run_id) / "artifacts" / "oc-flow"

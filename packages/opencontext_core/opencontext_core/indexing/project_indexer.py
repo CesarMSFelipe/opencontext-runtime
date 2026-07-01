@@ -10,13 +10,13 @@ from pathlib import Path
 
 from opencontext_core.compat import UTC
 from opencontext_core.config import ProjectIndexConfig
-from opencontext_core.paths import StorageMode, resolve_storage_path
 from opencontext_core.indexing.dependency_graph import DependencyGraphBuilder
 from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 from opencontext_core.indexing.scanner import ProjectScanner, ScannedFile
 from opencontext_core.indexing.symbol_extractor import ExtractableFile, SymbolExtractor
 from opencontext_core.indexing.tree_sitter_parser import LANGUAGE_EXTENSIONS
 from opencontext_core.models.project import ProjectManifest, Symbol
+from opencontext_core.paths import StorageMode, resolve_storage_path
 from opencontext_core.project.profiles import (
     GENERIC_PROFILE,
     GenericTechnologyProfile,
@@ -72,7 +72,9 @@ class ProjectIndexer:
         # Checkpoint persists which files have been indexed so interrupted runs resume.
         kg_stats = {"files_indexed": 0, "nodes": 0, "edges": 0}
         if self.knowledge_graph is not None:
-            checkpoint_path = resolve_storage_path(project_root, StorageMode.local) / "index_checkpoint.json"
+            checkpoint_path = (
+                resolve_storage_path(project_root, StorageMode.local) / "index_checkpoint.json"
+            )
             done_paths: set[str] = _load_checkpoint(checkpoint_path)
             indexed_files: list[tuple[str, str]] = []
             batch_size = 50

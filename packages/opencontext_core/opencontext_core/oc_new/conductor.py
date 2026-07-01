@@ -393,7 +393,11 @@ class OcNewConductor:
 
             # NOTE: G4 — validate approval.json content before spawning apply subagent.
             if phase_def.name == "apply":
-                run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
+                run_dir = (
+                    resolve_workspace_path(self.root, StorageMode.local)
+                    / "runs"
+                    / state.identity.run_id
+                )
                 approval_error = self._validate_approval_content(run_dir)
                 if approval_error:
                     return state.model_copy(
@@ -621,7 +625,9 @@ class OcNewConductor:
 
         from opencontext_core.agentic.receipt import AgenticReceipt, sha256_file, sha256_tree
 
-        run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
+        run_dir = (
+            resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
+        )
         run_dir.mkdir(parents=True, exist_ok=True)
 
         config = state.config
@@ -668,7 +674,9 @@ class OcNewConductor:
             tasks=tasks,
             mode=git_mode,
         )
-        run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
+        run_dir = (
+            resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
+        )
         run_dir.mkdir(parents=True, exist_ok=True)
         git_plan_path = run_dir / "git_plan.json"
         git_plan_path.write_text(json.dumps(plan.model_dump(), indent=2))
@@ -679,7 +687,10 @@ class OcNewConductor:
         from opencontext_core.agentic.budget_controller import BudgetController
 
         ledger_path = (
-            resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id / "budget_ledger.json"
+            resolve_workspace_path(self.root, StorageMode.local)
+            / "runs"
+            / state.identity.run_id
+            / "budget_ledger.json"
         )
         if ledger_path.exists():
             ledger = BudgetLedger.model_validate_json(ledger_path.read_text())
@@ -694,7 +705,10 @@ class OcNewConductor:
         phase_budget = int(getattr(state.config, "phase_budget", 0) or 0)
         used_before = 0
         ledger_path = (
-            resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id / "budget_ledger.json"
+            resolve_workspace_path(self.root, StorageMode.local)
+            / "runs"
+            / state.identity.run_id
+            / "budget_ledger.json"
         )
         if ledger_path.exists():
             try:
@@ -731,7 +745,12 @@ class OcNewConductor:
 
         from opencontext_core.agentic.budget import BudgetLedger, PhaseBudget
 
-        ledger_path = resolve_workspace_path(self.root, StorageMode.local) / "runs" / run_id / "budget_ledger.json"
+        ledger_path = (
+            resolve_workspace_path(self.root, StorageMode.local)
+            / "runs"
+            / run_id
+            / "budget_ledger.json"
+        )
         if ledger_path.exists():
             ledger = BudgetLedger.model_validate_json(ledger_path.read_text())
         else:
@@ -827,7 +846,9 @@ class OcNewConductor:
         )
 
     def _missing_artifacts(self, state: OcNewRunState, phase_def: PhaseDefinition) -> list[str]:
-        run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
+        run_dir = (
+            resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
+        )
         spec_dir = self.root / "openspec" / "changes" / state.identity.change_id
         missing: list[str] = []
         for artifact in phase_def.required_artifacts:

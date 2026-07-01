@@ -28,7 +28,6 @@ from pathlib import Path
 from typing import Any
 
 from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
-
 from opencontext_core.studio.views import (
     StudioBenchmarkCoverageView,
     StudioBenchmarkSuiteCoverage,
@@ -286,7 +285,12 @@ class StudioReader:
         )
 
     def _read_events(self, sid: str) -> list[dict[str, Any]]:
-        path = resolve_workspace_path(self._root, StorageMode.local) / "sessions" / sid / "events.jsonl"
+        path = (
+            resolve_workspace_path(self._root, StorageMode.local)
+            / "sessions"
+            / sid
+            / "events.jsonl"
+        )
         if not path.exists():
             return []
         events: list[dict[str, Any]] = []
@@ -650,7 +654,9 @@ class StudioReader:
     # ------------------------------------------------------------- learning
     def learning(self, sid: str) -> StudioLearningView:
         """Learning candidates view with benchmark evidence (STU-CONV)."""
-        path = resolve_workspace_path(self._root, StorageMode.local) / "learning" / "candidates.jsonl"
+        path = (
+            resolve_workspace_path(self._root, StorageMode.local) / "learning" / "candidates.jsonl"
+        )
         if not path.exists():
             return StudioLearningView(session_id=sid, available=False)
         candidates: list[StudioLearningCandidate] = []

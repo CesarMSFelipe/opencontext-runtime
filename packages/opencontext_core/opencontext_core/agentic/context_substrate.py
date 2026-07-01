@@ -130,9 +130,10 @@ class ContextSubstrateBuilder:
                 selected_tokens = sqlite_tokens
             else:
                 try:
-                    raw_content = (resolve_workspace_path(self.root, StorageMode.local) / "knowledge_graph.json").read_text(
-                        encoding="utf-8"
-                    )
+                    raw_content = (
+                        resolve_workspace_path(self.root, StorageMode.local)
+                        / "knowledge_graph.json"
+                    ).read_text(encoding="utf-8")
                     selected_tokens = int(len(raw_content.split()) * 1.3)
                 except Exception:
                     selected_tokens = 0

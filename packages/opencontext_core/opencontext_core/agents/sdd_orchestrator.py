@@ -12,7 +12,6 @@ import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 
-from opencontext_core.paths import StorageMode, resolve_workspace_path
 from opencontext_core.agents.artifact_store import (
     ArtifactStore,
     EngramStore,
@@ -30,6 +29,7 @@ from opencontext_core.config import (
     ArtifactStoreMode,
     SDDConfig,
 )
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 
 _log = logging.getLogger(__name__)
 
@@ -385,7 +385,10 @@ class SDDOrchestrator:
             openspec_root = Path(self.config.artifact_store.openspec.path)
             # .opencontext sits next to the openspec root (e.g. openspec/../.opencontext)
             checkpoint_dir = (
-                resolve_workspace_path(openspec_root / "..", StorageMode.local) / "sdd" / "checkpoints" / change
+                resolve_workspace_path(openspec_root / "..", StorageMode.local)
+                / "sdd"
+                / "checkpoints"
+                / change
             ).resolve()
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
             ts = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%S")

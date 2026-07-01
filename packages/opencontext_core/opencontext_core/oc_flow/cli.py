@@ -15,13 +15,13 @@ from typing import Any
 import yaml
 
 from opencontext_core.config_resolver import resolve_config_path
-from opencontext_core.paths import StorageMode, resolve_workspace_path
 from opencontext_core.context.planning.workflow_selector import select_workflow
 from opencontext_core.llm.provider_gateway import build_adapter, build_provider_gateway
 from opencontext_core.oc_flow.models import Lane
 from opencontext_core.oc_flow.nodes import NodeExecutor, ProviderBackedNodeExecutor
 from opencontext_core.oc_flow.runner import OCFlowRunner
 from opencontext_core.operating_model.receipts import RunReceiptStore
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 from opencontext_core.providers.detect import detect_provider
 from opencontext_core.providers.gateway import ProviderGateway
 from opencontext_core.providers.test_stub import TestStubGateway

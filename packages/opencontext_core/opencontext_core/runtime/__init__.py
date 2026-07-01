@@ -50,7 +50,7 @@ from opencontext_core.operating_model.events import ProviderEventEmitter
 from opencontext_core.operating_model.performance import CostLedger, ModelRoleRouter
 from opencontext_core.operating_model.quality import PreLLMQualityGate
 from opencontext_core.operating_model.receipts import RunReceiptStore
-from opencontext_core.paths import (  # noqa: F401 — StorageMode re-exported
+from opencontext_core.paths import (
     StorageMode,
     detect_legacy,
     resolve_storage_path,

@@ -35,7 +35,9 @@ class EvolutionStore:
         if root.name == "evolution" and root.parent.name == "learning":
             self._store_dir = root
         else:
-            self._store_dir = resolve_workspace_path(root, StorageMode.local) / "learning" / "evolution"
+            self._store_dir = (
+                resolve_workspace_path(root, StorageMode.local) / "learning" / "evolution"
+            )
 
     def _ensure_dir(self) -> None:
         self._store_dir.mkdir(parents=True, exist_ok=True)
