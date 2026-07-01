@@ -1,0 +1,20 @@
+[project]
+name = "opencontext_studio"
+version = "0.1.0"
+description = "OpenContext Studio — read-only control plane + 12-screen TUI"
+requires-python = ">=3.12"
+# No external deps added here: FastAPI is reused from opencontext_api,
+# Textual from opencontext_cli. The dep test enforces this.
+dependencies = [
+    "opencontext_core",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["opencontext_studio"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
