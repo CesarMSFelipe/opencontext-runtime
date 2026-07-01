@@ -14,9 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-from opencontext_core.paths import project_id, resolve_storage_path, StorageMode
+from opencontext_core.paths import StorageMode, project_id, resolve_storage_path
 
 
 def test_resolve_storage_windows_mock(tmp_path: Path) -> None:
@@ -30,9 +28,7 @@ def test_resolve_storage_windows_mock(tmp_path: Path) -> None:
         path = resolve_storage_path(tmp_path, StorageMode.user)
 
     expected_prefix = fake_localappdata / "projects" / project_id(tmp_path)
-    assert path == expected_prefix, (
-        f"Expected {expected_prefix}, got {path}"
-    )
+    assert path == expected_prefix, f"Expected {expected_prefix}, got {path}"
 
 
 def test_resolve_storage_windows_mock_different_roots(tmp_path: Path) -> None:

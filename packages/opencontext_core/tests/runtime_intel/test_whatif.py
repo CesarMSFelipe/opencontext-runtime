@@ -72,13 +72,23 @@ class TestWhatIfImmutability:
 class TestCostEstimate:
     def test_estimate_has_required_fields(self) -> None:
         wf = WhatIfAnalysis()
-        result = wf.compare([_plan("a", tokens=100, model="default", duration_s=2.0),
-                             _plan("b", tokens=200, model="default", duration_s=1.0),
-                             _plan("c", tokens=300, model="default", duration_s=0.5)])
+        result = wf.compare(
+            [
+                _plan("a", tokens=100, model="default", duration_s=2.0),
+                _plan("b", tokens=200, model="default", duration_s=1.0),
+                _plan("c", tokens=300, model="default", duration_s=0.5),
+            ]
+        )
         est = result[0]
         for field_name in (
-            "workflow", "input_tokens", "output_tokens", "tool_calls",
-            "duration_s", "cost_usd", "confidence", "assumptions",
+            "workflow",
+            "input_tokens",
+            "output_tokens",
+            "tool_calls",
+            "duration_s",
+            "cost_usd",
+            "confidence",
+            "assumptions",
         ):
             assert hasattr(est, field_name), f"missing {field_name}"
 

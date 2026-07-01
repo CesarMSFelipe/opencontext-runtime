@@ -7,14 +7,15 @@ surface (``cache/v2/__init__``) can stay focused on typed-entry plumbing.
 
 from __future__ import annotations
 
+import builtins
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class CacheStrategy(str, Enum):
+class CacheStrategy(StrEnum):
     TTL = "ttl"
     LRU = "lru"
     FIFO = "fifo"
@@ -39,13 +40,15 @@ class _StrategyEntry:
 # Re-use the existing dataclass name ``CacheEntry`` from v2.__init__ for the
 # strategy store; the typed Pydantic CacheEntry lives in cache.base. Both
 # coexist because they serve different layers (runtime vs typed).
-CacheEntry = _StrategyEntry  # type: ignore[misc,assignment]
+CacheEntry = _StrategyEntry
 
 
 class SemanticCache:
     """Multi-strategy in-memory cache leaf with eviction policies."""
 
-    def __init__(self, strategy: CacheStrategy = CacheStrategy.TTL, max_entries: int = 1000) -> None:
+    def __init__(
+        self, strategy: CacheStrategy = CacheStrategy.TTL, max_entries: int = 1000
+    ) -> None:
         self._strategy = strategy
         self._max_entries = max_entries
         self._store: OrderedDict[str, _StrategyEntry] = OrderedDict()
@@ -81,7 +84,7 @@ class SemanticCache:
     def invalidate(self, key: str) -> None:
         self._store.pop(key, None)
 
-    def apply_delta(self, deleted_keys: set[str]) -> int:
+    def apply_delta(self, deleted_keys: builtins.set[str]) -> int:
         count = 0
         for k in deleted_keys:
             if k in self._store:

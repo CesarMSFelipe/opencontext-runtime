@@ -7,9 +7,6 @@ Per openspec/changes/agentic-parity-engram-gentle/design/pr3-cli-fastapi.md
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
-
-import pytest
 
 from opencontext_cli.commands.sdd_cmd import SUBCOMMANDS, add_sdd_parser
 
@@ -103,9 +100,7 @@ def test_sdd_tasks_emits_checkboxes() -> None:
 def test_sdd_apply_writes_failing_test_first_when_strict() -> None:
     """REQ-OSP-007 / R1: In strict TDD mode, apply writes failing test before impl."""
     parser = _build_parent()
-    args = parser.parse_args(
-        ["sdd", "apply", "--change", "test", "--cwd", ".", "--task", "T3.1"]
-    )
+    args = parser.parse_args(["sdd", "apply", "--change", "test", "--cwd", ".", "--task", "T3.1"])
     assert args.sdd_command == "apply"
     assert args.task == "T3.1"
 

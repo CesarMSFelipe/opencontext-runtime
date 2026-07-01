@@ -31,8 +31,9 @@ def _overconfident_history(
 class TestCalibrationReportInBand:
     def test_perfectly_calibrated_is_in_band(self) -> None:
         # confidence == outcome → brier == 0, baseline 0 → in band
-        history = [CalibrationEntry(confidence=0.0, outcome=0.0)] * 50 + \
-                  [CalibrationEntry(confidence=1.0, outcome=1.0)] * 50
+        history = [CalibrationEntry(confidence=0.0, outcome=0.0)] * 50 + [
+            CalibrationEntry(confidence=1.0, outcome=1.0)
+        ] * 50
         report = CalibrationReport.build(history, baseline=0.0)
         assert report.brier_within_baseline is True
         assert report.drift_event is None

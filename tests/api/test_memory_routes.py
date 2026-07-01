@@ -6,7 +6,6 @@ Per openspec/changes/agentic-parity-engram-gentle/design/pr3-cli-fastapi.md
 
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 
 from opencontext_api.main import app

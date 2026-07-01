@@ -4,6 +4,7 @@ Acceptance: a LearningCandidate is promotable only when ``quality_score >= 80``
 AND the supplied evidence carries a ``benchmark_id`` key. Either gate failing
 raises the typed rejection; the promoted result exposes the destination record.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -17,8 +18,10 @@ from opencontext_core.learning.v2.promotion_gate import (
 
 def _candidate(quality: int = 90, candidate_id: str = "cand-1") -> object:
     """Trivial stand-in carrying only the fields the gate reads."""
+
     class _Stub:
         pass
+
     s = _Stub()
     s.candidate_id = candidate_id
     s.quality_score = quality
@@ -34,18 +37,14 @@ class TestPromotionGateQuality:
 
     def test_quality_at_80_promoted(self):
         gate = PromotionGate()
-        result = gate.promote(
-            _candidate(quality=80), evidence={"benchmark_id": "first_run_v1"}
-        )
+        result = gate.promote(_candidate(quality=80), evidence={"benchmark_id": "first_run_v1"})
         assert isinstance(result, PromotionResult)
         assert result.promoted is True
         assert result.benchmark_id == "first_run_v1"
 
     def test_quality_above_80_with_benchmark_promoted(self):
         gate = PromotionGate()
-        result = gate.promote(
-            _candidate(quality=85), evidence={"benchmark_id": "first_run_v1"}
-        )
+        result = gate.promote(_candidate(quality=85), evidence={"benchmark_id": "first_run_v1"})
         assert result.promoted is True
 
 

@@ -32,7 +32,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import median
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from opencontext_core.evaluation.models import (
     BenchmarkSuiteReport,
@@ -337,7 +337,7 @@ class EvalSuite:
 
     name: str
     methodology_version: str
-    cases: list[dict] = field(default_factory=list)
+    cases: list[dict[Any, Any]] = field(default_factory=list[Any])
     gate_blocking: bool = True
     regression_threshold: float = 0.05
 
@@ -347,7 +347,7 @@ class _CaseOutcome:
     """Internal: a case's raw run payload + timing."""
 
     case_id: str
-    payload: dict
+    payload: dict[Any, Any]
     duration_ms: int
 
 
@@ -398,7 +398,7 @@ class EvalRunner:
         return [self.run(name) for name in self._suites]
 
 
-def _execute_case(case: dict) -> _CaseOutcome:
+def _execute_case(case: dict[Any, Any]) -> _CaseOutcome:
     """Run a single case dict; never raises — failures become a failed result.
 
     The case MUST have an ``"id"`` and a ``"run"`` callable. Anything else

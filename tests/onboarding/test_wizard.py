@@ -58,7 +58,9 @@ class TestOnboardingWizard:
     )
     def test_wizard_persists_valid_security_mode(self, tmp_path: Path, requested: str) -> None:
         """A valid (or legacy-hyphenated) mode is written to config AND prefs."""
-        InteractiveOnboardingWizard(root=tmp_path).run(non_interactive=True, security_mode=requested)
+        InteractiveOnboardingWizard(root=tmp_path).run(
+            non_interactive=True, security_mode=requested
+        )
 
         config = load_config(tmp_path / "opencontext.yaml")  # must not raise
         expected = SecurityMode(requested.replace("-", "_"))

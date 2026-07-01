@@ -11,7 +11,9 @@ from opencontext_core.marketplace.v2.official_packs import (
 
 def test_REQ_mkt_v1_004_three_packs_registered() -> None:
     assert set(OFFICIAL_PACK_IDS) >= {
-        "python-pytest", "typescript-eslint", "php-phpunit",
+        "python-pytest",
+        "typescript-eslint",
+        "php-phpunit",
     }
 
 

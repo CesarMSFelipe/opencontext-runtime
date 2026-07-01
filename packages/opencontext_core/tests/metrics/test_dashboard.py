@@ -87,14 +87,24 @@ class TestRenderDashboard:
         from opencontext_core.metrics.dashboard import MetricsDashboard
 
         dash = MetricsDashboard()
-        sample = {k: 0.5 for k in [
-            "time_to_first_success_minutes", "task_success_rate",
-            "tokens_per_task", "cache_hit_rate", "first_pass_yield",
-            "p50_latency_s", "p95_latency_s", "eval_suite_pass_rate",
-            "redaction_false_positive_rate", "redaction_false_negative_rate",
-            "kg_retrieval_mrr", "memory_usefulness_score",
-            "compatibility_violations",
-        ]}
+        sample = {
+            k: 0.5
+            for k in [
+                "time_to_first_success_minutes",
+                "task_success_rate",
+                "tokens_per_task",
+                "cache_hit_rate",
+                "first_pass_yield",
+                "p50_latency_s",
+                "p95_latency_s",
+                "eval_suite_pass_rate",
+                "redaction_false_positive_rate",
+                "redaction_false_negative_rate",
+                "kg_retrieval_mrr",
+                "memory_usefulness_score",
+                "compatibility_violations",
+            ]
+        }
         output = dash.render_dashboard(sample, format="md")
         assert "task_success_rate" in output
         assert "compatibility_violations" in output

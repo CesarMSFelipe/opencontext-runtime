@@ -34,15 +34,13 @@ PROFILES: dict[str, dict[str, Any]] = {
     },
     "subagent-native": {
         "description": (
-            "Subagent-native profile: delegates to native sub-agents per "
-            "phase. No model overrides."
+            "Subagent-native profile: delegates to native sub-agents per phase. No model overrides."
         ),
         "overrides": {},
     },
     "multi-phase": {
         "description": (
-            "Multi-phase profile: phases delegate to sub-agents with "
-            "opinionated model assignments."
+            "Multi-phase profile: phases delegate to sub-agents with opinionated model assignments."
         ),
         "overrides": {
             "design": {"model": None},

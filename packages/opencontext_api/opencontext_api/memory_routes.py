@@ -25,10 +25,17 @@ from opencontext_api.schemas import (
 
 router = APIRouter(prefix="/v1/memory", tags=["memory"])
 
-_VALID_RELATIONS = frozenset({
-    "related", "compatible", "scoped", "conflicts_with",
-    "supersedes", "not_conflict", "orphaned",
-})
+_VALID_RELATIONS = frozenset(
+    {
+        "related",
+        "compatible",
+        "scoped",
+        "conflicts_with",
+        "supersedes",
+        "not_conflict",
+        "orphaned",
+    }
+)
 
 
 # ---------------------------------------------------------------------------

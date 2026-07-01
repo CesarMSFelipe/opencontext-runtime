@@ -11,10 +11,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-import pytest
-
 from opencontext_core.paths import is_owned, write_manifest
-
 
 # ---------------------------------------------------------------------------
 # is_owned gate — the predicate the uninstall command relies on
@@ -61,11 +58,8 @@ def test_is_owned_wrong_project_root_manifest(tmp_path: Path) -> None:
     assert is_owned(dir_a) is True
 
 
-def test_uninstall_user_mode_cleans_xdg_state(
-    xdg_state_tmp: Path, tmp_path: Path
-) -> None:
+def test_uninstall_user_mode_cleans_xdg_state(xdg_state_tmp: Path, tmp_path: Path) -> None:
     """_purge_project_artifacts removes the XDG user-mode project dir when owned."""
-    import shutil
 
     from opencontext_cli.commands.uninstall_cmd import _purge_project_artifacts
     from opencontext_core.paths import StorageMode, resolve_storage_path
@@ -82,11 +76,9 @@ def test_uninstall_user_mode_cleans_xdg_state(
     assert is_owned(xdg_path)
 
     # Run purge targeting the project root.
-    removed = _purge_project_artifacts(project_root)
+    _purge_project_artifacts(project_root)
 
-    assert not xdg_path.exists(), (
-        f"XDG state dir {xdg_path} should have been removed by purge"
-    )
+    assert not xdg_path.exists(), f"XDG state dir {xdg_path} should have been removed by purge"
 
 
 def test_uninstall_does_not_remove_foreign_manifest_dir(
@@ -99,7 +91,7 @@ def test_uninstall_does_not_remove_foreign_manifest_dir(
     the resolved path for the current project.
     """
     from opencontext_cli.commands.uninstall_cmd import _purge_project_artifacts
-    from opencontext_core.paths import StorageMode, resolve_storage_path, project_id
+    from opencontext_core.paths import StorageMode, resolve_storage_path
 
     project_a = tmp_path / "project_a"
     project_a.mkdir()

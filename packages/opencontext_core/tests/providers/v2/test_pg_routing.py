@@ -15,8 +15,16 @@ from opencontext_core.providers.v2.spec import (
 )
 
 
-def _spec(pid: str, *, ctx: int = 4096, cost_in: float = 0.01, lat: int = 100,
-           qual: float = 0.5, vision: bool = False, local: bool = False) -> ProviderSpec:
+def _spec(
+    pid: str,
+    *,
+    ctx: int = 4096,
+    cost_in: float = 0.01,
+    lat: int = 100,
+    qual: float = 0.5,
+    vision: bool = False,
+    local: bool = False,
+) -> ProviderSpec:
     return ProviderSpec(
         provider_id=pid,
         display_name=pid,
@@ -31,11 +39,13 @@ def _spec(pid: str, *, ctx: int = 4096, cost_in: float = 0.01, lat: int = 100,
 
 
 def test_REQ_pg_v2_001_capability_based() -> None:
-    engine = RoutingEngine([
-        _spec("cheap", cost_in=0.001, lat=500, qual=0.3),
-        _spec("fast", cost_in=0.01, lat=10, qual=0.5),
-        _spec("vision-only", vision=True),
-    ])
+    engine = RoutingEngine(
+        [
+            _spec("cheap", cost_in=0.001, lat=500, qual=0.3),
+            _spec("fast", cost_in=0.01, lat=10, qual=0.5),
+            _spec("vision-only", vision=True),
+        ]
+    )
     chosen = engine.route(required_capabilities=("vision",), strategy=RoutingStrategy.cheapest)
     assert chosen.provider_id == "vision-only"
 
@@ -48,5 +58,11 @@ def test_REQ_pg_v2_001_no_provider_raises() -> None:
 
 def test_six_strategies_present() -> None:
     names = {s.name for s in RoutingStrategy}
-    assert names == {"cheapest", "fastest", "balanced", "highest_quality",
-                     "local_first", "enterprise"}
+    assert names == {
+        "cheapest",
+        "fastest",
+        "balanced",
+        "highest_quality",
+        "local_first",
+        "enterprise",
+    }

@@ -125,18 +125,14 @@ class TestBuildWorkerForMode:
 
     def test_shared_remote_returns_remote_worker(self):
         # GIVEN SHARED_REMOTE mode with a URL
-        w = build_worker_for_mode(
-            DeployMode.SHARED_REMOTE, remote_url="http://127.0.0.1:7443"
-        )
+        w = build_worker_for_mode(DeployMode.SHARED_REMOTE, remote_url="http://127.0.0.1:7443")
         # THEN it is a RemoteWorkerConnection (not in-process)
         assert isinstance(w, RemoteWorkerConnection)
         assert not isinstance(w, InProcessWorker)
 
     def test_hybrid_returns_remote_worker(self):
         # GIVEN HYBRID_EDGE_CLOUD mode
-        w = build_worker_for_mode(
-            DeployMode.HYBRID_EDGE_CLOUD, remote_url="http://127.0.0.1:7443"
-        )
+        w = build_worker_for_mode(DeployMode.HYBRID_EDGE_CLOUD, remote_url="http://127.0.0.1:7443")
         # THEN it is a RemoteWorkerConnection
         assert isinstance(w, RemoteWorkerConnection)
 

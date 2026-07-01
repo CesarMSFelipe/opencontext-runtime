@@ -18,23 +18,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _CATALOG = _REPO_ROOT / "openspec" / "USER-VALIDATION-DOD.md"
 _GAP_ANALYSIS = (
-    _REPO_ROOT
-    / "openspec"
-    / "changes"
-    / "opencontext-1-0-convergence"
-    / "round-2-gap-analysis.md"
+    _REPO_ROOT / "openspec" / "changes" / "opencontext-1-0-convergence" / "round-2-gap-analysis.md"
 )
-_SPECS_DIR = (
-    _REPO_ROOT
-    / "openspec"
-    / "changes"
-    / "opencontext-1-0-convergence"
-    / "specs"
-)
+_SPECS_DIR = _REPO_ROOT / "openspec" / "changes" / "opencontext-1-0-convergence" / "specs"
 
 
 def _read(path: Path) -> str:
@@ -94,8 +83,7 @@ class TestUVDProgramCatalog:
                 if field not in body:
                     missing_fields.append(f"{uvd_id} lacks {field}")
         assert not missing_fields, (
-            "UVD catalog sections missing required fields:\n  - "
-            + "\n  - ".join(missing_fields)
+            "UVD catalog sections missing required fields:\n  - " + "\n  - ".join(missing_fields)
         )
 
     def test_catalog_at_least_10_cli_verifiable(self) -> None:
@@ -119,9 +107,7 @@ class TestUVDProgramCatalog:
             pr_match = pr_line_re.search(body)
             if not pr_match or not pr_match.group(1).strip():
                 unassigned.append(uvd_id)
-        assert not unassigned, (
-            f"UVD sections with no PR assignment: {unassigned}."
-        )
+        assert not unassigned, f"UVD sections with no PR assignment: {unassigned}."
 
 
 class TestUVDProgramMatrixConsistency:
@@ -140,9 +126,7 @@ class TestUVDProgramMatrixConsistency:
         text = _read(_CATALOG)
         # Summary Index table must include every UVD-NNN at least once.
         missing = [uid for uid in _all_uvd_ids() if uid not in text]
-        assert not missing, (
-            f"UVD catalog does not mention these IDs anywhere: {missing}."
-        )
+        assert not missing, f"UVD catalog does not mention these IDs anywhere: {missing}."
 
 
 class TestUVDProgramSpecsCrossReference:
@@ -160,6 +144,4 @@ class TestUVDProgramSpecsCrossReference:
             text_total += "\n" + _read(spec_path)
 
         for uid in _all_uvd_ids():
-            assert uid in text_total, (
-                f"{uid} is not referenced by any spec under {_SPECS_DIR}."
-            )
+            assert uid in text_total, f"{uid} is not referenced by any spec under {_SPECS_DIR}."

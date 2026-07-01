@@ -28,6 +28,7 @@ def xdg_state_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.delenv("OPENCONTEXT_STORAGE_MODE", raising=False)
     return state_dir
 
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _GUARDED = ("AGENTS.md", "CLAUDE.md", "GEMINI.md", "QWEN.md", "opencontext.yaml")
 _LOG = os.environ.get("OPENCONTEXT_POLLUTION_LOG")

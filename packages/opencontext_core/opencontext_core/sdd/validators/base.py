@@ -29,27 +29,34 @@ def validate_phase(phase: str, content: str) -> PhaseValidationResult:
         "review": _has_all("finding", "severity"),
         "archive": _has_all("status", "artifact"),
     }
-    return validators.get(phase, _valid_nonempty)(text)
+    result: PhaseValidationResult = validators.get(phase, _valid_nonempty)(text)
+    return result
 
 
 def _valid_nonempty(text: str) -> PhaseValidationResult:
-    return PhaseValidationResult(bool(text), "phase output failed contract validation")
+    if bool(text):
+        return PhaseValidationResult(True, "")
+    return PhaseValidationResult(False, "phase output failed contract validation")
 
 
-def _has_any(*needles: str):
+def _has_any(*needles: str) -> Any:
     def check(text: str) -> PhaseValidationResult:
         low = text.lower()
         ok = any(n in low for n in needles)
-        return PhaseValidationResult(ok, "phase output failed contract validation" if not ok else "")
+        return PhaseValidationResult(
+            ok, "phase output failed contract validation" if not ok else ""
+        )
 
     return check
 
 
-def _has_all(*needles: str):
+def _has_all(*needles: str) -> Any:
     def check(text: str) -> PhaseValidationResult:
         low = text.lower()
         ok = all(n in low for n in needles)
-        return PhaseValidationResult(ok, "phase output failed contract validation" if not ok else "")
+        return PhaseValidationResult(
+            ok, "phase output failed contract validation" if not ok else ""
+        )
 
     return check
 

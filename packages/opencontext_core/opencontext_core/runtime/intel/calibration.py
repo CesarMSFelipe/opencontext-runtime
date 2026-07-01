@@ -80,9 +80,7 @@ class DriftDetected(Exception):
     """Raised when a build_run asks to raise on drift (opt-in)."""
 
     def __init__(self, brier: float, baseline: float) -> None:
-        super().__init__(
-            f"calibration drift: brier={brier:.4f} baseline={baseline:.4f}"
-        )
+        super().__init__(f"calibration drift: brier={brier:.4f} baseline={baseline:.4f}")
         self.brier = brier
         self.baseline = baseline
 

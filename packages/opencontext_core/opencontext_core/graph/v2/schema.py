@@ -7,12 +7,12 @@ a TemporalMetadata envelope for soft-deletion and audit.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class KgNodeType(str, Enum):
+class KgNodeType(StrEnum):
     """23 node types covering code, infra, people, and runtime domains."""
 
     FILE = "file"
@@ -45,7 +45,7 @@ class KgNodeType(str, Enum):
     DOCUMENT = "document"
 
 
-class KgEdgeType(str, Enum):
+class KgEdgeType(StrEnum):
     """21 edge types covering structural, call, data, and organizational flows."""
 
     CALLS = "calls"

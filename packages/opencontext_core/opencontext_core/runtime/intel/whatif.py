@@ -59,9 +59,7 @@ class WhatIfAnalysis:
     def compare(self, plans: Iterable[Plan]) -> list[CostEstimate]:
         plans = list(plans)
         if len(plans) < 3:
-            raise ValueError(
-                f"WhatIf requires >= 3 plans for ranking; got {len(plans)}"
-            )
+            raise ValueError(f"WhatIf requires >= 3 plans for ranking; got {len(plans)}")
         estimates = [self._project(p) for p in plans]
         # Sort by cost ascending; do NOT mutate the input list.
         return sorted(estimates, key=lambda e: e.cost_usd)

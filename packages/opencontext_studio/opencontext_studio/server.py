@@ -66,4 +66,5 @@ def _default_handler() -> BaseHTTPRequestHandler:
 
         def log_message(self, format: str, *args: object) -> None:  # silence
             return
+
     return _Handler

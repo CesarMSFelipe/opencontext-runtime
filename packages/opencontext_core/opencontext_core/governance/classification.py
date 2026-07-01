@@ -8,6 +8,7 @@ may force a specific level via glob patterns (e.g. ``"secrets/**": "RESTRICTED"`
 Layer: L3 (Governance). Read by L7 Provider Gateway (PR-012) before any outbound
 call. Honors doc 34 (OC-DATAGOV-001).
 """
+
 from __future__ import annotations
 
 import fnmatch

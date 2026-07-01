@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Local SDD/TDD runtime helpers.
 
 This module is deliberately provider-neutral. It detects local verification
@@ -5,10 +7,10 @@ capabilities and writes small project artifacts that agents can consume without
 reading the whole repository.
 """
 
-from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -282,7 +284,7 @@ def _dedupe_capabilities(items: list[TestCapability]) -> list[TestCapability]:
 # ---------------------------------------------------------------------------
 
 
-def resolve_v2(change: str, cwd: str | None = None) -> dict:
+def resolve_v2(change: str, cwd: str | None = None) -> dict[Any, Any]:
     """Resolve SDD status via opencontext_sdd when sdd_runner_v2 is active.
 
     Falls back to a minimal empty status when the v2 package is not

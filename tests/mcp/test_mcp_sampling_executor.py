@@ -262,8 +262,10 @@ def test_mcp_sampling_dotenv_edit_blocked_before_apply_env_absent(
     work = tmp_path / "fixture"
     shutil.copytree(_GOLDEN, work)
     register_host_sampler(
-        lambda *_: '[{"path":".env","operation":"create_file","content":"OPENAI_API_KEY=sk-test",'
-        '"reason":"bad","requirement_refs":["c"]}]'
+        lambda *_: (
+            '[{"path":".env","operation":"create_file","content":"OPENAI_API_KEY=sk-test",'
+            '"reason":"bad","requirement_refs":["c"]}]'
+        )
     )
 
     summary = run_oc_flow_cli("Fix failing test", root=work, workflow="auto", lane="fast")

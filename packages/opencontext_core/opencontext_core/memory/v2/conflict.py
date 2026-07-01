@@ -47,18 +47,19 @@ def _stable_judgment_id(record_a: str, record_b: str) -> str:
     return f"rel-{hashlib.sha1(pair).hexdigest()[:12]}"
 
 
-def _as_dict(record: Any) -> dict:
+def _as_dict(record: Any) -> dict[Any, Any]:
     """Accept either a MemoryRecordV2 instance or a plain dict."""
     if isinstance(record, dict):
         return record
     if hasattr(record, "model_dump"):
-        return record.model_dump()
-    return {
+        return record.model_dump()  # type: ignore[no-any-return]
+    result: dict[Any, Any] = {
         "id": getattr(record, "id", ""),
         "topic_key": getattr(record, "topic_key", ""),
         "content": getattr(record, "content", ""),
         "confidence": getattr(record, "confidence", 0.0),
     }
+    return result
 
 
 def detect_contradiction(

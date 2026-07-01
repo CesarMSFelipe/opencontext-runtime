@@ -52,10 +52,13 @@ def test_sampling_applyedit_contract_accepts_delete_file_and_rejects_bad_range()
         '[{"path":"old.py","operation":"delete_file","reason":"remove",'
         '"requirement_refs":["gone"]}]'
     )
-    assert _parse_apply_edit_set(
-        '[{"path":"calc.py","operation":"replace_range","start_line":4,"end_line":2,'
-        '"content":"x","reason":"bad","requirement_refs":["c"]}]'
-    ) is None
+    assert (
+        _parse_apply_edit_set(
+            '[{"path":"calc.py","operation":"replace_range","start_line":4,"end_line":2,'
+            '"content":"x","reason":"bad","requirement_refs":["c"]}]'
+        )
+        is None
+    )
 
 
 def test_mcp_sampling_cli_fix_runs_full_pipeline(tmp_path: Path, monkeypatch) -> None:
@@ -67,7 +70,9 @@ def test_mcp_sampling_cli_fix_runs_full_pipeline(tmp_path: Path, monkeypatch) ->
     summary = run_oc_flow_cli("Fix failing test", root=work, workflow="auto", lane="fast")
 
     assert summary["status"] == "completed"
-    assert (work / "buggy_add.py").read_text(encoding="utf-8") == "def add(a, b):\n    return a + b\n"
+    assert (work / "buggy_add.py").read_text(
+        encoding="utf-8"
+    ) == "def add(a, b):\n    return a + b\n"
     assert (Path(summary["artifacts_dir"]) / "apply-receipts.json").exists()
 
 
@@ -82,11 +87,15 @@ def test_mcp_opencontext_run_uses_sampling_executor(tmp_path: Path, monkeypatch)
 
     assert out["status"] == "completed"
     assert out["host_model_used"] is True
-    assert (work / "buggy_add.py").read_text(encoding="utf-8") == "def add(a, b):\n    return a + b\n"
+    assert (work / "buggy_add.py").read_text(
+        encoding="utf-8"
+    ) == "def add(a, b):\n    return a + b\n"
     server.close()
 
 
-def test_mcp_sampling_malformed_response_blocks_without_mutation(tmp_path: Path, monkeypatch) -> None:
+def test_mcp_sampling_malformed_response_blocks_without_mutation(
+    tmp_path: Path, monkeypatch
+) -> None:
     _pin_mock(monkeypatch)
     work = tmp_path / "fixture"
     shutil.copytree(_GOLDEN, work)
@@ -96,7 +105,9 @@ def test_mcp_sampling_malformed_response_blocks_without_mutation(tmp_path: Path,
 
     assert summary["status"] == "blocked"
     assert "sampling response failed ApplyEdit contract validation" in summary["completion_reason"]
-    assert (work / "buggy_add.py").read_text(encoding="utf-8") == "def add(a, b):\n    return a - b\n"
+    assert (work / "buggy_add.py").read_text(
+        encoding="utf-8"
+    ) == "def add(a, b):\n    return a - b\n"
 
 
 def test_mcp_sampling_secret_file_edit_blocks_before_apply(tmp_path: Path, monkeypatch) -> None:
@@ -104,8 +115,10 @@ def test_mcp_sampling_secret_file_edit_blocks_before_apply(tmp_path: Path, monke
     work = tmp_path / "fixture"
     shutil.copytree(_GOLDEN, work)
     register_host_sampler(
-        lambda *_: '[{"path":".env","operation":"create_file","content":"OPENAI_API_KEY=sk-test",'
-        '"reason":"bad","requirement_refs":["c"]}]'
+        lambda *_: (
+            '[{"path":".env","operation":"create_file","content":"OPENAI_API_KEY=sk-test",'
+            '"reason":"bad","requirement_refs":["c"]}]'
+        )
     )
 
     summary = run_oc_flow_cli("Fix failing test", root=work, workflow="auto", lane="fast")

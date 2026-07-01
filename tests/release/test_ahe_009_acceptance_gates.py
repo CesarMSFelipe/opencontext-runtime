@@ -102,7 +102,7 @@ class TestGateRegistry:
 
         zero_test_selectors: list[str] = []
         for _gate_id, selectors in GATES:
-            cmd = [sys.executable, "-m", "pytest", "--collect-only", "-q"] + selectors.split()
+            cmd = [sys.executable, "-m", "pytest", "--collect-only", "-q", *selectors.split()]
             completed = subprocess.run(
                 cmd,
                 cwd=str(repo_root),
@@ -172,9 +172,7 @@ class TestAcceptanceCommandExitCode:
 
     def _run_cli(self, root: Path, *args: str) -> subprocess.CompletedProcess:
         cmd = [
-            cli_path  # noqa: F841 — placeholder; real path is built below
-            if False
-            else sys.executable,
+            self.cli_path if False else sys.executable,
             "-m",
             "opencontext_cli.main",
             "agent-harness",
@@ -214,15 +212,12 @@ class TestAcceptanceCommandExitCode:
     def test_json_includes_every_gate(self, repo_root: Path) -> None:
         """Every gate in GATES must appear in the verdict JSON."""
         completed = self._run_cli(repo_root)
-        assert completed.returncode == 0, (
-            f"non-zero exit; stderr={completed.stderr[:500]}"
-        )
+        assert completed.returncode == 0, f"non-zero exit; stderr={completed.stderr[:500]}"
         payload = json.loads(completed.stdout)
         listed = {g["gate"] for g in payload["gates"]}
         registered = {gate_id for gate_id, _ in GATES}
         assert listed == registered, (
-            f"verdict missing gates: {registered - listed}; "
-            f"extra gates: {listed - registered}"
+            f"verdict missing gates: {registered - listed}; extra gates: {listed - registered}"
         )
 
 
@@ -243,15 +238,12 @@ class TestEvaluatorDirectInvocation:
         if not verdict.ready:
             failing = [g for g in verdict.gates if g.status != "met"]
             pytest.fail(
-                f"verdict.ready is False on a clean project root. "
-                f"Failing gates:\n" + "\n".join(
-                    f"  {g.gate}: {g.status} - {g.detail}" for g in failing
-                )
+                "verdict.ready is False on a clean project root. "
+                "Failing gates:\n"
+                + "\n".join(f"  {g.gate}: {g.status} - {g.detail}" for g in failing)
             )
 
-    def test_evaluator_with_unknown_root_still_returns_a_verdict(
-        self, tmp_path: Path
-    ) -> None:
+    def test_evaluator_with_unknown_root_still_returns_a_verdict(self, tmp_path: Path) -> None:
         """An empty root yields all NOT_MEASURED (selectors find no source).
 
         Verifies the evaluator never crashes and never returns ``ready=True``

@@ -45,6 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_kg_edges_target ON kg_edges(target);
 
 # FTS5 table creation kept for future migration
 
+
 class KgStore:
     """SQLite-backed knowledge graph store.
 
@@ -62,15 +63,22 @@ class KgStore:
     def insert_node(self, node: KgNode) -> None:
         with sqlite3.connect(str(self._path)) as conn:
             self._ensure_schema(conn)
-            conn.execute(
-                "INSERT OR REPLACE INTO kg_nodes (id,type,name,properties,created_at,superseded_at,source_commit,source_author) VALUES (?,?,?,?,?,?,?,?)",
+            _sql = (
+                "INSERT OR REPLACE INTO kg_nodes "
+                "(id,type,name,properties,created_at,"
+                "superseded_at,source_commit,source_author) "
+                "VALUES (?,?,?,?,?,?,?,?)"
+            )
+            conn.execute(_sql,
                 (
                     node.id,
                     node.type.value,
                     node.name,
                     _json_dumps(node.properties),
                     node.temporal.created_at.isoformat(),
-                    node.temporal.superseded_at.isoformat() if node.temporal.superseded_at else None,
+                    node.temporal.superseded_at.isoformat()
+                    if node.temporal.superseded_at
+                    else None,
                     node.temporal.source_commit,
                     node.temporal.source_author,
                 ),
@@ -79,8 +87,13 @@ class KgStore:
     def insert_edge(self, edge: KgEdge) -> None:
         with sqlite3.connect(str(self._path)) as conn:
             self._ensure_schema(conn)
-            conn.execute(
-                "INSERT OR REPLACE INTO kg_edges (id,type,source,target,properties,created_at,superseded_at,source_commit,source_author) VALUES (?,?,?,?,?,?,?,?,?)",
+            _sql = (
+                "INSERT OR REPLACE INTO kg_edges "
+                "(id,type,source,target,properties,created_at,"
+                "superseded_at,source_commit,source_author) "
+                "VALUES (?,?,?,?,?,?,?,?,?)"
+            )
+            conn.execute(_sql,
                 (
                     edge.id,
                     edge.type.value,
@@ -88,13 +101,15 @@ class KgStore:
                     edge.target,
                     _json_dumps(edge.properties),
                     edge.temporal.created_at.isoformat(),
-                    edge.temporal.superseded_at.isoformat() if edge.temporal.superseded_at else None,
+                    edge.temporal.superseded_at.isoformat()
+                    if edge.temporal.superseded_at
+                    else None,
                     edge.temporal.source_commit,
                     edge.temporal.source_author,
                 ),
             )
 
-    def query_nodes_by_type(self, node_type: str) -> list[dict]:
+    def query_nodes_by_type(self, node_type: str) -> list[dict[Any, Any]]:
         with sqlite3.connect(str(self._path)) as conn:
             self._ensure_schema(conn)
             rows = conn.execute(
@@ -103,7 +118,9 @@ class KgStore:
             ).fetchall()
             return [_row_to_dict(r) for r in rows]
 
-    def query_edges(self, source: str | None = None, target: str | None = None) -> list[dict]:
+    def query_edges(
+        self, source: str | None = None, target: str | None = None
+    ) -> list[dict[Any, Any]]:
         with sqlite3.connect(str(self._path)) as conn:
             self._ensure_schema(conn)
             if source:
@@ -117,12 +134,10 @@ class KgStore:
                     (target,),
                 ).fetchall()
             else:
-                rows = conn.execute(
-                    "SELECT * FROM kg_edges WHERE superseded_at IS NULL"
-                ).fetchall()
+                rows = conn.execute("SELECT * FROM kg_edges WHERE superseded_at IS NULL").fetchall()
             return [_row_to_dict(r) for r in rows]
 
-    def search(self, query: str, limit: int = 10) -> list[dict]:
+    def search(self, query: str, limit: int = 10) -> list[dict[Any, Any]]:
         with sqlite3.connect(str(self._path)) as conn:
             self._ensure_schema(conn)
             rows = conn.execute(
@@ -134,6 +149,7 @@ class KgStore:
 
 def _json_dumps(obj: object) -> str:
     import json
+
     return json.dumps(obj, default=str)
 
 

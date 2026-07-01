@@ -34,12 +34,8 @@ class QualityScoreV2(BaseModel):
     evidence_anchoring: float = Field(
         ge=0.0, le=1.0, description="Backed by concrete evidence refs."
     )
-    reusability: float = Field(
-        ge=0.0, le=1.0, description="Likely to be reused on future tasks."
-    )
-    temporal_validity: float = Field(
-        ge=0.0, le=1.0, description="Still fresh (decays with age)."
-    )
+    reusability: float = Field(ge=0.0, le=1.0, description="Likely to be reused on future tasks.")
+    temporal_validity: float = Field(ge=0.0, le=1.0, description="Still fresh (decays with age).")
     composite: float | None = Field(
         default=None, ge=0.0, le=1.0, description="Weighted mean; auto-computed if None."
     )
@@ -47,20 +43,17 @@ class QualityScoreV2(BaseModel):
     def model_post_init(self, _ctx: Any) -> None:
         if self.composite is None:
             mean = (
-                self.clarity
-                + self.evidence_anchoring
-                + self.reusability
-                + self.temporal_validity
+                self.clarity + self.evidence_anchoring + self.reusability + self.temporal_validity
             ) / 4.0
             object.__setattr__(self, "composite", round(mean, 4))
 
 
-def _as_dict(record: Any) -> dict:
+def _as_dict(record: Any) -> dict[Any, Any]:
     if isinstance(record, dict):
         return record
     if hasattr(record, "model_dump"):
-        return record.model_dump()
-    return {
+        return record.model_dump()  # type: ignore[no-any-return]
+    result: dict[Any, Any] = {
         "content": getattr(record, "content", ""),
         "evidence_refs": list(getattr(record, "evidence_refs", []) or []),
         "source_refs": list(getattr(record, "source_refs", []) or []),
@@ -68,6 +61,7 @@ def _as_dict(record: Any) -> dict:
         "topic_key": getattr(record, "topic_key", ""),
         "created_at": getattr(record, "created_at", None),
     }
+    return result
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -95,7 +89,7 @@ def _evidence_anchoring(refs: list[str]) -> float:
     return round(min(1.0, n / 3.0), 4)
 
 
-def _reusability(record: dict) -> float:
+def _reusability(record: dict[Any, Any]) -> float:
     """Confidence + topic_key + evidence breadth heuristic."""
     confidence = float(record.get("confidence", 0.0))
     has_topic = 1.0 if record.get("topic_key") else 0.0
@@ -116,7 +110,8 @@ def _temporal_validity(created_at: datetime | None, now: datetime) -> float:
     if ts is None:
         return 0.0
     age_days = max(0.0, (now - ts).total_seconds() / 86400.0)
-    return round(0.5 ** (age_days / _TEMPORAL_HALF_LIFE_DAYS), 4)
+    result: float = round(0.5 ** (age_days / _TEMPORAL_HALF_LIFE_DAYS), 4)
+    return result
 
 
 def score_quality(

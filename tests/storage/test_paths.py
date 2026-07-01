@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -24,7 +23,6 @@ from opencontext_core.paths import (
     resolve_workspace_path,
     write_manifest,
 )
-
 
 # ---------------------------------------------------------------------------
 # project_id
@@ -60,9 +58,7 @@ def test_project_id_is_12_chars(tmp_path: Path) -> None:
 def test_resolve_storage_user_mode(xdg_state_tmp: Path, tmp_path: Path) -> None:
     """User mode returns a path under XDG_STATE_HOME / opencontext / projects."""
     path = resolve_storage_path(tmp_path, StorageMode.user)
-    assert str(xdg_state_tmp) in str(path), (
-        f"Expected path under {xdg_state_tmp}, got {path}"
-    )
+    assert str(xdg_state_tmp) in str(path), f"Expected path under {xdg_state_tmp}, got {path}"
     assert "opencontext" in str(path)
     assert "projects" in str(path)
     assert project_id(tmp_path) in str(path)

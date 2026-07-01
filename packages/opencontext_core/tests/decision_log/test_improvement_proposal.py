@@ -5,6 +5,7 @@ mutating its target; calling :meth:`apply` on a public/builtin proposal
 without explicit human approval raises ``ApprovalRequired``; an internal
 proposal with explicit approval may be marked applied (no automatic apply).
 """
+
 from __future__ import annotations
 
 import pytest

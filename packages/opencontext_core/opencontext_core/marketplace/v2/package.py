@@ -33,8 +33,7 @@ def install_package(pkg: MarketplacePackage, *, min_trust: TrustLevel) -> dict[s
     """Install gate: enforce trust level, return a receipt."""
     if pkg.trust < min_trust:
         raise TrustLevelRejected(
-            f"package {pkg.package_id!r} trust={pkg.trust.name} "
-            f"< required min={min_trust.name}"
+            f"package {pkg.package_id!r} trust={pkg.trust.name} < required min={min_trust.name}"
         )
     return {
         "installed": True,

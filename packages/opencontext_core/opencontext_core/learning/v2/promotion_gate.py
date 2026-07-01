@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Gated promotion to memory (PR-000.4 / SPEC DL-003 / DL-009).
 
 The honesty gate (OC-FINAL §9.8, doc 44 Risks 4 + 11): a learning candidate
@@ -11,9 +13,9 @@ This module owns the gate contract; persistence is the PR-009
 NOT touch KG, Cache, or any Brain-adjacent port (doc 59 §6).
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 _QUALITY_THRESHOLD = 80
 
@@ -52,7 +54,7 @@ class PromotionGate:
         self._threshold = quality_threshold
         self.destination = destination
 
-    def promote(self, candidate: Any, *, evidence: dict | None) -> PromotionResult:
+    def promote(self, candidate: Any, *, evidence: dict[Any, Any] | None) -> PromotionResult:
         """Promote *candidate* to the destination memory harness.
 
         ``candidate`` must expose ``candidate_id`` (str) and ``quality_score``
@@ -66,8 +68,7 @@ class PromotionGate:
 
         if quality < self._threshold:
             raise MemoryPromotionRejected(
-                f"quality_below_threshold: got {quality}, "
-                f"need >= {self._threshold}"
+                f"quality_below_threshold: got {quality}, need >= {self._threshold}"
             )
 
         benchmark_id = ev.get("benchmark_id")

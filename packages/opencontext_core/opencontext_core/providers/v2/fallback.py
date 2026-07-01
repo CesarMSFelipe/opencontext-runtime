@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class FallbackReason(str, Enum):
+class FallbackReason(StrEnum):
     timeout = "timeout"
     quota = "quota"
     error = "error"

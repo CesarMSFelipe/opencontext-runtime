@@ -45,7 +45,7 @@ class PromotionPolicyV2(BaseModel):
 
 def _composite_of(score: float | QualityScoreV2 | Any) -> float:
     if isinstance(score, QualityScoreV2):
-        return score.composite
+        return score.composite  # type: ignore[return-value]
     return float(score)
 
 

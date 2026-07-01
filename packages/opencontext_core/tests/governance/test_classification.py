@@ -8,6 +8,7 @@ Spec contract:
     * carries the matching override rule on the result for audit
 - `ClassifiedNode` is a dataclass carrying `path`, `sensitivity`, `rule`, `node_id`.
 """
+
 from __future__ import annotations
 
 from opencontext_core.governance.classification import (

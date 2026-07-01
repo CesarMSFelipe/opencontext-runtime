@@ -72,9 +72,7 @@ class InProcessWorker:
         if not self._connected:
             self._connected = True
         self._counter += 1
-        return JobHandle(
-            id=f"local-{self._counter}", status="completed", mode=self._mode
-        )
+        return JobHandle(id=f"local-{self._counter}", status="completed", mode=self._mode)
 
 
 # ponytail: env var name + error class are spec-level choices; keep them

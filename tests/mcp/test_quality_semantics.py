@@ -21,6 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from opencontext_core.quality.report import QualityReport
 
 import opencontext_core.quality.languages as languages_mod
 from opencontext_core.mcp_stdio import MCPServer
@@ -149,9 +150,11 @@ class TestNoApplicableCheckSemantics:
 
         data = result["data"]
         # Top-level status field (the spec asks for ``status`` exactly).
-        assert data["status"] == "not_applicable", (
-            f"no-applicable-checks fixture must report status='not_applicable', got {data['status']!r}"
+        msg = (
+            f"no-applicable-checks fixture must report "
+            f"status='not_applicable', got {data['status']!r}"
         )
+        assert data["status"] == "not_applicable", msg
         # Mirrored under summary for the ci_checks-compatible contract.
         assert data["summary"]["status"] == "not_applicable"
 
@@ -175,7 +178,7 @@ class TestNoApplicableCheckSemantics:
         assert data["summary"]["passed"] == 0
         assert data["summary"]["total_checks"] == 0
 
-    def test_empty_project_does_not_pretend_success(self, tmp_path: Path) -> Coherence:
+    def test_empty_project_does_not_pretend_success(self, tmp_path: Path) -> None:
         """No-applicable must NOT report success=true either.
 
         A reader that branches on ``summary.success`` alone would treat an
@@ -213,16 +216,16 @@ class TestNoApplicableCheckSemantics:
 class TestCleanApplicableSemantics:
     """When applicable rules run AND pass, ``success=True`` and status=passed."""
 
-    def _clean_quality_report(self) -> "QualityReport":
+    def _clean_quality_report(self) -> QualityReport:
         """Build a QualityReport that has run clean (one PASSED architecture verdict)."""
         from opencontext_core.harness.models import GateStatus
+        from opencontext_core.quality.ci_checks import CheckSeverity, CheckStatus
         from opencontext_core.quality.models import (
             HealthScore,
             QualityMetrics,
             QualityReport,
             RuleVerdict,
         )
-        from opencontext_core.quality.ci_checks import CheckSeverity, CheckStatus
 
         metrics = QualityMetrics()
         health = HealthScore(score=10000, metrics=metrics, components={})
@@ -252,6 +255,7 @@ class TestCleanApplicableSemantics:
     def test_synthetic_failed_report_reports_success_false(self) -> None:
         """A QualityReport with a FAILED verdict emits success=False (regression pin)."""
         from opencontext_core.harness.models import GateStatus
+        from opencontext_core.quality.ci_checks import CheckSeverity, CheckStatus
         from opencontext_core.quality.models import (
             Finding,
             HealthScore,
@@ -259,7 +263,6 @@ class TestCleanApplicableSemantics:
             QualityReport,
             RuleVerdict,
         )
-        from opencontext_core.quality.ci_checks import CheckSeverity, CheckStatus
 
         finding = Finding(
             rule="max_cycles",

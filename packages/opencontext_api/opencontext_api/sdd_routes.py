@@ -14,10 +14,18 @@ from opencontext_api.schemas import SDDContinueRequest, SDDPhaseRequest
 
 router = APIRouter(prefix="/v1/sdd", tags=["sdd"])
 
-_SDD_PHASES = frozenset({
-    "explore", "propose", "spec", "design", "tasks",
-    "apply", "verify", "archive",
-})
+_SDD_PHASES = frozenset(
+    {
+        "explore",
+        "propose",
+        "spec",
+        "design",
+        "tasks",
+        "apply",
+        "verify",
+        "archive",
+    }
+)
 
 
 @router.get("/status")
@@ -41,9 +49,13 @@ def sdd_status(change: str = "", cwd: str = ".") -> dict:
 @router.post("/continue")
 def sdd_continue(body: SDDContinueRequest) -> dict:
     """Continue with the next recommended phase."""
+    prompt = (
+        f"# SDD Continue\n\nChange: {body.change}\n"
+        f"Cwd: {body.cwd}\n(PR4 wires real runner)"
+    )
     return {
         "status": "ok",
-        "prompt": f"# SDD Continue\n\nChange: {body.change}\nCwd: {body.cwd}\n(PR4 wires real runner)",
+        "prompt": prompt,
     }
 
 

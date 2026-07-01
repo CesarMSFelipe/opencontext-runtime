@@ -22,8 +22,16 @@ class TestOverlay:
         agents = overlay.get("agents", {})
         # 8 phases
         assert len(agents) == 8
-        for phase in ("explore", "propose", "spec", "design",
-                       "tasks", "apply", "verify", "archive"):
+        for phase in (
+            "explore",
+            "propose",
+            "spec",
+            "design",
+            "tasks",
+            "apply",
+            "verify",
+            "archive",
+        ):
             assert phase in agents
 
     def test_chained_pr_binding_by_registry_name(self) -> None:
@@ -50,8 +58,16 @@ class TestOverlay:
     def test_get_phase_list_ordered(self) -> None:
         """get_phase_list returns phases in the correct order."""
         phases = get_phase_list()
-        assert phases == ["explore", "propose", "spec", "design",
-                           "tasks", "apply", "verify", "archive"]
+        assert phases == [
+            "explore",
+            "propose",
+            "spec",
+            "design",
+            "tasks",
+            "apply",
+            "verify",
+            "archive",
+        ]
 
     def test_overlay_version(self) -> None:
         """Overlay has a version string."""

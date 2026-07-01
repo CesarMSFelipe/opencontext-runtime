@@ -8,12 +8,12 @@ from typing import Any
 class ContextRanker:
     """BM25-style overlap + recency ranker. ponytail: score = bm25 * recency."""
 
-    def rank(self, items: list[dict], query: str) -> list[dict]:
+    def rank(self, items: list[dict[Any, Any]], query: str) -> list[dict[Any, Any]]:
         scored = [(self._score(item, query), item) for item in items]
         scored.sort(key=lambda x: x[0], reverse=True)
         return [item for _, item in scored]
 
-    def _score(self, item: dict, query: str) -> float:
+    def _score(self, item: dict[Any, Any], query: str) -> float:
         content = item.get("content", "")
         recency = item.get("recency", 0.5)  # ponytail: default 0.5 if missing
         return self._bm25_sim(content, query) * float(recency)

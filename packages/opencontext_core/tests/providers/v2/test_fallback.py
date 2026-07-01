@@ -36,5 +36,8 @@ def test_REQ_pg_v2_003_unsupported_capability() -> None:
 
 def test_fallback_reasons_enum() -> None:
     assert {r.name for r in FallbackReason} >= {
-        "timeout", "quota", "error", "unsupported_capability",
+        "timeout",
+        "quota",
+        "error",
+        "unsupported_capability",
     }

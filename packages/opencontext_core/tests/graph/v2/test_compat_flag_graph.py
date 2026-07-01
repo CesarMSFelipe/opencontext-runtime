@@ -14,6 +14,7 @@ class TestCompatFlag:
     def test_v2_modules_importable(self) -> None:
         """All v2 modules import without error."""
         from opencontext_core.graph.v2 import evidence, schema, store
+
         assert schema.KgNodeType is not None
         assert evidence.EvidenceRef is not None
         assert store.KgStore is not None
@@ -21,6 +22,7 @@ class TestCompatFlag:
     def test_new_kg_id_stable(self) -> None:
         """new_kg_id produces stable 16-char hex ids."""
         from opencontext_core.graph.v2.evidence import new_kg_id
+
         a = new_kg_id(b"test")
         b = new_kg_id(b"test")
         assert a == b

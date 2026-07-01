@@ -2894,9 +2894,10 @@ def _status(root: str = ".") -> None:
     config_path = project_root / "opencontext.yaml"
     opencontext_dir = project_root / ".opencontext"
     _cfg = load_config_or_defaults(config_path if config_path.exists() else None)
-    manifest_path = resolve_storage_path(
-        project_root, _cfg.storage.mode, _cfg.storage.custom_path
-    ) / "project_manifest.json"
+    manifest_path = (
+        resolve_storage_path(project_root, _cfg.storage.mode, _cfg.storage.custom_path)
+        / "project_manifest.json"
+    )
     hints_path = project_root / ".opencontexthints"
     checks_dir = project_root / ".opencontext" / "checks"
 
@@ -5065,7 +5066,9 @@ def _memory_doctor() -> None:
     from opencontext_core.paths import resolve_storage_path
 
     _dc = load_config_or_defaults()
-    db_path = resolve_storage_path(Path.cwd(), _dc.storage.mode, _dc.storage.custom_path) / "memory.db"
+    db_path = (
+        resolve_storage_path(Path.cwd(), _dc.storage.mode, _dc.storage.custom_path) / "memory.db"
+    )
     if db_path.exists():
         try:
             store = LocalMemoryStore(db_path)

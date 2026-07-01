@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Retention policy (REQ-data-gov-003, PR-R2-B).
 
 Purges records on a per-classification schedule:
@@ -11,10 +13,11 @@ reaches durable storage beyond the active run.
 (optionally) calls an audit hook so the audit log is the only place the record
 id is preserved once the record itself is gone.
 """
-from __future__ import annotations
+
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from typing import Any
 
 from opencontext_core.governance.classification import DataSensitivity
 
@@ -71,7 +74,7 @@ AuditHook = Callable[[str, DataSensitivity, str], None]
 
 
 def enforce_retention(
-    records: Iterable[dict],
+    records: Iterable[dict[Any, Any]],
     policy: RetentionPolicy,
     now: float | int = 0,
     audit: AuditHook | None = None,

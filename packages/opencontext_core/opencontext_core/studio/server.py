@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -19,16 +20,24 @@ class StudioTimeline:
 
 
 TIMELINE_NAMES = [
-    "sdd-phases", "memory-saves", "conflicts", "judgments",
-    "decisions", "benchmarks", "plugins", "providers",
-    "cache-hits", "errors", "health",
+    "sdd-phases",
+    "memory-saves",
+    "conflicts",
+    "judgments",
+    "decisions",
+    "benchmarks",
+    "plugins",
+    "providers",
+    "cache-hits",
+    "errors",
+    "health",
 ]
 
 VIEW_NAMES = ["dashboard", "sdd-flow", "memory-graph", "cost-breakdown", "health-radar", "timeline"]
 
 
 class StudioServer:
-    def status(self) -> dict:
+    def status(self) -> dict[Any, Any]:
         return {"studio": "running", "timelines": len(TIMELINE_NAMES), "views": len(VIEW_NAMES)}
 
     def list_timelines(self) -> list[str]:

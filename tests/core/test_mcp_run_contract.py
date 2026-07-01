@@ -116,7 +116,9 @@ def test_sdd_run_includes_phase_metadata(server: MCPServer, tmp_path: Path, monk
 
     monkeypatch.setattr(runner_mod.HarnessRunner, "run", _fake_run)
 
-    out = server._handle_run({"task": "do formal work", "workflow": "standard", "root": str(tmp_path)})
+    out = server._handle_run(
+        {"task": "do formal work", "workflow": "standard", "root": str(tmp_path)}
+    )
 
     assert captured["workflow"] == "standard"
     assert out["selected_workflow"] == "standard"
@@ -125,12 +127,15 @@ def test_sdd_run_includes_phase_metadata(server: MCPServer, tmp_path: Path, monk
     assert out["verification_outcome"] == "warning"
 
 
-def test_mcp_sdd_junk_phase_output_surfaces_warning(server: MCPServer, tmp_path: Path, monkeypatch) -> None:
+def test_mcp_sdd_junk_phase_output_surfaces_warning(
+    server: MCPServer, tmp_path: Path, monkeypatch
+) -> None:
     """Junk spec output raises a phase_contract WARNING visible in gates.
 
     Hard blocking only occurs in sdd_strict mode; standard workflow surfaces
     the warning without stopping the run.
     """
+
     class _JunkDelegate:
         def delegate(self, phase: str, context: dict[str, object]) -> object:
             return SimpleNamespace(status="success", output="ok")
@@ -139,7 +144,9 @@ def test_mcp_sdd_junk_phase_output_surfaces_warning(server: MCPServer, tmp_path:
 
     monkeypatch.setattr(runner_mod.HarnessRunner, "_build_executor", lambda self: _JunkDelegate())
 
-    out = server._handle_run({"task": "do formal work", "workflow": "standard", "root": str(tmp_path)})
+    out = server._handle_run(
+        {"task": "do formal work", "workflow": "standard", "root": str(tmp_path)}
+    )
 
     gates = out.get("gates", {})
     assert any(

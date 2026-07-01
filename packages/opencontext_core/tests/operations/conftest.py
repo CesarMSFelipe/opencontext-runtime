@@ -41,9 +41,7 @@ def _ensure_metrics_collector() -> None:
         sys.modules["opencontext_core.metrics"] = mod
 
     if not hasattr(sys.modules["opencontext_core.metrics"], "MetricsCollector"):
-        sys.modules["opencontext_core.metrics"].MetricsCollector = type(
-            "MetricsCollector", (), {}
-        )
+        sys.modules["opencontext_core.metrics"].MetricsCollector = type("MetricsCollector", (), {})
 
 
 _ensure_metrics_collector()

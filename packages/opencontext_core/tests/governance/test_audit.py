@@ -7,6 +7,7 @@ Tampering with any historical line is detected by :meth:`AuditLog.verify`
 via per-line SHA-256 hashes recorded in the first line of the file
 ("anchor + leaf chain" — same shape as the decision log recorder).
 """
+
 from __future__ import annotations
 
 from opencontext_core.governance.audit import AuditLog, AuditRecord

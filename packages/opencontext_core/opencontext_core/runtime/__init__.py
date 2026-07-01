@@ -50,7 +50,7 @@ from opencontext_core.operating_model.events import ProviderEventEmitter
 from opencontext_core.operating_model.performance import CostLedger, ModelRoleRouter
 from opencontext_core.operating_model.quality import PreLLMQualityGate
 from opencontext_core.operating_model.receipts import RunReceiptStore
-from opencontext_core.paths import (
+from opencontext_core.paths import (  # noqa: F401 — StorageMode re-exported
     StorageMode,
     detect_legacy,
     resolve_storage_path,
@@ -322,9 +322,7 @@ class OpenContextRuntime:
             _legacy = detect_legacy(_root)
             if _legacy is not None:
                 _legacy_paths = [
-                    str(p)
-                    for p in [_legacy.storage_path, _legacy.workspace_path]
-                    if p is not None
+                    str(p) for p in [_legacy.storage_path, _legacy.workspace_path] if p is not None
                 ]
                 _legacy_str = " and ".join(_legacy_paths)
                 warnings.warn(

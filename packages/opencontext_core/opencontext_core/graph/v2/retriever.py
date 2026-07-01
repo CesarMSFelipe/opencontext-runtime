@@ -1,12 +1,14 @@
+from __future__ import annotations
+
 """KG v2 retriever — subgraph retrieval with omission tracking.
 
 PR-008.c: SubgraphRetriever executes a KgQueryPlan against the
 store and returns a ContextSubgraph with structured omissions.
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from opencontext_core.graph.v2.planner import KgQueryPlan
 from opencontext_core.graph.v2.store import KgStore
@@ -21,8 +23,8 @@ class Omission:
 
 @dataclass
 class ContextSubgraph:
-    nodes: list[dict] = field(default_factory=list)
-    edges: list[dict] = field(default_factory=list)
+    nodes: list[dict[Any, Any]] = field(default_factory=list[Any])
+    edges: list[dict[Any, Any]] = field(default_factory=list[Any])
     omissions: list[Omission] = field(default_factory=list)
     tokens_used: int = 0
 
@@ -38,13 +40,17 @@ class SubgraphRetriever:
         self._store = store
 
     def retrieve(self, plan: KgQueryPlan) -> ContextSubgraph:
-        nodes: list[dict] = []
+        nodes: list[dict[Any, Any]] = []
         omissions: list[Omission] = []
         for nt in plan.node_types:
             results = self._store.query_nodes_by_type(nt)
             if len(results) > plan.limit:
                 omissions.append(
-                    Omission(source=nt, reason=f"truncated to {plan.limit}", tokens_saved=len(results) - plan.limit)
+                    Omission(
+                        source=nt,
+                        reason=f"truncated to {plan.limit}",
+                        tokens_saved=len(results) - plan.limit,
+                    )
                 )
                 nodes.extend(results[: plan.limit])
             else:

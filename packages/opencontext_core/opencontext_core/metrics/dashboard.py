@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 
 
 # REQ-metrics-dash-001 — KPI enum, exactly 13 entries.
-class KPI(str, enum.Enum):
+class KPI(enum.StrEnum):
     TIME_TO_FIRST_SUCCESS_MINUTES = "time_to_first_success_minutes"
     TASK_SUCCESS_RATE = "task_success_rate"
     TOKENS_PER_TASK = "tokens_per_task"
@@ -170,9 +170,7 @@ class MetricsDashboard:
             "",
         ]
         if _has_methodology_bump(snapshot.records):
-            lines.append(
-                "> ⚠ **methodology change detected** — historical sparkline breaks here."
-            )
+            lines.append("> ⚠ **methodology change detected** — historical sparkline breaks here.")
             lines.append("")
         # Group by KPI
         by_kpi: dict[str, list[MetricRecord]] = {}
@@ -221,8 +219,7 @@ class MetricsDashboard:
 
     def _render_html(self, samples: Mapping[str, float]) -> str:
         rows = "".join(
-            f"<tr><td>{kpi.value}</td><td>{samples.get(kpi.value, 0.0)}</td></tr>"
-            for kpi in KPI
+            f"<tr><td>{kpi.value}</td><td>{samples.get(kpi.value, 0.0)}</td></tr>" for kpi in KPI
         )
         return (
             "<html><body>"

@@ -194,16 +194,12 @@ class SdkPlatform:
             except ValueError:
                 return {
                     "status": "fail",
-                    "mismatches": [
-                        {"field": "sdk_max_version", "value": sdk_max_version}
-                    ],
+                    "mismatches": [{"field": "sdk_max_version", "value": sdk_max_version}],
                 }
             if rmin > smax:
                 return {
                     "status": "fail",
-                    "mismatches": [
-                        {"sdk_max": sdk_max_version, "runtime": runtime}
-                    ],
+                    "mismatches": [{"sdk_max": sdk_max_version, "runtime": runtime}],
                 }
         return {
             "status": "ok",

@@ -11,6 +11,7 @@ with a deterministic token of the form ``<REDACTED:<sha256-16hex>>`` so that:
 The pipeline is the only entry point used by ``ProviderRedactionFilter``
 (PR-012) and the ingest-time defense-in-depth pass (REQ-data-gov-002 §2).
 """
+
 from __future__ import annotations
 
 import hashlib

@@ -13,10 +13,9 @@ import warnings
 from pathlib import Path
 
 import pytest
-import yaml
 
 from opencontext_core.config import OpenContextConfig, StorageConfig, default_config_data
-from opencontext_core.paths import StorageMode, is_owned, write_manifest
+from opencontext_core.paths import StorageMode, is_owned
 from opencontext_core.runtime import OpenContextRuntime
 
 
@@ -41,7 +40,9 @@ def test_runtime_user_mode_storage_in_xdg(xdg_state_tmp: Path, tmp_path: Path) -
     assert not (project_root / ".storage").exists()
 
 
-def test_runtime_local_mode_storage_in_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runtime_local_mode_storage_in_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """In local mode, runtime.storage_path is under <root>/.storage/opencontext."""
     monkeypatch.delenv("OPENCONTEXT_STORAGE_MODE", raising=False)
     project_root = tmp_path / "proj"
@@ -70,11 +71,9 @@ def test_runtime_legacy_detected(xdg_state_tmp: Path, tmp_path: Path) -> None:
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        rt = OpenContextRuntime(config=_config(project_root, StorageMode.user))
+        OpenContextRuntime(config=_config(project_root, StorageMode.user))
 
-    legacy_warnings = [
-        w for w in caught if "legacy local state detected" in str(w.message)
-    ]
+    legacy_warnings = [w for w in caught if "legacy local state detected" in str(w.message)]
     assert legacy_warnings, (
         "Expected 'legacy local state detected' warning but none was emitted. "
         f"Warnings captured: {[str(w.message) for w in caught]}"

@@ -16,8 +16,13 @@ class BenchResult:
 
 
 SUITE_A_NAMES = [
-    "A1-baseline", "A2-search", "A3-context", "A4-conflict",
-    "A5-mrr", "A6-recall", "A7-precision",
+    "A1-baseline",
+    "A2-search",
+    "A3-context",
+    "A4-conflict",
+    "A5-mrr",
+    "A6-recall",
+    "A7-precision",
 ]
 
 

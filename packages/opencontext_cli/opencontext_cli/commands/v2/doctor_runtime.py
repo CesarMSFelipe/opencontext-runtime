@@ -26,6 +26,7 @@ def build_health_report(dimensions: dict[str, dict[str, Any]]) -> dict[str, Any]
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(UTC).isoformat(),
-        "dimensions": {d: dimensions.get(d, {"status": "unknown", "detail": ""})
-                       for d in HEALTH_DIMENSIONS},
+        "dimensions": {
+            d: dimensions.get(d, {"status": "unknown", "detail": ""}) for d in HEALTH_DIMENSIONS
+        },
     }

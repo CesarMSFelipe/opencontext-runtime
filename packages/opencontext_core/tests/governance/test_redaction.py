@@ -10,6 +10,7 @@ Contract:
   pipeline's ``apply(text)`` returns the same shape via :class:`RedactionResult`.
 - The original secret **never** appears in the redacted output.
 """
+
 from __future__ import annotations
 
 import re

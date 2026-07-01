@@ -42,11 +42,23 @@ class TestAssessMaturity:
             assess_maturity,
         )
 
-        levels = {dim: MaturityLevel.L3_PRODUCTION for dim in [
-            "kg", "memory", "context", "cache", "intelligence",
-            "provider", "plugin", "marketplace", "studio",
-            "benchmark", "observability", "data_gov",
-        ]}
+        levels = {
+            dim: MaturityLevel.L3_PRODUCTION
+            for dim in [
+                "kg",
+                "memory",
+                "context",
+                "cache",
+                "intelligence",
+                "provider",
+                "plugin",
+                "marketplace",
+                "studio",
+                "benchmark",
+                "observability",
+                "data_gov",
+            ]
+        }
         # Knock data_gov down to L1
         levels["data_gov"] = MaturityLevel.L1_EXPERIMENTAL
         report = assess_maturity(levels)
@@ -83,11 +95,22 @@ class TestAssessMaturity:
             assess_maturity,
         )
 
-        levels = {dim: MaturityLevel.L4_OPTIMIZED for dim in [
-            "kg", "memory", "context", "cache", "intelligence",
-            "provider", "plugin", "marketplace", "studio",
-            "benchmark", "observability",
-        ]}
+        levels = {
+            dim: MaturityLevel.L4_OPTIMIZED
+            for dim in [
+                "kg",
+                "memory",
+                "context",
+                "cache",
+                "intelligence",
+                "provider",
+                "plugin",
+                "marketplace",
+                "studio",
+                "benchmark",
+                "observability",
+            ]
+        }
         levels["data_gov"] = MaturityLevel.L0_NOT_STARTED
         report = assess_maturity(levels)
         assert report.overall_level == 0

@@ -15,7 +15,9 @@ class _CacheLike(Protocol):
 class ContextRouter:
     """Route envelope through cache; on miss rank items via ContextRanker."""
 
-    def __init__(self, cache: _CacheLike | None = None, ranker: ContextRanker | None = None) -> None:
+    def __init__(
+        self, cache: _CacheLike | None = None, ranker: ContextRanker | None = None
+    ) -> None:
         self._cache = cache
         self._ranker = ranker or ContextRanker()
 
@@ -27,9 +29,7 @@ class ContextRouter:
                 return envelope
         envelope.items = self._ranker.rank(envelope.items, envelope.task)
         if envelope.tokens_used > envelope.budget:
-            envelope.omissions.append(
-                f"budget exceeded: {envelope.tokens_used}/{envelope.budget}"
-            )
+            envelope.omissions.append(f"budget exceeded: {envelope.tokens_used}/{envelope.budget}")
         return envelope
 
 

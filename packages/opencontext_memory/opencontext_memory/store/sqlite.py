@@ -264,9 +264,7 @@ class MemoryStore:
 
     def _delete_locked(self, observation_id: int, *, hard: bool) -> None:
         if hard:
-            self._conn.execute(
-                "DELETE FROM observations WHERE id = ?", (int(observation_id),)
-            )
+            self._conn.execute("DELETE FROM observations WHERE id = ?", (int(observation_id),))
             return
         self._conn.execute(
             """

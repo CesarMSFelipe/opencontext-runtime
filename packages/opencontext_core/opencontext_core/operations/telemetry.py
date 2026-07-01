@@ -55,9 +55,7 @@ class TelemetryOptIn:
     def __post_init__(self) -> None:
         # sample_rate is a probability
         if not 0.0 <= self.sample_rate <= 1.0:
-            raise ValueError(
-                f"sample_rate must be in [0, 1], got {self.sample_rate!r}"
-            )
+            raise ValueError(f"sample_rate must be in [0, 1], got {self.sample_rate!r}")
 
 
 def telemetry_policy_for(

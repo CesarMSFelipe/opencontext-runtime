@@ -9,9 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-from opencontext_sdd.runner import PhaseResultEnvelope, Orchestrator, run_phase
+from opencontext_sdd.runner import Orchestrator, PhaseResultEnvelope
 
 
 class TestEnvelope:

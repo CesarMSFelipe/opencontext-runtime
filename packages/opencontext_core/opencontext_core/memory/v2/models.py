@@ -47,9 +47,7 @@ class MemoryRecordV2(BaseModel):
 
     id: str = Field(description="Stable memory id, e.g. mem_<ulid>.")
     kind: MemoryKindV2 = Field(description="Content intent of this record.")
-    topic_key: str = Field(
-        description="Hierarchical dedup handle like 'architecture/auth-model'."
-    )
+    topic_key: str = Field(description="Hierarchical dedup handle like 'architecture/auth-model'.")
     content: str = Field(description="The memory payload (prose or structured).")
     evidence_refs: list[str] = Field(
         default_factory=list, description="Supporting evidence refs (file:line, run ids)."
@@ -84,21 +82,15 @@ class MemoryCandidateV2(BaseModel):
 
     content: str = Field(description="Redacted candidate content.")
     kind: MemoryKindV2 = Field(description="Inferred content intent.")
-    topic_key: str = Field(
-        min_length=1, description="Hierarchical dedup handle (required)."
-    )
-    evidence_refs: list[str] = Field(
-        default_factory=list, description="Supporting evidence refs."
-    )
+    topic_key: str = Field(min_length=1, description="Hierarchical dedup handle (required).")
+    evidence_refs: list[str] = Field(default_factory=list, description="Supporting evidence refs.")
     source_refs: list[str] = Field(
         default_factory=list, description="Provenance traces that produced the candidate."
     )
     confidence: float = Field(
         default=0.7, ge=0.0, le=1.0, description="Proposer confidence in [0, 1]."
     )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Free-form scoring data."
-    )
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Free-form scoring data.")
 
 
 class MemoryReceiptV2(BaseModel):

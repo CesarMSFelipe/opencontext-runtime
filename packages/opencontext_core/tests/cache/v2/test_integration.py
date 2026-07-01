@@ -6,6 +6,7 @@ from __future__ import annotations
 class TestAllModules:
     def test_cache_leaf_all_strategies(self) -> None:
         from opencontext_core.cache.v2 import CacheStrategy, SemanticCache
+
         for s in CacheStrategy:
             c = SemanticCache(s, max_entries=3)
             c.set("k", 42)
@@ -13,11 +14,14 @@ class TestAllModules:
 
     def test_memory_harness_pipeline(self) -> None:
         from opencontext_core.memory.v2.harness import MemoryHarnessV2
+
         mh = MemoryHarnessV2(quality_threshold=0.0)
-        result = mh.ingest([
-            {"id": 1, "topic_key": "a", "type": "x", "content": "hello world " * 20},
-            {"id": 2, "topic_key": "a", "type": "x", "content": "different"},
-        ])
+        result = mh.ingest(
+            [
+                {"id": 1, "topic_key": "a", "type": "x", "content": "hello world " * 20},
+                {"id": 2, "topic_key": "a", "type": "x", "content": "different"},
+            ]
+        )
         assert len(result.conflicts) == 1
         assert result.ingested == 2
 
@@ -28,12 +32,15 @@ class TestAllModules:
             NoCoTExtractor,
             brain_no_write_port_guard,
         )
+
         assert brain_no_write_port_guard() is True
         ext = NoCoTExtractor()
         entries = ext.extract("We decided to use hexagonal architecture for the API layer")
         assert len(entries) >= 1
         d = DecisionRecorder(confidence_threshold=0.5)
-        d.record(DecisionLogEntry(id="d1", kind="architecture", decision="hexagonal", confidence=0.8))
+        d.record(
+            DecisionLogEntry(id="d1", kind="architecture", decision="hexagonal", confidence=0.8)
+        )
         assert d.promote("d1")
 
     def test_context_v2_full(self) -> None:
@@ -43,10 +50,15 @@ class TestAllModules:
             ContextRanker,
             usefulness_score,
         )
-        e = ContextEnvelope(task="auth bug", items=[
-            {"content": "login returns 500", "id": "i1"},
-            {"content": "unrelated docs", "id": "i2"},
-        ], budget=100)
+
+        e = ContextEnvelope(
+            task="auth bug",
+            items=[
+                {"content": "login returns 500", "id": "i1"},
+                {"content": "unrelated docs", "id": "i2"},
+            ],
+            budget=100,
+        )
         r = ContextRanker()
         ranked = r.rank(e.items, "auth")
         assert len(ranked) == 2
@@ -67,6 +79,7 @@ class TestAllModules:
             RuntimeProfiler,
             WorkflowSimulator,
         )
+
         ws = WorkflowSimulator()
         r = ws.simulate("sdd", "add auth")
         assert r.token_estimate > 0
@@ -90,6 +103,7 @@ class TestAllModules:
             ProviderGateway,
             StructuredOutputAdapter,
         )
+
         gw = ProviderGateway()
         gw.register("mock", ProviderCapability(name="mock", models=["mock-llm"]))
         assert gw.best_for(min_tokens=1000) is not None
@@ -100,6 +114,7 @@ class TestAllModules:
 
     def test_studio_full(self) -> None:
         from opencontext_core.studio.server import StudioServer
+
         s = StudioServer()
         assert len(s.list_timelines()) == 11
         assert len(s.list_views()) == 6
@@ -112,6 +127,7 @@ class TestAllModules:
             PluginRegistry,
             PluginState,
         )
+
         pr = PluginRegistry()
         m = PluginManifest(name="test", version="1.0", endpoints=1, permissions=["read"])
         pr.register(m)
@@ -130,6 +146,7 @@ class TestAllModules:
             MarketPackage,
             MarketRegistry,
         )
+
         mr = MarketRegistry()
         mr.register(MarketPackage(name="bench-tool", version="1.0"))
         mr.benchmark_on_install("bench-tool", 0.95)
@@ -139,6 +156,7 @@ class TestAllModules:
 
     def test_benchmarks_full(self) -> None:
         from opencontext_core.benchmarks.runner import BenchRunner
+
         br = BenchRunner()
         results = br.run_all_suites(runs=10)
         assert len(results) == 7

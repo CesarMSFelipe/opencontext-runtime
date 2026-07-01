@@ -447,15 +447,16 @@ class MatchSkillsFn(Protocol):
 
     def __call__(
         self,
-        entries: list,
+        entries: list[Any],
         keywords: list[str] | None = None,
         *,
         name: str | None = None,
-    ) -> list:
-        ...
+    ) -> list[Any]: ...
 
 
-def match_skills_v2(entries: list, keywords: list[str] | None = None, *, name: str | None = None) -> list:
+def match_skills_v2(
+    entries: list[Any], keywords: list[str] | None = None, *, name: str | None = None
+) -> list[Any]:
     """Delegate to ``opencontext_sdd.skill_registry.match_skills`` when installed.
 
     Falls back to the core's legacy match_skills when the v2 package is
@@ -466,4 +467,4 @@ def match_skills_v2(entries: list, keywords: list[str] | None = None, *, name: s
 
         return _v2(entries, keywords=keywords, name=name)
     except ImportError:
-        return match_skills(entries, keywords=keywords, name=name)
+        return match_skills(entries, list(entries), keywords or [])

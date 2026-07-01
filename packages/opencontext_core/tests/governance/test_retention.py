@@ -14,6 +14,7 @@ Contract:
 - RESTRICTED records are always purged, regardless of age.
 - A record whose ``age_days`` is below its window is **kept**.
 """
+
 from __future__ import annotations
 
 from opencontext_core.governance.classification import DataSensitivity
@@ -82,11 +83,11 @@ class TestEnforceRetention:
         policy = RetentionPolicy()
         records = [
             _record("a", DataSensitivity.PUBLIC, 9_999),
-            _record("b", DataSensitivity.INTERNAL, 10),       # keep
-            _record("c", DataSensitivity.INTERNAL, 31),       # purge
-            _record("d", DataSensitivity.CONFIDENTIAL, 7),     # keep
-            _record("e", DataSensitivity.CONFIDENTIAL, 8),     # purge
-            _record("f", DataSensitivity.RESTRICTED, 0),       # purge
+            _record("b", DataSensitivity.INTERNAL, 10),  # keep
+            _record("c", DataSensitivity.INTERNAL, 31),  # purge
+            _record("d", DataSensitivity.CONFIDENTIAL, 7),  # keep
+            _record("e", DataSensitivity.CONFIDENTIAL, 8),  # purge
+            _record("f", DataSensitivity.RESTRICTED, 0),  # purge
         ]
         receipts = enforce_retention(records, policy, now=0)
         purged_ids = {r.record_id for r in receipts}

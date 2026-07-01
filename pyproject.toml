@@ -16,6 +16,12 @@ select = ["B", "E", "F", "I", "RUF", "UP"]
 [tool.ruff.lint.per-file-ignores]
 # HTML/CSS template strings in the KG viewer generator are legitimately long
 "packages/opencontext_cli/opencontext_cli/commands/kg_cmd.py" = ["E501"]
+"packages/opencontext_core/opencontext_core/context/v2/*.py" = ["E402"]
+"packages/opencontext_core/opencontext_core/graph/v2/*.py" = ["E402"]
+"packages/opencontext_core/opencontext_core/learning/v2/*.py" = ["E402"]
+"packages/opencontext_core/opencontext_core/memory/v2/*.py" = ["E402"]
+"packages/opencontext_core/opencontext_core/governance/*.py" = ["E402"]
+"packages/opencontext_core/opencontext_core/sdd_runtime.py" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"

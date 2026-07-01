@@ -21,9 +21,7 @@ class MemoryRetrievalCacheEntry(CacheEntry):
     profile: str = ""
 
     @classmethod
-    def build(
-        cls, *, query: str, profile: str, value_ref: str
-    ) -> MemoryRetrievalCacheEntry:
+    def build(cls, *, query: str, profile: str, value_ref: str) -> MemoryRetrievalCacheEntry:
         fp = memory_query_fingerprint(query, profile=profile)
         return cls(
             key=f"mem_{fp}",

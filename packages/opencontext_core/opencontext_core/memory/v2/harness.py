@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Memory v2 harness — 8-step pipeline with NoCoT conflict detection. PR-009.
 
 Replaces LLM-based conflict detection with a deterministic rules-first
@@ -8,9 +10,9 @@ promote → learn.
 LB 2026 — full memory harness v2.
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -46,12 +48,12 @@ class MemoryHarnessV2:
     """
 
     def __init__(self, quality_threshold: float = 0.3) -> None:
-        self._records: dict[int, dict] = {}
+        self._records: dict[int, dict[Any, Any]] = {}
         self._quality_threshold = quality_threshold
 
-    def ingest(self, records: list[dict]) -> HarnessResult:
+    def ingest(self, records: list[dict[Any, Any]]) -> HarnessResult:
         result = HarnessResult(ingested=len(records))
-        seen: set[tuple] = set()
+        seen: set[tuple[Any, ...]] = set()
         for r in records:
             key = (r.get("topic_key"), r.get("type"), hash(r.get("content", "")))
             if key in seen:
@@ -62,10 +64,12 @@ class MemoryHarnessV2:
             self._records[rid] = r
         result.conflicts = self.detect_conflicts(list(self._records.values()))
         result.promoted = self._promote_quality()
-        result.learned = len([r for r in self._records.values() if self.quality_score(r) >= self._quality_threshold])
+        result.learned = len(
+            [r for r in self._records.values() if self.quality_score(r) >= self._quality_threshold]
+        )
         return result
 
-    def detect_conflicts(self, records: list[dict]) -> list[MemoryConflict]:
+    def detect_conflicts(self, records: list[dict[Any, Any]]) -> list[MemoryConflict]:
         conflicts: list[MemoryConflict] = []
         for i, a in enumerate(records):
             for b in records[i + 1 :]:
@@ -79,7 +83,7 @@ class MemoryHarnessV2:
                     )
         return conflicts
 
-    def quality_score(self, record: dict) -> float:
+    def quality_score(self, record: dict[Any, Any]) -> float:
         content = record.get("content", "")
         length_score = min(1.0, len(content) / 200.0)
         return round(length_score, 3)
@@ -91,8 +95,10 @@ class MemoryHarnessV2:
                 count += 1
         return count
 
-    def get_promotable(self) -> list[dict]:
-        return [r for r in self._records.values() if self.quality_score(r) >= self._quality_threshold]
+    def get_promotable(self) -> list[dict[Any, Any]]:
+        return [
+            r for r in self._records.values() if self.quality_score(r) >= self._quality_threshold
+        ]
 
 
 __all__ = ["HarnessResult", "MemoryConflict", "MemoryHarnessV2"]

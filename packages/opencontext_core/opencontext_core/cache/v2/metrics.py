@@ -55,8 +55,8 @@ class CacheMetrics:
 def cache_stats_payload(metrics: CacheMetrics) -> dict[str, object]:
     """Stable CLI/Studio payload for `opencontext cache stats` (REQ-cache-v2-004)."""
     snap = metrics.snapshot()
-    hits = sum(int(v["hits"]) for v in snap.values())  # type: ignore[arg-type]
-    misses = sum(int(v["misses"]) for v in snap.values())  # type: ignore[arg-type]
+    hits = sum(int(v["hits"]) for v in snap.values())
+    misses = sum(int(v["misses"]) for v in snap.values())
     total = hits + misses
     return {
         "hits": hits,

@@ -173,8 +173,7 @@ class OnboardingService:
             # mode=local explicitly, or legacy dirs already exist in the repo.
             # mode=user (default): state goes to XDG, so no .gitignore entry needed.
             _write_gitignore = (
-                _oc.storage.mode == StorageMode.local
-                or detect_legacy(root) is not None
+                _oc.storage.mode == StorageMode.local or detect_legacy(root) is not None
             )
         except Exception:
             _write_gitignore = True  # safe default: write block when uncertain

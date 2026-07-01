@@ -21,8 +21,9 @@ def test_REQ_plugin_v1_001_round_trip() -> None:
 
 def test_REQ_plugin_v1_001_schema_mismatch() -> None:
     with pytest.raises(ManifestSchemaError):
-        PluginManifest.from_dict({"schema_version": "opencontext.plugin.v0",
-                                  "plugin_id": "x", "version": "0.0.1"})
+        PluginManifest.from_dict(
+            {"schema_version": "opencontext.plugin.v0", "plugin_id": "x", "version": "0.0.1"}
+        )
 
 
 def test_schema_version_constant() -> None:

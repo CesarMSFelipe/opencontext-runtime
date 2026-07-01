@@ -11,6 +11,7 @@ Tamper-evidence uses a SHA-256 hash chain: each line carries
 ``_prev_hash`` is the all-zeros anchor. :meth:`AuditLog.verify` walks the
 chain and returns ``False`` if any line was rewritten.
 """
+
 from __future__ import annotations
 
 import hashlib

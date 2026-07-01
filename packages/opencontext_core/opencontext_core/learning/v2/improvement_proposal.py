@@ -88,9 +88,11 @@ class ImprovementProposal:
             elif isinstance(decision_log, dict):
                 decision_log.setdefault("applies", []).append(record)
             else:
-                raise TypeError(
-                    f"decision_log must be list-like or dict-like, got {type(decision_log).__name__}"
+                msg = (
+                    f"decision_log must be list-like or dict-like, "
+                    f"got {type(decision_log).__name__}"
                 )
+                raise TypeError(msg)
 
 
 __all__ = [

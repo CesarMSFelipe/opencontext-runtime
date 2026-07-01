@@ -7,10 +7,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 
-SDD_SKILLS = Path(__file__).parents[2] / "packages" / "opencontext_sdd" / "opencontext_sdd" / "skills"
+SDD_SKILLS = (
+    Path(__file__).parents[2] / "packages" / "opencontext_sdd" / "opencontext_sdd" / "skills"
+)
 
 EXPECTED_SKILLS: set[str] = {
     "branch-pr",

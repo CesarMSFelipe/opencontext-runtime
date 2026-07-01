@@ -22,7 +22,5 @@ class TestNoAiCoauthor:
         assert result.returncode == 0, "git log failed"
         for i, msg in enumerate(result.stdout.split("\n---\n")):
             if "Co-Authored-By:" in msg:
-                lines = [l for l in msg.splitlines() if "Co-Authored-By" in l]
-                raise AssertionError(
-                    f"Commit {i+1} has Co-Authored-By trailer(s): {lines}"
-                )
+                lines = [ln for ln in msg.splitlines() if "Co-Authored-By" in ln]
+                raise AssertionError(f"Commit {i + 1} has Co-Authored-By trailer(s): {lines}")

@@ -26,7 +26,7 @@ class ConformanceSuite:
     def __init__(self) -> None:
         self.categories = CATEGORIES
 
-    def run(self, manifest: PluginManifest | None) -> ConformanceReport:
+    def run(self, manifest: PluginManifest | object | None) -> ConformanceReport:
         results: dict[str, bool] = {c: True for c in self.categories}
         failures: list[str] = []
         if manifest is None:
@@ -34,10 +34,10 @@ class ConformanceSuite:
                 results[c] = False
             failures.append("manifest is None")
             return ConformanceReport(passed=False, failures=failures, categories=results)
-        if not isinstance(manifest, PluginManifest):
+        if not isinstance(manifest, PluginManifest):  # defensive runtime check
             results["manifest_schema"] = False
             failures.append("manifest is not a PluginManifest")
-        if not manifest.plugin_id or not manifest.version:
+        if not manifest.plugin_id or not manifest.version:  # type: ignore[attr-defined]
             results["manifest_schema"] = False
             failures.append("manifest missing plugin_id or version")
         # Permission scope: empty permissions list is the deny-by-default safe baseline.

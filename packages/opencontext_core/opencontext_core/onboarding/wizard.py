@@ -690,7 +690,8 @@ class OnboardingWizard:
                 continue
             self._dispatch(earlier)
 
-        return self._dispatch(step)
+        result: WizardReport | OnboardingResult = self._dispatch(step)
+        return result
 
     def _dispatch(self, step: WizardStep) -> Any:
         """Internal: execute one step method by enum value."""

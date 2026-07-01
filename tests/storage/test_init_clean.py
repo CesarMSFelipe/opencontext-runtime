@@ -9,12 +9,9 @@ Spec scenario: "Fresh init, mode=user — no repo dirs created"
 
 from __future__ import annotations
 
-import yaml
 from pathlib import Path
 
-import pytest
-
-from opencontext_core.config import OpenContextConfig, StorageConfig, default_config_data
+from opencontext_core.config import OpenContextConfig, default_config_data
 from opencontext_core.paths import StorageMode, is_owned
 from opencontext_core.runtime import OpenContextRuntime
 
@@ -37,7 +34,7 @@ def test_init_user_mode_no_repo_dirs(xdg_state_tmp: Path, tmp_path: Path) -> Non
     # by the xdg_state_tmp fixture).
     assert config.storage.mode == StorageMode.user
 
-    rt = OpenContextRuntime(config=config)
+    OpenContextRuntime(config=config)
 
     # No in-repo dirs should have been created.
     assert not (project_root / ".storage").exists(), (
@@ -46,9 +43,7 @@ def test_init_user_mode_no_repo_dirs(xdg_state_tmp: Path, tmp_path: Path) -> Non
     assert not (project_root / ".opencontext").exists(), (
         ".opencontext/ was created in the repo under user mode"
     )
-    assert not (project_root / ".atl").exists(), (
-        ".atl/ was created in the repo under user mode"
-    )
+    assert not (project_root / ".atl").exists(), ".atl/ was created in the repo under user mode"
 
 
 def test_init_user_mode_storage_under_xdg(xdg_state_tmp: Path, tmp_path: Path) -> None:
@@ -74,6 +69,4 @@ def test_init_user_mode_manifest_written(xdg_state_tmp: Path, tmp_path: Path) ->
     config = _make_config(project_root, StorageMode.user)
     rt = OpenContextRuntime(config=config)
 
-    assert is_owned(rt.storage_path), (
-        f"No valid manifest in {rt.storage_path}"
-    )
+    assert is_owned(rt.storage_path), f"No valid manifest in {rt.storage_path}"

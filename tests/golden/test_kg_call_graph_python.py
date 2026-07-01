@@ -21,17 +21,15 @@ Tasks covered:
 
 from __future__ import annotations
 
-import tempfile
-import os
 from pathlib import Path
 
 import pytest
 
-from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 from opencontext_core.indexing.call_graph import CallGraphAnalyzer
-from opencontext_core.indexing.impact_analysis import ImpactAnalyzer
 from opencontext_core.indexing.context_builder import ContextBuilder
 from opencontext_core.indexing.graph_db import GraphDatabase
+from opencontext_core.indexing.impact_analysis import ImpactAnalyzer
+from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 
 # ---------------------------------------------------------------------------
 # Fixture paths
@@ -110,9 +108,7 @@ def test_callees_add_includes_helper(cga: CallGraphAnalyzer, kg_db_path: Path) -
     add_id = _node_id_by_name(kg_db_path, "add")
     callees = cga.get_callees(add_id, depth=1)
     callee_names = [c["name"] for c in callees]
-    assert "helper" in callee_names, (
-        f"Expected 'helper' in callees of 'add', got: {callee_names}"
-    )
+    assert "helper" in callee_names, f"Expected 'helper' in callees of 'add', got: {callee_names}"
 
 
 # ---------------------------------------------------------------------------
@@ -125,9 +121,7 @@ def test_callers_helper_includes_add(cga: CallGraphAnalyzer, kg_db_path: Path) -
     helper_id = _node_id_by_name(kg_db_path, "helper")
     callers = cga.get_callers(helper_id, depth=1)
     caller_names = [c["name"] for c in callers]
-    assert "add" in caller_names, (
-        f"Expected 'add' in callers of 'helper', got: {caller_names}"
-    )
+    assert "add" in caller_names, f"Expected 'add' in callers of 'helper', got: {caller_names}"
 
 
 # ---------------------------------------------------------------------------
@@ -150,9 +144,7 @@ def test_impact_helper_includes_add(ia: ImpactAnalyzer, kg_db_path: Path) -> Non
     )
 
 
-def test_impact_helper_includes_test_add_at_depth2(
-    ia: ImpactAnalyzer, kg_db_path: Path
-) -> None:
+def test_impact_helper_includes_test_add_at_depth2(ia: ImpactAnalyzer, kg_db_path: Path) -> None:
     """Impact analysis on helper at depth 2 should include test_add (transitive via add)."""
     helper_id = _node_id_by_name(kg_db_path, "helper")
     result = ia.analyze(helper_id, depth=2)
@@ -191,18 +183,13 @@ def test_context_builder_provenance_distinguishes_call_graph_from_query_match(
     context = cb.build_context("add", max_nodes=20, include_code=False)
 
     # Collect relationship tags across all returned nodes
-    query_match_nodes = [
-        n for n in context.nodes if "search_match" in n.relationships
-    ]
+    query_match_nodes = [n for n in context.nodes if "search_match" in n.relationships]
     call_graph_nodes = [
-        n for n in context.nodes
-        if any(r.startswith("calls:") for r in n.relationships)
+        n for n in context.nodes if any(r.startswith("calls:") for r in n.relationships)
     ]
 
     # At least one query-match result must exist (add or helper returned by FTS)
-    assert query_match_nodes, (
-        "Expected at least one node tagged 'search_match' for query 'add'"
-    )
+    assert query_match_nodes, "Expected at least one node tagged 'search_match' for query 'add'"
 
     # Provenance values must be distinguishable: "search_match" != "calls:*"
     query_match_tags: set[str] = set()

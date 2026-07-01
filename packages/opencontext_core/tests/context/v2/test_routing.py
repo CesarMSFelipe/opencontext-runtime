@@ -34,10 +34,13 @@ def test_router_cache_hit_skips_ranking() -> None:
 def test_router_cache_miss_ranks_items() -> None:
     cache = _FakeCache(payload=None)
     router = ContextRouter(cache=cache)
-    env = ContextEnvelope(task="auth", items=[
-        {"id": "a", "content": "auth"},
-        {"id": "b", "content": "weather"},
-    ])
+    env = ContextEnvelope(
+        task="auth",
+        items=[
+            {"id": "a", "content": "auth"},
+            {"id": "b", "content": "weather"},
+        ],
+    )
     out = router.route(env)
     assert out.items[0]["id"] == "a"
     assert cache.misses == 1

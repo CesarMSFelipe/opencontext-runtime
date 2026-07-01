@@ -7,7 +7,10 @@ from opencontext_core.marketplace.v2.trust import TrustLevel
 
 def test_trust_levels_present() -> None:
     assert {t.name for t in TrustLevel} == {
-        "untrusted", "community", "verified", "official",
+        "untrusted",
+        "community",
+        "verified",
+        "official",
     }
 
 

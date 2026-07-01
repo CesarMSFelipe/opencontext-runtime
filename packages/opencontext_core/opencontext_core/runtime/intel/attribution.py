@@ -40,10 +40,7 @@ class TokenSavings:
     @property
     def total(self) -> int:
         return (
-            self.kg_signature
-            + self.semantic_compression
-            + self.cache_hit
-            + self.local_inspection
+            self.kg_signature + self.semantic_compression + self.cache_hit + self.local_inspection
         )
 
     @property
@@ -58,10 +55,10 @@ def _coerce_int(value: object) -> int:
     if value is None:
         return 0
     try:
-        n = int(value)  # type: ignore[arg-type]
+        n = int(value)  # type: ignore[call-overload]
     except (TypeError, ValueError):
         return 0
-    return max(0, n)
+    return max(0, n)  # type: ignore[no-any-return]
 
 
 def _coerce_float(value: object) -> float:
@@ -84,9 +81,7 @@ class TokenSavingsAttribution:
 
     def decompose(self, run: Mapping[str, object]) -> TokenSavings:
         baseline = _coerce_int(run.get("baseline_tokens"))
-        axes: dict[str, int] = {
-            key: _coerce_int(run.get(key)) for key in _SAVING_KEYS
-        }
+        axes: dict[str, int] = {key: _coerce_int(run.get(key)) for key in _SAVING_KEYS}
         return TokenSavings(
             kg_signature=axes["kg_signature"],
             semantic_compression=axes["semantic_compression"],

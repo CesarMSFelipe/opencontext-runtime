@@ -6,7 +6,6 @@ Per openspec/changes/agentic-parity-engram-gentle/design/pr3-cli-fastapi.md
 
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 
 from opencontext_api.main import app
@@ -64,6 +63,7 @@ class TestPhase:
     def test_phase_endpoint_archive(self) -> None:
         resp = client.post("/v1/sdd/archive", json={"change": "test"})
         assert resp.status_code == 200
+
 
 class TestNegativePaths:
     def test_sdd_unknown_phase_returns_404(self) -> None:

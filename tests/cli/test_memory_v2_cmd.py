@@ -7,7 +7,6 @@ Per openspec/changes/agentic-parity-engram-gentle/design/pr3-cli-fastapi.md
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 import pytest
 
@@ -139,20 +138,12 @@ class TestToolArgs:
         args = v2_parent.parse_args(["v2", "current-project"])
         assert args.v2_command == "current-project"
 
-    def test_capture_passive_accepts_content(
-        self, v2_parent: argparse.ArgumentParser
-    ) -> None:
-        args = v2_parent.parse_args(
-            ["v2", "capture-passive", "--content", "some learning"]
-        )
+    def test_capture_passive_accepts_content(self, v2_parent: argparse.ArgumentParser) -> None:
+        args = v2_parent.parse_args(["v2", "capture-passive", "--content", "some learning"])
         assert args.content == "some learning"
 
-    def test_suggest_topic_key_accepts_title(
-        self, v2_parent: argparse.ArgumentParser
-    ) -> None:
-        args = v2_parent.parse_args(
-            ["v2", "suggest-topic-key", "--title", "auth redesign"]
-        )
+    def test_suggest_topic_key_accepts_title(self, v2_parent: argparse.ArgumentParser) -> None:
+        args = v2_parent.parse_args(["v2", "suggest-topic-key", "--title", "auth redesign"])
         assert args.title == "auth redesign"
 
     def test_review_action_list(self, v2_parent: argparse.ArgumentParser) -> None:
@@ -167,9 +158,7 @@ class TestToolArgs:
         args = v2_parent.parse_args(["v2", "timeline", "--project", "my-project"])
         assert args.project == "my-project"
 
-    def test_merge_projects_accepts_sources(
-        self, v2_parent: argparse.ArgumentParser
-    ) -> None:
+    def test_merge_projects_accepts_sources(self, v2_parent: argparse.ArgumentParser) -> None:
         args = v2_parent.parse_args(
             ["v2", "merge-projects", "--target", "main", "--sources", "a", "b"]
         )

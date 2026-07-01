@@ -30,12 +30,8 @@ def _record(
 
 def test_REQ_mem_v2_003_contradicts_edge() -> None:
     """Same topic_key, different content, confidence delta > threshold => contradicts."""
-    candidate = _record(
-        "mem_new", "auth:method", "Auth uses session cookies", confidence=0.95
-    )
-    existing = [
-        _record("mem_old", "auth:method", "Auth uses JWT tokens", confidence=0.5)
-    ]
+    candidate = _record("mem_new", "auth:method", "Auth uses session cookies", confidence=0.95)
+    existing = [_record("mem_old", "auth:method", "Auth uses JWT tokens", confidence=0.5)]
     conflicts = detect_contradiction(candidate, existing, confidence_delta=0.3)
     assert len(conflicts) == 1
     edge: ConflictEnvelopeV2 = conflicts[0]

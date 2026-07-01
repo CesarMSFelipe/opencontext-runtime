@@ -77,9 +77,7 @@ class TestSdkPlatform:
         # Strip permissions to simulate the spec's missing-field scenario
         manifest = out_dir / "plugin.yaml"
         text = manifest.read_text()
-        cleaned = "\n".join(
-            line for line in text.splitlines() if "permissions" not in line
-        )
+        cleaned = "\n".join(line for line in text.splitlines() if "permissions" not in line)
         manifest.write_text(cleaned)
         result = platform.validate_plugin(out_dir)
         assert result["status"] == "error"

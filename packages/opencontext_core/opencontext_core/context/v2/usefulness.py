@@ -1,9 +1,11 @@
-"""Context v2 usefulness — CONV2 #11 content-to-query relevance."""
-
 from __future__ import annotations
 
+from typing import Any
 
-def usefulness_score(item: dict, query: str) -> float:
+"""Context v2 usefulness — CONV2 #11 content-to-query relevance."""
+
+
+def usefulness_score(item: dict[Any, Any], query: str) -> float:
     """Fraction of query terms found in item content."""
     if not query:
         return 0.0

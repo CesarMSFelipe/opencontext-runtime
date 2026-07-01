@@ -36,8 +36,18 @@ SUBCOMMANDS = [
     "list",
 ]
 
-_PHASE_VERBS = {"init", "new", "explore", "propose", "spec", "design",
-                 "tasks", "apply", "verify", "archive"}
+_PHASE_VERBS = {
+    "init",
+    "new",
+    "explore",
+    "propose",
+    "spec",
+    "design",
+    "tasks",
+    "apply",
+    "verify",
+    "archive",
+}
 _STATUS_VERBS = {"status", "continue", "ff", "onboard", "list"}
 
 
@@ -62,8 +72,19 @@ def add_sdd_parser(subparsers: Any) -> argparse.ArgumentParser:
         p.add_argument("--cwd", default=".", help="Project root (default: current dir).")
         p.add_argument("--verbose", action="store_true", help="Verbose output.")
 
-        if verb in {"new", "status", "continue", "propose", "spec", "design",
-                     "tasks", "apply", "verify", "archive", "ff"}:
+        if verb in {
+            "new",
+            "status",
+            "continue",
+            "propose",
+            "spec",
+            "design",
+            "tasks",
+            "apply",
+            "verify",
+            "archive",
+            "ff",
+        }:
             p.add_argument("--change", default=None, help="Change name.")
             if verb == "new":
                 p.add_argument("change", nargs="?", help="Change name (positional).")

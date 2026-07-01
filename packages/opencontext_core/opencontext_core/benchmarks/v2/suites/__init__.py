@@ -32,12 +32,11 @@ def _stub(suite_id: str) -> Callable[[], BenchmarkResult]:
             methodology_version=current_methodology_version(),
             detail=f"{suite_id} stub",
         )
+
     return run
 
 
-_SUITES: dict[str, Callable[[], BenchmarkResult]] = {
-    sid: _stub(sid) for sid in SUITE_IDS
-}
+_SUITES: dict[str, Callable[[], BenchmarkResult]] = {sid: _stub(sid) for sid in SUITE_IDS}
 
 
 def get_suite(suite_id: str) -> Callable[[], BenchmarkResult]:

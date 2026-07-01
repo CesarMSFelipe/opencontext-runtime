@@ -147,7 +147,9 @@ class CompressionPackMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = Field(description="True only when compression ran on at least one item.")
-    tokens_before: int = Field(ge=0, description="Sum of original token estimates before compression.")
+    tokens_before: int = Field(
+        ge=0, description="Sum of original token estimates before compression."
+    )
     tokens_after: int = Field(ge=0, description="Sum of token estimates after compression.")
     items_compressed: int = Field(ge=0, description="Number of items that were compressed.")
 

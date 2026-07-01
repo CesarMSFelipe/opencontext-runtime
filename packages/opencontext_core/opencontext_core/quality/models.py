@@ -181,7 +181,9 @@ class QualityReport:
         """
         total_checks = len(self.verdicts)
         passed = sum(1 for v in self.verdicts if v.status == CheckStatus.PASSED)
-        failed = sum(1 for v in self.verdicts if v.status in (CheckStatus.FAILED, CheckStatus.ERROR))
+        failed = sum(
+            1 for v in self.verdicts if v.status in (CheckStatus.FAILED, CheckStatus.ERROR)
+        )
 
         warnings = 0
         errors = 0

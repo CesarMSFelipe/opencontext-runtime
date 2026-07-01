@@ -254,9 +254,7 @@ def test_REQ_OMS_003_soft_delete_hides_from_search(store_db) -> None:
 
     # And the row is still present in the table with ``deleted_at`` stamped.
     with store._connect() as conn:
-        row = conn.execute(
-            "SELECT deleted_at FROM observations WHERE id = ?", (obs_id,)
-        ).fetchone()
+        row = conn.execute("SELECT deleted_at FROM observations WHERE id = ?", (obs_id,)).fetchone()
         assert row is not None, "soft-deleted row still in the table"
         assert row["deleted_at"] is not None
 
@@ -279,9 +277,7 @@ def test_REQ_OMS_003_hard_delete_removes_row_and_fts(store_db) -> None:
     store.delete(obs_id, hard=True)
 
     with store._connect() as conn:
-        row = conn.execute(
-            "SELECT id FROM observations WHERE id = ?", (obs_id,)
-        ).fetchone()
+        row = conn.execute("SELECT id FROM observations WHERE id = ?", (obs_id,)).fetchone()
         assert row is None, "hard-deleted row removed from observations"
 
         fts_row = conn.execute(

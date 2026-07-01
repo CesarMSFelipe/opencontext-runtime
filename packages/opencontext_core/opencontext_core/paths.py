@@ -92,11 +92,7 @@ def resolve_storage_path(
         return Path(custom)
     effective = _effective_mode(mode)
     if effective == StorageMode.user:
-        return (
-            Path(platformdirs.user_state_path("opencontext"))
-            / "projects"
-            / project_id(root)
-        )
+        return Path(platformdirs.user_state_path("opencontext")) / "projects" / project_id(root)
     # local mode — in-repo legacy layout
     return root.resolve() / ".storage" / "opencontext"
 
@@ -191,7 +187,8 @@ def read_manifest(path: Path) -> dict[str, Any] | None:
     if not manifest_file.exists():
         return None
     try:
-        return json.loads(manifest_file.read_text(encoding="utf-8"))
+        result: dict[str, Any] | None = json.loads(manifest_file.read_text(encoding="utf-8"))
+        return result
     except (json.JSONDecodeError, OSError):
         return None
 
@@ -209,6 +206,7 @@ def is_owned(path: Path) -> bool:
 # ---------------------------------------------------------------------------
 # Internal helper used by detect_legacy callers to emit the standard warning
 # ---------------------------------------------------------------------------
+
 
 def _warn_legacy(legacy: LegacyState) -> None:
     """Emit a standard deprecation warning for detected legacy state."""

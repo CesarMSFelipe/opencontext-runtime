@@ -109,8 +109,7 @@ class Orchestrator:
                 return PhaseResultEnvelope(
                     status="blocked",
                     executive_summary=(
-                        "No test files found. Strict TDD requires a failing "
-                        "test before apply."
+                        "No test files found. Strict TDD requires a failing test before apply."
                     ),
                     artifacts={},
                     next_recommended="design",
@@ -193,13 +192,15 @@ def build_phase_prompt(
         lines.append(f"Change: {change}")
     if tdd_mode != "ask":
         lines.append(f"TDD Mode: {tdd_mode}")
-    lines.extend([
-        "",
-        "## Instructions",
-        "",
-        f"Execute the '{phase}' phase per the SDD workflow.",
-        "Return a PhaseResultEnvelope-compatible result.",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Instructions",
+            "",
+            f"Execute the '{phase}' phase per the SDD workflow.",
+            "Return a PhaseResultEnvelope-compatible result.",
+        ]
+    )
     return "\n".join(lines)
 
 

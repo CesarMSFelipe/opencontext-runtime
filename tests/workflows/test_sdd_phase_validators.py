@@ -74,7 +74,9 @@ def test_explore_validator_rejects_ok() -> None:
 
 
 def test_explore_validator_accepts_context_summary() -> None:
-    result = validate_phase("explore", "Context summary: project has files and symbols. unknowns: none.")
+    result = validate_phase(
+        "explore", "Context summary: project has files and symbols. unknowns: none."
+    )
     assert result.passed is True
 
 

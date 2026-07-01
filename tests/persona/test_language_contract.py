@@ -14,9 +14,7 @@ from pathlib import Path
 import pytest
 
 # Root of the SDD change artifacts
-CHANGE_ROOT = (
-    Path(__file__).parents[1] / "openspec" / "changes" / "agentic-parity-engram-gentle"
-)
+CHANGE_ROOT = Path(__file__).parents[1] / "openspec" / "changes" / "agentic-parity-engram-gentle"
 
 # Artifact files to check
 ARTIFACT_GLOBS = [
@@ -99,7 +97,9 @@ class TestLanguageContract:
 
     def test_skill_md_has_no_voseo(self) -> None:
         """Portable SKILL.md files have no regional voice."""
-        skills_dir = CHANGE_ROOT.parents[1] / "packages" / "opencontext_sdd" / "opencontext_sdd" / "skills"
+        skills_dir = (
+            CHANGE_ROOT.parents[1] / "packages" / "opencontext_sdd" / "opencontext_sdd" / "skills"
+        )
         if not skills_dir.is_dir():
             pytest.skip("SDD skills directory not found")
         for skill_md in skills_dir.rglob("SKILL.md"):

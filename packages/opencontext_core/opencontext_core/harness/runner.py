@@ -904,8 +904,7 @@ class HarnessRunner:
                 g.id == "guardrails" and g.status == GateStatus.FAILED for g in result.gates
             )
             contract_blocked = getattr(state, "sdd_strict", False) and any(
-                g.id == "phase_contract" and g.status == GateStatus.WARNING
-                for g in result.gates
+                g.id == "phase_contract" and g.status == GateStatus.WARNING for g in result.gates
             )
             if result.status == GateStatus.FAILED:
                 if budget_mode is BudgetMode.STRICT or scaffold_blocked or contract_blocked:
@@ -940,7 +939,9 @@ class HarnessRunner:
                 from opencontext_core.config import load_config_or_defaults
 
                 _rc = load_config_or_defaults(state.root / "opencontext.yaml", auto_detect=False)
-                _fb_base = resolve_storage_path(state.root, _rc.storage.mode, _rc.storage.custom_path)
+                _fb_base = resolve_storage_path(
+                    state.root, _rc.storage.mode, _rc.storage.custom_path
+                )
             except Exception:
                 _fb_base = state.root / ".storage" / "opencontext"
             fb = FeedbackCollector(storage_path=_fb_base / "learning")
@@ -986,7 +987,7 @@ class HarnessRunner:
         existing telemetry and persistence chain.
         """
         try:
-            from opencontext_sdd.runner import PhaseResultEnvelope, run_phase
+            from opencontext_sdd.runner import run_phase
 
             envelope = run_phase(workflow, change=task, cwd=str(self.root))
         except ImportError:
@@ -1011,7 +1012,7 @@ class HarnessRunner:
             )()
 
         # Fake a HarnessRunResult that downstream persistence can consume
-        from dataclasses import dataclass
+        from dataclasses import dataclass, field
 
         @dataclass
         class _V2Result:
@@ -1020,8 +1021,8 @@ class HarnessRunner:
             phases_ok: int = 1 if envelope.status == "ok" else 0
             phases_failed: int = 0 if envelope.status == "ok" else 1
             status: str = envelope.status
-            executive_summary: str = envelope.executive_summary  # type: ignore[attr-defined]
-            artifacts: dict = {}
+            executive_summary: str = envelope.executive_summary
+            artifacts: dict[Any, Any] = field(default_factory=dict)
             trace_id: str = ""
 
         return _V2Result()  # type: ignore[return-value]
@@ -1066,8 +1067,12 @@ class HarnessRunner:
                     from opencontext_core.config import load_config_or_defaults
                     from opencontext_core.paths import resolve_storage_path
 
-                    _lrc = load_config_or_defaults(state.root / "opencontext.yaml", auto_detect=False)
-                    _ls = resolve_storage_path(state.root, _lrc.storage.mode, _lrc.storage.custom_path)
+                    _lrc = load_config_or_defaults(
+                        state.root / "opencontext.yaml", auto_detect=False
+                    )
+                    _ls = resolve_storage_path(
+                        state.root, _lrc.storage.mode, _lrc.storage.custom_path
+                    )
                 except Exception:
                     _ls = state.root / ".storage" / "opencontext"
                 orch = LearningOrchestrator(
@@ -1128,8 +1133,12 @@ class HarnessRunner:
                     from opencontext_core.config import load_config_or_defaults
                     from opencontext_core.paths import resolve_storage_path
 
-                    _krc = load_config_or_defaults(state.root / "opencontext.yaml", auto_detect=False)
-                    _ks = resolve_storage_path(state.root, _krc.storage.mode, _krc.storage.custom_path)
+                    _krc = load_config_or_defaults(
+                        state.root / "opencontext.yaml", auto_detect=False
+                    )
+                    _ks = resolve_storage_path(
+                        state.root, _krc.storage.mode, _krc.storage.custom_path
+                    )
                     db_path = _ks / "context_graph.db"
                 except Exception:
                     db_path = state.root / ".storage" / "opencontext" / "context_graph.db"
@@ -1376,7 +1385,9 @@ class HarnessRunner:
         _cfg_tdd = getattr(self.config, "tdd_mode", "ask")
         # Env var only applies when config is at the default ("ask"); an explicit
         # config value (e.g. from a test fixture) always wins.
-        tdd_mode = os.environ.get("OPENCONTEXT_TDD_MODE", _cfg_tdd) if _cfg_tdd == "ask" else _cfg_tdd
+        tdd_mode = (
+            os.environ.get("OPENCONTEXT_TDD_MODE", _cfg_tdd) if _cfg_tdd == "ask" else _cfg_tdd
+        )
         approval_required = bool(getattr(self.config, "approval_required_for_writes", False))
 
         # Merge from the top-level config only to fill in non-overridden defaults.
@@ -1441,8 +1452,7 @@ class HarnessRunner:
                             status=GateStatus.FAILED,
                             message=(
                                 "TDD gate requires a failing test. Continue, add test, "
-                                "or switch mode? Non-interactive run blocked. "
-                                + gate.message
+                                "or switch mode? Non-interactive run blocked. " + gate.message
                             ),
                             metadata=gate.metadata,
                         )
@@ -1592,7 +1602,10 @@ class HarnessRunner:
             from opencontext_core.paths import resolve_storage_path
 
             _qrc = load_config_or_defaults(_oc_yaml, auto_detect=False)
-            _resolved = resolve_storage_path(root, _qrc.storage.mode, _qrc.storage.custom_path) / "context_graph.db"
+            _resolved = (
+                resolve_storage_path(root, _qrc.storage.mode, _qrc.storage.custom_path)
+                / "context_graph.db"
+            )
             return _resolved if _resolved.exists() or not _local.exists() else _local
         except Exception:
             return _local
@@ -2309,7 +2322,9 @@ class HarnessRunner:
                     from opencontext_core.paths import resolve_storage_path
 
                     _crc = load_config_or_defaults(_oc_yaml, auto_detect=False)
-                    _cs = resolve_storage_path(self.root, _crc.storage.mode, _crc.storage.custom_path)
+                    _cs = resolve_storage_path(
+                        self.root, _crc.storage.mode, _crc.storage.custom_path
+                    )
                     _kg_db = _cs / "context_graph.db"
                     if not _kg_db.exists() and _local_kg_db.exists():
                         _kg_db = _local_kg_db

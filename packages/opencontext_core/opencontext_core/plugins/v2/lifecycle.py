@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
 class IllegalTransitionError(Exception):
     """A state transition that is not permitted by the lifecycle FSM."""
 
 
-class PluginState(str, Enum):
+class PluginState(StrEnum):
     install = "install"
     validate = "validate"
     enable = "enable"
@@ -41,9 +41,7 @@ class PluginStateMachine:
         if self.current is None:
             # First transition must be ``install``.
             if target != PluginState.install:
-                raise IllegalTransitionError(
-                    f"initial transition must be install, got {target!r}"
-                )
+                raise IllegalTransitionError(f"initial transition must be install, got {target!r}")
             self.current = target
             return target
         allowed = _TRANSITIONS[self.current]

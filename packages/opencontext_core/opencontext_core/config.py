@@ -1523,8 +1523,7 @@ class StorageConfig(BaseModel):
     custom_path: str | None = Field(
         default=None,
         description=(
-            "Absolute path override for storage. When set, overrides both "
-            "mode and XDG computation."
+            "Absolute path override for storage. When set, overrides both mode and XDG computation."
         ),
     )
 

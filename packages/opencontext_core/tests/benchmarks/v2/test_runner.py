@@ -15,10 +15,22 @@ from opencontext_core.benchmarks.v2.runner import (
 
 def test_runner_runs_all_tasks() -> None:
     runner = BenchmarkRunner()
-    runner.register(BenchmarkTask(name="t1", run=lambda: BenchmarkResult(
-        name="t1", success=True, methodology_version=current_methodology_version())))
-    runner.register(BenchmarkTask(name="t2", run=lambda: BenchmarkResult(
-        name="t2", success=True, methodology_version=current_methodology_version())))
+    runner.register(
+        BenchmarkTask(
+            name="t1",
+            run=lambda: BenchmarkResult(
+                name="t1", success=True, methodology_version=current_methodology_version()
+            ),
+        )
+    )
+    runner.register(
+        BenchmarkTask(
+            name="t2",
+            run=lambda: BenchmarkResult(
+                name="t2", success=True, methodology_version=current_methodology_version()
+            ),
+        )
+    )
     results = runner.run_all()
     assert [r.name for r in results] == ["t1", "t2"]
     assert all(r.success for r in results)
@@ -27,8 +39,14 @@ def test_runner_runs_all_tasks() -> None:
 def test_runner_returns_results_in_order() -> None:
     runner = BenchmarkRunner()
     for n in ("a", "b", "c"):
-        runner.register(BenchmarkTask(name=n, run=lambda n=n: BenchmarkResult(
-            name=n, success=True, methodology_version=current_methodology_version())))
+        runner.register(
+            BenchmarkTask(
+                name=n,
+                run=lambda n=n: BenchmarkResult(
+                    name=n, success=True, methodology_version=current_methodology_version()
+                ),
+            )
+        )
     assert [r.name for r in runner.run_all()] == ["a", "b", "c"]
 
 

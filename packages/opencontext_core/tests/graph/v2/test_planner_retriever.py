@@ -16,6 +16,7 @@ def test_planner_within_budget() -> None:
     plan = p.plan("auth function", ["function"])
     assert isinstance(plan, KgQueryPlan)
 
+
 def test_planner_over_budget() -> None:
     p = ContextQueryPlanner(ceiling=10)
     try:
@@ -24,23 +25,28 @@ def test_planner_over_budget() -> None:
         return
     raise AssertionError("Expected BudgetExceededError")
 
+
 def test_subgraph_empty() -> None:
     sg = ContextSubgraph()
     assert sg.tokens_used == 0
+
 
 def test_owner_resolver_stub() -> None:
     r = OwnerResolver()
     ref = r.resolve("src/x.py")
     assert ref.path == "src/x.py"
 
+
 def test_freshness_new() -> None:
     fs = compute_freshness(datetime.now(tz=UTC))
     assert fs.score > 0.9
+
 
 def test_confidence_diverse() -> None:
     evidence = [{"source_type": "code"}, {"source_type": "git"}, {"source_type": "docs"}]
     cs = compute_confidence(evidence)
     assert cs.score > 0.5
+
 
 def test_unknown_owner_event() -> None:
     evt = emit_unknown_owner("src/missing.py")

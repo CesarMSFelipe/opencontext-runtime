@@ -35,7 +35,9 @@ class TestInsertQuery:
         assert len(results) == 1
 
     def test_search_fts5(self, store: KgStore) -> None:
-        store.insert_node(KgNode(id="n:func:auth", type=KgNodeType.FUNCTION, name="authenticate_user"))
+        store.insert_node(
+            KgNode(id="n:func:auth", type=KgNodeType.FUNCTION, name="authenticate_user")
+        )
         results = store.search("auth")
         assert len(results) >= 1
 

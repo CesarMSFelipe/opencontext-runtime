@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 """KG v2 freshness + confidence — PR-008.e."""
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 
 
 @dataclass
@@ -31,7 +33,7 @@ class KgConfidenceScore:
     score: float = 0.0  # 0.0 — 1.0
 
 
-def compute_confidence(evidence: list[dict]) -> KgConfidenceScore:
+def compute_confidence(evidence: list[dict[Any, Any]]) -> KgConfidenceScore:
     sources = {e.get("source_type", "unknown") for e in evidence}
     base = min(1.0, len(evidence) / 5.0)
     diversity = min(1.0, len(sources) / 3.0)

@@ -276,4 +276,3 @@ def _kiro_md() -> str:
         + _orchestrator_section("kiro-ide")
         + "\n\nKiro: keep specs in `.kiro/specs/<change>/` when using native spec workflows.\n"
     )
-

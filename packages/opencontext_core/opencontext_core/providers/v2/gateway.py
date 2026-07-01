@@ -48,5 +48,5 @@ class FallbackRouter:
 
 
 class StructuredOutputAdapter:
-    def adapt(self, response: dict[str, Any], schema: dict) -> dict[str, Any]:
+    def adapt(self, response: dict[str, Any], schema: dict[Any, Any]) -> dict[str, Any]:
         return {k: response.get(k) for k in schema if k in response}

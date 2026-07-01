@@ -30,21 +30,24 @@ _LAZY = {
 }
 
 
-def __getattr__(name: str):  # PEP 562 lazy re-export
+def __getattr__(name: str) -> Any:  # PEP 562 lazy re-export
     mod_name = _LAZY.get(name)
     if mod_name is None:
         raise AttributeError(name)
     import importlib
+
     module = importlib.import_module(mod_name)
     value = getattr(module, name)
     globals()[name] = value  # cache
     return value
 
 
+# Lazy re-exports expose these via __getattr__; declare in __all__ so
+# `from envelope import *` lists them.
 __all__ = [
-    "ContextCompressor",
+    "ContextCompressor",  # noqa: F822 — re-exported lazily
     "ContextEnvelope",
-    "ContextRanker",
-    "ContextRouter",
-    "usefulness_score",
+    "ContextRanker",  # noqa: F822 — re-exported lazily
+    "ContextRouter",  # noqa: F822 — re-exported lazily
+    "usefulness_score",  # noqa: F822 — re-exported lazily
 ]

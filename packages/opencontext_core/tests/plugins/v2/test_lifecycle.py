@@ -30,6 +30,11 @@ def test_REQ_plugin_v1_002_illegal_transition() -> None:
 
 def test_seven_states_present() -> None:
     assert {s.name for s in PluginState} >= {
-        "install", "validate", "enable", "upgrade",
-        "disable", "remove", "migrate",
+        "install",
+        "validate",
+        "enable",
+        "upgrade",
+        "disable",
+        "remove",
+        "migrate",
     }

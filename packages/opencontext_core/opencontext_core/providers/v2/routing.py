@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from opencontext_core.providers.v2.spec import ProviderSpec
 
@@ -12,7 +12,7 @@ class NoProviderAvailable(Exception):
     """No registered provider satisfies the request."""
 
 
-class RoutingStrategy(str, Enum):
+class RoutingStrategy(StrEnum):
     cheapest = "cheapest"
     fastest = "fastest"
     balanced = "balanced"

@@ -4,6 +4,7 @@ Acceptance: decision-bearing text yields structured LearningCandidate entries
 with stable ids; empty input yields nothing; entries are redacted through
 the NoCoT redaction layer when present.
 """
+
 from __future__ import annotations
 
 from opencontext_core.learning.v2.candidate_extractor import (
