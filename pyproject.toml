@@ -29,6 +29,7 @@ pythonpath = [
   "packages/opencontext_api",
   "packages/opencontext_cli",
   "packages/opencontext_core",
+  "packages/opencontext_memory",
   "packages/opencontext_profiles",
   "packages/opencontext_sdd",
 ]
@@ -36,7 +37,7 @@ pythonpath = [
 [tool.mypy]
 python_version = "3.12"
 strict = true
-mypy_path = "packages/opencontext_core:packages/opencontext_profiles:packages/opencontext_sdd"
+mypy_path = "packages/opencontext_core:packages/opencontext_memory:packages/opencontext_profiles:packages/opencontext_sdd"
 warn_unreachable = true
 exclude = [
   "packages/.*/build/",
