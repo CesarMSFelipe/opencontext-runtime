@@ -45,6 +45,12 @@ def _subprocess_env(home: Path) -> dict[str, str]:
             entries.append(abs_pkg)
     env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
     env["PYTHONPATH"] = os.pathsep.join(entries)
+    # Pin storage to the project root so ``opencontext index`` writes
+    # ``project_manifest.json`` inside ``<work>/.storage/opencontext/`` instead of
+    # the user-mode XDG state dir. The e2e journey asserts the manifest lives
+    # under the project root; this keeps the journey self-contained and
+    # isolated from any host-side XDG state.
+    env["OPENCONTEXT_STORAGE_MODE"] = "local"
     return env
 
 
