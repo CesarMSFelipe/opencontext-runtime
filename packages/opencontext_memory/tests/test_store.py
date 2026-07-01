@@ -79,3 +79,34 @@ def test_REQ_OMS_001_write_inserts_row_and_fts_and_search_bm25(store_db) -> None
     hits = store.search("login", limit=2)
     assert hits, "search must return at least one hit"
     assert hits[0]["title"] == "Fix login bug"
+
+
+# ---------------------------------------------------------------------------
+# T2.10 — migrations apply idempotently (REDo, then GREEN with migrations.py)
+# ---------------------------------------------------------------------------
+
+
+def test_migrations_apply_idempotent(store_db) -> None:
+    """``opencontext_memory.store.migrations.migrate(flag=False)`` runs against
+    an existing DB without raising AND can be re-invoked safely
+    (idempotency contract). Production code lands in T2.9 to satisfy this test.
+    """
+    from opencontext_memory.store.migrations import migrate
+
+    # First open + first migrate: fresh DB, schema applies via schema.sql.
+    store = MemoryStore.open(store_db)
+    migrate(store_db, flag=False)
+    # Second migration on the same DB must NOT raise (idempotency).
+    migrate(store_db, flag=False)
+
+    # Sanity: a write still works after a 2-pass migration.
+    obs_id = store.write(
+        Observation(
+            session_id="s-1",
+            type="decision",
+            title="Post-migration",
+            content="ok",
+            project="P",
+        )
+    )
+    assert obs_id >= 1
