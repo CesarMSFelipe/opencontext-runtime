@@ -7,8 +7,8 @@ from pathlib import Path
 from opencontext_core.skills.v2.catalog import (
     Catalog,
     DriftReport,
-    generate_catalog,
     dry_run_update,
+    generate_catalog,
 )
 
 

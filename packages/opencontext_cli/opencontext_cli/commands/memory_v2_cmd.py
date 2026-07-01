@@ -80,7 +80,7 @@ def add_memory_v2_parser(subparsers: Any) -> argparse.ArgumentParser:
         p.add_argument("--cwd", default=".", help="Project root.")
         p.add_argument("--verbose", action="store_true", help="Verbose output.")
         p.add_argument("--project", default=None, help="Project name.")
-        return p
+        return p  # type: ignore[no-any-return]  # v2_sub typed Any; add_parser returns ArgumentParser at runtime
 
     # --- Save ---
     p = _tool("save", "Save an observation to persistent memory.")
@@ -204,7 +204,7 @@ def add_memory_v2_parser(subparsers: Any) -> argparse.ArgumentParser:
     p.add_argument("--target", required=True, help="Target project name.")
     p.add_argument("--sources", nargs="+", required=True, help="Source project names.")
 
-    return v2_parser
+    return v2_parser  # type: ignore[no-any-return]  # subparsers typed Any; add_parser returns ArgumentParser at runtime
 
 
 def handle_memory_v2(args: argparse.Namespace) -> None:

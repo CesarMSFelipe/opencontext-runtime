@@ -95,7 +95,7 @@ def add_sdd_parser(subparsers: Any) -> argparse.ArgumentParser:
         if verb == "apply":
             p.add_argument("--task", default=None, help="Task ID to apply (e.g. T3.1).")
 
-    return sdd_parser
+    return sdd_parser  # type: ignore[no-any-return]  # subparsers typed Any; add_parser returns ArgumentParser at runtime
 
 
 def handle_sdd(args: Any) -> None:

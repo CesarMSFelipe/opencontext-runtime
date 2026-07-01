@@ -8,7 +8,6 @@ import pytest
 
 from opencontext_core.skills.v2.audit import AuditFinding, SkillAudit
 
-
 BUILTINS_ROOT = Path(__file__).parents[3] / "opencontext_core" / "skills" / "builtins" / "core"
 
 

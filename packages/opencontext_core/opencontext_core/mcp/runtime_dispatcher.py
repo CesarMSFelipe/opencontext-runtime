@@ -18,7 +18,7 @@ delegates to the API method.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import opencontext_core.compat as _compat_mod
 
@@ -31,7 +31,7 @@ def _is_migrated_flag(flag: str) -> bool:
 # Tool name -> (RuntimeApi method name, request-builder). The builders
 # convert a flat dict input into the Pydantic request DTO expected by
 # RuntimeApi. ``None`` means "no request DTO, just pass session_id".
-_SESSION_TOOLS: dict[str, tuple[str, Callable[[dict[str, Any]], Any]]] = {}
+_SESSION_TOOLS: dict[str, tuple[str, Callable[[dict[str, Any]], Any] | None]] = {}
 
 
 def _build_start_session(payload: dict[str, Any]) -> Any:
@@ -145,5 +145,5 @@ def handle_tool_call(name: str, payload: dict[str, Any]) -> dict[str, Any]:
     # Project the result to a dict for the MCP wire format. Pydantic
     # models expose .model_dump; everything else is used as-is.
     if hasattr(result, "model_dump"):
-        return result.model_dump(mode="json")
-    return result if isinstance(result, dict) else {"result": result}
+        return cast(dict[str, Any], result.model_dump(mode="json"))
+    return cast(dict[str, Any], result if isinstance(result, dict) else {"result": result})

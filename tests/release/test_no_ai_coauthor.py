@@ -14,7 +14,6 @@ from __future__ import annotations
 import re
 import subprocess
 
-
 _TRAILER_RE = re.compile(r"(?m)^Co-Authored-By:\s+")
 
 

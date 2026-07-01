@@ -8,7 +8,6 @@ import pytest
 
 from opencontext_core.skills.v2.bundles import load_bundle
 
-
 BUNDLES_ROOT = Path(__file__).parents[3] / "opencontext_core" / "skills" / "bundles_yaml"
 
 

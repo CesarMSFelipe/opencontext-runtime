@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Callable
 
 from opencontext_core.benchmarks.v2.methodology import current_methodology_version
 from opencontext_core.benchmarks.v2.runner import BenchmarkResult
@@ -50,4 +51,4 @@ def run() -> BenchmarkResult:
 # Registry: name → suite callable. ``all_suites()`` is consumed by
 # the release runner; ``first_run_user_flow`` is exposed alongside
 # the §A1-A12 set without being one of them.
-REGISTRY: dict[str, callable[[], BenchmarkResult]] = {SUITE_ID: run}
+REGISTRY: dict[str, Callable[[], BenchmarkResult]] = {SUITE_ID: run}

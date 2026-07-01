@@ -19,7 +19,6 @@ from opencontext_core.context.v2.receipt import (
     FullFileReadJustification,
 )
 
-
 REQUIRED_FIELDS = (
     "schema_version",
     "receipt_id",
