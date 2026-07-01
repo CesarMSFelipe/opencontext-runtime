@@ -327,5 +327,50 @@ MIGRATION_LEDGER = MigrationLedger(
             removal_milestone="milestone-D",
             flag="runtime.context_engine_enabled",
         ),
+        # CL-V2 (commit 006) RuntimeApi parallel class — Phase 2 spine.
+        ModuleMigration(
+            module="runtime/api.py",
+            legacy_symbol="RuntimeApi",
+            state=MigrationState.legacy,
+            superseded_by="PR-006",
+            removal_milestone="milestone-F",
+            flag="runtime.rt-spine",
+        ),
+        # CL-V2 (commit 006) MCP ``runtime.*`` dispatcher — Phase 2 spine.
+        ModuleMigration(
+            module="mcp/run_dispatcher.py",
+            legacy_symbol="runtime_dispatcher",
+            state=MigrationState.legacy,
+            superseded_by="PR-008",
+            removal_milestone="milestone-F",
+            flag="runtime.mcp-runtime",
+        ),
+        # CL-V2 (commit 010) unified ResourceBudget — Phase 6.
+        ModuleMigration(
+            module="context/v2/budget.py",
+            legacy_symbol="ResourceBudget",
+            state=MigrationState.legacy,
+            superseded_by="PR-010",
+            removal_milestone="milestone-H",
+            flag="runtime.rt-budget",
+        ),
+        # CL-V2 (commit 011) skills v2 ecosystem — Phase 8.
+        ModuleMigration(
+            module="skills/v2/bundle.py",
+            legacy_symbol="SkillBundle",
+            state=MigrationState.legacy,
+            superseded_by="PR-011",
+            removal_milestone="milestone-I",
+            flag="runtime.skills-v2",
+        ),
+        # CL-V2 (commit 012) studio control plane — Phase 11.
+        ModuleMigration(
+            module="opencontext_studio/server.py",
+            legacy_symbol="StudioServer",
+            state=MigrationState.legacy,
+            superseded_by="PR-012",
+            removal_milestone="milestone-J",
+            flag="runtime.studio-control-plane",
+        ),
     ],
 )
