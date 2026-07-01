@@ -20,6 +20,7 @@ from opencontext_core.agents.sdd_orchestrator import (
     WORKFLOW_TRACKS,
 )
 from opencontext_core.harness.budget import TokenBudgetEnforcer
+from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.harness.config import HarnessConfig
 from opencontext_core.harness.gates import (
     ApprovalRequiredForWritesGate,
@@ -155,7 +156,7 @@ class HarnessRunner:
         llm_gateway: Any = None,
     ) -> None:
         self.root = root.resolve()
-        self.config = config or HarnessConfig.from_yaml_file(root / ".opencontext" / "harness.yaml")
+        self.config = config or HarnessConfig.from_yaml_file(resolve_workspace_path(root, StorageMode.local) / "harness.yaml")
         self.enforcer = TokenBudgetEnforcer()
         # Optional explicit LLM gateway. When provided (and not the mock
         # provider) the runner builds a live executor from it and attaches it to
@@ -211,7 +212,7 @@ class HarnessRunner:
                     oc_config.storage.custom_path,
                 )
             except Exception:
-                storage_path = self.root / ".storage" / "opencontext"
+                storage_path = resolve_storage_path(self.root, StorageMode.local)
             storage_path.mkdir(parents=True, exist_ok=True)
             self._memory_store = BackendFactory.create_memory_store(oc_config, storage_path)
         except Exception:
@@ -260,7 +261,7 @@ class HarnessRunner:
         (spec PR-004 SDD-CONV: meta-plan awareness).
         """
         try:
-            path = self.root / ".opencontext" / "program-plan.json"
+            path = resolve_workspace_path(self.root, StorageMode.local) / "program-plan.json"
             if not path.exists():
                 return None
             from opencontext_core.planning.program import ProgramPlan
@@ -354,7 +355,7 @@ class HarnessRunner:
         try:
             import json
 
-            context = self.root / ".opencontext" / "sdd" / "context.json"
+            context = resolve_workspace_path(self.root, StorageMode.local) / "sdd" / "context.json"
             name = (
                 json.loads(context.read_text(encoding="utf-8")).get("sdd_model_profile")
                 if context.exists()
@@ -631,7 +632,7 @@ class HarnessRunner:
     def _write_selection_receipt(self, state: HarnessState, receipt: Any) -> None:
         """Persist the workflow-selection receipt into the run dir (spec RCPT1)."""
         try:
-            run_dir = self.root / ".opencontext" / "runs" / state.run_id
+            run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             (run_dir / "workflow-selection.json").write_text(
                 json.dumps(receipt.model_dump(mode="json"), indent=2),
@@ -650,7 +651,7 @@ class HarnessRunner:
         """
         import json as _json
 
-        events_path = self.root / ".opencontext" / "runs" / run_id / "events.json"
+        events_path = resolve_workspace_path(self.root, StorageMode.local) / "runs" / run_id / "events.json"
         if not events_path.exists():
             return set()
         try:
@@ -794,7 +795,7 @@ class HarnessRunner:
             if self.config.privacy_profile is not PrivacyProfile.OFF:
                 privacy_rules = self._load_privacy_rules()
                 if privacy_rules:
-                    run_dir = state.root / ".opencontext" / "runs" / state.run_id
+                    run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
                     for rule in privacy_rules:
                         privacy_gate = PrivacyGate()
                         # Operation is determined by phase type
@@ -943,7 +944,7 @@ class HarnessRunner:
                     state.root, _rc.storage.mode, _rc.storage.custom_path
                 )
             except Exception:
-                _fb_base = state.root / ".storage" / "opencontext"
+                _fb_base = resolve_storage_path(state.root, StorageMode.local)
             fb = FeedbackCollector(storage_path=_fb_base / "learning")
             op_id = fb.start_operation("context_pack", task)
             fb.finish_operation(
@@ -1074,7 +1075,7 @@ class HarnessRunner:
                         state.root, _lrc.storage.mode, _lrc.storage.custom_path
                     )
                 except Exception:
-                    _ls = state.root / ".storage" / "opencontext"
+                    _ls = resolve_storage_path(state.root, StorageMode.local)
                 orch = LearningOrchestrator(
                     storage_path=_ls / "learning",
                     kg_db_path=_ls / "context_graph.db",
@@ -1141,7 +1142,7 @@ class HarnessRunner:
                     )
                     db_path = _ks / "context_graph.db"
                 except Exception:
-                    db_path = state.root / ".storage" / "opencontext" / "context_graph.db"
+                    db_path = resolve_storage_path(state.root, StorageMode.local) / "context_graph.db"
                 kg_changed = {p for p in changed if (state.root / p).suffix in _KG_EXTENSIONS}
                 if db_path.exists() and kg_changed:
                     kg = KnowledgeGraph(db_path=db_path)
@@ -1241,7 +1242,7 @@ class HarnessRunner:
             from opencontext_core.harness.receipt_store import ReceiptStore
             from opencontext_core.models.receipt import PhaseReceipt
 
-            run_dir = self.root / ".opencontext" / "runs" / state.run_id
+            run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             gate_digest = {
                 g.id: (g.status.value if hasattr(g.status, "value") else str(g.status))
@@ -1325,7 +1326,7 @@ class HarnessRunner:
                 handoff, from_persona=PHASE_PERSONAS.get(phase_id, "")
             )
 
-            run_dir = self.root / ".opencontext" / "runs" / state.run_id
+            run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             ArtifactStore(run_dir).write(
                 ArtifactWriteRequest(
@@ -1363,7 +1364,7 @@ class HarnessRunner:
 
             from opencontext_core.harness.run_store import RunStore
 
-            new_dir = self.root / ".opencontext" / "runs" / new_run_id
+            new_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / new_run_id
             new_dir.mkdir(parents=True, exist_ok=True)
             for src in RunStore(self.root).passed_phase_artifacts(resume_from, resume_completed):
                 dest = new_dir / src.name
@@ -1593,7 +1594,7 @@ class HarnessRunner:
     @staticmethod
     def _quality_db_path(root: Path) -> Path:
         """Path to the persisted knowledge graph the quality engine reads."""
-        _local = root / ".storage" / "opencontext" / "context_graph.db"
+        _local = resolve_storage_path(root, StorageMode.local) / "context_graph.db"
         _oc_yaml = root / "opencontext.yaml"
         if not _oc_yaml.exists():
             return _local
@@ -2226,7 +2227,7 @@ class HarnessRunner:
         try:
             import yaml
 
-            privacy_path = self.root / ".opencontext" / "privacy.yaml"
+            privacy_path = resolve_workspace_path(self.root, StorageMode.local) / "privacy.yaml"
             if not privacy_path.exists():
                 return []
             data = yaml.safe_load(privacy_path.read_text(encoding="utf-8"))
@@ -2313,7 +2314,7 @@ class HarnessRunner:
             # sets mode=user, use the XDG path. Otherwise fall back to the in-repo
             # local path for backward compatibility (legacy layout and tests without
             # a project config file).
-            _local_kg_db = self.root / ".storage" / "opencontext" / "context_graph.db"
+            _local_kg_db = resolve_storage_path(self.root, StorageMode.local) / "context_graph.db"
             _kg_db = _local_kg_db
             _oc_yaml = self.root / "opencontext.yaml"
             if _oc_yaml.exists():
@@ -2344,7 +2345,7 @@ class HarnessRunner:
 
     def persist_run(self, state: HarnessState, result: HarnessRunResult) -> Path:
         """Persist run artifacts to .opencontext/runs/<run_id>/."""
-        run_dir = self.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         def _serialize(obj: Any) -> Any:
