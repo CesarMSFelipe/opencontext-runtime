@@ -24,6 +24,10 @@ resolve_storage_path_strict`` added per call site during commit 004
 and 005 migrations).
 
 Idempotency: ``rewrite_source(rewrite_source(s)) == rewrite_source(s)``.
+
+Dry-run (A6): ``plan_rewrites(s)`` returns a list of planned changes
+without mutating the source. Per A6 the migration MUST be previewed via
+``plan_rewrites`` before any mass ``rewrite_source`` invocation.
 """
 
 from __future__ import annotations
@@ -38,12 +42,22 @@ from typing import Final
 _DIRECTORIES: Final[tuple[str, ...]] = (".opencontext", ".storage", ".cache", ".runtime")
 
 # regex per directory: matches `f"{X}/<dir>/<suffix>"` (suffix optional)
-_PATTERNS: Final[tuple[re.Pattern[str], ...]] = tuple(
-    re.compile(
-        r'f"(\{[^}]+\})/' + re.escape(d) + r'(?:/([^"\s]+))?"'
-    )
+_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
+    (d, re.compile(r'f"(\{[^}]+\})/' + re.escape(d) + r'(?:/([^"\s]+))?"'))
     for d in _DIRECTORIES
 )
+
+
+def _replace(match: re.Match[str]) -> str:
+    """Substitute one matched f-string with a resolver form."""
+    expr = match.group(1)            # e.g. "{ROOT}"
+    suffix = match.group(2)          # e.g. "cache.db" or None
+    stem = re.sub(r"[{}]", "", expr)  # e.g. "ROOT"
+    base = f"(Path({stem}))"
+    if suffix:
+        joined = " / ".join([f'"{dir_part}"' for dir_part in (suffix.split("/"))])
+        return f"({base} / {joined}).resolve()"
+    return f"resolve_storage_path_strict({base})"
 
 
 def rewrite_source(source: str) -> str:
@@ -55,23 +69,31 @@ def rewrite_source(source: str) -> str:
     f-string is replaced with a non-matching expression).
     """
     out = source
-    for pattern in _PATTERNS:
+    for _directory, pattern in _PATTERNS:
         out = pattern.sub(_replace, out)
     return out
 
 
-def _replace(match: re.Match[str]) -> str:
-    """Substitute one matched f-string with a resolver form."""
-    expr = match.group(1)            # e.g. "{ROOT}"
-    suffix = match.group(2)          # e.g. "cache.db" or None
-    stem = re.sub(r"[{}]", "", expr) # e.g. "ROOT"
-    base = f"(Path({stem}))"
-    if suffix:
-        joined = " / ".join([f'"{dir_part}"' for dir_part in (suffix.split("/"))])
-        return f"{base} / {joined}".replace(
-            f"{base} / {joined}", f"({base} / {joined}).resolve()"
-        )
-    return f"resolve_storage_path_strict({base})"
+def plan_rewrites(source: str) -> list[dict[str, object]]:
+    """A6 dry-run: report planned rewrites without mutating the source.
+
+    Returns a list of plan entries with ``directory``, ``line`` (1-based),
+    ``original`` (the matched f-string snippet) and ``replacement`` (the
+    would-be rewrite). The source string is not touched.
+    """
+    plan: list[dict[str, object]] = []
+    for lineno, line_text in enumerate(source.splitlines(keepends=True), start=1):
+        for directory, pattern in _PATTERNS:
+            for match in pattern.finditer(line_text):
+                plan.append(
+                    {
+                        "directory": directory,
+                        "line": lineno,
+                        "original": match.group(0),
+                        "replacement": _replace(match),
+                    }
+                )
+    return plan
 
 
-__all__ = ["rewrite_source"]
+__all__ = ["plan_rewrites", "rewrite_source"]  

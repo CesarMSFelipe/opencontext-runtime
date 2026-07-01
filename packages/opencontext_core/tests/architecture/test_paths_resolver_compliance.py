@@ -2,9 +2,11 @@
 
 The v2 design (commit 003) introduces an AST-level rewriter that turns
 `f"{X}/.opencontext/Y"` into `resolve_storage_path_strict(Path(X) / "Y")`
-so migrations are mechanical. This test pins two properties:
+so migrations are mechanical. This test pins three properties:
 
 * idempotent — running the rewriter twice produces the same output
+* dry-run — the rewriter can be queried for what it would change without
+  mutating anything (A6 requirement: dry-run before mass rewrite)
 * bypasser count — once a target module is rewritten, no `.opencontext`/
   `.storage`/`.cache`/`.runtime` literal concatenations remain in it
 
@@ -26,6 +28,43 @@ def test_rewriter_idempotent() -> None:
     once = rewrite_source(original)
     twice = rewrite_source(once)
     assert once == twice, f"non-idempotent: {once!r}"
+
+
+def test_rewriter_dry_run_no_side_effects() -> None:
+    """Dry-run mode (A6): the planner reports what would change without mutating.
+
+    Per A6 the migration MUST be previewed via a dry-run before any
+    mass rewrite; the planner function returns the planned diff
+    metadata without touching the source string.
+    """
+    from opencontext_core.paths._paths_cookie_cutter import (
+        plan_rewrites,
+        rewrite_source,
+    )
+
+    original = (
+        'ROOT = "/tmp"\n'
+        'a = f"{ROOT}/.opencontext/cache.db"\n'
+        'b = f"{ROOT}/.storage/opencontext"\n'
+        'c = f"{ROOT}/.cache/foo"\n'
+        'd = f"{ROOT}/.runtime/state.json"\n'
+    )
+    plan = plan_rewrites(original)
+    # All four legacy directories are detected in dry-run plan.
+    detected = {entry["directory"] for entry in plan}
+    assert detected == {".opencontext", ".storage", ".cache", ".runtime"}
+    # Source remains untouched by plan_rewrites.
+    assert original == (
+        'ROOT = "/tmp"\n'
+        'a = f"{ROOT}/.opencontext/cache.db"\n'
+        'b = f"{ROOT}/.storage/opencontext"\n'
+        'c = f"{ROOT}/.cache/foo"\n'
+        'd = f"{ROOT}/.runtime/state.json"\n'
+    )
+    # The actual rewriter DOES mutate, and is idempotent.
+    mutated = rewrite_source(original)
+    assert mutated != original
+    assert rewrite_source(mutated) == mutated
 
 
 def test_str_rejected_at_resolve_path() -> None:
@@ -87,4 +126,7 @@ def test_rewriter_importable() -> None:
     )
     assert hasattr(mod, "rewrite_source"), (
         "_paths_cookie_cutter must expose rewrite_source"
+    )
+    assert hasattr(mod, "plan_rewrites"), (
+        "_paths_cookie_cutter must expose plan_rewrites (A6 dry-run)"
     )

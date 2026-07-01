@@ -1,17 +1,17 @@
-"""Strict-Path-only entry points for the paths resolver.
+"""Strict-Path-only entry points for the paths resolver (amendment A4 audit).
 
-The v1 `paths.resolve_storage_path(root, mode, custom)` accepts a `Path`
-plus a `StorageMode` and an optional `str` override. The v2 design
-spec (commit 003) tightens the contract: callers MUST pass `pathlib.Path`
-or get a `TypeError` raised. This module re-exports the v1 helpers but
-also enforces strict-Path handling at the `resolve_storage_path_strict`
-boundary so migrations can verify the new shape one caller at a time.
+The v2 design (commit 003 spec) tightens the contract: callers MUST pass
+``pathlib.Path`` or get a ``TypeError`` raised. This module exports the
+``*_strict`` aliases that delegate to the public
+:func:`resolve_storage_path` / :func:`resolve_workspace_path` with
+``strict_path=True`` — so migrations can verify the new shape one caller
+at a time without modifying every call site.
 
 Usage::
 
     from opencontext_core.paths.resolve_paths import resolve_storage_path_strict
     result = resolve_storage_path_strict(Path("/tmp/runtime"))  # OK
-    resolve_storage_path_strict("/tmp/runtime")  # raises TypeError
+    resolve_storage_path_strict("/tmp/runtime")                  # raises TypeError
 """
 
 from __future__ import annotations
@@ -22,40 +22,25 @@ from opencontext_core.paths import (
     StorageMode,
 )
 from opencontext_core.paths import (
-    resolve_storage_path as _resolve_storage_v1,
+    resolve_storage_path as _resolve_storage_public,
 )
 from opencontext_core.paths import (
-    resolve_workspace_path as _resolve_workspace_v1,
+    resolve_workspace_path as _resolve_workspace_public,
 )
-
-
-def _reject_str(name: str, value: object) -> None:
-    """Raise TypeError if the caller passed a `str` instead of `Path`."""
-    raise TypeError(
-        f"{name} requires pathlib.Path; got str ({value!r}). "
-        "Wrap with Path(...) at the call site."
-    )
-
-
-def _check_path(name: str, value: object) -> None:
-    """Runtime check helper (mypy sees `Path`, runtime may see `str`)."""
-    if not isinstance(value, Path) and isinstance(value, str):
-        _reject_str(name, value)
 
 
 def resolve_storage_path_strict(p: Path) -> Path:
-    """Resolve the runtime storage directory from a `Path` input.
+    """Resolve the runtime storage directory from a strict-Path input.
 
-    Accepts ``pathlib.Path`` only. ``str`` raises ``TypeError``.
+    Delegates to :func:`resolve_storage_path` with ``strict_path=True``.
+    Accepts ``pathlib.Path`` only; ``str`` raises ``TypeError``.
     """
-    _check_path("resolve_storage_path_strict", p)
-    return _resolve_storage_v1(p, StorageMode.local, custom=None)
+    return _resolve_storage_public(p, StorageMode.local, custom=None, strict_path=True)
 
 
 def resolve_workspace_path_strict(p: Path) -> Path:
-    """Resolve the workspace directory from a `Path` input."""
-    _check_path("resolve_workspace_path_strict", p)
-    return _resolve_workspace_v1(p, StorageMode.local, custom=None)
+    """Resolve the workspace directory from a strict-Path input."""
+    return _resolve_workspace_public(p, StorageMode.local, custom=None, strict_path=True)
 
 
 __all__ = [
