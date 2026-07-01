@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="240" viewBox="0 0 720 240" role="img" aria-label="OpenContext configuration menu with project setup runtime workflow memory and maintenance categories">
+  <title>Config Menu</title>
   <rect width="720" height="240" rx="18" fill="#0B0F14"/>
   <text x="28" y="36" fill="#E6EDF3" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" font-weight="700">Configuration explains impact</text>
   <g font-family="monospace" font-size="14">
