@@ -20,7 +20,7 @@ from opencontext_studio.server_v2 import V2StudioServer, create_v2_app
 class StudioConfig:
     host: str = "127.0.0.1"
     port: int = 0  # random free port
-    handler_factory: Callable[[], BaseHTTPRequestHandler] | None = None
+    handler_factory: Callable[[], type[BaseHTTPRequestHandler]] | None = None
 
 
 class StudioServer:
@@ -41,11 +41,11 @@ class StudioServer:
         if self._server is None:
             raise RuntimeError("server not started")
         host, port = self._server.server_address[:2]
-        return host, port
+        return str(host), int(port)
 
     def start(self) -> None:
-        handler = self.config.handler_factory or _default_handler
-        self._server = ThreadingHTTPServer((self.config.host, self.config.port), handler)
+        handler_cls = (self.config.handler_factory or _default_handler)()
+        self._server = ThreadingHTTPServer((self.config.host, self.config.port), handler_cls)
 
     def serve_forever(self) -> None:
         if self._server is None:
@@ -64,7 +64,7 @@ class StudioServer:
         self._thread = None
 
 
-def _default_handler() -> BaseHTTPRequestHandler:
+def _default_handler() -> type[BaseHTTPRequestHandler]:
     class _Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # pragma: no cover - default page only
             self.send_response(200)

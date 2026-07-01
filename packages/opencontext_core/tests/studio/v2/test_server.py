@@ -20,3 +20,18 @@ def test_REQ_studio_mvp_001_local_binds() -> None:
 def test_studio_config_defaults() -> None:
     cfg = StudioConfig()
     assert cfg.host == "127.0.0.1"
+
+
+def test_default_handler_serves_get() -> None:
+    from urllib.request import urlopen
+
+    server = StudioServer(StudioConfig())
+    server.start()
+    server.serve_forever()
+    try:
+        host, port = server.bound_address
+        with urlopen(f"http://{host}:{port}/", timeout=5) as resp:
+            assert resp.status == 200
+            assert b"opencontext studio" in resp.read()
+    finally:
+        server.stop()

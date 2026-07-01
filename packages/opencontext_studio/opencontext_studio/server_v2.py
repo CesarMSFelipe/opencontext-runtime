@@ -22,7 +22,8 @@ def _payload(status: str = "ok", **fields: Any) -> dict[str, Any]:
     """Compose a response payload and run it through the redaction mask."""
     body: dict[str, Any] = {"status": status}
     body.update(fields)
-    return mask(body)
+    masked: dict[str, Any] = mask(body)
+    return masked
 
 
 def create_v2_app() -> FastAPI:
@@ -91,7 +92,7 @@ class V2StudioServer:
         return self.port
 
     def start(self) -> None:
-        import uvicorn
+        import uvicorn  # type: ignore[import-not-found]  # optional [studio] extra
 
         config = uvicorn.Config(self._app, host=self.host, port=self.port, log_level="warning")
         self._server = uvicorn.Server(config)
