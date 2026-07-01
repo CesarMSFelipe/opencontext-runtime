@@ -1,0 +1,17 @@
+id: mutation-safe
+name: Mutation Safe
+tier: 0
+required_capabilities:
+  - read
+  - write
+  - checkpoint
+persona_compat:
+  - senior-architect
+contract:
+  inputs:
+    edits: list
+  outputs:
+    - apply_receipt
+gates:
+  - ruff
+  - mypy

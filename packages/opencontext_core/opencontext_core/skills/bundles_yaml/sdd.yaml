@@ -1,0 +1,19 @@
+id: sdd
+name: SDD Workflow Bundle
+tier: 0
+required_capabilities:
+  - read
+  - grep
+  - write
+persona_compat:
+  - senior-architect
+contract:
+  inputs:
+    task: string
+  outputs:
+    - decision
+    - apply_receipt
+gates:
+  - ruff
+  - mypy
+  - pytest

@@ -1,0 +1,20 @@
+id: sdd
+name: Spec-Driven Development
+tier: 0
+required_capabilities:
+  - read
+  - grep
+  - write
+persona_compat:
+  - senior-architect
+  - reviewer
+contract:
+  inputs:
+    task: string
+  outputs:
+    - decision
+    - apply_receipt
+gates:
+  - ruff
+  - mypy
+  - pytest
