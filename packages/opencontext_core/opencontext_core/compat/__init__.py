@@ -41,6 +41,7 @@ from opencontext_core.compat.migration import (
     TwoSpineDecision,
     direct_legacy_importers,
     is_migrated,
+    is_migrated_flag,
 )
 from opencontext_core.compat.parity import (
     ParityGateError,
@@ -87,4 +88,5 @@ __all__ = [
     "flag_catalog",
     "flag_spec",
     "is_migrated",
+    "is_migrated_flag",
 ]

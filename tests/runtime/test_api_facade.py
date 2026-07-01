@@ -27,20 +27,26 @@ class _FakeHarness:
 
 class TestFacadeSurface:
     def test_exactly_eight_public_methods(self, tmp_path: Path) -> None:
+        # Commit-006: 3 aux stubs (simulate, get_health, decide) join the 8
+        # session methods. The 9th session method ``status`` lands in
+        # commit-017, so the count goes 8 -> 11 here, then 12 in commit-017.
         api = RuntimeApi(tmp_path)
         public = sorted(
             name for name in dir(api) if not name.startswith("_") and callable(getattr(api, name))
         )
         assert public == sorted(
             [
-                "start_session",
-                "run",
+                "apply",
+                "archive",
+                "decide",
+                "get_health",
+                "inspect",
                 "next",
                 "observe",
-                "apply",
-                "inspect",
                 "resume",
-                "archive",
+                "run",
+                "simulate",
+                "start_session",
             ]
         )
 
