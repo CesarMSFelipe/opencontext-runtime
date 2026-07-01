@@ -85,6 +85,7 @@ from opencontext_cli.commands.update_cmd import (
     handle_update,
     handle_upgrade,
 )
+from opencontext_cli.commands.memory_v2_cmd import add_memory_v2_parser, handle_memory_v2
 from opencontext_cli.commands.sdd_cmd import add_sdd_parser, handle_sdd
 from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
 from opencontext_cli.output import add_output_flag, eprint
@@ -1279,6 +1280,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "memory", help="Progressive memory commands.", formatter_class=_PublicHelpFormatter
     )
     memory_sub = memory_parser.add_subparsers(dest="memory_command", required=True)
+    add_memory_v2_parser(memory_sub)
     memory_sub.add_parser("init", help="Create context repository layout.")
     memory_sub.add_parser("list", help="List local memory.")
     memory_search = memory_sub.add_parser("search", help="Search local memory.")
@@ -4750,6 +4752,9 @@ def _memory(args: argparse.Namespace) -> None:
         raise SystemExit(handle_migrate("memory", args))
     if command == "audit":
         raise SystemExit(_memory_audit(args))
+    if command == "v2":
+        handle_memory_v2(args)
+        return
     repo = ContextRepository(Path("."))
     if command == "init":
         created = repo.init_layout()
