@@ -10,9 +10,8 @@ silently require network access again.
 
 from __future__ import annotations
 
-from tests.memory.fake_engram_client import FakeEngramClient
-
 from opencontext_core.memory.engram_mcp_store import EngramClient
+from tests.memory.fake_engram_client import FakeEngramClient
 
 
 def test_fake_satisfies_engram_client_protocol() -> None:

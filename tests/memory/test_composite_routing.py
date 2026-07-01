@@ -18,17 +18,17 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.memory.fake_engram_client import (
-    composite,
-    engram_routed_layers,
-    local_routed_layers,
-    local_store,
-)
 
 from opencontext_core.models.agent_memory import (
     DecayPolicy,
     MemoryLayer,
     MemoryRecord,
+)
+from tests.memory.fake_engram_client import (
+    composite,
+    engram_routed_layers,
+    local_routed_layers,
+    local_store,
 )
 
 
