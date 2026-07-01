@@ -30,6 +30,8 @@ site/
 .storage/
 .opencontext/
 tmp/opencontext-proof/
+# Generated done-in-v1 probe runner output (commit-000)
+artifacts/done-in-v1-validation.json
 
 # Generated knowledge graph viewer (created by `opencontext knowledge-graph view`)
 opencontext-kg-view.html

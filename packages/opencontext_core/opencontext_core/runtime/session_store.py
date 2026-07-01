@@ -20,8 +20,10 @@ class SessionStore:
     """File-backed store for sessions, runs, events, and live state."""
 
     def __init__(self, root: Path | str = ".") -> None:
+        from opencontext_core.paths import StorageMode, resolve_workspace_path
+
         self.root = Path(root)
-        self.sessions_path = self.root / ".opencontext" / "sessions"
+        self.sessions_path = resolve_workspace_path(self.root, StorageMode.local) / "sessions"
 
     # ----------------------------------------------------------------- paths
     def session_dir(self, session_id: str) -> Path:

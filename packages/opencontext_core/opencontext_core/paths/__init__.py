@@ -67,42 +67,75 @@ def _effective_mode(mode: StorageMode) -> StorageMode:
 
 
 def resolve_storage_path(
-    root: Path,
+    root: Path | str,
     mode: StorageMode,
     custom: str | None = None,
+    *,
+    strict_path: bool = False,
 ) -> Path:
     """Resolve the storage path for runtime-generated state.
+
+    Per amendment A4 the public signature accepts ``Path | str`` so CLI/MCP
+    integrations do not break. ``str`` inputs emit a ``DeprecationWarning``
+    (one-line hint to use ``Path(...)``); internal callers opt into strict
+    audit mode by passing ``strict_path=True``, which raises ``TypeError``
+    when given a non-``Path`` value.
 
     Parameters
     ----------
     root:
         Absolute or relative project root; resolved to an absolute path internally.
+        ``str`` is accepted for backward compatibility but emits a deprecation warning.
     mode:
         ``user`` → XDG/LOCALAPPDATA under the user home directory.
         ``local`` → ``<root>/.storage/opencontext`` (legacy layout).
     custom:
         If set, overrides both modes and returns ``Path(custom)`` directly.
+    strict_path:
+        When ``True``, ``root`` MUST be ``pathlib.Path``; otherwise ``TypeError``
+        is raised. Default ``False``. Internal audit scripts pass ``True``.
 
     Environment override
     --------------------
     If ``OPENCONTEXT_STORAGE_MODE=local`` is set in the process environment,
     the resolver behaves as ``mode=local`` regardless of the *mode* argument.
     """
+    if strict_path and not isinstance(root, Path):
+        raise TypeError(
+            f"resolve_storage_path requires pathlib.Path in strict_path mode; "
+            f"got {type(root).__name__}. Wrap with Path(...) at the call site."
+        )
+    if isinstance(root, str):
+        warnings.warn(
+            "str paths are deprecated; pass pathlib.Path",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    root_path = Path(root)
     if custom:
         return Path(custom)
     effective = _effective_mode(mode)
     if effective == StorageMode.user:
-        return Path(platformdirs.user_state_path("opencontext")) / "projects" / project_id(root)
+        return (
+            Path(platformdirs.user_state_path("opencontext"))
+            / "projects"
+            / project_id(root_path)
+        )
     # local mode — in-repo legacy layout
-    return root.resolve() / ".storage" / "opencontext"
+    return root_path.resolve() / ".storage" / "opencontext"
 
 
 def resolve_workspace_path(
-    root: Path,
+    root: Path | str,
     mode: StorageMode,
     custom: str | None = None,
+    *,
+    strict_path: bool = False,
 ) -> Path:
     """Resolve the workspace path for harness / SDD / skill artifacts.
+
+    Per amendment A4 ``Path | str`` is accepted publicly; ``strict_path=True``
+    switches to internal audit mode (see :func:`resolve_storage_path`).
 
     Parameters
     ----------
@@ -113,12 +146,26 @@ def resolve_workspace_path(
         ``local`` → ``<root>/.opencontext`` (legacy workspace layout).
     custom:
         If set, the workspace is placed as ``<custom>/workspace``.
+    strict_path:
+        When ``True``, ``root`` MUST be ``pathlib.Path``; otherwise ``TypeError``.
     """
+    if strict_path and not isinstance(root, Path):
+        raise TypeError(
+            f"resolve_workspace_path requires pathlib.Path in strict_path mode; "
+            f"got {type(root).__name__}. Wrap with Path(...) at the call site."
+        )
+    if isinstance(root, str):
+        warnings.warn(
+            "str paths are deprecated; pass pathlib.Path",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    root_path = Path(root)
     effective = _effective_mode(mode)
     if effective == StorageMode.user:
-        return resolve_storage_path(root, mode, custom) / "workspace"
+        return resolve_storage_path(root_path, mode, custom) / "workspace"
     # local mode — in-repo legacy workspace
-    return root.resolve() / ".opencontext"
+    return root_path.resolve() / ".opencontext"
 
 
 @dataclass

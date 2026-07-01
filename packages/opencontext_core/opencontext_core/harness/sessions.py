@@ -28,8 +28,10 @@ from opencontext_core.models.run_manifest import (
 
 
 def sessions_root(root: Path | str) -> Path:
-    """Return ``<root>/.opencontext/sessions``."""
-    return Path(root) / ".opencontext" / "sessions"
+    """Return the runtime sessions directory under the project workspace."""
+    from opencontext_core.paths import StorageMode, resolve_workspace_path
+
+    return resolve_workspace_path(root, StorageMode.local) / "sessions"
 
 
 def session_root(root: Path | str, session_id: str) -> Path:
