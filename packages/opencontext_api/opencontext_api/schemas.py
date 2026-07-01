@@ -217,3 +217,176 @@ class ScaffoldResponse(BaseModel):
 
     status: str = Field(description="Endpoint implementation status.")
     result: dict[str, Any] = Field(description="Structured scaffold result.")
+
+
+# ---------------------------------------------------------------------------
+# Memory v2 API schemas (PR3.c)
+# ---------------------------------------------------------------------------
+
+
+class MemorySaveRequest(BaseModel):
+    """POST /v1/memory/save request body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(default="", description="Observation title.")
+    content: str = Field(default="", description="Observation content.")
+    type: str = Field(default="manual", description="Observation type.")
+    scope: str = Field(default="project", description="Scope: project|personal.")
+    topic_key: str | None = Field(default=None, description="Topic key for upsert.")
+
+
+class MemorySearchRequest(BaseModel):
+    """GET /v1/memory/search query params (via Query)."""
+
+    query: str = Field(description="Search query.")
+    limit: int = Field(default=10, ge=1, le=100, description="Max results.")
+    all_projects: bool = Field(default=False, description="Search all projects.")
+
+
+class MemoryGetResponse(BaseModel):
+    """GET /v1/memory/get/{memory_id} response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    memory_id: str = Field(description="Observation ID.")
+    content: str | None = Field(default=None, description="Observation content.")
+
+
+class MemoryJudgeRequest(BaseModel):
+    """POST /v1/memory/judge request body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    judgment_id: str = Field(description="Judgment ID (rel-...).")
+    relation: str = Field(description="Relation verb (related|compatible|...).")
+    reason: str | None = Field(default=None, description="Free-text explanation.")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence.")
+
+
+class MemoryCompareRequest(BaseModel):
+    """POST /v1/memory/compare request body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id_a: int = Field(description="First observation ID.")
+    id_b: int = Field(description="Second observation ID.")
+    relation: str = Field(description="Relation verb.")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence.")
+
+
+class MemorySessionRequest(BaseModel):
+    """POST /v1/memory/session/start|end request body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(default="", description="Session identifier.")
+    summary: str | None = Field(default=None, description="Session summary.")
+
+
+class MemorySessionSummaryRequest(BaseModel):
+    """POST /v1/memory/session/summary request body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(default="", description="Session summary content.")
+    session_id: str | None = Field(default=None, description="Session ID.")
+
+
+class MemoryPinRequest(BaseModel):
+    """POST /v1/memory/pin|unpin request body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int = Field(description="Observation ID to pin/unpin.")
+
+
+class MemoryDeleteRequest(BaseModel):
+    """POST /v1/memory/delete request body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int = Field(description="Observation ID to delete.")
+    hard: bool = Field(default=False, description="Hard (permanent) delete.")
+
+
+class MemoryDoctorResponse(BaseModel):
+    """POST /v1/memory/doctor response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = Field(description="Health status.")
+    checks: list[dict] = Field(default_factory=list, description="Individual checks.")
+
+
+class MemoryStatsResponse(BaseModel):
+    """POST /v1/memory/stats response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_observations: int = Field(default=0, description="Total observation count.")
+    total_sessions: int = Field(default=0, description="Total session count.")
+
+
+class MemoryTimelineRequest(BaseModel):
+    """POST /v1/memory/timeline request body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project: str = Field(default="", description="Project name filter.")
+    limit: int = Field(default=20, ge=1, le=500, description="Max results.")
+
+
+class MemoryReviewResponse(BaseModel):
+    """GET /v1/memory/review response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    observations: list[dict] = Field(default_factory=list, description="Review items.")
+    total: int = Field(default=0, description="Total items needing review.")
+
+
+class MemoryMergeProjectsRequest(BaseModel):
+    """POST /v1/memory/merge-projects request body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target: str = Field(description="Target project name.")
+    sources: list[str] = Field(description="Source project names.")
+
+
+# ---------------------------------------------------------------------------
+# SDD API schemas (PR3.c)
+# ---------------------------------------------------------------------------
+
+
+class SDDStatusResponse(BaseModel):
+    """GET /v1/sdd/status response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schemaName: str = Field(default="opencontext.sdd-status")
+    schemaVersion: int = Field(default=1)
+    changeName: str | None = Field(default=None)
+    nextRecommended: str = Field(default="select-change")
+    blockedReasons: list[str] = Field(default_factory=list)
+
+
+class SDDContinueRequest(BaseModel):
+    """POST /v1/sdd/continue request body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    change: str = Field(description="Change name.")
+    cwd: str = Field(default=".", description="Project root.")
+
+
+class SDDPhaseRequest(BaseModel):
+    """POST /v1/sdd/{phase} request body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    change: str | None = Field(default=None, description="Change name.")
+    cwd: str = Field(default=".", description="Project root.")
+    topic: str | None = Field(default=None, description="Exploration topic.")
+    task: str | None = Field(default=None, description="Task ID.")

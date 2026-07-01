@@ -7,6 +7,8 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from opencontext_api.memory_routes import router as memory_router
+from opencontext_api.sdd_routes import router as sdd_router
 from opencontext_api.schemas import (
     AgentContextRequest,
     ContextPackRequest,
@@ -47,6 +49,8 @@ except ModuleNotFoundError:
 
 
 app = FastAPI(title="OpenContext Runtime API", version="0.1.0")
+app.include_router(memory_router)
+app.include_router(sdd_router)
 
 
 def _runtime() -> OpenContextRuntime:
