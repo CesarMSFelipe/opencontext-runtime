@@ -56,7 +56,19 @@ def _engram_db_path() -> Path:
 
 
 def engram_project() -> str:
-    """Project key matching Engram's convention (slugified working-dir name)."""
+    """Project key matching Engram's convention (slugified working-dir name).
+
+    .. deprecated:: 2.0
+        Use :func:`engram_project_full` for the 5-case detector with
+        ambiguity surfacing and recovery-token flow.
+    """
+    import warnings
+
+    warnings.warn(
+        "engram_project() is deprecated since 2.0; use engram_project_full() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     override = os.environ.get("OPENCONTEXT_ENGRAM_PROJECT")
     if override:
         return override
