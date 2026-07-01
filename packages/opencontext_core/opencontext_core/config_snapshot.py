@@ -14,12 +14,13 @@ from typing import Any
 import yaml
 
 from opencontext_core.config import OpenContextConfig
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 
 SNAPSHOT_FILENAME = "config-snapshot.yaml"
 
 
 def snapshot_path(root: str | Path, session_id: str) -> Path:
-    return Path(root) / ".opencontext" / "sessions" / session_id / SNAPSHOT_FILENAME
+    return resolve_workspace_path(root, StorageMode.local) / "sessions" / session_id / SNAPSHOT_FILENAME
 
 
 def write_snapshot(

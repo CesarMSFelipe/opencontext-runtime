@@ -23,6 +23,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from opencontext_core.paths import StorageMode, resolve_workspace_path
+
 
 @dataclass(frozen=True)
 class FileSnapshot:
@@ -49,7 +51,7 @@ def _backups_root() -> Path:
     Read lazily so a monkeypatched ``Path.home`` is honored in tests.
     """
 
-    return Path.home() / ".opencontext" / "backups"
+    return resolve_workspace_path(Path.home(), StorageMode.local) / "backups"
 
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:

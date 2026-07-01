@@ -9,6 +9,7 @@ from dataclasses import field as _field
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 from opencontext_core.registries.base import Registry, RegistryNotFound
 from opencontext_core.registries.loader import load_defs_from_dir
 from opencontext_core.skills.builtins import builtins_dir
@@ -323,7 +324,7 @@ def scan_skills(project_root: Path) -> list[SkillEntryV2]:
 
     for search_dir in [
         project_root / "skills",
-        project_root / ".opencontext" / "skills",
+        resolve_workspace_path(project_root, StorageMode.local) / "skills",
     ]:
         if search_dir.is_dir():
             for p in sorted(search_dir.rglob("*.skill.md")):
@@ -346,7 +347,7 @@ def scan_skills(project_root: Path) -> list[SkillEntryV2]:
 def refresh(project_root: Path, force: bool = False) -> Path:
     """Write .opencontext/skill-registry.md and return the path."""
     entries = scan_skills(project_root)
-    out_dir = project_root / ".opencontext"
+    out_dir = resolve_workspace_path(project_root, StorageMode.local)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "skill-registry.md"
     lines = ["# Skill Registry", "", f"_Generated from {len(entries)} skill files._", ""]

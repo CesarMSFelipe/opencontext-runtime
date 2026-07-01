@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from opencontext_core.paths import StorageMode, resolve_workspace_path
+
 WORKSPACE_FILE_CONTENT: dict[str, str] = {
     "policies/security-policy.yaml": (
         "mode: private_project\n"
@@ -90,7 +92,7 @@ def ensure_workspace(root: Path) -> list[Path]:
     """
 
     created: list[Path] = []
-    base = root / ".opencontext"
+    base = resolve_workspace_path(root, StorageMode.local)
     base.mkdir(parents=True, exist_ok=True)
     for rel, content in WORKSPACE_FILE_CONTENT.items():
         file_path = base / rel

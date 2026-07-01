@@ -37,6 +37,7 @@ from opencontext_core.config import (
     find_config,
 )
 from opencontext_core.config_profiles import BUILTIN_PROFILES, DEFAULT_PROFILE
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 
 # Ordered layer names (lowest precedence first). Public so callers/tests can
 # assert ordering without hard-coding strings.
@@ -114,7 +115,7 @@ def _load_yaml(path: Path | None) -> dict[str, Any]:
 
 
 def _global_config_path() -> Path:
-    return Path.home() / ".opencontext" / "config.yaml"
+    return resolve_workspace_path(Path.home(), StorageMode.local) / "config.yaml"
 
 
 def _pick_profile(layers: list[tuple[str, dict[str, Any]]]) -> tuple[str, str]:
