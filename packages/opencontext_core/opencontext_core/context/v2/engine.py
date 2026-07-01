@@ -4,6 +4,9 @@ The engine composes the four context layers (route → rank → score → compre
 and emits a ``ContextEnvelope`` + ``ContextReceipt`` pair. The receipt's
 ``envelope_hash`` is a deterministic SHA-256 over a canonicalised view of the
 envelope; the same items + budget always produce the same hash.
+
+Amendment A5 (commit-019): the engine emits a ``FullFileReadJustification``
+for every input item whose ``retrieval_strategy == "FULL_FILE"``.
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -18,7 +22,11 @@ from opencontext_core.context.v2.budget import ResourceBudget
 from opencontext_core.context.v2.compression import ContextCompressor
 from opencontext_core.context.v2.envelope import ContextEnvelope
 from opencontext_core.context.v2.ranking.score import usefulness
-from opencontext_core.context.v2.receipt import ContextReceipt, EvidenceRef
+from opencontext_core.context.v2.receipt import (
+    ContextReceipt,
+    EvidenceRef,
+    FullFileReadJustification,
+)
 from opencontext_core.context.v2.routing import ContextRouter
 
 
@@ -111,12 +119,26 @@ class ContextEngine:
             EvidenceRef(kind="file", id=str(it.get("id")), tokens=int(it.get("tokens", 0)))
             for it in envelope.items
         ]
+        # A5: emit a FullFileReadJustification per input item whose
+        # ``retrieval_strategy`` is FULL_FILE (the engine asked to load the
+        # whole file rather than a snippet/symbol view).
+        full_file_reads = [
+            FullFileReadJustification(
+                path=str(it.get("path", it.get("id", ""))),
+                reason=str(it.get("reason", "")),
+                byte_count=int(it.get("byte_count", 0)),
+                requested_by=str(it.get("requested_by", node)),
+            )
+            for it in items
+            if str(it.get("retrieval_strategy", "")).upper() == "FULL_FILE"
+        ]
         receipt = ContextReceipt(
             receipt_id=f"rcpt-{uuid4().hex[:12]}",
             request_id=request_id,
             workflow=workflow,
             node=node,
             task=task,
+            decision_dependency=str(items[0].get("decision_dependency", "")) if items else "",
             envelope_hash=_envelope_hash(envelope),
             ranking_hash=_ranking_hash(envelope.items),
             budget_hash=_budget_hash(budget),
@@ -125,6 +147,8 @@ class ContextEngine:
             used_tokens=envelope.tokens_used,
             available_tokens=budget,
             confidence=_confidence(envelope.items),
+            full_file_reads=full_file_reads,
+            created_at=datetime.now(UTC),
         )
         return ContextBuildResult(envelope=envelope, receipt=receipt)
 

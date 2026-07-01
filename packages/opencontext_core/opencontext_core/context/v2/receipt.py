@@ -1,15 +1,15 @@
-"""Context v2 receipt — ``ContextReceipt`` envelope-of-evidence (CONV2 #10).
+"""Context v2 receipt — ``ContextReceipt`` envelope-of-evidence (CONV2 #10 + A5).
 
-Commit-010 ships the initial 14-field schema (confidence, hashes, refs). The
-five additive fields required by Amendment A5 (``decision_dependency``,
-``schema_version``, ``full_file_reads``, ``created_at`` and the documented
-`schema_version`) land in commit-019 — the field set is forward-compatible
-because every commit-019 field has a default.
+The receipt proves what evidence a single node execution consumed. Commit-019
+extends the v1 shape (7 fields) to the deep-evidence shape: 13 required fields
+plus a per-read justification for any full-file read issued by the engine.
+Legacy receipts (without ``full_file_reads``) still load because the field
+has a default of ``[]`` and every commit-019 field is forward-compatible.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,16 +24,30 @@ class EvidenceRef(BaseModel):
     tokens: int = 0
 
 
-class ContextReceipt(BaseModel):
-    """The persisted proof-of-context for a single node execution."""
+class FullFileReadJustification(BaseModel):
+    """Per-read justification emitted whenever the engine issues a FULL_FILE read."""
 
     model_config = ConfigDict(extra="forbid")
 
+    path: str
+    reason: str
+    byte_count: int
+    requested_by: str  # node id
+
+
+class ContextReceipt(BaseModel):
+    """The persisted proof-of-context for a single node execution (13 fields, A5)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # --- 13 required fields (Amendment A5) ---------------------------------
+    schema_version: str = "opencontext.context_receipt.v1"
     receipt_id: str
     request_id: str
     workflow: str
     node: str
     task: str
+    decision_dependency: str = ""
     envelope_hash: str
     ranking_hash: str
     budget_hash: str
@@ -42,12 +56,8 @@ class ContextReceipt(BaseModel):
     used_tokens: int = 0
     available_tokens: int = 0
     confidence: float = Field(ge=0.0, le=1.0)
-
-    # Forward-compat fields (populated in commit-019; defaults keep legacy loads valid).
-    schema_version: str = "opencontext.context_receipt.v1"
-    decision_dependency: str = ""
-    full_file_reads: list[dict[str, Any]] = Field(default_factory=list)
-    created_at: str = ""
+    full_file_reads: list[FullFileReadJustification] = Field(default_factory=list)
+    created_at: datetime | None = None
 
 
-__all__ = ["ContextReceipt", "EvidenceRef"]
+__all__ = ["ContextReceipt", "EvidenceRef", "FullFileReadJustification"]
