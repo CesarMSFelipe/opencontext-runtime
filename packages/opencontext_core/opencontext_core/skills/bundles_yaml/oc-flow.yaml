@@ -1,0 +1,17 @@
+id: oc-flow
+name: OpenContext Flow
+tier: 0
+required_capabilities:
+  - read
+  - write
+persona_compat:
+  - senior-architect
+contract:
+  inputs:
+    task: string
+  outputs:
+    - context_receipt
+    - apply_receipt
+gates:
+  - ruff
+  - mypy

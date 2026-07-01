@@ -1,0 +1,17 @@
+id: context-debug
+name: Context Debug
+tier: 0
+required_capabilities:
+  - read
+  - grep
+persona_compat:
+  - senior-architect
+  - explorer
+contract:
+  inputs:
+    session_id: string
+  outputs:
+    - context_receipt
+    - envelope_hash
+gates:
+  - ruff

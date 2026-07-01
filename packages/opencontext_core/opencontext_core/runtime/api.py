@@ -896,3 +896,8 @@ class RuntimeApi:
         if self._config is None:
             return {}
         return {"session_wrapper": self._session_wrapper}
+
+
+# CL-V2 / commit-010 redirect: callers that used ``from runtime.api import
+# ResourceBudget`` keep working through this module-level alias.
+from opencontext_core.context.v2.budget import ResourceBudget  # noqa: E402, F401
