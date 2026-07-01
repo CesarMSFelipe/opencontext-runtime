@@ -1,8 +1,20 @@
-"""Context v2 ranking — CONV2 #9 (BM25 + recency, 4th layer)."""
+"""Context v2 ranking — BM25 + recency (CONV2 #9) and L4 usefulness (CONV2 #10).
+
+Public re-exports preserve the legacy ``from .ranking import ContextRanker``
+path used by envelope.py and the v2 tests.
+"""
 
 from __future__ import annotations
 
 from typing import Any
+
+from opencontext_core.context.v2.ranking.score import (
+    DEFAULT_WEIGHTS,
+    LAYER_WEIGHTS,
+    UsefulnessScore,
+    UsefulnessWeights,
+    usefulness,
+)
 
 
 class ContextRanker:
@@ -27,7 +39,12 @@ class ContextRanker:
         return hits / max(1, len(q_terms))
 
 
-# ponytail: API compat with legacy envelope.py
-__all__ = ["ContextRanker"]
-# mark unused import as intentional
+__all__ = [
+    "DEFAULT_WEIGHTS",
+    "LAYER_WEIGHTS",
+    "ContextRanker",
+    "UsefulnessScore",
+    "UsefulnessWeights",
+    "usefulness",
+]
 _ = Any
