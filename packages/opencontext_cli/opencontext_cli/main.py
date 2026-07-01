@@ -1088,6 +1088,38 @@ def _build_parser() -> argparse.ArgumentParser:
             "and persists results to .opencontext/runs/<run_id>/."
         ),
     )
+
+    agent_harness_parser = subparsers.add_parser(
+        "agent-harness",
+        help="Agent/harness readiness gates (PR-AHE-009 / final-acceptance-gates).",
+        description=(
+            "Evaluate the agent/harness 1.0 readiness gate set: every named "
+            "gate (mcp-oc-flow-sampling-bugfix, mcp-oc-flow-no-executor, "
+            "mcp-sdd-junk-output-blocked, mcp-sdd-valid-output, tdd-strict-gate, "
+            "kg-call-graph-basic-python, context-pack-truthfulness, "
+            "memory-runtime-backed, engram-fake-routing, agent-docs-parity, "
+            "quality-semantics) must MET for ``ready=true``. Mirrors the "
+            "release acceptance shape — JSON-only output, exit 1 if any gate "
+            "is FAILED, exit 0 only when all gates are MET."
+        ),
+    )
+    agent_harness_sub = agent_harness_parser.add_subparsers(
+        dest="agent_harness_command", required=True
+    )
+    agent_harness_acceptance = agent_harness_sub.add_parser(
+        "acceptance",
+        help="Evaluate every named gate and emit a JSON readiness verdict.",
+    )
+    agent_harness_acceptance.add_argument(
+        "--root",
+        default=".",
+        help="Project root to evaluate against (default: current directory).",
+    )
+    agent_harness_acceptance.add_argument(
+        "--report",
+        default=None,
+        help="Optional path to also persist the verdict JSON.",
+    )
     harness_sub = harness_parser.add_subparsers(dest="harness_command", required=True)
     harness_run = harness_sub.add_parser(
         "run",
@@ -1513,6 +1545,9 @@ def _dispatch(args: argparse.Namespace) -> None:
         return
     if command == "sdd":
         handle_sdd(args)
+        return
+    if command == "agent-harness":
+        _agent_harness(args)
         return
     if command == "harness":
         _harness(
@@ -3679,6 +3714,48 @@ def _cache(args: argparse.Namespace, config_path: str) -> None:
             indent=2,
         )
     )
+
+
+def _agent_harness(args: argparse.Namespace) -> None:
+    """Dispatch the ``agent-harness`` subcommand tree.
+
+    Only ``acceptance`` exists today; new subcommands (e.g. ``gates list``)
+    can plug in here without changing the parser layout.
+    """
+    if args.agent_harness_command == "acceptance":
+        _agent_harness_acceptance(args)
+        return
+    _unreachable(args.agent_harness_command)
+
+
+def _agent_harness_acceptance(args: argparse.Namespace) -> None:
+    """Run every named gate and emit the readiness verdict as JSON.
+
+    Mirrors the ``opencontext release acceptance`` shape so the two
+    verdicts are interchangeable in dashboards / CI scripts. Exit code 1 if
+    any gate is FAILED (the spec's contract); exit 0 only when every gate
+    is MET (no NOT_MEASURED, no FAILED). The verdict is also persisted to
+    ``--report`` if supplied, so a downstream studio panel can read it
+    without re-running the evaluator.
+    """
+    from opencontext_core.agent_harness_acceptance import (
+        AgentHarnessAcceptanceEvaluator,
+        render_verdict_json,
+    )
+
+    root = Path(getattr(args, "root", "."))
+    verdict = AgentHarnessAcceptanceEvaluator(root).evaluate()
+    rendered = render_verdict_json(verdict)
+    print(rendered)
+
+    report_path = getattr(args, "report", None)
+    if report_path:
+        out = Path(report_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(rendered + "\n", encoding="utf-8")
+
+    if not verdict.ready:
+        raise SystemExit(1)
 
 
 def _harness_error_hint(error_msg: str, workflow: str | None) -> str:
