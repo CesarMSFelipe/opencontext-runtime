@@ -6,6 +6,8 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
+from opencontext_core.paths import StorageMode, resolve_storage_path
+
 
 @dataclass(frozen=True)
 class RuntimeBrandState:
@@ -46,7 +48,7 @@ def gather_runtime_brand_state(root: str | Path = ".") -> RuntimeBrandState:
 
 
 def _kg_status(base: Path) -> tuple[int, int, str]:
-    db = base / ".storage" / "opencontext" / "context_graph.db"
+    db = resolve_storage_path(base, StorageMode.local) / "context_graph.db"
     if not db.exists():
         return 0, 0, "not indexed"
     try:

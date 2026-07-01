@@ -19,6 +19,7 @@ from opencontext_core.adapters.agent_manifest import AgentTarget
 from opencontext_core.configurator.constants import agent_home
 from opencontext_core.configurator.filemerge import write_text_atomic
 from opencontext_core.configurator.service import Configurator
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 
 __all__ = ["AgentInstaller", "AgentTarget"]
 
@@ -44,7 +45,7 @@ class AgentInstaller:
 
     def __init__(self, project_root: str | Path = ".") -> None:
         self.project_root = Path(project_root).resolve()
-        self.opencontext_dir = self.project_root / ".opencontext"
+        self.opencontext_dir = resolve_workspace_path(self.project_root, StorageMode.local)
         self.storage_dir = self.opencontext_dir / "agent-configs"
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self._configurator = Configurator(project_root=self.project_root)

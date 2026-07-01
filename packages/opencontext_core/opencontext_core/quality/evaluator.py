@@ -33,6 +33,7 @@ from pathlib import Path
 
 from opencontext_core.harness.models import GateStatus
 from opencontext_core.indexing.scanner import ScannedFile
+from opencontext_core.paths import StorageMode, resolve_storage_path
 from opencontext_core.quality.architecture import ArchitectureAnalyzer
 from opencontext_core.quality.baseline import Baseline, BaselineStore
 from opencontext_core.quality.ci_checks import CheckSeverity, CheckStatus
@@ -161,7 +162,7 @@ class QualityEvaluator:
     @property
     def db_path(self) -> Path:
         """Path to this project's persisted knowledge graph DB."""
-        return self.root / ".storage" / "opencontext" / "context_graph.db"
+        return resolve_storage_path(self.root, StorageMode.local) / "context_graph.db"
 
     def _scanned(self) -> list[ScannedFile]:
         """Return the scanned source, scanning lazily + caching on first use."""

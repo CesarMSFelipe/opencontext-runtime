@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from opencontext_core.compat import UTC
 from opencontext_core.context.budgeting import estimate_tokens
 from opencontext_core.models.context import ContextPriority, DataClassification
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 from opencontext_core.safety.redaction import SinkGuard
 from opencontext_core.safety.secrets import SecretScanner
 
@@ -70,7 +71,9 @@ class ContextRepository:
         if self.root.name == "context-repository":
             self.base_path = self.root
         else:
-            self.base_path = self.root / ".opencontext" / "context-repository"
+            self.base_path = (
+                resolve_workspace_path(self.root, StorageMode.local) / "context-repository"
+            )
 
     def init_layout(self) -> list[Path]:
         """Create the repository directory layout."""

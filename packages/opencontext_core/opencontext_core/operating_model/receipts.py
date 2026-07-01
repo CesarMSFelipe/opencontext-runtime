@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from opencontext_core.compat import UTC
 from opencontext_core.operating_model.team import RunReceipt
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 from opencontext_core.runtime.ids import new_id
 
 # NOTE: pruning strategy not yet implemented (Phase 2+)
@@ -59,7 +60,7 @@ class RunReceiptStore:
     def __init__(self, root: Path | str = ".") -> None:
         # ``root`` is the PROJECT root; receipts live at ``.opencontext/receipts``.
         # Created lazily on first save so an unused store leaves no empty dir.
-        self.base_path = Path(root) / ".opencontext" / "receipts"
+        self.base_path = resolve_workspace_path(Path(root), StorageMode.local) / "receipts"
         self._store = self.base_path / "receipts.jsonl"
 
     def save(self, receipt: RunReceipt) -> Path:

@@ -14,6 +14,7 @@ from opencontext_core.indexing.graph_tunnel import (
 )
 from opencontext_core.models.context import ContextItem, ContextPriority
 from opencontext_core.models.project import ProjectFile, ProjectManifest
+from opencontext_core.paths import StorageMode, resolve_storage_path
 from opencontext_core.retrieval.retriever import ProjectRetriever
 
 
@@ -90,10 +91,10 @@ class CrossProjectRetriever:
 
             # Load target project manifest
             target_manifest_path = (
-                Path(self.manifest.root).parent
-                / target_project
-                / ".storage"
-                / "opencontext"
+                resolve_storage_path(
+                    Path(self.manifest.root).parent / target_project,
+                    StorageMode.local,
+                )
                 / "project_manifest.json"
             )
             if not target_manifest_path.exists():

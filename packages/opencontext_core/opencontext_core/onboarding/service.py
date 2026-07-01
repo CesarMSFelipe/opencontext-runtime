@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from opencontext_core.paths import StorageMode, resolve_workspace_path
+
 # Used only as the fallback when no agent CLI is detected on the host. Detection
 # (below) is preferred — we configure what is actually present, not a fixed list.
 _FALLBACK_CLIENTS: tuple[str, ...] = ("opencode",)
@@ -166,7 +168,7 @@ class OnboardingService:
         # Best-effort — never fail onboarding over it.
         try:
             from opencontext_core.config import load_config_or_defaults
-            from opencontext_core.paths import StorageMode, detect_legacy
+            from opencontext_core.paths import detect_legacy
 
             _oc = load_config_or_defaults(config_path)
             # Write .gitignore block only when in-repo state will be written:
@@ -266,7 +268,7 @@ class OnboardingService:
                     result.generated_agent_files.append(f"{entry['agent']}: {path}")
 
         # 7. Generate .opencontext/agents/<client>.md contract files
-        agents_dir = root / ".opencontext" / "agents"
+        agents_dir = resolve_workspace_path(root, StorageMode.local) / "agents"
         agents_dir.mkdir(parents=True, exist_ok=True)
         for client in options.active_clients:
             agent_path = agents_dir / f"{client}.md"
@@ -279,7 +281,7 @@ class OnboardingService:
             result.generated_agent_files.append(str(agent_path))
 
         # 8. Generate harness.yaml
-        harness_path = root / ".opencontext" / "harness.yaml"
+        harness_path = resolve_workspace_path(root, StorageMode.local) / "harness.yaml"
         self._write_harness_yaml(harness_path, options, sdd_token_budget)
         result.harness_config_path = str(harness_path)
 
@@ -461,7 +463,7 @@ def is_first_run(root: str | Path) -> bool:
     """
     root_path = Path(root)
     config_path = root_path / "opencontext.yaml"
-    workspace_marker = root_path / ".opencontext" / "sdd" / "context.json"
+    workspace_marker = resolve_workspace_path(root_path, StorageMode.local) / "sdd" / "context.json"
 
     # Neither config nor workspace marker → first run
     if not config_path.exists() and not workspace_marker.exists():

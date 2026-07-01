@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from opencontext_core.config import OpenContextConfig
-from opencontext_core.paths import resolve_storage_path
+from opencontext_core.paths import StorageMode, resolve_storage_path
 
 
 @dataclass
@@ -116,7 +116,7 @@ class ComponentDoctor:
                 db_path = legacy_path
             else:
                 # Legacy fallback: check in-repo location when XDG path is empty.
-                _local_storage = _root.resolve() / ".storage" / "opencontext"
+                _local_storage = resolve_storage_path(_root, StorageMode.local)
                 _local_db = _local_storage / "context_graph.db"
                 if _local_db.exists():
                     db_path = _local_db
