@@ -240,6 +240,43 @@ class MemoryStore:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    # -- delete --------------------------------------------------------------
+
+    def delete(self, observation_id: int, *, hard: bool = False) -> None:
+        """Delete ``observation_id`` from the store.
+
+        Default (``hard=False``) is a *soft* delete: ``deleted_at`` is
+        stamped and the row drops out of ``search`` while remaining in the
+        table for audit. ``hard=True`` removes the row outright along with
+        its FTS mirror.
+
+        Soft-delete is idempotent: re-invoking on an already soft-deleted
+        row does NOT overwrite the original ``deleted_at`` stamp. Hard-
+        delete is also idempotent — it returns silently when the row is
+        already gone.
+        """
+        if self._write_queue is not None:
+            with self._write_queue:
+                self._delete_locked(observation_id, hard=hard)
+                return
+        with self._write_lock:
+            self._delete_locked(observation_id, hard=hard)
+
+    def _delete_locked(self, observation_id: int, *, hard: bool) -> None:
+        if hard:
+            self._conn.execute(
+                "DELETE FROM observations WHERE id = ?", (int(observation_id),)
+            )
+            return
+        self._conn.execute(
+            """
+            UPDATE observations
+            SET deleted_at = ?
+            WHERE id = ? AND deleted_at IS NULL
+            """,
+            (_utcnow_iso(), int(observation_id)),
+        )
+
 
 class _ConnectionCtx:
     """Tiny context manager that borrows the shared connection under the

@@ -51,8 +51,11 @@ class TestAllModules:
         assert e2.compressed
 
     def test_runtime_intel_full(self) -> None:
+        from opencontext_core.runtime.intel.calibration import (
+            CalibrationEntry, ConfidenceCalibrator,
+        )
         from opencontext_core.runtime.intel.simulator import (
-            WorkflowSimulator, CostEstimator, ConfidenceCalibrator,
+            WorkflowSimulator, CostEstimator,
             RuntimeProfiler, HealthChecker,
         )
         ws = WorkflowSimulator()
@@ -61,7 +64,10 @@ class TestAllModules:
         ce = CostEstimator()
         assert ce.estimate(1000) == 2.0
         cc = ConfidenceCalibrator()
-        assert cc.calibrate({"a": 1, "b": 2}) == 0.2
+        # new API: Brier-style score from a (confidence, outcome) history
+        history = [CalibrationEntry(confidence=0.8, outcome=0.8) for _ in range(20)]
+        score = cc.calibrate(history)
+        assert score == 0.0
         rp = RuntimeProfiler()
         rp.record(r)
         assert rp.avg_cost > 0

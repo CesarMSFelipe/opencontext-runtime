@@ -1,9 +1,20 @@
-"""Runtime intel — PR-011 simulator, cost, confidence, profiler, health."""
+"""Runtime intel — PR-011 simulator, cost, profiler, health.
+
+Note: ``ConfidenceCalibrator`` was extracted to ``runtime.intel.calibration``
+in PR-011.e. Re-exported here for backward compatibility with existing
+imports (e.g. cache integration tests).
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+
+from opencontext_core.runtime.intel.calibration import (  # noqa: F401  (re-export)
+    CalibrationEntry,
+    CalibrationReport,
+    ConfidenceCalibrator,
+    DriftDetected,
+)
 
 
 @dataclass
@@ -30,11 +41,6 @@ class CostEstimator:
     def estimate(self, tokens: int, model: str = "default") -> float:
         rates = {"default": 0.002, "large": 0.015, "small": 0.0005}
         return tokens * rates.get(model, 0.002)
-
-
-class ConfidenceCalibrator:
-    def calibrate(self, inputs: dict) -> float:
-        return min(1.0, len(inputs) / 10.0)
 
 
 class RuntimeProfiler:

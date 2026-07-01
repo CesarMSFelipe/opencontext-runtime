@@ -32,6 +32,7 @@ pythonpath = [
   "packages/opencontext_memory",
   "packages/opencontext_profiles",
   "packages/opencontext_sdd",
+  "packages/opencontext_studio",
 ]
 
 [tool.mypy]
