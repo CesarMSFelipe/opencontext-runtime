@@ -20,8 +20,8 @@ def test_memory_harness_v2() -> None:
 
 def test_decision_log() -> None:
     from opencontext_core.decision_log.recorder import DecisionRecorder, DecisionLogEntry
-    d = DecisionRecorder()
-    d.record(DecisionLogEntry(id="d1", kind="architecture", decision="test"))
+    d = DecisionRecorder(confidence_threshold=0.0)
+    d.record(DecisionLogEntry(id="d1", kind="architecture", decision="test", confidence=0.8))
     assert d.promote("d1")
 
 def test_context_v2() -> None:
