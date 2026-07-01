@@ -85,6 +85,7 @@ from opencontext_cli.commands.update_cmd import (
     handle_update,
     handle_upgrade,
 )
+from opencontext_cli.commands.sdd_cmd import add_sdd_parser, handle_sdd
 from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
 from opencontext_cli.output import add_output_flag, eprint
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
@@ -1076,6 +1077,7 @@ def _build_parser() -> argparse.ArgumentParser:
     cache_warm = cache_sub.add_parser("warm")
     cache_warm.add_argument("--workflow", default="code-review")
 
+    add_sdd_parser(subparsers)
     harness_parser = subparsers.add_parser(
         "harness",
         help="Run OpenContext harness workflows.",
@@ -1508,6 +1510,9 @@ def _dispatch(args: argparse.Namespace) -> None:
         return
     if command == "cache":
         _cache(args, args.config)
+        return
+    if command == "sdd":
+        handle_sdd(args)
         return
     if command == "harness":
         _harness(
