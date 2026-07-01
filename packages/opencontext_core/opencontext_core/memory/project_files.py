@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from opencontext_core.models.agent_memory import MemoryLayer, MemoryRecord
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 
 # The eight book files, in render order. Exported so layout/CLI can reference them.
 PROJECT_MEMORY_FILES: tuple[str, ...] = (
@@ -105,7 +106,7 @@ def generate(store: object, root: Path | str, *, limit: int = 500) -> list[Path]
 
     Overwrites existing files (they are projections). Returns the written paths.
     """
-    base = Path(root) / ".opencontext" / "memory"
+    base = resolve_workspace_path(root, StorageMode.local) / "memory"
     base.mkdir(parents=True, exist_ok=True)
     records = _all_records(store, limit=limit)
     written: list[Path] = []
