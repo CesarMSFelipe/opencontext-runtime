@@ -1,4 +1,6 @@
-"""Unified benchmark runner over the named cognitive suites (REL-08/REL-09/REL-CONV).
+"""Unified benchmark runner over the named cognitive suites (REL-08/REL-09/REL-CONV)
++ the PR-R2-C ``EvalSuite`` / :class:`EvalRunner` harness for the evaluation
+framework (REQ-eval-fw-001/002/003).
 
 A thin registry that unifies discovery + versioned reporting across the ten
 mandatory 1.0 benchmark gates (doc 57 §A / convergence §6) WITHOUT coupling their
@@ -25,6 +27,7 @@ fabricated pass (build-rule #1).
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -35,6 +38,11 @@ from opencontext_core.evaluation.models import (
     BenchmarkSuiteReport,
     EfficiencyReport,
     GateStatus,
+)
+from opencontext_core.evaluation.report import (
+    EvalCaseResult,
+    EvalReport,
+    generate_report,
 )
 
 #: The ten mandatory 1.0 benchmark gates (doc 57 §A / OC-FINAL-CONVERGENCE-001 §6).
@@ -288,8 +296,167 @@ __all__ = [
     "BenchmarkSuite",
     "DeclaredSuite",
     "EfficiencySuite",
+    "EvalRunner",
+    "EvalSuite",
     "MemorySuite",
     "RecallSuite",
     "build_default_runner",
     "not_measured",
+    "run_suite",
 ]
+
+
+# ── PR-R2-C evaluation framework (REQ-eval-fw-001/002/003) ──────────────────
+# A lightweight, registry-based harness on top of the existing
+# ``BenchmarkRunner``. The two coexist on purpose: the legacy
+# ``BenchmarkRunner`` is the unified entry point for the 10 mandatory 1.0
+# gates (REL-08/REL-09/REL-CONV); :class:`EvalRunner` is the user-facing
+# surface for the six canonical suites described in spec §C.3.
+
+
+@dataclass
+class EvalSuite:
+    """A named, versioned eval suite — the eval framework's unit of work.
+
+    Mirrors the spec's :class:`EvalSuite` Protocol
+    (specs/evaluation-framework/spec.md §Contracts): ``name``,
+    ``methodology_version`` (the ``YYYY.MM.DD`` schema-style stamp that bumps
+    ONLY on a rubric change), ``cases``, ``gate_blocking`` (default ``True``
+    so a failing suite blocks release — REQ-eval-fw-003), and
+    ``regression_threshold`` (a passing case whose score drops by more than
+    this amount is recorded as a regression).
+
+    Each entry in ``cases`` is a mapping that MUST expose ``"id"`` and a
+    ``"run"`` callable returning a payload of the form
+    ``{"passed": bool, "score": float, "reasons": list[str]}``; ``"setup"``,
+    ``"teardown"``, ``"assertions"`` and ``"timeout_s"`` are accepted per
+    the spec contract but are NOT enforced by this lazy reference runner —
+    they are surfaced as attributes for downstream consumers (CI gates,
+    Studio dashboard).
+    """
+
+    name: str
+    methodology_version: str
+    cases: list[dict] = field(default_factory=list)
+    gate_blocking: bool = True
+    regression_threshold: float = 0.05
+
+
+@dataclass
+class _CaseOutcome:
+    """Internal: a case's raw run payload + timing."""
+
+    case_id: str
+    payload: dict
+    duration_ms: int
+
+
+class EvalRunner:
+    """Registry + driver for :class:`EvalSuite` instances.
+
+    Per REQ-eval-fw-001: ``eval.registry.list()`` returns every registered
+    suite; per REQ-eval-fw-003: a failing or regressing suite carries a
+    verdict the release-gate lint can act on.
+    """
+
+    def __init__(self) -> None:
+        self._suites: dict[str, EvalSuite] = {}
+
+    # ── Registry API ────────────────────────────────────────────────────
+
+    def register(self, suite: EvalSuite, *, replace: bool = False) -> None:
+        """Add ``suite`` to the registry.
+
+        Raises :class:`ValueError` on duplicate name unless ``replace=True``.
+        """
+        if suite.name in self._suites and not replace:
+            raise ValueError(f"eval suite {suite.name!r} already registered")
+        self._suites[suite.name] = suite
+
+    def list_suites(self) -> list[str]:
+        """Return the registered suite names in insertion order."""
+        return list(self._suites.keys())
+
+    def has(self, name: str) -> bool:
+        return name in self._suites
+
+    def get_suite(self, name: str) -> EvalSuite:
+        """Return the registered :class:`EvalSuite` for ``name``."""
+        if name not in self._suites:
+            raise KeyError(f"unknown eval suite: {name!r}")
+        return self._suites[name]
+
+    # ── Execution ───────────────────────────────────────────────────────
+
+    def run(self, name: str) -> EvalReport:
+        """Run every case in the named suite and return an :class:`EvalReport`."""
+        suite = self.get_suite(name)
+        return _execute_suite(suite)
+
+    def run_all(self) -> list[EvalReport]:
+        """Run every registered suite; preserves registration order."""
+        return [self.run(name) for name in self._suites]
+
+
+def _execute_case(case: dict) -> _CaseOutcome:
+    """Run a single case dict; never raises — failures become a failed result.
+
+    The case MUST have an ``"id"`` and a ``"run"`` callable. Anything else
+    (missing id, run is not callable, the run raised) becomes a failed
+    case with a descriptive reason; the harness never crashes on a bad
+    case because a single bad case must not block the suite.
+    """
+    case_id = str(case.get("id", "<unknown>"))
+    run = case.get("run")
+    if not callable(run):
+        return _CaseOutcome(
+            case_id=case_id,
+            payload={"passed": False, "score": 0.0, "reasons": ["case has no callable 'run'"]},
+            duration_ms=0,
+        )
+    t0 = time.monotonic()
+    try:
+        payload = run() or {}
+    except Exception as exc:
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        return _CaseOutcome(
+            case_id=case_id,
+            payload={"passed": False, "score": 0.0, "reasons": [f"case raised: {exc!r}"]},
+            duration_ms=duration_ms,
+        )
+    duration_ms = int((time.monotonic() - t0) * 1000)
+    if not isinstance(payload, dict):
+        payload = {"passed": bool(payload), "score": 1.0 if payload else 0.0, "reasons": []}
+    return _CaseOutcome(case_id=case_id, payload=payload, duration_ms=duration_ms)
+
+
+def _execute_suite(suite: EvalSuite) -> EvalReport:
+    """Drive a full suite → :class:`EvalReport` via :func:`generate_report`."""
+    outcomes = [_execute_case(case) for case in suite.cases]
+    results = [
+        EvalCaseResult(
+            case_id=o.case_id,
+            passed=bool(o.payload.get("passed", False)),
+            score=float(o.payload.get("score", 1.0 if o.payload.get("passed") else 0.0)),
+            duration_ms=o.duration_ms,
+            reasons=list(o.payload.get("reasons", [])),
+        )
+        for o in outcomes
+    ]
+    microseconds_total = sum(o.duration_ms for o in outcomes) * 1000
+    return generate_report(
+        suite=suite.name,
+        methodology_version=suite.methodology_version,
+        results=results,
+        microseconds_total=microseconds_total,
+    )
+
+
+def run_suite(suite: EvalSuite) -> EvalReport:
+    """Free-function convenience wrapper: run a suite without a registry.
+
+    Equivalent to ``EvalRunner().run(suite.name)`` after registering, but
+    avoids touching the registry for one-shot invocations (e.g. tests, ad-hoc
+    ``opencontext eval run bug_fix``).
+    """
+    return _execute_suite(suite)

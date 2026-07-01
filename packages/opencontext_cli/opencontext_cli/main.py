@@ -379,9 +379,9 @@ def _check_first_run(command: str) -> None:
         run_wizard = False
 
     if run_wizard:
-        from opencontext_core.onboarding.wizard import OnboardingWizard
+        from opencontext_core.onboarding.wizard import InteractiveOnboardingWizard
 
-        wizard = OnboardingWizard(root=root)
+        wizard = InteractiveOnboardingWizard(root=root)
         wizard.run()
         fr_console.print("[green]Setup complete! Run `opencontext doctor` to verify.[/]")
     else:
@@ -1903,7 +1903,7 @@ def _init(
 
     if is_interactive:
         # Launch the full wizard
-        from opencontext_core.onboarding.wizard import OnboardingWizard
+        from opencontext_core.onboarding.wizard import InteractiveOnboardingWizard
 
         kwargs: dict[str, Any] = {}
         if security_mode:
@@ -1913,7 +1913,7 @@ def _init(
         if agent:
             kwargs["agents"] = [a.strip() for a in agent.split(",") if a.strip()]
 
-        wizard = OnboardingWizard(root=root)
+        wizard = InteractiveOnboardingWizard(root=root)
         wizard.run(non_interactive=False, **kwargs)
         if profile:
             _apply_profile_to_config(root / "opencontext.yaml", profile)
