@@ -121,7 +121,7 @@ def _handle_status(change: str | None, cwd: Path, verbose: bool) -> None:
     """Resolve and print the SDD status."""
     from opencontext_sdd.status import Resolve, Status
 
-    status = Resolve(change or "", str(cwd))
+    status = Resolve(change or "", cwd=str(cwd))
     _print_json(status.model_dump(mode="json", exclude_none=True), verbose)
 
 
@@ -129,7 +129,7 @@ def _handle_continue(change: str | None, cwd: Path, verbose: bool) -> None:
     """Continue with the next recommeded phase."""
     from opencontext_sdd.dispatcher import RenderNativePhasePrompt
 
-    prompt = RenderNativePhasePrompt(change or "", str(cwd))
+    prompt = RenderNativePhasePrompt("continue", change=change)
     print(prompt)
 
 
