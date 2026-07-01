@@ -7,6 +7,8 @@ Per openspec/changes/agentic-parity-engram-gentle/design/pr3-cli-fastapi.md
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -206,3 +208,45 @@ class TestVerboseFlag:
             extra = TOOL_ARGS.get(tool, [])
             args = v2_parent.parse_args(["v2", tool, "--verbose", *extra])
             assert getattr(args, "verbose", False) is True, f"{tool}: verbose not set"
+
+
+class TestDispatchWiring:
+    """save/search must hit a real store; unwired verbs must fail loudly."""
+
+    def test_save_search_roundtrip_persists(self, tmp_path: Path, capsys: Any) -> None:
+        from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
+
+        save_args = argparse.Namespace(
+            title="found bug",
+            content="memory leak in loop",
+            type="manual",
+            scope="project",
+            topic_key=None,
+            no_capture_prompt=True,
+        )
+        _dispatch_tool("save", tmp_path, save_args)
+        db = tmp_path / ".storage" / "opencontext" / "memory_v2.db"
+        assert db.exists(), "save must persist to the v2 store on disk"
+
+        search_args = argparse.Namespace(query="leak", limit=10, all_projects=False)
+        _dispatch_tool("search", tmp_path, search_args)
+        out = capsys.readouterr().out
+        assert "found bug" in out, "search must find the observation just saved"
+
+    def test_save_empty_content_exits_nonzero(self, tmp_path: Path) -> None:
+        from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
+
+        args = argparse.Namespace(
+            title="t", content="", type="manual", scope="project",
+            topic_key=None, no_capture_prompt=True,
+        )
+        with pytest.raises(SystemExit) as excinfo:
+            _dispatch_tool("save", tmp_path, args)
+        assert excinfo.value.code == 2
+
+    def test_unwired_tool_exits_nonzero(self, tmp_path: Path) -> None:
+        from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
+
+        with pytest.raises(SystemExit) as excinfo:
+            _dispatch_tool("doctor", tmp_path, argparse.Namespace())
+        assert excinfo.value.code == 2

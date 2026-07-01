@@ -117,7 +117,11 @@ class MemoryStore:
         ``PRAGMA`` statements above. So we replay the DDL statements we need
         directly here, in order.
         """
-        conn.executescript(_SCHEMA_PATH.read_text(encoding="utf-8"))
+        existing = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'observations'"
+        ).fetchone()
+        if existing is None:
+            conn.executescript(_SCHEMA_PATH.read_text(encoding="utf-8"))
         # Partial unique index driving topic_key upsert. Lives next to schema
         # but declared here because ON CONFLICT requires the matching predicate.
         conn.execute(

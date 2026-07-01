@@ -13,6 +13,8 @@ LB 2026 — memory v2 CLI surface.
 from __future__ import annotations
 
 import argparse
+import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -216,14 +218,60 @@ def handle_memory_v2(args: argparse.Namespace) -> None:
     _dispatch_tool(tool, cwd, args)
 
 
-def _dispatch_tool(tool: str, cwd: Path, args: argparse.Namespace) -> None:
-    """Look up and call the matching opencontext_memory function.
+def _open_store(cwd: Path) -> Any:
+    """Open (creating if needed) the local v2 store under the path resolver."""
+    from opencontext_memory import MemoryStore
 
-    Falls back to a stub when the tool is not yet wired in PR4.
+    from opencontext_core.paths import StorageMode, resolve_storage_path
+
+    db_path = resolve_storage_path(cwd, StorageMode.local) / "memory_v2.db"
+    return MemoryStore.open(db_path)
+
+
+def _dispatch_tool(tool: str, cwd: Path, args: argparse.Namespace) -> None:
+    """Call the matching opencontext_memory entry point.
+
+    ``save`` and ``search`` are wired to the local SQLite store. Every other
+    verb exits non-zero instead of silently succeeding, so users never lose
+    data to a no-op.
     """
-    print(f"memory v2 {tool} (cwd={cwd})")
-    if getattr(args, "verbose", False):
-        print(f"  args: {vars(args)}")
+    if tool == "save":
+        from opencontext_memory import mem_save
+
+        try:
+            receipt = mem_save(
+                _open_store(cwd),
+                session_id=f"cli-{cwd.name}",
+                project=cwd.name,
+                title=getattr(args, "title", ""),
+                content=getattr(args, "content", ""),
+                type=getattr(args, "type", "manual"),
+                topic_key=getattr(args, "topic_key", None),
+                capture_prompt=not getattr(args, "no_capture_prompt", False),
+            )
+        except ValueError as exc:
+            print(f"memory v2 save: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        print(receipt.model_dump_json(indent=2))
+        return
+    if tool == "search":
+        from opencontext_memory import mem_search
+
+        project = None if getattr(args, "all_projects", False) else cwd.name
+        rows = mem_search(
+            _open_store(cwd),
+            query=getattr(args, "query", ""),
+            limit=getattr(args, "limit", 10),
+            project=project,
+        )
+        print(json.dumps(rows, indent=2, default=str))
+        return
+    print(
+        f"memory v2 {tool}: not wired yet — use 'opencontext memory {tool}' "
+        "or the Engram MCP tools instead.",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
 
 
 # Re-export for backward compatibility
