@@ -63,6 +63,25 @@ def engram_project() -> str:
     return Path.cwd().name.strip().lower().replace(" ", "-")
 
 
+def engram_project_full(cwd: Path | None = None) -> Any:
+    """Full 5-case project detection via :mod:`opencontext_memory.project`.
+
+    PR2.d additive extension: returns a
+    :class:`opencontext_memory.project.DetectionResult` so callers can
+    inspect ``source``, ``warning`` and (for ambiguous projects)
+    ``available_projects`` + ``recovery_token``.
+
+    The legacy ``engram_project()`` string-shaped function stays put for
+    back-compat with the existing ``backends/factory.py`` wiring; the
+    new full detector is the canonical path for any host that wants
+    ambiguity-surfacing + ``git_child`` auto-promotion.
+    """
+    from opencontext_memory.project import DetectProjectFull
+
+    resolved = Path(cwd).resolve() if cwd is not None else Path.cwd()
+    return DetectProjectFull(resolved)
+
+
 def detect_engram() -> bool:
     """Return True when a co-resident Engram install is usable.
 

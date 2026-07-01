@@ -26,7 +26,14 @@ from opencontext_core.models.memory import MemoryConflict, MemoryQuery, MemoryRe
 
 @runtime_checkable
 class MemoryProvider(Protocol):
-    """Book memory backend surface used by upper layers (OC-MEMORY-001 §26)."""
+    """Book memory backend surface used by upper layers (OC-MEMORY-001 §26).
+
+    PR2.d extends the protocol with three concrete methods ``opencontext_memory``
+    consumers need (REQ-OMS-002, REQ-OMPD-005, REQ-OMT-016). The extensions are
+    additive — concrete providers that pre-date PR2.d keep satisfying the
+    5-method baseline; providers that want full parity with the new store
+    surface override the new methods.
+    """
 
     def search(self, query: MemoryQuery) -> list[MemoryRecord]:
         """Return records relevant to a typed query, honoring its budgets."""
@@ -46,6 +53,36 @@ class MemoryProvider(Protocol):
 
     def detect_conflicts(self, candidate: MemoryCandidate) -> list[MemoryConflict]:
         """Return typed conflicts between a candidate and active beliefs."""
+        ...
+
+    # --- PR2.d additions (REQ-OMS-002 / REQ-OMPD-005 / REQ-OMT-016) -----
+
+    def bm25_search(self, query: str, *, limit: int = 10) -> list[MemoryRecord]:
+        """Full-text BM25 search across the raw store.
+
+        Default-returned records are NOT conflict-filtered (use
+        :meth:`detect_conflicts` for the structured conflict flow).
+        """
+        ...
+
+    def topic_upsert(self, topic_key: str, payload: MemoryRecord) -> MemoryReceipt:
+        """Idempotent insert keyed by ``topic_key`` (REQ-OMS-002).
+
+        A pre-existing record with the same ``topic_key`` is updated in
+        place; ``revision_count`` increments.
+        """
+        ...
+
+    def judge_relation(self, judgment_id: str, relation: str) -> dict[str, Any]:
+        """Apply a verdict to a pending relation row.
+
+        ``relation`` is one of the 7-verb literal values
+        (``related``/``compatible``/``scoped``/``conflicts_with``/
+        ``supersedes``/``not_conflict``/``orphaned`` - the seventh acts
+        as ``ignore``). Returns the refreshed row as a dict so the
+        protocol stays structurally typed without depending on
+        :mod:`opencontext_memory`.
+        """
         ...
 
 
