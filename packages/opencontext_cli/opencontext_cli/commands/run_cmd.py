@@ -295,6 +295,54 @@ def handle_simulate(args: Any) -> None:
     emit(data, resolve_output_mode(args), _human)
 
 
+def _print_profile(run_dir: Path) -> None:
+    """Print per-component timing profile from trace.json (R3).
+
+    Reads ``timings_ms`` from ``run_dir/trace.json``.  When the file is absent
+    or has no timing data, prints an honest "no trace recorded" line and returns
+    — never crashes or raises.
+    """
+    trace_path = run_dir / "trace.json"
+    if not trace_path.exists():
+        print("\nProfile: no trace recorded for this run.")
+        return
+    try:
+        raw = _read_json(trace_path)
+        if not isinstance(raw, dict):
+            print("\nProfile: no trace recorded for this run.")
+            return
+        timings = raw.get("timings_ms") or {}
+        if not timings:
+            print("\nProfile: no trace recorded for this run.")
+            return
+
+        from opencontext_core.runtime_intelligence.profiler import RuntimeProfiler
+
+        # Duck-typed proxy: RuntimeProfiler only needs .run_id and .timings_ms.
+        class _TraceProxy:
+            def __init__(self, run_id: str, timings_ms: dict[str, float]) -> None:
+                self.run_id = run_id
+                self.timings_ms = timings_ms
+
+        proxy = _TraceProxy(
+            run_id=raw.get("run_id", run_dir.name),
+            timings_ms={k: float(v) for k, v in timings.items()},
+        )
+        report = RuntimeProfiler().profile(proxy)  # type: ignore[arg-type]
+
+        print("\nProfile (per-component time share):")
+        for component, share in sorted(
+            report.cost_by_component.items(), key=lambda kv: kv[1], reverse=True
+        ):
+            bar = "#" * max(1, int(share * 20))
+            print(f"  {component:<20} {share:>6.1%}  {bar}")
+        if report.recommendations:
+            print(f"  Recommendation: {report.recommendations[0]}")
+    except Exception as exc:
+        # Profiler failure is non-fatal — honest degraded message.
+        print(f"\nProfile: could not load trace ({exc}).")
+
+
 def add_run_parser(subparsers: Any) -> None:
     """Add the ``runs`` command group."""
 
@@ -307,6 +355,12 @@ def add_run_parser(subparsers: Any) -> None:
     show_p = runs_subs.add_parser("show", help="Show a run summary.")
     show_p.add_argument("run_id", help="Run ID.")
     show_p.add_argument("--json", action="store_true", help="JSON output.")
+    show_p.add_argument(
+        "--profile",
+        action="store_true",
+        default=False,
+        help="Show per-component timing profile from trace (if available).",
+    )
 
     art_p = runs_subs.add_parser("artifacts", help="List a run's artifact files.")
     art_p.add_argument("run_id", help="Run ID.")
@@ -346,6 +400,11 @@ def handle_run_inspect(args: Any) -> None:
             "artifacts": len(artifacts.get("artifacts", []) if isinstance(artifacts, dict) else []),
         }
         print(json.dumps(summary, indent=2))
+
+        # R3: per-component profiler surface (--profile flag).
+        if getattr(args, "profile", False):
+            _print_profile(run_dir)
+
         return
 
     if action == "artifacts":
