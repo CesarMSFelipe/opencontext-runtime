@@ -90,7 +90,7 @@ def _run_dir(root: Path, run_id: str) -> Path:
     return _find_run_dir(root, run_id)
 
 
-def _read_run_json(run_dir: Path) -> "dict[str, Any] | None":
+def _read_run_json(run_dir: Path) -> dict[str, Any] | None:
     """Read run metadata from run.json (harness) or state.json (oc_flow), in that order."""
     data = _read_json(run_dir / "run.json")
     if data is not None:
