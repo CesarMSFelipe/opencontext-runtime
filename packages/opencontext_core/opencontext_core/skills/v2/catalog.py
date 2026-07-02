@@ -42,11 +42,19 @@ def _catalog_path(root: Path) -> Path:
 
 
 def generate_catalog(root: Path) -> Catalog:
-    """Walk ``root`` for skill YAMLs and produce a deterministic :class:`Catalog`."""
+    """Walk ``root`` for skill YAMLs and produce a deterministic :class:`Catalog`.
+
+    Only files that declare an ``id`` key are treated as skill definitions.
+    General project configs (e.g. ``opencontext.yaml``) are silently skipped,
+    matching the discriminator used by :class:`~opencontext_core.skills.v2.audit.SkillAudit`.
+    """
     skills: list[CatalogSkill] = []
     for yaml_file in sorted(root.glob("*.yaml")):
         data = yaml.safe_load(yaml_file.read_text(encoding="utf-8")) or {}
         if not isinstance(data, dict):
+            continue
+        # Skip non-skill files (no 'id' key = general config, not a skill definition).
+        if "id" not in data:
             continue
         skills.append(
             CatalogSkill(
