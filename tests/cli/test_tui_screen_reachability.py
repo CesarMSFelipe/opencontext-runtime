@@ -18,8 +18,8 @@ Both checks are static (AST) — they run without a display or Textual runtime.
 from __future__ import annotations
 
 import ast
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _TUI_ROOT = _REPO_ROOT / "packages" / "opencontext_cli" / "opencontext_cli" / "tui"
