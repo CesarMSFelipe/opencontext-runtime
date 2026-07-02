@@ -397,7 +397,8 @@ def show_config(root: Path | None = None) -> None:
         try:
             import yaml as _yaml
 
-            raw: dict = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+            _loaded = _yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+            raw: dict[str, dict[str, object]] = _loaded or {}
         except Exception as exc:
             console.print(f"    [dim](error reading opencontext.yaml: {exc})[/]")
         else:
