@@ -6,6 +6,8 @@ providers, and plugins. Uses rich for a modern interactive TUI.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from rich.console import Console
 from rich.prompt import IntPrompt
 from rich.table import Table
@@ -318,8 +320,17 @@ def reconfigure(section: str | None = None) -> None:
     console.print(f"\n{section} configuration updated.")
 
 
-def show_config() -> None:
-    """Display current configuration."""
+def show_config(root: Path | None = None) -> None:
+    """Display current configuration.
+
+    Parameters
+    ----------
+    root:
+        Optional project root to resolve ``opencontext.yaml`` from.  When
+        ``None`` the current working directory is used.  If no
+        ``opencontext.yaml`` is found a graceful "no project config" line is
+        emitted instead of a section header with keys.
+    """
     from opencontext_core.dx.console_styles import BRAND_PRIMARY
     from opencontext_core.dx.console_styles import console as brand_console
 
@@ -375,6 +386,38 @@ def show_config() -> None:
     _label("Updates")
     console.print(f"    Check updates: {_flag(prefs.check_updates)}")
     console.print(f"    Auto-update plugins: {_flag(prefs.auto_update_plugins)}")
+
+    # --- Project (opencontext.yaml) section ----------------------------------
+    _label("Project (opencontext.yaml)")
+    project_root = Path(root) if root is not None else Path.cwd()
+    yaml_path = project_root / "opencontext.yaml"
+    if not yaml_path.is_file():
+        console.print("    [dim]no project config (opencontext.yaml not found)[/]")
+    else:
+        try:
+            import yaml as _yaml
+
+            raw: dict = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        except Exception as exc:
+            console.print(f"    [dim](error reading opencontext.yaml: {exc})[/]")
+        else:
+            console.print(f"    Config file: {yaml_path}")
+            # memory.provider
+            memory_cfg = raw.get("memory", {}) or {}
+            console.print(f"    memory.provider: {memory_cfg.get('provider', '(not set)')}")
+            # storage.mode
+            storage_cfg = raw.get("storage", {}) or {}
+            console.print(f"    storage.mode: {storage_cfg.get('mode', '(not set)')}")
+            # sdd.flow_mode
+            sdd_cfg = raw.get("sdd", {}) or {}
+            console.print(f"    sdd.flow_mode: {sdd_cfg.get('flow_mode', '(not set)')}")
+            # models.roles
+            models_cfg = raw.get("models", {}) or {}
+            roles = models_cfg.get("roles")
+            if roles:
+                console.print(f"    models.roles: {roles}")
+            else:
+                console.print("    models.roles: (not set)")
 
 
 def reset_config() -> None:

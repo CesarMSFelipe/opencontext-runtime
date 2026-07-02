@@ -45,7 +45,12 @@ def add_config_parser(subparsers: Any) -> None:
         "--non-interactive", action="store_true", help="Use defaults without prompts."
     )
 
-    config_sub.add_parser("show", help="Display current configuration.")
+    show_p = config_sub.add_parser("show", help="Display current configuration.")
+    show_p.add_argument(
+        "--root",
+        default=None,
+        help="Project root for resolving opencontext.yaml (default: cwd).",
+    )
 
     config_sub.add_parser("reset", help="Reset to factory defaults.")
 
@@ -126,7 +131,9 @@ def handle_config(args: Any) -> None:
 
             run_wizard(non_interactive=True)
     elif command == "show":
-        show_config()
+        from pathlib import Path
+
+        show_config(root=Path(getattr(args, "root", None) or ".").resolve())
     elif command == "reset":
         reset_config()
     elif command == "reconfigure":
