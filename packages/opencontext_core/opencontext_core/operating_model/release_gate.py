@@ -526,14 +526,11 @@ class AcceptanceEvaluator:
         # AVH-010 / B10 — the HARD, gating e2e DoD journey.
         out.append(self._e2e_dod_gate(regression, release_mode=release_mode, e2e_proof=e2e_proof))
         # AVH-007 / B3 — per-subsystem parity-gated flip integrity (reads
-        # .opencontext/flips/*.json; absent bundles add no gates). When an explicit
-        # ``regression`` entry carries a ``flip-{subsystem}`` key, that injected
-        # status wins over the computed result (same override pattern as e2e-dod).
-        for gate_result in self._flip_gates():
-            if gate_result.gate in regression:
-                out.append(_resolve(gate_result.gate, "C", regression, default_detail=""))
-            else:
-                out.append(gate_result)
+        # .opencontext/flips/*.json; absent bundles add no gates). The flip gate is
+        # computed honestly from the ACTIVE flag default vs the recorded bundle; the
+        # ACTIVE default for the spine flags derives from the migration ledger
+        # (compat/flags), so a correct post-C15 state computes MET with no injection.
+        out.extend(self._flip_gates())
         # Externally measured (full suite / gate_k / mypy / ruff / forbidden-names):
         for name in (
             "suite-green",

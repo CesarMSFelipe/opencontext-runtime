@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from opencontext_core.compat.flip_evidence import read_flip_bundles
 from opencontext_core.evaluation.models import (
     BenchmarkSuiteReport,
     CostTriple,
@@ -136,24 +135,18 @@ def test_acceptance_ready_only_when_every_gate_met() -> None:
     )
     functional = {name: GateStatus.MET for name in FUNCTIONAL_BEHAVIOURS}
     governance = {name: GateStatus.MET for name in GOVERNANCE_GATES}
-    # Inject MET for all flip gates in this repo so computed flip results don't
-    # block the "everything MET" invariant (flip gates are injectable via regression
-    # using the same override pattern as e2e-dod).
-    flip_gates = {
-        f"flip-{b.subsystem}": GateStatus.MET for b in read_flip_bundles(PROJECT_ROOT)
-    }
+    # The flip gates are NOT injected: with the spine defaults reconciled to the
+    # migration ledger (compat/flags), every accepted flip bundle in this repo has
+    # ACTIVE == config_after, so the flip gates compute MET on their own.
     regression = {
-        **flip_gates,
-        **{
-            name: GateStatus.MET
-            for name in (
-                "suite-green",
-                "gate-k-12-12",
-                "mypy-strict-clean",
-                "ruff-clean",
-                "forbidden-names-clean",
-            )
-        },
+        name: GateStatus.MET
+        for name in (
+            "suite-green",
+            "gate-k-12-12",
+            "mypy-strict-clean",
+            "ruff-clean",
+            "forbidden-names-clean",
+        )
     }
     dod = [
         GateResult(gate=n, category="C", status=GateStatus.MET, detail="ok")

@@ -152,9 +152,29 @@ def is_migrated(
     return (ledger or MIGRATION_LEDGER).is_migrated(module, root=root)
 
 
-def is_migrated_flag(
+def ledger_state_for_flag(
     flag: str, *, ledger: MigrationLedger | None = None
-) -> bool:
+) -> MigrationState | None:
+    """Return the migration state recorded on the ledger entry for *flag*, or ``None``.
+
+    Accepts the bare flag (``"rt-spine"``) or the dotted name
+    (``"runtime.rt-spine"``); the ledger stores the dotted form, so a leading
+    ``"runtime."`` is stripped before matching. This is the single matching
+    implementation shared by :func:`is_migrated_flag` and the flag catalog
+    (``compat.flags.flag_catalog``) so the ledger stays the ONE source of truth
+    for a subsystem's migration state.
+    """
+    target = ledger or MIGRATION_LEDGER
+    bare = flag[len("runtime.") :] if flag.startswith("runtime.") else flag
+    for entry in target.modules:
+        stored = entry.flag or ""
+        stored_bare = stored[len("runtime.") :] if stored.startswith("runtime.") else stored
+        if stored == flag or stored_bare == bare:
+            return entry.state
+    return None
+
+
+def is_migrated_flag(flag: str, *, ledger: MigrationLedger | None = None) -> bool:
     """Flag-level convenience for the v2 migration flags (commit-006).
 
     Looks up the ledger entry whose ``flag`` field equals *flag* and returns
@@ -174,14 +194,8 @@ def is_migrated_flag(
     ``compat.is_migrated_flag("rt-spine")`` instead of fishing for module
     paths.
     """
-    target = ledger or MIGRATION_LEDGER
-    bare = flag[len("runtime.") :] if flag.startswith("runtime.") else flag
-    for entry in target.modules:
-        stored = entry.flag or ""
-        stored_bare = stored[len("runtime.") :] if stored.startswith("runtime.") else stored
-        if stored == flag or stored_bare == bare:
-            return entry.state in {MigrationState.migrated, MigrationState.removed}
-    return False
+    state = ledger_state_for_flag(flag, ledger=ledger)
+    return state in {MigrationState.migrated, MigrationState.removed}
 
 
 def _evaluate_migrated(

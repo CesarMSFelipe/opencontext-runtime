@@ -11,8 +11,6 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from opencontext_core.compat import is_migrated_flag
-
 
 def _import_action() -> Any:
     """Lazy import to avoid touching the stub unless the test needs it."""
@@ -32,9 +30,10 @@ def test_tui_uses_spine_when_on(tmp_path: Path) -> None:
 def test_tui_uses_legacy_when_off(tmp_path: Path) -> None:
     """When rt-spine is off, start_session returns ``\"legacy\"``."""
     tui_action = _import_action()
-    # Default: flag is off (legacy path).
-    assert is_migrated_flag("rt-spine") is False
-    result = tui_action.start_session(task="do x", root=tmp_path, profile="balanced")
+    # Post-C15 the ledger records rt-spine as migrated, so the flag defaults ON;
+    # patch it OFF to exercise the legacy shim branch (the scenario under test).
+    with patch("opencontext_core.compat.is_migrated_flag", return_value=False):
+        result = tui_action.start_session(task="do x", root=tmp_path, profile="balanced")
     assert result == "legacy"
 
 
@@ -42,9 +41,7 @@ def test_tui_start_session_forwards_args(tmp_path: Path) -> None:
     """The TUI start action accepts task/root/profile kwargs (commit-009 shape)."""
     tui_action = _import_action()
     with patch("opencontext_core.compat.is_migrated_flag", return_value=True):
-        result = tui_action.start_session(
-            task="build feature", root=tmp_path, profile="careful"
-        )
+        result = tui_action.start_session(task="build feature", root=tmp_path, profile="careful")
     assert result == "spine"  # the kwargs are accepted without TypeError
 
 
