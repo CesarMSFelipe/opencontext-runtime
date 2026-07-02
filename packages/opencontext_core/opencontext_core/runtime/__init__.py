@@ -53,6 +53,7 @@ from opencontext_core.operating_model.receipts import RunReceiptStore
 from opencontext_core.paths import (
     StorageMode,
     detect_legacy,
+    is_owned,
     resolve_storage_path,
     resolve_workspace_path,
     write_manifest,
@@ -321,20 +322,32 @@ class OpenContextRuntime:
             # Legacy detection — warn if old in-repo state dirs exist.
             _legacy = detect_legacy(_root)
             if _legacy is not None:
-                _legacy_paths = [
-                    str(p) for p in [_legacy.storage_path, _legacy.workspace_path] if p is not None
-                ]
-                _legacy_str = " and ".join(_legacy_paths)
-                warnings.warn(
-                    f"legacy local state detected at {_legacy_str}; "
-                    "run `opencontext storage migrate` to move it",
-                    stacklevel=2,
+                # Ownership skip: if the detected path carries our own manifest
+                # (written by write_manifest above), it was self-created by the
+                # current OC install — not alien legacy state from a previous
+                # tool. Only emit the warning for paths we did not create.
+                _owned = (
+                    _legacy.storage_path is not None and is_owned(_legacy.storage_path)
+                ) or (
+                    _legacy.workspace_path is not None and is_owned(_legacy.workspace_path)
                 )
-                _logging.getLogger("opencontext").warning(
-                    "legacy local state detected at %s; "
-                    "run `opencontext storage migrate` to move it",
-                    _legacy_str,
-                )
+                if not _owned:
+                    _legacy_paths = [
+                        str(p)
+                        for p in [_legacy.storage_path, _legacy.workspace_path]
+                        if p is not None
+                    ]
+                    _legacy_str = " and ".join(_legacy_paths)
+                    warnings.warn(
+                        f"legacy local state detected at {_legacy_str}; "
+                        "run `opencontext storage migrate` to move it",
+                        stacklevel=2,
+                    )
+                    _logging.getLogger("opencontext").warning(
+                        "legacy local state detected at %s; "
+                        "run `opencontext storage migrate` to move it",
+                        _legacy_str,
+                    )
         else:
             # Explicit storage_path passed — backward-compat path; resolver skipped.
             self.storage_path = Path(storage_path)  # type: ignore[arg-type]
