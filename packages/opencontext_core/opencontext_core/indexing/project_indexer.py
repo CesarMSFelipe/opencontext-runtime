@@ -79,6 +79,9 @@ class ProjectIndexer:
             indexed_files: list[tuple[str, str]] = []
             batch_size = 50
             batch_count = 0
+            # K2: per-language count of files in _KG_LANGUAGES that were counted
+            # but not actually AST-parsed (grammar unavailable + regex yields nothing).
+            unparsed_by_lang: dict[str, int] = {}
             for scanned_file in scanned_files:
                 if scanned_file.language not in _KG_LANGUAGES:
                     continue
@@ -93,6 +96,10 @@ class ProjectIndexer:
                     kg_stats["files_indexed"] += 1
                     kg_stats["nodes"] += stats.get("nodes", 0)
                     kg_stats["edges"] += stats.get("edges", 0)
+                    # K2: detect "counted but not parsed" — regex fallback with zero nodes
+                    if stats.get("parse_mode") == "regex" and stats.get("nodes", 0) == 0:
+                        lang = scanned_file.language
+                        unparsed_by_lang[lang] = unparsed_by_lang.get(lang, 0) + 1
                     indexed_files.append((scanned_file.relative_path, scanned_file.content))
                     done_paths.add(scanned_file.relative_path)
                     batch_count += 1
@@ -109,6 +116,15 @@ class ProjectIndexer:
                     "indexing: %d file(s) failed to index — graph may be incomplete",
                     kg_stats["files_failed"],
                 )
+            # K2: surface unparsed-file counts and emit one honest log line per language
+            if unparsed_by_lang:
+                kg_stats["unparsed_files"] = unparsed_by_lang
+                for lang, count in sorted(unparsed_by_lang.items()):
+                    _log.warning(
+                        "%d %s file(s) counted but not parsed — grammar unavailable",
+                        count,
+                        lang,
+                    )
             # Single FTS5 rebuild after all files are indexed (was per-file — huge speedup)
             try:
                 self.knowledge_graph.db.rebuild_fts()
