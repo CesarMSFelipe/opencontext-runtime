@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from opencontext_core.paths import StorageMode, resolve_workspace_path
+from opencontext_core.paths import StorageMode, resolve_workspace_path, write_manifest
 
 WORKSPACE_FILE_CONTENT: dict[str, str] = {
     "policies/security-policy.yaml": (
@@ -94,6 +94,16 @@ def ensure_workspace(root: Path) -> list[Path]:
     created: list[Path] = []
     base = resolve_workspace_path(root, StorageMode.local)
     base.mkdir(parents=True, exist_ok=True)
+    # Write an OC ownership manifest so detect_legacy / is_owned recognise this
+    # directory as self-created and suppress the spurious legacy-state warning
+    # that fires when OpenContextRuntime is initialised after onboarding (R2).
+    try:
+        from importlib.metadata import version as _pkg_version
+
+        _oc_version = _pkg_version("opencontext-core")
+    except Exception:
+        _oc_version = "install"
+    write_manifest(base, root, _oc_version)
     for rel, content in WORKSPACE_FILE_CONTENT.items():
         file_path = base / rel
         if file_path.exists():

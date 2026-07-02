@@ -43,7 +43,9 @@ class BackupManager:
     def __init__(self, project_root: str | Path = ".") -> None:
         self.project_root = Path(project_root).resolve()
         self.backup_dir = self.project_root / self.BACKUP_DIR
-        self.backup_dir.mkdir(parents=True, exist_ok=True)
+        # NOTE: mkdir is intentionally deferred — eager creation here caused a spurious
+        # "legacy local state detected" warning when detect_legacy ran later (R2 fix).
+        # The directory is created on first write inside create_backup().
         self.index_path = self.backup_dir / "index.json"
 
     def create_backup(
@@ -63,6 +65,8 @@ class BackupManager:
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_id = name or f"backup_{timestamp}"
+        # Create the backup dir on first write (deferred from __init__ — R2 fix).
+        self.backup_dir.mkdir(parents=True, exist_ok=True)
 
         if paths is None:
             paths = self._default_paths()
