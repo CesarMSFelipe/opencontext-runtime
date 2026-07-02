@@ -154,6 +154,7 @@ class ContextSubstrateBuilder:
         compression_savings = 0
         if context_pack_hash is not None and selected_tokens > 0:
             try:
+                from opencontext_core.context.budgeting import estimate_tokens
                 from opencontext_core.context.compression import CompressionEngine
                 from opencontext_core.models.context import (
                     ContextItem,
@@ -166,16 +167,18 @@ class ContextSubstrateBuilder:
                 engine = CompressionEngine(cfg.context.compression)
 
                 # Build a single ContextItem representing the KG text payload.
+                # Use estimate_tokens (char-based) for consistency with the engine.
                 kg_text = raw_kg_content or json.dumps(
                     {"note": "sqlite-backed kg"}, indent=2
                 )
+                kg_token_count = estimate_tokens(kg_text)
                 kg_item = ContextItem(
                     id="kg:context_substrate",
                     content=kg_text,
                     source="knowledge_graph",
                     source_type="file",
                     priority=ContextPriority.P1,
-                    tokens=selected_tokens,
+                    tokens=kg_token_count,
                     score=1.0,
                 )
                 result = engine.compress_item(kg_item)
