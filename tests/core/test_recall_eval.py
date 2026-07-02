@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from conftest import create_sample_project, write_config
 from opencontext_core.evaluation.recall_eval import (
     RecallTask,
     format_recall_report,
     run_recall_eval,
 )
 from opencontext_core.runtime import OpenContextRuntime
+from tests.core.conftest import create_sample_project, write_config
 
 
 def _runtime(tmp_path: Path) -> tuple[OpenContextRuntime, Path]:

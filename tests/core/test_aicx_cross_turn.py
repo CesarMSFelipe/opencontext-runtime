@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from conftest import create_sample_project, write_config
 from opencontext_core.retrieval.contracts import VerifiedContextRequest
 from opencontext_core.runtime import OpenContextRuntime
+from tests.core.conftest import create_sample_project, write_config
 
 
 def test_second_turn_emits_delta_against_first(tmp_path: Path) -> None:

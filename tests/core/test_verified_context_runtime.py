@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from conftest import create_sample_project, write_config
 from opencontext_core.config import OpenContextConfig, default_config_data
 from opencontext_core.context.compression import CompressionEngine
 from opencontext_core.memory_usability.context_repository import ContextRepository
@@ -17,6 +16,7 @@ from opencontext_core.retrieval.contracts import (
 )
 from opencontext_core.retrieval.planner import RetrievalPlanner
 from opencontext_core.runtime import OpenContextRuntime
+from tests.core.conftest import create_sample_project, write_config
 
 
 def test_verified_context_request_rejects_empty_query() -> None:

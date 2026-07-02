@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from conftest import write_config
 from opencontext_core.runtime import OpenContextRuntime
 from opencontext_core.safety.secrets import SecretScanner
+from tests.core.conftest import write_config
 
 
 def test_secret_scanner_redacts_common_patterns() -> None:
