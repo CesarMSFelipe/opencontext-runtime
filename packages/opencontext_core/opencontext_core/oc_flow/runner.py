@@ -459,6 +459,45 @@ class OCFlowRunner:
             if completion is not CompletionStatus.completed and ctx.block_reason
             else completion_reason(completion, mutation_required=mut_required)
         )
+
+        # R4: post-run confidence report — emit as a RuntimeDecision so
+        # decisions.json captures the ConfidenceEngine evaluation.  Real signals
+        # come from the completed run context; absent signals fall back to the
+        # conservative default (ConfidenceSignals default = None → disclosed).
+        try:
+            from opencontext_core.runtime_intelligence.confidence import (
+                ConfidenceEngine,
+                ConfidenceSignals,
+            )
+
+            _inspection = ctx.inspection
+            _signals = ConfidenceSignals(
+                inspection_confidence=(
+                    1.0 if (_inspection and _inspection.outcome == "passed") else
+                    0.0 if (_inspection and _inspection.outcome != "not_run") else None
+                ),
+            )
+            _cr = ConfidenceEngine().report(
+                session_id=session_id,
+                run_id=run_id,
+                workflow="oc-flow",
+                signals=_signals,
+            )
+            decisions.append(
+                RuntimeDecision(
+                    kind="confidence_report",
+                    chosen=str(round(_cr.overall, 4)),
+                    reason=(
+                        f"ConfidenceEngine post-run report: overall={_cr.overall:.4f}, "
+                        f"action={_cr.recommended_action}"
+                    ),
+                    confidence=_cr.overall,
+                    inputs=dict(_cr.dimensions),
+                )
+            )
+        except Exception:
+            pass  # confidence emission is advisory; never interrupts the run
+
         self._persist(
             session_id,
             run_id,

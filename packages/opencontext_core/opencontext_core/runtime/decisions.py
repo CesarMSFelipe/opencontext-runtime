@@ -56,6 +56,8 @@ class DecisionKind(StrEnum):
     # C16 (product-closure-r13): runner-level selections.
     workflow = "workflow"
     memory_promotion = "memory_promotion"
+    # R4: post-run confidence report from ConfidenceEngine (book §8/§9).
+    confidence_report = "confidence_report"
 
 
 class RuntimeDecision(BaseModel):
