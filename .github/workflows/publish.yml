@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [opencontext-core, opencontext-cli, opencontext-api, opencontext-profiles]
+        package: [opencontext-core, opencontext-cli, opencontext-api, opencontext-profiles, opencontext-memory, opencontext-sdd, opencontext-studio]
         include:
           - package: opencontext-core
             path: packages/opencontext_core
@@ -35,6 +35,12 @@ jobs:
             path: packages/opencontext_api
           - package: opencontext-profiles
             path: packages/opencontext_profiles
+          - package: opencontext-memory
+            path: packages/opencontext_memory
+          - package: opencontext-sdd
+            path: packages/opencontext_sdd
+          - package: opencontext-studio
+            path: packages/opencontext_studio
 
     steps:
       - uses: actions/checkout@v4
