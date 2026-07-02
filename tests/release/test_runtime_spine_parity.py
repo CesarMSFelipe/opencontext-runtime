@@ -167,6 +167,78 @@ def test_mcp_build_run_contract_has_canonical_keys() -> None:
 # ── TUI: start path accepts RuntimeApi session data ───────────────────────────
 
 
+# ── status vocabulary parity (C15 regression pin) ────────────────────────────
+
+
+def test_legacy_status_preserves_oc_flow_terminal_vocabulary() -> None:
+    """_legacy_status must pass OC Flow terminal statuses through unchanged (C15 fix).
+
+    Before the C15 fix, _legacy_status mapped *every* unrecognised text
+    (including "needs_executor", "needs_provider") to "completed".  The public
+    ``opencontext run --json`` output must preserve the OC Flow vocabulary so
+    callers that branch on "completed" vs "needs_executor" are not misled.
+    """
+    from opencontext_core.runtime.api import RuntimeApi
+
+    _ls = RuntimeApi._legacy_status
+
+    class _R:
+        def __init__(self, s: str) -> None:
+            self.status = s
+
+    # OC Flow terminal values must survive unchanged.
+    assert _ls(_R("completed")) == "completed"
+    assert _ls(_R("needs_executor")) == "needs_executor"
+    assert _ls(_R("needs_provider")) == "needs_provider"
+    assert _ls(_R("blocked")) == "blocked"
+    assert _ls(_R("escalated")) == "escalated"
+    assert _ls(_R("needs_verification")) == "needs_verification"
+    assert _ls(_R("needs_user_edit")) == "needs_user_edit"
+
+    # Harness GateStatus values must translate to runtime vocabulary.
+    from opencontext_core.harness.models import GateStatus
+
+    class _H:
+        def __init__(self, s: GateStatus) -> None:
+            self.status = s
+
+    assert _ls(_H(GateStatus.PASSED)) == "completed"
+    assert _ls(_H(GateStatus.WARNING)) == "completed_with_warnings"
+    assert _ls(_H(GateStatus.FAILED)) == "failed"
+    assert _ls(_H(GateStatus.SKIPPED)) == "scaffolded"
+
+
+def test_oc_flow_harness_adapter_routes_to_ocflow_runner(tmp_path: Path) -> None:
+    """_OCFlowHarness.run returns OCFlowRunResult so status vocabulary is correct.
+
+    This pins the C15-introduced routing: RuntimeApi for "oc-flow" / "auto"
+    workflows must use _OCFlowHarness (which returns OCFlowRunResult with
+    'completed'/'needs_executor' vocabulary), NOT HarnessRunner (which would
+    return HarnessRunResult with GateStatus.PASSED='passed').
+    """
+    from opencontext_core.oc_flow.runner import OCFlowRunResult
+    from opencontext_core.runtime.api import RuntimeApi, RunRequest, StartSessionRequest
+
+    api = RuntimeApi(tmp_path)
+    ref = api.start_session(StartSessionRequest(task="Fix bug", root=str(tmp_path)))
+    result = api.run(RunRequest(session_id=ref.session_id, workflow_id="oc-flow", task="Fix bug"))
+
+    # The legacy carrier must be an OCFlowRunResult (not HarnessRunResult).
+    assert isinstance(result.legacy, OCFlowRunResult), (
+        f"expected OCFlowRunResult, got {type(result.legacy).__name__}: "
+        "RuntimeApi routes oc-flow via _OCFlowHarness → OCFlowRunResult"
+    )
+    # Public status must be in the OC Flow terminal vocabulary (not "passed").
+    oc_flow_vocab = {
+        "completed", "needs_executor", "needs_provider", "blocked",
+        "escalated", "needs_verification", "needs_user_edit",
+    }
+    assert result.status in oc_flow_vocab, (
+        f"status {result.status!r} is not in OC Flow vocabulary; "
+        "the harness vocabulary leak ('passed') has been reintroduced"
+    )
+
+
 def test_tui_data_set_state_accepts_runtime_api_session(tmp_path: Path) -> None:
     """TUI data.set_state accepts fields from a RuntimeApi.start_session result."""
     from opencontext_studio.tui import data

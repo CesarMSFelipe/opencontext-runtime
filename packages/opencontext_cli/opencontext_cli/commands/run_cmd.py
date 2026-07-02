@@ -129,18 +129,43 @@ def handle_run_exec(args: Any) -> None:
     result = api.run(
         RunRequest(session_id=session.session_id, workflow_id=workflow, task=task)
     )
-    # B1 / PROD-004: extract the real OC Flow status from the legacy carrier so
-    # needs_executor / needs_provider are reported honestly (the spine wrapper maps
-    # them to "completed" via _legacy_status; we surface the carrier value first).
-    oc_status = str(getattr(result.legacy, "status", result.status) or result.status)
-    summary = {
+    # B1 / PROD-004: result.status is _legacy_status(legacy) which preserves
+    # OC Flow terminal vocabulary ("completed", "needs_executor", etc.) and
+    # translates harness GateStatus values.  Use it directly.
+    oc_status = result.status
+    leg = result.legacy
+    # Resolve the workflow actually executed (e.g. "auto" → "oc-flow").  For
+    # OCFlowRunResult the workflow_selection receipt carries the resolved name.
+    sel = getattr(leg, "workflow_selection", None) or {}
+    resolved_workflow = sel.get("workflow") or workflow
+    # B1 / shape-parity: expose the full OCFlowRunResult vocabulary so --json
+    # consumers (tests, automation) that relied on run_oc_flow_cli fields
+    # (artifacts_dir, selection_reason, final_node, session_id, run_id) keep
+    # working.  For non-OC-Flow legacy results, only the 4 core fields are
+    # emitted.
+    ocflow_session_id = getattr(leg, "session_id", None) or session.session_id
+    ocflow_run_id = getattr(leg, "run_id", None) or result.run_id
+    artifacts_dir = getattr(leg, "artifacts_dir", None)
+    summary: dict[str, object] = {
         "status": oc_status,
-        "session_id": session.session_id,
-        "run_id": result.run_id,
-        "workflow": workflow,
+        "session_id": ocflow_session_id,
+        "run_id": ocflow_run_id,
+        "workflow": resolved_workflow,
     }
+    if artifacts_dir is not None:
+        summary["artifacts_dir"] = str(artifacts_dir)
+    for _field in (
+        "final_node", "visited", "total_tokens", "diagnosis_attempts",
+        "escalated", "graph_status", "completion_reason", "mutation_required",
+        "verified_by", "verification_outcome",
+    ):
+        _v = getattr(leg, _field, None)
+        if _v is not None:
+            summary[_field] = _v
+    if sel.get("reason"):
+        summary["selection_reason"] = sel["reason"]
     if getattr(args, "json", False):
-        print(json.dumps(summary, indent=2))
+        print(json.dumps(summary, indent=2, default=str))
     else:
         print(f"OC Flow (spine): {summary.get('status')}")
         print(f"  workflow: {summary.get('workflow')}")

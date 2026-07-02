@@ -190,6 +190,38 @@ class ArchiveResult(BaseModel):
     status: str
 
 
+# --------------------------------------------------------------------- helpers
+class _OCFlowHarness:
+    """Minimal harness adapter that routes oc-flow / auto workflows through OCFlowRunner.
+
+    ``HarnessRunner`` treats unknown workflow IDs (including "oc-flow") as
+    custom workflows and executes only ["explore", "archive"] phases — it does
+    not perform OC Flow mutation.  This adapter delegates to
+    :class:`~opencontext_core.oc_flow.runner.OCFlowRunner` so the result is an
+    ``OCFlowRunResult`` carrying the correct terminal status vocabulary
+    ("completed", "needs_executor", …) instead of harness ``GateStatus``.
+
+    The ``run`` signature deliberately mirrors ``HarnessRunner.run`` so both
+    work interchangeably as the ``harness`` slot inside
+    :meth:`RuntimeApi._execute_workflow_run`.
+    """
+
+    def __init__(self, root: Path) -> None:
+        self._root = root
+
+    def run(self, workflow: str, task: str, **_kw: Any) -> Any:
+        from opencontext_core.oc_flow.cli import _resolve_executor
+        from opencontext_core.oc_flow.runner import OCFlowRunner
+
+        executor = _resolve_executor(self._root)
+        return OCFlowRunner(root=self._root, executor=executor).run(task)
+
+    def run_resume(self, session_id: str, run_id: str, task: str = "") -> Any:
+        from opencontext_core.oc_flow.runner import OCFlowRunner
+
+        return OCFlowRunner(root=self._root).resume(session_id, run_id)
+
+
 # --------------------------------------------------------------------- facade
 class RuntimeApi:
     """The stable, workflow-neutral runtime boundary (exactly 8 methods)."""
@@ -256,7 +288,7 @@ class RuntimeApi:
     def run(self, request: RunRequest) -> RunResult:
         # Wrapper disabled: call HarnessRunner.run() directly; no session writes.
         if not self._session_wrapper:
-            harness = self._make_harness(self._root)
+            harness = self._make_harness(self._root, workflow_id=request.workflow_id)
             legacy = harness.run(request.workflow_id, request.task or "")
             return RunResult(
                 run_id=str(getattr(legacy, "run_id", "legacy")),
@@ -336,7 +368,7 @@ class RuntimeApi:
             )
         )
 
-        harness = self._make_harness(Path(session.root))
+        harness = self._make_harness(Path(session.root), workflow_id=workflow_id)
         try:
             if resume_from is not None:
                 legacy = harness.run(workflow_id, task, resume_from=resume_from)
@@ -871,24 +903,57 @@ class RuntimeApi:
             last_event_id=last_event_id,
         )
 
-    def _make_harness(self, root: Path | str) -> Any:
+    def _make_harness(self, root: Path | str, *, workflow_id: str = "") -> Any:
+        """Return the harness appropriate for *workflow_id*.
+
+        OC Flow workflows ("oc-flow", "auto") route to :class:`_OCFlowHarness`
+        so the result carries ``OCFlowRunResult`` vocabulary (status values such
+        as ``"completed"`` / ``"needs_executor"``).  All other workflows keep the
+        legacy :class:`~opencontext_core.harness.runner.HarnessRunner` path.
+
+        The injected *harness_factory* (test seam) bypasses this routing so unit
+        tests that supply a stub are unaffected.
+        """
         if self._harness_factory is not None:
             return self._harness_factory(Path(root))
+        if workflow_id in ("oc-flow", "auto"):
+            return _OCFlowHarness(Path(root))
         from opencontext_core.harness.runner import HarnessRunner
 
         return HarnessRunner(root=Path(root))
 
     @staticmethod
     def _legacy_status(legacy: Any) -> str:
+        """Map a legacy harness/runner result status to runtime vocabulary.
+
+        OC Flow terminal statuses ("completed", "needs_executor", etc.) are
+        preserved unchanged so the public CLI --json output keeps its contract.
+        Harness :class:`~opencontext_core.harness.models.GateStatus` values
+        are translated to runtime vocabulary.
+        """
         raw = getattr(legacy, "status", None)
         value = getattr(raw, "value", raw)
         text = str(value).lower() if value is not None else "completed"
-        if text in ("failed", "blocked", "error"):
+        # OC Flow terminal vocabulary — pass through unchanged (C15 parity fix).
+        _OC_FLOW_TERMINAL = {
+            "completed",
+            "blocked",
+            "needs_executor",
+            "needs_provider",
+            "needs_verification",
+            "needs_user_edit",
+            "escalated",
+        }
+        if text in _OC_FLOW_TERMINAL:
+            return text
+        # GateStatus translation (harness vocabulary).
+        if text in ("failed", "error"):
             return "failed"
         if text == "warning":
             return "completed_with_warnings"
         if text == "skipped":
             return "scaffolded"
+        # GateStatus.PASSED / any other → "completed"
         return "completed"
 
     def _config_snapshot(self) -> dict[str, Any]:
