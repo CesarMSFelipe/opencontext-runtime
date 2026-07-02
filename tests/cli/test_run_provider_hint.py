@@ -3,8 +3,9 @@
 The hint must name at least one concrete remedy and go to STDERR so that the
 ``--json`` STDOUT payload stays pure JSON.
 
-C15 update: the spine path extracts the real OC Flow status from ``result.legacy``
-so the hint is preserved even though RuntimeApi wraps the result.
+C15 update: RuntimeApi._legacy_status now preserves OC Flow terminal vocabulary
+(needs_executor, needs_provider, …) so result.status already carries the correct
+value.  The stub _FakeResult.status is set to the legacy_status directly.
 """
 
 from __future__ import annotations
@@ -32,14 +33,21 @@ def _args(tmp_path: Path, *, json_out: bool) -> SimpleNamespace:
 
 
 def _make_stub_api(legacy_status: str):
-    """Return a fake RuntimeApi class whose run() carries legacy.status=legacy_status."""
+    """Return a fake RuntimeApi class whose run() carries the given status.
+
+    _legacy_status now preserves OC Flow terminal vocabulary unchanged, so
+    result.status == legacy_status for needs_executor / needs_provider.
+    """
 
     class _FakeLegacy:
         status = legacy_status
+        workflow_selection: dict[str, str] = {}
 
     class _FakeResult:
         run_id = "r1"
-        status = "completed"  # the spine wrapper status
+        # _legacy_status passes OC Flow terminal vocab through unchanged;
+        # set status to match so callers using result.status see the right value.
+        status = legacy_status
         legacy = _FakeLegacy()
 
     class _FakeSession:

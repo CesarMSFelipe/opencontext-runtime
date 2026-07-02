@@ -22,7 +22,13 @@ def _sample_project(root: Path) -> None:
     )
 
 
-def test_index_json_emits_valid_object_on_success(tmp_path: Path, capsys) -> None:
+def test_index_json_emits_valid_object_on_success(
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Pin storage to `local` so the runtime does not probe the repo-root
+    # XDG state dir (which has genuine legacy-state from developer use) and
+    # avoids an unrelated UserWarning in the test output.
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
     _sample_project(tmp_path)
     _index(_runtime(), str(tmp_path), json_output=True)
     out = capsys.readouterr().out.strip()
@@ -35,7 +41,10 @@ def test_index_json_emits_valid_object_on_success(tmp_path: Path, capsys) -> Non
     assert report["indexed_files"] >= 1
 
 
-def test_index_json_emits_machine_readable_error(tmp_path: Path, capsys, monkeypatch) -> None:
+def test_index_json_emits_machine_readable_error(
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
     runtime = _runtime()
     monkeypatch.setattr(
         runtime, "index_project", lambda *a, **k: (_ for _ in ()).throw(OSError("boom"))
