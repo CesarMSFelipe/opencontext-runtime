@@ -930,6 +930,30 @@ def _build_parser() -> argparse.ArgumentParser:
     add_kg_parser(subparsers)
     # ── Config, Plugins & Stack ───────────────────────────────────────
     add_config_parser(subparsers)
+    # storage: storage location management
+    _storage_parser = subparsers.add_parser(
+        "storage",
+        help="Manage OpenContext storage location.",
+        description="Commands for managing where OpenContext stores project state.",
+    )
+    _storage_sub = _storage_parser.add_subparsers(dest="storage_command")
+    _migrate_parser = _storage_sub.add_parser(
+        "migrate",
+        help="Move legacy in-repo state (.storage/opencontext, .opencontext) to the user XDG directory.",
+    )
+    _migrate_parser.add_argument(
+        "project",
+        nargs="?",
+        default=".",
+        help="Project root to migrate (default: current directory).",
+    )
+    _migrate_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        dest="dry_run",
+        help="Print what would be moved without actually moving anything.",
+    )
     add_plugin_parser(subparsers)
     add_setup_parser(subparsers)
     add_uninstall_parser(subparsers)
@@ -1659,6 +1683,9 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command == "config":
         handle_config(args)
         return
+    if command == "storage":
+        _storage(args)
+        return
     if command == "skill":
         handle_skill(args)
         return
@@ -2205,7 +2232,7 @@ def _print_agent_instructions(agents: list[Any], console: Any) -> None:
             )
 
 
-def _build_agentic_cfg_from_args(args: argparse.Namespace) -> "AgenticFlowConfig":  # type: ignore[name-defined]
+def _build_agentic_cfg_from_args(args: argparse.Namespace) -> AgenticFlowConfig:  # type: ignore[name-defined]
     """Build an AgenticFlowConfig from CLI flags (shared between dry-run and real install).
 
     Explicit flags take precedence over preset/default (flag > preset > default).
@@ -2242,7 +2269,7 @@ def _build_agentic_cfg_from_args(args: argparse.Namespace) -> "AgenticFlowConfig
     return cfg
 
 
-def _apply_agentic_flags_to_yaml(yaml_path: Path, cfg: "AgenticFlowConfig") -> None:  # type: ignore[name-defined]
+def _apply_agentic_flags_to_yaml(yaml_path: Path, cfg: AgenticFlowConfig) -> None:  # type: ignore[name-defined]
     """Apply an AgenticFlowConfig overlay to an existing opencontext.yaml.
 
     Only non-default flag values are written; default values are left unchanged so
@@ -2323,6 +2350,88 @@ def _install_dry_run(args: argparse.Namespace) -> None:
     # Payload is a pre-rendered multi-line plan — print raw so rich never tries to
     # parse stray brackets as markup.
     print(render_dry_run(plan))
+
+
+def _storage(args: argparse.Namespace) -> None:
+    """Dispatch storage sub-commands."""
+    storage_command = getattr(args, "storage_command", None)
+    if storage_command == "migrate":
+        _storage_migrate(
+            project=Path(getattr(args, "project", ".")),
+            dry_run=getattr(args, "dry_run", False),
+        )
+    else:
+        from opencontext_core.dx.console_styles import console as dx_console
+
+        dx_console.print(
+            "Usage: opencontext storage <command>\n\n"
+            "Available commands:\n"
+            "  migrate   Move legacy in-repo state to the user XDG directory"
+        )
+
+
+def _storage_migrate(project: Path, *, dry_run: bool = False) -> None:
+    """Move legacy in-repo state (.storage/opencontext, .opencontext) to the user XDG dir.
+
+    Idempotent: already-migrated or already-absent dirs are skipped gracefully.
+    Supports ``--dry-run`` to preview moves without executing them.
+    """
+    import shutil
+
+    from opencontext_core.dx.console_styles import console as dx_console
+    from opencontext_core.paths import (
+        StorageMode,
+        detect_legacy,
+        is_owned,
+        resolve_storage_path,
+        resolve_workspace_path,
+    )
+
+    root = project.resolve()
+    legacy = detect_legacy(root)
+
+    if legacy is None:
+        dx_console.print("[green]Nothing to migrate — no legacy in-repo state detected.[/]")
+        return
+
+    moves: list[tuple[Path, Path]] = []
+
+    if legacy.storage_path is not None and not is_owned(legacy.storage_path):
+        dest = resolve_storage_path(root, StorageMode.user)
+        moves.append((legacy.storage_path, dest))
+
+    if legacy.workspace_path is not None and not is_owned(legacy.workspace_path):
+        dest = resolve_workspace_path(root, StorageMode.user)
+        moves.append((legacy.workspace_path, dest))
+
+    if not moves:
+        dx_console.print(
+            "[green]Nothing to migrate — all detected dirs are already user-owned.[/]"
+        )
+        return
+
+    if dry_run:
+        dx_console.print("[yellow]Dry run — would perform the following moves:[/]")
+        for src, dst in moves:
+            dx_console.print(f"  {src}  →  {dst}")
+        return
+
+    migrated: list[str] = []
+    for src, dst in moves:
+        if dst.exists():
+            # Destination already populated: merge files not yet present there.
+            for item in src.iterdir():
+                item_dst = dst / item.name
+                if not item_dst.exists():
+                    shutil.move(str(item), str(item_dst))
+        else:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+        migrated.append(str(src))
+
+    for path_str in migrated:
+        dx_console.print(f"[green]✓ Migrated {path_str}[/]")
+    dx_console.print("[green]Migration complete.[/]")
 
 
 def _install_provision_engram(args: argparse.Namespace) -> None:
