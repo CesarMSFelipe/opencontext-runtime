@@ -46,7 +46,13 @@ class VerificationReport:
 
     @property
     def is_healthy(self) -> bool:
-        return self.failures == 0
+        # A Knowledge Graph warning indicates the KG is degraded (not indexed,
+        # stale, or unreadable). This degrades the healthy status because
+        # most OC features depend on the KG. Advisory warnings (Python version,
+        # no config yet) remain non-degrading — they do not block OC workflows.
+        return self.failures == 0 and not any(
+            r.name == "Knowledge Graph" and r.status == "warning" for r in self.results
+        )
 
 
 # ── Individual Checks ──────────────────────────────────────────────────────
