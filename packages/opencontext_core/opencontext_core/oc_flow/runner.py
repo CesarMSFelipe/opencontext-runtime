@@ -169,9 +169,11 @@ class OCFlowRunner:
                 kg_v2_enabled = bool(getattr(runtime_cfg, "kg_v2_enabled", False))
         self._context_engine_enabled = bool(context_engine_enabled)
         self._kg_v2_enabled = bool(kg_v2_enabled)
-        # kg_v2 consults the KG index before broad file reads; locate it under root
-        # only when the flag is on (None on an unindexed project = honest fallback).
-        self._graph_db_path = self._resolve_graph_db_path() if self._kg_v2_enabled else None
+        # Always locate the KG index regardless of the kg_v2_enabled flag. When the
+        # index is present and no seed paths are given, node_gather_context uses the
+        # path for opportunistic KG grounding even without kg_v2_enabled=True. On an
+        # unindexed project _resolve_graph_db_path() returns None so no seeding occurs.
+        self._graph_db_path = self._resolve_graph_db_path()
 
     # -- config / kg resolution ----------------------------------------------
     def _load_runtime_config(self) -> Any:
@@ -317,8 +319,9 @@ class OCFlowRunner:
             )
         )
         _context_strategy = (
-            "context_engine" if self._context_engine_enabled else
-            ("kg_v2" if self._kg_v2_enabled else "legacy")
+            "context_engine"
+            if self._context_engine_enabled
+            else ("kg_v2" if self._kg_v2_enabled else "legacy")
         )
         decisions.append(
             RuntimeDecision(
@@ -330,9 +333,13 @@ class OCFlowRunner:
                     else ("kg_v2_enabled flag" if self._kg_v2_enabled else "default legacy gather")
                 ),
                 alternatives=(
-                    ["kg_v2", "legacy"] if self._context_engine_enabled else
-                    (["context_engine", "legacy"] if self._kg_v2_enabled else
-                     ["context_engine", "kg_v2"])
+                    ["kg_v2", "legacy"]
+                    if self._context_engine_enabled
+                    else (
+                        ["context_engine", "legacy"]
+                        if self._kg_v2_enabled
+                        else ["context_engine", "kg_v2"]
+                    )
                 ),
                 confidence=1.0,
                 inputs={
@@ -341,9 +348,9 @@ class OCFlowRunner:
                 },
             )
         )
-        _provider_chosen = "deterministic" if not bool(
-            getattr(executor, "provider_available", False)
-        ) else "model"
+        _provider_chosen = (
+            "deterministic" if not bool(getattr(executor, "provider_available", False)) else "model"
+        )
         decisions.append(
             RuntimeDecision(
                 kind="provider",
@@ -473,8 +480,11 @@ class OCFlowRunner:
             _inspection = ctx.inspection
             _signals = ConfidenceSignals(
                 inspection_confidence=(
-                    1.0 if (_inspection and _inspection.outcome == "passed") else
-                    0.0 if _inspection is not None else None
+                    1.0
+                    if (_inspection and _inspection.outcome == "passed")
+                    else 0.0
+                    if _inspection is not None
+                    else None
                 ),
             )
             _cr = ConfidenceEngine().report(

@@ -204,6 +204,14 @@ class ContextEnvelopeItem(BaseModel):
         default="",
         description="Source type + match reason from ranking (e.g. 'file:seed', 'kg:score=0.9').",
     )
+    # Per-item confidence score derived from KG node temporal confidence.
+    # 0.0 for fallback/seed items; >0 for KG-grounded items.
+    confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Item-level retrieval confidence [0,1]; 0.0 for non-KG items.",
+    )
 
 
 class ContextEnvelope(BaseModel):

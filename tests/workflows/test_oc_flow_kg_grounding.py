@@ -65,9 +65,7 @@ def test_context_envelope_item_accepts_confidence_on_construction() -> None:
 
 
 # ------------------------------------------------------------------ P0.5 grounding path
-def test_gather_context_grounds_on_kg_when_db_available(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_gather_context_grounds_on_kg_when_db_available(tmp_path: Path, monkeypatch: Any) -> None:
     """When graph_db_path is set and seed_paths is empty, node_gather_context must
     query the KG and produce ≥1 envelope item with ref ending in session_store.py and
     confidence > 0 (not the memory:task-statement-fallback placeholder).
@@ -92,9 +90,7 @@ def test_gather_context_grounds_on_kg_when_db_available(
 
     assert ctx.envelope is not None
     kg_items_in_envelope = [
-        i
-        for i in ctx.envelope.items
-        if i.ref.endswith("session_store.py") and i.confidence > 0
+        i for i in ctx.envelope.items if i.ref.endswith("session_store.py") and i.confidence > 0
     ]
     _items_debug = [
         {"ref": i.ref, "why_included": i.why_included, "confidence": i.confidence}
@@ -106,9 +102,7 @@ def test_gather_context_grounds_on_kg_when_db_available(
     )
 
 
-def test_gather_context_does_not_ground_on_kg_without_db(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_gather_context_does_not_ground_on_kg_without_db(tmp_path: Path, monkeypatch: Any) -> None:
     """Without graph_db_path the opportunistic KG path must be skipped entirely.
     Legacy behaviour: executor produces the memory fallback, kg_consulted = False."""
     calls: list[int] = []

@@ -585,6 +585,21 @@ def node_gather_context(ctx: OCFlowContext) -> NodeResult:
             envelope = _context_engine_envelope(ctx, depth)
         else:
             envelope = ctx.executor.gather_context(ctx.task, ctx.seed_paths, depth)
+            # Opportunistic KG grounding (C17+): when no seed paths were provided,
+            # a KG index is available, and the kg_v2_enabled explicit-flag path did
+            # not already attempt the KG, try seeding from the graph before falling
+            # back to the task-statement placeholder. This ensures graph-indexed
+            # projects always produce grounded envelopes without requiring flag changes.
+            if not ctx.seed_paths and ctx.graph_db_path is not None and not ctx.kg_v2_enabled:
+                _opp_items = _kg_v2_seed_items(ctx)
+                if _opp_items:
+                    kg_consulted = True
+                    envelope = ContextEnvelope(
+                        task=ctx.task,
+                        items=_opp_items,
+                        omissions=[],
+                        token_estimate=sum(i.tokens for i in _opp_items),
+                    )
     envelope = envelope.model_copy(update={"cache_hit": cache_hit})
     # C17 (product-closure-r13): enrich envelope with receipt provenance fields so
     # context-envelope.json carries full auditability.  All fields are optional; this
@@ -593,9 +608,7 @@ def node_gather_context(ctx: OCFlowContext) -> NodeResult:
     import uuid as _uuid
 
     _budget_cap = OC_FLOW_BUDGETS["gather_context"][1]
-    _ranking_hash = hashlib.sha1(
-        "|".join(i.ref for i in envelope.items).encode()
-    ).hexdigest()[:12]
+    _ranking_hash = hashlib.sha1("|".join(i.ref for i in envelope.items).encode()).hexdigest()[:12]
     receipt_updates: dict[str, Any] = {}
     if not envelope.receipt_id:
         receipt_updates["receipt_id"] = str(_uuid.uuid4())
@@ -607,10 +620,39 @@ def node_gather_context(ctx: OCFlowContext) -> NodeResult:
         receipt_updates["budget_available"] = _budget_cap
     if not envelope.why_omitted:
         receipt_updates["why_omitted"] = list(envelope.omissions)
+    # Set envelope confidence from KG item scores when KG was consulted and
+    # envelope confidence has not been set by a caller.
+    if kg_consulted and envelope.confidence == 0.0 and envelope.items:
+        _mean_conf = sum(i.confidence for i in envelope.items) / len(envelope.items)
+        if _mean_conf > 0.0:
+            receipt_updates["confidence"] = _mean_conf
     if receipt_updates:
         envelope = envelope.model_copy(update=receipt_updates)
     ctx.envelope = envelope
     name = _write_json(ctx.artifacts_dir / "context-envelope.json", envelope.model_dump())
+    # P1.2: persist context-receipt.json — a receipt view of the envelope that exposes
+    # the key auditability fields next to context-envelope.json for easy discovery.
+    # Laziest implementation: project the envelope's receipt fields into a flat dict.
+    receipt_payload: dict[str, Any] = {
+        "receipt_id": envelope.receipt_id,
+        "items": [
+            {
+                "ref": i.ref,
+                "why_included": i.why_included,
+                "confidence": i.confidence,
+            }
+            for i in envelope.items
+        ],
+        "omissions": [{"why_omitted": o} for o in envelope.why_omitted],
+        "budget": {
+            "used": envelope.budget_used,
+            "available": envelope.budget_available,
+        },
+        "ranking_hash": envelope.ranking_hash,
+        "decision_dependency": envelope.decision_dependency,
+        "confidence": envelope.confidence,
+    }
+    receipt_name = _write_json(ctx.artifacts_dir / "context-receipt.json", receipt_payload)
     tokens = (
         0
         if cache_hit
@@ -629,7 +671,7 @@ def node_gather_context(ctx: OCFlowContext) -> NodeResult:
             "kg_consulted": kg_consulted,
         },
         llm_tokens=tokens,
-        artifacts=[name],
+        artifacts=[name, receipt_name],
     )
 
 
@@ -704,6 +746,8 @@ def _kg_v2_seed_items(ctx: OCFlowContext) -> list[ContextEnvelopeItem] | None:
             ref=(n.path or n.name),
             summary=f"{n.type.value} {n.name}",
             tokens=80,
+            why_included=f"kg:score={n.temporal.confidence:.2f}",
+            confidence=n.temporal.confidence,
         )
         for n in subgraph.nodes
     ]
