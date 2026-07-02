@@ -59,10 +59,22 @@ def project_id(root: Path) -> str:
 
 
 def _effective_mode(mode: StorageMode) -> StorageMode:
-    """Return the effective mode, honouring the OPENCONTEXT_STORAGE_MODE env var."""
+    """Return the effective mode, honouring the OPENCONTEXT_STORAGE_MODE env var.
+
+    ``OPENCONTEXT_STORAGE_MODE=local`` forces local (in-repo) storage.
+    ``OPENCONTEXT_STORAGE_MODE=user`` forces user-mode (XDG) storage.
+    Any other non-empty value emits a one-line warning and falls back to *mode*.
+    """
     env_val = os.environ.get(_ENV_VAR, "").strip().lower()
     if env_val == StorageMode.local:
         return StorageMode.local
+    if env_val == StorageMode.user:
+        return StorageMode.user
+    if env_val:
+        warnings.warn(
+            f"unknown {_ENV_VAR} value {env_val!r}; ignoring (valid: 'local', 'user')",
+            stacklevel=3,
+        )
     return mode
 
 
@@ -117,9 +129,7 @@ def resolve_storage_path(
     effective = _effective_mode(mode)
     if effective == StorageMode.user:
         return (
-            Path(platformdirs.user_state_path("opencontext"))
-            / "projects"
-            / project_id(root_path)
+            Path(platformdirs.user_state_path("opencontext")) / "projects" / project_id(root_path)
         )
     # local mode — in-repo legacy layout
     return root_path.resolve() / ".storage" / "opencontext"

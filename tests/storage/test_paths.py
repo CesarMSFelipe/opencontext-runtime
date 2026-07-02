@@ -79,6 +79,35 @@ def test_resolve_storage_env_override(
     assert path == tmp_path.resolve() / ".storage" / "opencontext"
 
 
+def test_resolve_storage_env_user_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, xdg_state_tmp: Path
+) -> None:
+    """OPENCONTEXT_STORAGE_MODE=user forces user mode even when mode=local is passed."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "user")
+    path = resolve_storage_path(tmp_path, StorageMode.local)
+    # Must resolve to XDG path, NOT the in-repo .storage
+    assert path != tmp_path.resolve() / ".storage" / "opencontext"
+    assert str(xdg_state_tmp) in str(path)
+
+
+def test_resolve_storage_env_unknown_value_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OPENCONTEXT_STORAGE_MODE=bogus emits one warning, then falls back to the passed mode."""
+    import warnings
+
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "bogus")
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        path = resolve_storage_path(tmp_path, StorageMode.local)
+    # Falls back to local mode
+    assert path == tmp_path.resolve() / ".storage" / "opencontext"
+    msgs = [str(warning.message) for warning in w]
+    assert any("bogus" in m.lower() or "unknown" in m.lower() for m in msgs), (
+        f"expected a warning about the unknown value; got: {msgs}"
+    )
+
+
 def test_resolve_storage_custom_path(tmp_path: Path) -> None:
     """A custom path overrides both modes."""
     custom = str(tmp_path / "my_custom_store")
