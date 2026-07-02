@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from opencontext_cli.commands.studio_cmd import run_studio
 from opencontext_core.studio.server import serve, studio_url
 
 

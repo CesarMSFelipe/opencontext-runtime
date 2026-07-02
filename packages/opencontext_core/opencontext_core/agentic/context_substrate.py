@@ -155,7 +155,7 @@ class ContextSubstrateBuilder:
         # SQLite-backed KG (no knowledge_graph.json), raw_kg_content is empty.
         # Compressing the synthetic {"note": "sqlite-backed kg"} placeholder
         # would produce baseline/compressed counts (char-based estimate_tokens)
-        # that are inconsistent with selected_tokens (word-count × 1.3 from
+        # that are inconsistent with selected_tokens (word-count x 1.3 from
         # real SQLite content), breaking the invariant selected_tokens >= used_tokens.
         # For the SQLite path we skip CompressionEngine entirely — all token fields
         # remain anchored to the same sqlite_tokens estimate so the report is honest.
