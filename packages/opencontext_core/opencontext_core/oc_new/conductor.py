@@ -414,6 +414,34 @@ class OcNewConductor:
                         }
                     )
 
+            # NOTE: R5 — sdd_strict parity.  When tdd_mode is 'strict', the apply
+            # phase requires failing test evidence (failing_test.json in the run dir)
+            # before the subagent is spawned, mirroring HarnessRunner's sdd_strict gate.
+            if phase_def.name == "apply" and self._is_strict_tdd(state):
+                _run_dir = (
+                    resolve_workspace_path(self.root, StorageMode.local)
+                    / "runs"
+                    / state.identity.run_id
+                )
+                if not (_run_dir / "failing_test.json").exists():
+                    _block_reason = (
+                        "strict TDD (tdd_mode='strict') requires failing test evidence "
+                        "(failing_test.json) before apply"
+                    )
+                    return state.model_copy(
+                        update={
+                            "current_phase": phase_def.name,
+                            "blocked_reason": _block_reason,
+                            "next_action": NextAction(
+                                kind="blocked",
+                                phase=phase_def.name,
+                                persona=phase_def.persona,
+                                instruction=_block_reason,
+                            ),
+                            "updated_at": datetime.now(tz=UTC),
+                        }
+                    )
+
             # NOTE: observe_only / engram_only / openspec_only skip code-execution phases.
             if not self._should_execute_code(state) and phase_def.name in {"apply"}:
                 return state.model_copy(
@@ -534,6 +562,12 @@ class OcNewConductor:
                 "updated_at": datetime.now(tz=UTC),
             }
         )
+
+    def _is_strict_tdd(self, state: OcNewRunState) -> bool:
+        """Return True when the run config requires strict TDD (R5)."""
+        if state.config is None:
+            return False
+        return getattr(state.config, "tdd_mode", "ask") == "strict"
 
     def _should_pause(self, state: OcNewRunState, phase_name: str) -> bool:
         """Return True when the configured flow_mode requires a pause before *phase_name*."""
