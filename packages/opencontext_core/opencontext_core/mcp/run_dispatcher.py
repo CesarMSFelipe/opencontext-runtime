@@ -1,4 +1,8 @@
-"""MCP run dispatcher — shim over the vNext RuntimeApi spine (C15).
+"""MCP run dispatcher — DEPRECATED shim delegating to runtime_dispatcher.
+
+This module is a backward-compatible shim retained after the C15 spine flip.
+New callers should use :mod:`opencontext_core.mcp.runtime_dispatcher` directly,
+which exposes the 9-method session-first RuntimeApi surface.
 
 C15 spine flip: ``dispatch_mcp_run`` retains the legacy ``run_oc_flow_cli``
 path for backward-compatible OC Flow MCP calls.  The ``mcp-runtime`` migration
