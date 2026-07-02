@@ -2513,6 +2513,13 @@ def _index(
     console.info(f"Root: {manifest.root}")
     console.info(f"Files: {len(manifest.files)}")
     console.info(f"Symbols: {len(manifest.symbols)}")
+    kg_stats = manifest.metadata.get("knowledge_graph", {})
+    skipped = kg_stats.get("skipped_unchanged", 0)
+    reindexed = kg_stats.get("reindexed_changed", 0)
+    if skipped > 0:
+        console.info(f"Unchanged (skipped): {skipped}")
+    if reindexed > 0:
+        console.info(f"Changed (reindexed): {reindexed}")
     console.info(f"Technology profiles: {', '.join(manifest.technology_profiles)}")
     console.info(f"Manifest: {runtime.storage_path / 'project_manifest.json'}")
     if incremental:

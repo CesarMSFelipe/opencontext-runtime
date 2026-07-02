@@ -41,6 +41,24 @@ def test_index_json_emits_valid_object_on_success(
     assert report["indexed_files"] >= 1
 
 
+def test_index_prints_skipped_unchanged_when_nonzero(
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second index run must print 'Unchanged (skipped)' when skipped_unchanged > 0."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
+    _sample_project(tmp_path)
+    runtime = _runtime()
+    # First run — builds checkpoint; all files are indexed.
+    _index(runtime, str(tmp_path))
+    capsys.readouterr()  # discard first run output
+    # Second run — all files unchanged; skipped_unchanged should be > 0.
+    _index(runtime, str(tmp_path))
+    out = capsys.readouterr().out
+    assert "Unchanged (skipped):" in out, (
+        f"Expected 'Unchanged (skipped):' in stdout on second index run, got:\n{out}"
+    )
+
+
 def test_index_json_emits_machine_readable_error(
     tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
