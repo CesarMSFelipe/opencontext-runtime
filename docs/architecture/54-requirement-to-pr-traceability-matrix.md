@@ -8,7 +8,9 @@ Authority: `OC-FINAL-CONVERGENCE-001.md` §7.2 (and §7 Output 1 / §11). This m
 
 **Status legend:** `Status ∈ {MET | DEFERRED | REJECTED}` per DoD #13. `MET` = present and cited in code; `DEFERRED` = assigned to a downstream / 1.x PR with reason; `REJECTED` = explicitly excluded from the 1.0 program.
 
-**Totals:** 453 requirements across 22 PRs — **118 MET**, **0 PROPOSED**, **335 DEFERRED**.
+**Last reconciled: 2026-07-02 (post deferred-program CH-1..CH-5)**
+
+**Totals:** 453 requirements across 22 PRs — **378 MET**, **0 PROPOSED**, **75 DEFERRED**.
 
 **Benchmark gates** referenced below are the mandatory 1.0 acceptance gates defined in `57-final-1-0-acceptance-gates.md` §A: `first-run`, `oc-flow-localized-bugfix`, `sdd-formal-feature`, `context-token-efficiency`, `kg-retrieval-precision`, `memory-usefulness`, `policy-security`, `plugin-compatibility`, `provider-fallback`, `resume-rollback`.
 
@@ -16,20 +18,20 @@ Authority: `OC-FINAL-CONVERGENCE-001.md` §7.2 (and §7 Output 1 / §11). This m
 
 ## PR-000 Meta Planning & Intent Engine
 
-Change folder: `pr-000-meta-planning` · Source: `OC-FINAL-CONVERGENCE-001.md §5` · 14 requirements (3 MET / 11 DEFERRED)
+Change folder: `pr-000-meta-planning` · Source: `OC-FINAL-CONVERGENCE-001.md §5` · 14 requirements (12 MET / 2 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
-| **MP-001** Workflow-neutral planning package | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/ (new)` | tbd | — | DEFERRED |
-| **MP-002** Structured intent record | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/ (new)` | tbd | — | DEFERRED |
-| **MP-003** Intent maps to architecture docs | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/ (new)` | tbd | — | DEFERRED |
-| **MP-004** Intent decomposes into typed slices | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/ (new)` | tbd | — | DEFERRED |
-| **MP-005** Slices assigned to PRs with a dependency graph | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/ (new)` | tbd | — | DEFERRED |
-| **MP-006** Each slice carries a program-scoped risk assessment | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/ (new)` | tbd | — | DEFERRED |
-| **MP-007** Each slice carries a cost estimate and a recommended workflow | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/ (new)` | tbd | — | DEFERRED |
+| **MP-001** Workflow-neutral planning package | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/` | tbd | — | MET |
+| **MP-002** Structured intent record | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/intent.py` | tbd | — | MET |
+| **MP-003** Intent maps to architecture docs | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/pr_plan.py` | tbd | — | MET |
+| **MP-004** Intent decomposes into typed slices | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/decomposition.py` | tbd | — | MET |
+| **MP-005** Slices assigned to PRs with a dependency graph | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/pr_plan.py` | tbd | — | MET |
+| **MP-006** Each slice carries a program-scoped risk assessment | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/risk.py` | tbd | — | MET |
+| **MP-007** Each slice carries a cost estimate and a recommended workflow | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/estimates.py` | tbd | — | MET |
 | **MP-008** Program-scoped requirement coverage map | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/ (new)` | tbd | — | DEFERRED |
-| **MP-009** Build fails on any orphaned requirement | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/ (new)` | tbd | — | DEFERRED |
-| **MP-010** ProgramPlan persisted as an artifact with a receipt | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/ (new)` | tbd | — | DEFERRED |
+| **MP-009** Build fails on any orphaned requirement | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `tests/cli/test_architecture_coverage_gaps_trace.py` | tbd | — | MET |
+| **MP-010** ProgramPlan persisted as an artifact with a receipt | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `planning/program.py` | tbd | — | MET |
 | **MP-011** ComplianceMatrix coverage primitive | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `verify/compliance.py` | tbd | — | MET |
 | **MP-012** Plan persists via the existing artifact store | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `agents/artifact_store.py` | tbd | — | MET |
 | **MP-013** Plan receipts use AgenticReceipt | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-meta-planning` | `agentic/receipt.py` | tbd | — | MET |
@@ -37,146 +39,146 @@ Change folder: `pr-000-meta-planning` · Source: `OC-FINAL-CONVERGENCE-001.md §
 
 ## PR-000.1 Runtime Brain & Scheduler
 
-Change folder: `pr-000-1-runtime-brain` · Source: `OC-FINAL-CONVERGENCE-001.md §5` · 12 requirements (2 MET / 10 DEFERRED)
+Change folder: `pr-000-1-runtime-brain` · Source: `OC-FINAL-CONVERGENCE-001.md §5` · 12 requirements (10 MET / 2 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
-| **RB-001** Decision-layer modules exist | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `brain.py (new)` | tbd | — | DEFERRED |
-| **RB-002** Every selection is a typed RuntimeDecision | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/brain/ (new)` | tbd | — | DEFERRED |
-| **RB-003** Per-run append-only Decision Log | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/brain/ (new)` | tbd | — | DEFERRED |
-| **RB-004** The Scheduler proposes the next node | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/brain/ (new)` | tbd | — | DEFERRED |
-| **RB-005** Brain covers all eight selection kinds | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/brain/ (new)` | tbd | — | DEFERRED |
-| **RB-006** Unified execution strategy | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/brain/ (new)` | tbd | — | DEFERRED |
-| **RB-007** Recommendations are advisory; the State Machine decides transitions | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/brain/ (new)` | tbd | — | DEFERRED |
+| **RB-001** Decision-layer modules exist | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/brain.py` | tbd | — | MET |
+| **RB-002** Every selection is a typed RuntimeDecision | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/decisions.py` | tbd | — | MET |
+| **RB-003** Per-run append-only Decision Log | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/decision_log.py` | tbd | — | MET |
+| **RB-004** The Scheduler proposes the next node | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/scheduler.py` | tbd | — | MET |
+| **RB-005** Brain covers all eight selection kinds | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/brain.py` | tbd | — | MET |
+| **RB-006** Unified execution strategy | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/execution_strategy.py` | tbd | — | MET |
+| **RB-007** Recommendations are advisory; the State Machine decides transitions | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/state_machine.py` | tbd | — | MET |
 | **RB-008** No hidden agent-only orchestration | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/brain/ (new)` | tbd | — | DEFERRED |
 | **RB-009** Adaptive but not opaque | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/brain/ (new)` | tbd | — | DEFERRED |
 | **RB-010** Reuse AgenticReceipt for decision receipts | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `agentic/receipt.py` | tbd | — | MET |
 | **RB-011** Decision Log extends existing PolicyDecision evidence | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `models/run_envelope.py` | `tests/core/test_run_envelope.py` | `policy-security` | MET |
-| **RB-012** Studio decision-timeline view | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `runtime/brain/ (new)` | tbd | — | DEFERRED |
+| **RB-012** Studio decision-timeline view | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-1-runtime-brain` | `packages/opencontext_studio/opencontext_studio/tui/s3_decision_log.py` | tbd | — | MET |
 
 ## PR-000.2 Capability Graph & Execution Profiles
 
-Change folder: `pr-000-2-capability-profiles` · Source: `OC-FINAL-CONVERGENCE-001.md §5` · 14 requirements (3 MET / 11 DEFERRED)
+Change folder: `pr-000-2-capability-profiles` · Source: `OC-FINAL-CONVERGENCE-001.md §5` · 14 requirements (12 MET / 2 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
 | **CP-001** Detect local test/lint/type tooling without executing it | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `sdd_runtime.py` | `tests/core/test_sdd_runtime.py` | — | MET |
 | **CP-002** Doctor command reports environment health | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `packages/opencontext_cli/opencontext_cli/main.py` | tbd | `first-run` | MET |
 | **CP-003** Per-client feature capability matrix | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `configurator/capability.py` | `tests/core/test_capability.py` | — | MET |
-| **CP-004** capabilities/ package with CapabilityNode/CapabilityGraph/CapabilityConstraint | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `runtime/capabilities/ (new)` | tbd | — | DEFERRED |
-| **CP-005** Capabilities declare dependencies in the graph | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `runtime/capabilities/ (new)` | tbd | — | DEFERRED |
-| **CP-006** doctor materialises the CapabilityGraph | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `runtime/capabilities/ (new)` | tbd | `first-run` | DEFERRED |
-| **CP-007** profiles/ package with ExecutionProfile and ExecutionProfileStrategy | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `runtime/capabilities/ (new)` | tbd | — | DEFERRED |
-| **CP-008** balanced / low-cost / enterprise / research / performance profiles | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `runtime/capabilities/ (new)` | tbd | — | DEFERRED |
-| **CP-009** fast / cheap / careful / enterprise / research / local_first strategies | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `runtime/capabilities/ (new)` | tbd | — | DEFERRED |
-| **CP-010** A profile binds the four runtime levers as one unit | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `runtime/capabilities/ (new)` | tbd | — | DEFERRED |
-| **CP-011** Workflow selection uses capability availability and degrades gracefully | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `runtime/capabilities/ (new)` | tbd | — | DEFERRED |
-| **CP-012** Resolver produces a decision-input snapshot | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `runtime/capabilities/ (new)` | tbd | — | DEFERRED |
+| **CP-004** capabilities/ package with CapabilityNode/CapabilityGraph/CapabilityConstraint | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `capabilities/graph.py, capabilities/constraints.py` | tbd | — | MET |
+| **CP-005** Capabilities declare dependencies in the graph | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `capabilities/graph.py` | tbd | — | MET |
+| **CP-006** doctor materialises the CapabilityGraph | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `capabilities/detector.py` | tbd | `first-run` | MET |
+| **CP-007** profiles/ package with ExecutionProfile and ExecutionProfileStrategy | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `profiles/definition.py` | tbd | — | MET |
+| **CP-008** balanced / low-cost / enterprise / research / performance profiles | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `profiles/definition.py` | tbd | — | MET |
+| **CP-009** fast / cheap / careful / enterprise / research / local_first strategies | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `profiles/strategy.py` | tbd | — | MET |
+| **CP-010** A profile binds the four runtime levers as one unit | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `profiles/definition.py` | tbd | — | MET |
+| **CP-011** Workflow selection uses capability availability and degrades gracefully | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `capabilities/detector.py, profiles/resolver.py` | tbd | — | MET |
+| **CP-012** Resolver produces a decision-input snapshot | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `profiles/resolver.py` | tbd | — | MET |
 | **CP-013** WorkflowDefinition.required_capabilities | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `runtime/capabilities/ (new)` | tbd | `first-run` | DEFERRED |
 | **CP-014** Runtime Brain reads graph + profile for next-node decisions | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-2-capability-profiles` | `runtime/capabilities/ (new)` | tbd | — | DEFERRED |
 
 ## PR-000.3 Semantic Cache & Runtime Optimizer
 
-Change folder: `pr-000-3-semantic-cache` · Source: `OC-FINAL-CONVERGENCE-001.md §5` · 14 requirements (5 MET / 9 DEFERRED)
+Change folder: `pr-000-3-semantic-cache` · Source: `OC-FINAL-CONVERGENCE-001.md §5` · 14 requirements (12 MET / 2 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
-| **SC-001** Shared CacheEntry base + four typed entries | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/ (new)` | tbd | — | DEFERRED |
+| **SC-001** Shared CacheEntry base + four typed entries | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/base.py` | tbd | — | MET |
 | **SC-002** Exact prompt/response cache | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/exact.py` | tbd | — | MET |
-| **SC-003** SemanticCacheEntry + semantic_cache.py | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/semantic_cache.py (new)` | tbd | — | DEFERRED |
-| **SC-004** ToolCacheEntry + tool_cache.py | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/tool_cache.py (new)` | tbd | — | DEFERRED |
-| **SC-005** AstCacheEntry + ast_cache.py (file-invalidated) | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/ast_cache.py (new)` | tbd | — | DEFERRED |
-| **SC-006** ProviderCacheEntry + provider_cache.py | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/provider_cache.py (new)` | tbd | — | DEFERRED |
+| **SC-003** SemanticCacheEntry + semantic_cache.py | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/semantic_cache.py` | tbd | — | MET |
+| **SC-004** ToolCacheEntry + tool_cache.py | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/tool_cache.py` | tbd | — | MET |
+| **SC-005** AstCacheEntry + ast_cache.py (file-invalidated) | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/ast_cache.py` | tbd | — | MET |
+| **SC-006** ProviderCacheEntry + provider_cache.py | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/provider_cache.py` | tbd | — | MET |
 | **SC-007** Stable cache-friendly prompt prefixes | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `compression/cache_aligner.py` | `tests/core/test_cache_aligner.py` | — | MET |
 | **SC-008** KgQuery + MemoryRetrieval caches | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
-| **SC-009** CacheInvalidationRule + file-change invalidation | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/invalidation.py (new)` | tbd | — | DEFERRED |
+| **SC-009** CacheInvalidationRule + file-change invalidation | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/invalidation.py` | tbd | — | MET |
 | **SC-010** Content-addressed keys + redaction | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/base.py` | tbd | `policy-security` | MET |
 | **SC-011** Classification fail-closed eligibility | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/base.py` | tbd | — | MET |
 | **SC-012** CCR cache reuse with hit/miss stats | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `compression/ccr_cache.py` | `tests/core/test_ccr_cache.py` | — | MET |
-| **SC-013** RuntimeOptimizationRecommendation + optimizer | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `optimization/optimizer.py (new)` | tbd | — | DEFERRED |
+| **SC-013** RuntimeOptimizationRecommendation + optimizer | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `optimization/optimizer.py` | tbd | — | MET |
 | **SC-014** Intelligence consumption + token/tool benchmark gate | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-3-semantic-cache` | `cache/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
 
 ## PR-000.4 Decision Log & Learning Loop
 
-Change folder: `pr-000-4-decision-log-learning` · Source: `OC-FINAL-CONVERGENCE-001.md §5` · 14 requirements (4 MET / 10 DEFERRED)
+Change folder: `pr-000-4-decision-log-learning` · Source: `OC-FINAL-CONVERGENCE-001.md §5` · 14 requirements (13 MET / 1 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
-| **DL-001** DecisionLogEntry + append-only DecisionLog | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/ (new)` | tbd | — | DEFERRED |
-| **DL-002** Record why each runtime selection was made | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/ (new)` | tbd | — | DEFERRED |
-| **DL-003** Typed learning candidate + outcome with classification | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/ (new)` | tbd | — | DEFERRED |
-| **DL-004** Typed runtime feedback over the capture substrate | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/ (new)` | tbd | — | DEFERRED |
-| **DL-005** ImprovementProposal aligns with existing EvolutionProposal | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/evolution_store.py (new)` | tbd | — | DEFERRED |
-| **DL-006** LearningLoop feeds Memory Harness + Runtime Intelligence | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/ (new)` | tbd | — | DEFERRED |
+| **DL-001** DecisionLogEntry + append-only DecisionLog | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `runtime/decision_log.py` | tbd | — | MET |
+| **DL-002** Record why each runtime selection was made | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `runtime/decision_log.py` | tbd | — | MET |
+| **DL-003** Typed learning candidate + outcome with classification | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/v2/candidate_extractor.py` | tbd | — | MET |
+| **DL-004** Typed runtime feedback over the capture substrate | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/v2/` | tbd | — | MET |
+| **DL-005** ImprovementProposal aligns with existing EvolutionProposal | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/v2/improvement_proposal.py` | tbd | — | MET |
+| **DL-006** LearningLoop feeds Memory Harness + Runtime Intelligence | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `memory/learning_seam.py` | tbd | — | MET |
 | **DL-007** No-CoT redaction on every persisted field | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/ (new)` | tbd | `policy-security` | DEFERRED |
-| **DL-008** Loop proposes promotions; it does not write durable memory | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/ (new)` | tbd | — | DEFERRED |
-| **DL-009** No improvement promotion without benchmark evidence | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/ (new)` | tbd | — | DEFERRED |
+| **DL-008** Loop proposes promotions; it does not write durable memory | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/v2/promotion_gate.py` | tbd | — | MET |
+| **DL-009** No improvement promotion without benchmark evidence | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/v2/promotion_gate.py` | tbd | — | MET |
 | **DL-010** EvolutionEngine post-run extractor | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/evolution_engine.py` | tbd | — | MET |
 | **DL-011** EvolutionStore + EvolutionApplier + ProposalEngine | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/evolution_store.py` | tbd | — | MET |
 | **DL-012** FeedbackCollector + OperationMetrics + record_outcome | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/feedback_collector.py` | tbd | — | MET |
 | **DL-013** Append-only RunEvent ledger for decision replay | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `models/trace.py` | tbd | — | MET |
-| **DL-014** Decision-timeline visualisation | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `learning/ (new)` | tbd | — | DEFERRED |
+| **DL-014** Decision-timeline visualisation | `OC-FINAL-CONVERGENCE-001.md §5` | `pr-000-4-decision-log-learning` | `packages/opencontext_studio/opencontext_studio/tui/s3_decision_log.py` | tbd | — | MET |
 
 ## PR-001 Runtime Core
 
-Change folder: `pr-001-runtime-core` · Source: `02-runtime-architecture.md` · 23 requirements (3 MET / 20 DEFERRED)
+Change folder: `pr-001-runtime-core` · Source: `02-runtime-architecture.md` · 23 requirements (22 MET / 1 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
-| **RC-001** Workflow-neutral RuntimeApi facade | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-002** RuntimeSession with 9-status enum | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-003** RuntimeRun belongs to a session | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-004** RuntimeEvent with required categories | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-005** Append-only JSONL event stream | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-006** On-disk session layout with live state | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-007** Every transition is validated | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-008** Runner drives one run | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-009** NodeResult evidence shape | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-010** Standard node pipeline | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-011** Six runtime modes | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-012** RuntimeErrorCode enum | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-013** Legacy runs execute inside a session | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
+| **RC-001** Workflow-neutral RuntimeApi facade | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/api.py` | tbd | — | MET |
+| **RC-002** RuntimeSession with 9-status enum | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/session.py` | tbd | — | MET |
+| **RC-003** RuntimeRun belongs to a session | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/run.py` | tbd | — | MET |
+| **RC-004** RuntimeEvent with required categories | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/events.py` | tbd | — | MET |
+| **RC-005** Append-only JSONL event stream | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/event_bus.py` | tbd | — | MET |
+| **RC-006** On-disk session layout with live state | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/session_store.py, runtime/session.py` | tbd | — | MET |
+| **RC-007** Every transition is validated | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/state_machine.py` | tbd | — | MET |
+| **RC-008** Runner drives one run | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/workflow_runner.py` | tbd | — | MET |
+| **RC-009** NodeResult evidence shape | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/run_contract.py` | tbd | — | MET |
+| **RC-010** Standard node pipeline | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/workflow_runner.py` | tbd | — | MET |
+| **RC-011** Six runtime modes | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/modes.py` | tbd | — | MET |
+| **RC-012** RuntimeErrorCode enum | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/errors.py` | tbd | — | MET |
+| **RC-013** Legacy runs execute inside a session | `02-runtime-architecture.md` | `pr-001-runtime-core` | `harness/runner.py` | tbd | — | MET |
 | **RC-014** RunEnvelope evidence record | `02-runtime-architecture.md` | `pr-001-runtime-core` | `models/run_envelope.py` | `tests/core/test_run_envelope.py` | — | MET |
 | **RC-015** AgenticReceipt v2 | `02-runtime-architecture.md` | `pr-001-runtime-core` | `agentic/receipt.py` | tbd | — | MET |
 | **RC-016** RunStore index | `02-runtime-architecture.md` | `pr-001-runtime-core` | `harness/run_store.py` | `tests/core/test_run_store.py` | — | MET |
 | **RC-017** Durable stores, checkpoints, artifact-aware resume | `02-runtime-architecture.md` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | `resume-rollback` | DEFERRED |
-| **RC-CONV** RuntimeDecision skeleton | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-CONV** DecisionLog skeleton attachable to a run | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-CONV** ExecutionProfile snapshot on session | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-CONV** Capability snapshot on session | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-CONV** Runtime Brain placeholder interface | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
-| **RC-CONV** Scheduler placeholder interface | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-001-runtime-core` | `runtime/ (new)` | tbd | — | DEFERRED |
+| **RC-CONV** RuntimeDecision skeleton | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-001-runtime-core` | `runtime/decisions.py` | tbd | — | MET |
+| **RC-CONV** DecisionLog skeleton attachable to a run | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-001-runtime-core` | `runtime/decision_log.py` | tbd | — | MET |
+| **RC-CONV** ExecutionProfile snapshot on session | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-001-runtime-core` | `profiles/definition.py` | tbd | — | MET |
+| **RC-CONV** Capability snapshot on session | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-001-runtime-core` | `capabilities/` | tbd | — | MET |
+| **RC-CONV** Runtime Brain placeholder interface | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-001-runtime-core` | `runtime/brain.py` | tbd | — | MET |
+| **RC-CONV** Scheduler placeholder interface | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-001-runtime-core` | `runtime/scheduler.py` | tbd | — | MET |
 
 ## PR-002 Artifacts, Receipts & Resume
 
-Change folder: `pr-002-artifacts-receipts` · Source: `24-artifact-receipt-lifecycle.md` · 20 requirements (5 MET / 15 DEFERRED)
+Change folder: `pr-002-artifacts-receipts` · Source: `24-artifact-receipt-lifecycle.md` · 20 requirements (17 MET / 3 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
 | **ART-01** Artifact references carry kind, path, and content checksum | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `models/run_envelope.py` | `tests/core/test_run_envelope.py` | `resume-rollback` | MET |
-| **ART-02** ArtifactStore exposes write/get/list_for_run/verify_checksum | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
+| **ART-02** ArtifactStore exposes write/get/list_for_run/verify_checksum | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `agents/artifact_store.py` | tbd | `resume-rollback` | MET |
 | **REC-01** ReceiptStore writes immutable, queryable receipts per run | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `operating_model/receipts.py` | tbd | `resume-rollback` | MET |
-| **REC-02** Receipt model carries action/reason/evidence and a valid kind | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
+| **REC-02** Receipt model carries action/reason/evidence and a valid kind | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `agentic/receipt.py` | tbd | `resume-rollback` | MET |
 | **MAN-01** Each run owns a RunManifest indexing its evidence | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
-| **APR-01** Every mutation produces an ApplyReceipt | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
+| **APR-01** Every mutation produces an ApplyReceipt | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `harness/phases.py` | tbd | `resume-rollback` | MET |
 | **CHK-01** A checkpoint snapshots target files before any write | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `harness/checkpoint.py` | `tests/harness/test_checkpoint.py` | `resume-rollback` | MET |
-| **CHK-02** CheckpointManager records per-file checksums in a Checkpoint model | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
+| **CHK-02** CheckpointManager records per-file checksums in a Checkpoint model | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `harness/checkpoint.py` | tbd | `resume-rollback` | MET |
 | **RES-01** A run can resume by skipping already-completed phases | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `harness/runner.py` | tbd | `resume-rollback` | MET |
-| **RES-02** Resume validates artifact integrity and fails safely if missing | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
+| **RES-02** Resume validates artifact integrity and fails safely if missing | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `harness/runner.py` | tbd | `resume-rollback` | MET |
 | **RBK-01** A failed or rejected mutation rolls back to the checkpoint | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `harness/phases.py` | tbd | `resume-rollback` | MET |
-| **RBK-02** Rollback emits a receipt, an event, and a report artifact | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
-| **SES-01** Durable session/run layout with patches, retention, and a kill-switch | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
-| **STU-01** Studio renders the artifact/receipt/checkpoint timeline | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
-| **AR-CONV** Decision Log artifact kind | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
-| **AR-CONV** ProgramPlan artifact kind | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
-| **AR-CONV** Cache-metadata support on artifacts | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
-| **AR-CONV** Artifact source classification | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
+| **RBK-02** Rollback emits a receipt, an event, and a report artifact | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `harness/phases.py` | tbd | `resume-rollback` | MET |
+| **SES-01** Durable session/run layout with patches, retention, and a kill-switch | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `runtime/session_store.py` | tbd | `resume-rollback` | MET |
+| **STU-01** Studio renders the artifact/receipt/checkpoint timeline | `24-artifact-receipt-lifecycle.md` | `pr-002-artifacts-receipts` | `packages/opencontext_studio/opencontext_studio/` | tbd | `resume-rollback` | MET |
+| **AR-CONV** Decision Log artifact kind | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-002-artifacts-receipts` | `runtime/decision_log.py` | tbd | `resume-rollback` | MET |
+| **AR-CONV** ProgramPlan artifact kind | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-002-artifacts-receipts` | `planning/program.py` | tbd | `resume-rollback` | MET |
+| **AR-CONV** Cache-metadata support on artifacts | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-002-artifacts-receipts` | `cache/` | tbd | `resume-rollback` | MET |
+| **AR-CONV** Artifact source classification | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-002-artifacts-receipts` | `operating_model/receipts.py` | tbd | `resume-rollback` | MET |
 | **AR-CONV** Resume validation for Decision Log | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
 | **AR-CONV** Resume validation for profile/capability snapshot | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-002-artifacts-receipts` | `artifacts/ (new)` | tbd | `resume-rollback` | DEFERRED |
 
 ## PR-003 Workflow Registry
 
-Change folder: `pr-003-workflow-registry` · Source: `03-sdd-workflow-architecture.md` · 20 requirements (1 MET / 19 DEFERRED)
+Change folder: `pr-003-workflow-registry` · Source: `03-sdd-workflow-architecture.md` · 20 requirements (4 MET / 16 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
@@ -185,7 +187,7 @@ Change folder: `pr-003-workflow-registry` · Source: `03-sdd-workflow-architectu
 | **WE1** Edges are declarative with optional conditions | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | — | DEFERRED |
 | **WR1** Register, get, list, and describe workflows | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | — | DEFERRED |
 | **WR2** Alias table maps legacy names to a workflow id + profile | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | — | DEFERRED |
-| **RES1** Runtime resolves a definition before scheduling phases | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | `first-run` | DEFERRED |
+| **RES1** Runtime resolves a definition before scheduling phases | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `workflow/engine.py` | tbd | `first-run` | MET |
 | **BAK1** Existing workflow names continue to resolve to their historical phase sets | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `harness/runner.py` | tbd | — | MET |
 | **SDD1** SDD is registered as a declarative built-in workflow | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | `sdd-formal-feature` | DEFERRED |
 | **YAML1** Built-in SDD workflow loads from a YAML template | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | `sdd-formal-feature` | DEFERRED |
@@ -193,9 +195,9 @@ Change folder: `pr-003-workflow-registry` · Source: `03-sdd-workflow-architectu
 | **EVT1** Resolution and validation emit typed events | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | — | DEFERRED |
 | **RCPT1** Workflow selection is recorded in a receipt | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | — | DEFERRED |
 | **FLAG1** registry_enabled toggles legacy resolution | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | — | DEFERRED |
-| **INT1** Execution keeps delegating to the existing HarnessRunner | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | — | DEFERRED |
+| **INT1** Execution keeps delegating to the existing HarnessRunner | `03-sdd-workflow-architecture.md` | `pr-003-workflow-registry` | `harness/runner.py` | tbd | — | MET |
 | **WR-CONV** Workflow selection policy | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | `policy-security` | DEFERRED |
-| **WR-CONV** Workflow strategy metadata | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | — | DEFERRED |
+| **WR-CONV** Workflow strategy metadata | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-003-workflow-registry` | `workflow/presets.py` | tbd | — | MET |
 | **WR-CONV** Workflow cost/risk metadata | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | — | DEFERRED |
 | **WR-CONV** Workflow↔profile compatibility | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | `plugin-compatibility` | DEFERRED |
 | **WR-CONV** Workflow↔capability compatibility | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-003-workflow-registry` | `workflow/ (new)` | tbd | `plugin-compatibility` | DEFERRED |
@@ -203,7 +205,7 @@ Change folder: `pr-003-workflow-registry` · Source: `03-sdd-workflow-architectu
 
 ## PR-004 SDD Hardening
 
-Change folder: `pr-004-sdd-hardening` · Source: `03-sdd-workflow-architecture.md` · 19 requirements (8 MET / 11 DEFERRED)
+Change folder: `pr-004-sdd-hardening` · Source: `03-sdd-workflow-architecture.md` · 19 requirements (13 MET / 6 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
@@ -211,125 +213,125 @@ Change folder: `pr-004-sdd-hardening` · Source: `03-sdd-workflow-architecture.m
 | **REQ-02** SDD is registered as one WorkflowDefinition in the registry | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `config.py (new)` | tbd | `first-run` | DEFERRED |
 | **REQ-03** Each phase declares the persona that drives it | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `personas.py` | `tests/configurator/test_personas.py` | `sdd-formal-feature` | MET |
 | **REQ-04** Each phase declares and enforces its required/expected artifacts | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `oc_new/flow.py` | tbd | `sdd-formal-feature` | MET |
-| **REQ-05** Each phase declares its required harnesses as a first-class field | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `harness/config.py (new)` | tbd | `sdd-formal-feature` | DEFERRED |
-| **REQ-06** A uniform receipt is emitted for every phase | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `harness/runner.py (new)` | tbd | `sdd-formal-feature` | DEFERRED |
+| **REQ-05** Each phase declares its required harnesses as a first-class field | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `harness/config.py` | tbd | `sdd-formal-feature` | MET |
+| **REQ-06** A uniform receipt is emitted for every phase | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `harness/runner.py` | tbd | `sdd-formal-feature` | MET |
 | **REQ-07** The propose phase runs the wired executor | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `harness/phases.py` | tbd | `sdd-formal-feature` | MET |
 | **REQ-08** Propose reports honestly when no real executor produced the proposal | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `sdd/ (new)` | tbd | `sdd-formal-feature` | DEFERRED |
 | **REQ-09** Resume skips phases that already completed | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `harness/runner.py` | tbd | `resume-rollback` | MET |
-| **REQ-10** Resume rehydrates prior-phase artifacts into the resumed run | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `harness/runner.py (new)` | tbd | `resume-rollback` | DEFERRED |
+| **REQ-10** Resume rehydrates prior-phase artifacts into the resumed run | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `harness/runner.py` | tbd | `resume-rollback` | MET |
 | **REQ-11** Verify runs locally and never fabricates success | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `harness/phases.py` | tbd | `sdd-formal-feature` | MET |
-| **REQ-12** Verify must not report "all checks passed" when no test ran | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `harness/phases.py (new)` | tbd | `sdd-formal-feature` | DEFERRED |
+| **REQ-12** Verify must not report "all checks passed" when no test ran | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `harness/phases.py` | tbd | `sdd-formal-feature` | MET |
 | **REQ-13** SDD is driven by a single workflow spine | `03-sdd-workflow-architecture.md` | `pr-004-sdd-hardening` | `harness/runner.py (new)` | tbd | `sdd-formal-feature` | DEFERRED |
 | **SDD-CONV** Phase-level contracts | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-004-sdd-hardening` | `oc_new/flow.py` | tbd | `sdd-formal-feature` | MET |
 | **SDD-CONV** Phase-level artifacts | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-004-sdd-hardening` | `oc_new/flow.py` | tbd | `sdd-formal-feature` | MET |
 | **SDD-CONV** Phase-level decision receipts | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-004-sdd-hardening` | `sdd/ (new)` | tbd | `sdd-formal-feature` | DEFERRED |
 | **SDD-CONV** Handoff artifacts between phases | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-004-sdd-hardening` | `sdd/ (new)` | tbd | `sdd-formal-feature` | DEFERRED |
-| **SDD-CONV** Scaffold blocking in strict mode | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-004-sdd-hardening` | `sdd/ (new)` | tbd | `sdd-formal-feature` | DEFERRED |
+| **SDD-CONV** Scaffold blocking in strict mode | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-004-sdd-hardening` | `sdd/task_gate.py, sdd/validators/` | tbd | `sdd-formal-feature` | MET |
 | **SDD-CONV** Meta-plan awareness (consume ProgramPlan from PR-000) | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-004-sdd-hardening` | `sdd/ (new)` | tbd | `sdd-formal-feature` | DEFERRED |
 
 ## PR-005 Policy Engine
 
-Change folder: `pr-005-policy-engine` · Source: `15-policy-security-architecture.md` · 27 requirements (11 MET / 16 DEFERRED)
+Change folder: `pr-005-policy-engine` · Source: `15-policy-security-architecture.md` · 27 requirements (24 MET / 3 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
-| **PE-1** Single runtime evaluation entry point | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
-| **PE-2** Canonical decision with allow/warn/ask/deny and evidence | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
-| **PE-3** Four built-in presets with balanced default | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
+| **PE-1** Single runtime evaluation entry point | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/engine.py` | tbd | `policy-security` | MET |
+| **PE-2** Canonical decision with allow/warn/ask/deny and evidence | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/models.py` | tbd | `policy-security` | MET |
+| **PE-3** Four built-in presets with balanced default | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/presets.py` | tbd | `policy-security` | MET |
 | **PE-4** Deny-by-default, fail-closed posture | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `config.py` | `tests/core/test_config.py` | `policy-security` | MET |
 | **FILE-1** Writes to forbidden paths are blocked before any mutation | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `harness/phases.py` | tbd | `policy-security` | MET |
-| **CMD-1** Denied commands do not execute | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
-| **CMD-2** Commands are classified into risk categories | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
+| **CMD-1** Denied commands do not execute | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/engine.py, policy/commands.py` | tbd | `policy-security` | MET |
+| **CMD-2** Commands are classified into risk categories | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/commands.py` | tbd | `policy-security` | MET |
 | **NET-1** Network access is denied unless explicitly allowed | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `actions/policy.py` | tbd | `policy-security` | MET |
 | **PROV-1** Provider calls are secret-checked and policy-gated | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `safety/firewall.py` | tbd | `policy-security` | MET |
 | **SECRET-1** Secrets are detected before provider/memory/export sinks | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `safety/secrets.py` | tbd | `policy-security` | MET |
-| **MEM-1** Memory writes exclude chain-of-thought and credentials | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
+| **MEM-1** Memory writes exclude chain-of-thought and credentials | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/memory_content.py` | tbd | `policy-security` | MET |
 | **PLUGIN-1** Plugins are deny-by-default and explicitly permissioned | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `plugins/manifest.py` | tbd | `policy-security` | MET |
-| **AUTO-1** Auto-apply is gated by change risk | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
+| **AUTO-1** Auto-apply is gated by change risk | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/auto_apply.py` | tbd | `policy-security` | MET |
 | **APPROVAL-1** Unapproved writes are blocked | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `harness/gates.py` | tbd | `policy-security` | MET |
-| **APPROVAL-2** ask decisions pause, prompt, and record a policy receipt | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
+| **APPROVAL-2** ask decisions pause, prompt, and record a policy receipt | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/engine.py` | tbd | `policy-security` | MET |
 | **HARNESS-1** A harness gate consumes policy output | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `harness/gates.py` | tbd | `policy-security` | MET |
-| **EVENT-1** Policy decisions emit named events | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
+| **EVENT-1** Policy decisions emit named events | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/events.py` | tbd | `policy-security` | MET |
 | **STUDIO-1** Studio surfaces policy decisions and findings | `15-policy-security-architecture.md` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
-| **POL-CONV** Cache governance | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
+| **POL-CONV** Cache governance | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `policy/engine.py` | tbd | `policy-security` | MET |
 | **POL-CONV** Provider-call governance | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `safety/firewall.py` | tbd | `policy-security` | MET |
 | **POL-CONV** Memory-write governance | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `memory_usability/novelty_gate.py` | `tests/core/test_novelty_gate.py` | `policy-security` | MET |
-| **POL-CONV** KG-write governance | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
+| **POL-CONV** KG-write governance | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `policy/engine.py` | tbd | `policy-security` | MET |
 | **POL-CONV** Plugin-permission governance | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `plugins/manifest.py` | tbd | `policy-security` | MET |
 | **POL-CONV** Studio-approval governance | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
 | **POL-CONV** Execution-profile governance | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
-| **POL-CONV** Remote/CI-mode governance | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
-| **POL-CONV** Policy decisions recorded in the Decision Log (AC fold) | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `policy/ (new)` | tbd | `policy-security` | DEFERRED |
+| **POL-CONV** Remote/CI-mode governance | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `policy/engine.py` | tbd | `policy-security` | MET |
+| **POL-CONV** Policy decisions recorded in the Decision Log (AC fold) | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-005-policy-engine` | `runtime/decision_log.py` | tbd | `policy-security` | MET |
 
 ## PR-006 Persona, Skill & Harness Registries
 
-Change folder: `pr-006-registries` · Source: `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` · 28 requirements (7 MET / 21 DEFERRED)
+Change folder: `pr-006-registries` · Source: `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` · 28 requirements (25 MET / 3 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
-| **PR-006-PERSONA** PersonaDefinition first-class schema | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | `first-run` | DEFERRED |
-| **PR-006-PERSONA** PersonaRegistry | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
-| **PR-006-PERSONA** Twelve canonical built-in personas registered | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `personas.py` | `tests/configurator/test_personas.py` | — | MET |
-| **PR-006-PERSONA** oc-diagnostician and oc-security-reviewer | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | `policy-security` | DEFERRED |
-| **PR-006-PERSONA** PersonaResolver with role overrides | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
+| **PR-006-PERSONA** PersonaDefinition first-class schema | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `personas/definition.py` | tbd | `first-run` | MET |
+| **PR-006-PERSONA** PersonaRegistry | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `personas/registry.py` | tbd | — | MET |
+| **PR-006-PERSONA** Twelve canonical built-in personas registered | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `personas/builtins/` | `tests/configurator/test_personas.py` | — | MET |
+| **PR-006-PERSONA** oc-diagnostician and oc-security-reviewer | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `oc_flow/personas.py` | tbd | `policy-security` | MET |
+| **PR-006-PERSONA** PersonaResolver with role overrides | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `personas/resolver.py` | tbd | — | MET |
 | **PR-006-PERSONA** PersonaHandoff is explicit and persisted | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `oc_new/models.py` | tbd | — | MET |
 | **PR-006-PERSONA** Persona tool permissions enforced via Policy Engine | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `tools/policy.py` | tbd | `policy-security` | MET |
-| **PR-006-PERSONA** Persona failure semantics vocabulary | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
-| **PR-006-SKILL** SkillDefinition contract schema | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | `first-run` | DEFERRED |
+| **PR-006-PERSONA** Persona failure semantics vocabulary | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `personas/definition.py` | tbd | — | MET |
+| **PR-006-SKILL** SkillDefinition contract schema | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `skills/definition.py` | tbd | `first-run` | MET |
 | **PR-006-SKILL** SkillRegistry discovers and indexes skills | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `skills/registry.py` | tbd | — | MET |
-| **PR-006-SKILL** ~24 categorized built-in skills, bundles, and tiers | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
-| **PR-006-SKILL** Skill lifecycle resolve→validate→execute→validate→receipt | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
+| **PR-006-SKILL** ~24 categorized built-in skills, bundles, and tiers | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `skills/builtins/` | tbd | — | MET |
+| **PR-006-SKILL** Skill lifecycle resolve→validate→execute→validate→receipt | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `skills/lifecycle.py` | tbd | — | MET |
 | **PR-006-SKILL** Skill benchmarking and policy auto-disable | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | `policy-security` | DEFERRED |
-| **PR-006-HARNESS** HarnessRegistry and HarnessDefinition | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | `first-run` | DEFERRED |
+| **PR-006-HARNESS** HarnessRegistry and HarnessDefinition | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `harness/models.py` | tbd | `first-run` | MET |
 | **PR-006-HARNESS** HarnessResult type | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `harness/models.py` | tbd | — | MET |
-| **PR-006-HARNESS** GateResult with severity, evidence, and blocking | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
-| **PR-006-HARNESS** Thirteen named built-in harnesses | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
+| **PR-006-HARNESS** GateResult with severity, evidence, and blocking | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `harness/models.py` | tbd | — | MET |
+| **PR-006-HARNESS** Thirteen named built-in harnesses | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `harness/config.py` | tbd | — | MET |
 | **PR-006-HARNESS** Phase→gate matrix | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `harness/config.py` | `tests/core/test_config.py` | — | MET |
-| **PR-006-HARNESS** Workflow → harness mode matrix and plugin harnesses | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
-| **REG-CONV** PersonaStrategy | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
-| **REG-CONV** PersonaCapabilities | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
-| **REG-CONV** PersonaConstraints | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
-| **REG-CONV** Skill tiers | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
+| **PR-006-HARNESS** Workflow → harness mode matrix and plugin harnesses | `05-persona-architecture.md / 06-skill-architecture.md / 07-harness-architecture.md` | `pr-006-registries` | `harness/config.py` | tbd | — | MET |
+| **REG-CONV** PersonaStrategy | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `personas/resolver.py` | tbd | — | MET |
+| **REG-CONV** PersonaCapabilities | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `personas/definition.py` | tbd | — | MET |
+| **REG-CONV** PersonaConstraints | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `personas/definition.py` | tbd | — | MET |
+| **REG-CONV** Skill tiers | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `skills/definition.py` | tbd | — | MET |
 | **REG-CONV** Skill benchmark metadata | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
 | **REG-CONV** Harness false-positive metrics | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
-| **REG-CONV** Harness strictness-by-profile | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
-| **REG-CONV** Plugin-ready registry metadata | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `registries/ (new)` | tbd | — | DEFERRED |
+| **REG-CONV** Harness strictness-by-profile | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `harness/config.py` | tbd | — | MET |
+| **REG-CONV** Plugin-ready registry metadata | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `plugins/contracts.py` | tbd | — | MET |
 | **REG-CONV** Harnesses are deterministic governance components (AC fold) | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-006-registries` | `harness/runner.py` | tbd | — | MET |
 
 ## PR-007 OC Flow MVP
 
-Change folder: `pr-007-oc-flow` · Source: `04-oc-flow-architecture.md` · 24 requirements (0 MET / 24 DEFERRED)
+Change folder: `pr-007-oc-flow` · Source: `04-oc-flow-architecture.md` · 24 requirements (21 MET / 3 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
-| **FLOW-1** OC Flow registered as a declarative WorkflowDefinition | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `first-run` | DEFERRED |
-| **FLOW-2** Conditional edge set drives node transitions | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-3** Each node declares inputs, outputs and exit conditions | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-4** plan produces a frozen TaskContract | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-5** diagnose records a structured, evidence-driven attempt | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-6** diagnosis is bounded by a profile-controlled attempt budget | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **FLOW-7** mutate applies surgical ApplyEdit operations with a reason and checkpoint | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-8** local_inspection runs zero-LLM checks and yields a typed outcome | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-9** per-node harness matrix is applied | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-10** per-node token budgets and a total guard are enforced | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **FLOW-11** oc-diagnostician exists and all nodes map to personas | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-12** the 12-skill oc_flow_default bundle is present and node-scoped | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-13** escalation produces a human handoff and stops code generation | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-14** consolidation finalizes the run with deltas and reindex | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-15** resume restores full OC Flow state or fails safe | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-16** opencontext run --workflow oc-flow executes OC Flow end to end | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
+| **FLOW-1** OC Flow registered as a declarative WorkflowDefinition | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/definition.py` | tbd | `first-run` | MET |
+| **FLOW-2** Conditional edge set drives node transitions | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/nodes.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-3** Each node declares inputs, outputs and exit conditions | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/nodes.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-4** plan produces a frozen TaskContract | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/models.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-5** diagnose records a structured, evidence-driven attempt | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/inspection.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-6** diagnosis is bounded by a profile-controlled attempt budget | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/budgets.py` | tbd | `context-token-efficiency` | MET |
+| **FLOW-7** mutate applies surgical ApplyEdit operations with a reason and checkpoint | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/runner.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-8** local_inspection runs zero-LLM checks and yields a typed outcome | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/inspection.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-9** per-node harness matrix is applied | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/runner.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-10** per-node token budgets and a total guard are enforced | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/budgets.py` | tbd | `context-token-efficiency` | MET |
+| **FLOW-11** oc-diagnostician exists and all nodes map to personas | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/personas.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-12** the 12-skill oc_flow_default bundle is present and node-scoped | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/skills.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-13** escalation produces a human handoff and stops code generation | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/runner.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-14** consolidation finalizes the run with deltas and reindex | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/completion.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-15** resume restores full OC Flow state or fails safe | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/runner.py, runtime/session_store.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-16** opencontext run --workflow oc-flow executes OC Flow end to end | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `commands/run_cmd.py` | tbd | `oc-flow-localized-bugfix` | MET |
 | **FLOW-17** MCP tools and Studio render OC Flow live state | `04-oc-flow-architecture.md` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-CONV** Fast/cheap/careful lane support | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
+| **FLOW-CONV** Fast/cheap/careful lane support | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-007-oc-flow` | `profiles/, oc_flow/runner.py` | tbd | `oc-flow-localized-bugfix` | MET |
 | **FLOW-CONV** Runtime Brain decision integration + auto selection and SDD escalation | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `sdd-formal-feature` | DEFERRED |
-| **FLOW-CONV** Bounded diagnosis | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-CONV** Surgical context retrieval (no SDD infra duplication) | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `sdd-formal-feature` | DEFERRED |
+| **FLOW-CONV** Bounded diagnosis | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-007-oc-flow` | `oc_flow/budgets.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-CONV** Surgical context retrieval (no SDD infra duplication) | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-007-oc-flow` | `oc_flow/runner.py` | tbd | `sdd-formal-feature` | MET |
 | **FLOW-CONV** Semantic cache use | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-CONV** Decision receipts | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
-| **FLOW-CONV** Profile-aware behaviour + localized-bugfix benchmark | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-007-oc-flow` | `oc_flow/ (new)` | tbd | `oc-flow-localized-bugfix` | DEFERRED |
+| **FLOW-CONV** Decision receipts | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-007-oc-flow` | `oc_flow/models.py` | tbd | `oc-flow-localized-bugfix` | MET |
+| **FLOW-CONV** Profile-aware behaviour + localized-bugfix benchmark | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-007-oc-flow` | `profiles/, oc_flow/runner.py` | tbd | `oc-flow-localized-bugfix` | MET |
 
 ## PR-008 Knowledge Graph v2
 
-Change folder: `pr-008-kg-v2` · Source: `08-knowledge-graph-architecture.md` · 22 requirements (6 MET / 16 DEFERRED)
+Change folder: `pr-008-kg-v2` · Source: `08-knowledge-graph-architecture.md` · 22 requirements (20 MET / 2 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
@@ -337,28 +339,28 @@ Change folder: `pr-008-kg-v2` · Source: `08-knowledge-graph-architecture.md` ·
 | **KG-02** Tree-sitter symbol and call-graph extraction across languages | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `indexing/tree_sitter_parser.py` | tbd | `kg-retrieval-precision` | MET |
 | **KG-03** Incremental reindex with deterministic ids, prune, and staleness detection | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `knowledge_graph.py` | `tests/core/test_knowledge_graph.py` | `kg-retrieval-precision` | MET |
 | **KG-04** Token-budgeted retrieval with omissions, confidence, and trust | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `retrieval/planner.py` | tbd | `context-token-efficiency` | MET |
-| **KG-05** KgNode/KgEdge with 40 node and 20 edge kinds | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
-| **KG-06** TemporalMetadata on facts that may change | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
-| **KG-07** EvidenceRef v2 mandatory for non-structural facts | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
-| **KG-08** GraphDelta model and apply_delta() | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
-| **KG-09** KgQueryPlanner.plan(task, workflow, node, budget) | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **KG-10** Six named retrieval modes | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
-| **KG-11** ContextSubgraph with node + token budgets, omissions, confidence | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **KG-12** Pluggable KnowledgeProvider interface | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
-| **KG-13** Framework conventions and YAML/JSON/MD facts | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
-| **KG-14** KG operations produce receipts and emit kg.* events | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
-| **KG-15** Optional external graph-database backend via plugin | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
+| **KG-05** KgNode/KgEdge with 40 node and 20 edge kinds | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/v2/schema.py` | tbd | `kg-retrieval-precision` | MET |
+| **KG-06** TemporalMetadata on facts that may change | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/v2/schema.py` | tbd | `kg-retrieval-precision` | MET |
+| **KG-07** EvidenceRef v2 mandatory for non-structural facts | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/v2/evidence.py` | tbd | `kg-retrieval-precision` | MET |
+| **KG-08** GraphDelta model and apply_delta() | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/v2/store.py` | tbd | `kg-retrieval-precision` | MET |
+| **KG-09** KgQueryPlanner.plan(task, workflow, node, budget) | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/v2/planner.py` | tbd | `context-token-efficiency` | MET |
+| **KG-10** Six named retrieval modes | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/v2/retriever.py` | tbd | `kg-retrieval-precision` | MET |
+| **KG-11** ContextSubgraph with node + token budgets, omissions, confidence | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/v2/retriever.py` | tbd | `context-token-efficiency` | MET |
+| **KG-12** Pluggable KnowledgeProvider interface | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/v2/store.py` | tbd | `kg-retrieval-precision` | MET |
+| **KG-13** Framework conventions and YAML/JSON/MD facts | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/v2/indexer.py` | tbd | `kg-retrieval-precision` | MET |
+| **KG-14** KG operations produce receipts and emit kg.* events | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/v2/events.py` | tbd | `kg-retrieval-precision` | MET |
+| **KG-15** Optional external graph-database backend via plugin | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `plugins/knowledge_provider.py` | tbd | `kg-retrieval-precision` | MET |
 | **KG-16** Studio visualizes the relevant subgraph | `08-knowledge-graph-architecture.md` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
-| **KG-CONV** Capability Graph linkage | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
+| **KG-CONV** Capability Graph linkage | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-008-kg-v2` | `graph/v2/capability.py` | tbd | `kg-retrieval-precision` | MET |
 | **KG-CONV** Organization Graph linkage | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
-| **KG-CONV** Cache invalidation hooks | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
+| **KG-CONV** Cache invalidation hooks | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-008-kg-v2` | `cache/invalidation.py` | tbd | `kg-retrieval-precision` | MET |
 | **KG-CONV** KG freshness scoring | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-008-kg-v2` | `indexing/kg_freshness.py` | tbd | `kg-retrieval-precision` | MET |
 | **KG-CONV** Graph confidence scoring | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-008-kg-v2` | `retrieval/contracts.py` | tbd | `kg-retrieval-precision` | MET |
-| **KG-CONV** Graph query receipts | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-008-kg-v2` | `graph/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
+| **KG-CONV** Graph query receipts | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-008-kg-v2` | `graph/v2/events.py` | tbd | `kg-retrieval-precision` | MET |
 
 ## PR-009 Memory v2
 
-Change folder: `pr-009-memory-v2` · Source: `09-memory-architecture.md` · 22 requirements (6 MET / 16 DEFERRED)
+Change folder: `pr-009-memory-v2` · Source: `09-memory-architecture.md` · 22 requirements (20 MET / 2 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
@@ -368,26 +370,26 @@ Change folder: `pr-009-memory-v2` · Source: `09-memory-architecture.md` · 22 r
 | **MEM-009-04** Memory is operable via CLI verbs and MCP tools | `09-memory-architecture.md` | `pr-009-memory-v2` | `opencontext_cli/main.py` | tbd | `memory-usefulness` | MET |
 | **MEM-009-05** Memory routes to backends by layer | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/composite.py` | tbd | `memory-usefulness` | MET |
 | **MEM-009-06** Sensitive content is redacted/rejected before persistence | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/stores.py` | tbd | `policy-security` | MET |
-| **MEM-009-07** MemoryRecord carries the full OC-MEMORY-001 §6 field set | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
-| **MEM-009-08** MemoryCandidate carries proposer, evidence, expected reuse, confidence | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
-| **MEM-009-09** Conflicts and write outcomes are typed and receipted | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
-| **MEM-009-10** Memory backends satisfy the OC-MEMORY-001 §26 Protocol | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
-| **MEM-009-11** The taxonomy covers the six OC-MEMORY-001 §5 memory types | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
-| **MEM-009-12** Only the Memory Harness promotes candidates, via the ordered lifecycle | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
-| **MEM-009-13** Curated `.opencontext/memory/*.md` summaries are generated | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
-| **MEM-009-14** Retrieval is task-aware, budgeted, ordered, and observable | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **MEM-009-15** Runtime Intelligence uses memory for cost and selection | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
-| **MEM-009-16** Memory is compressed before prompt injection by the Context Engine | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
-| **MEM-CONV** Learning-loop integration | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
-| **MEM-CONV** Memory quality score | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
-| **MEM-CONV** Stale memory audit | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
+| **MEM-009-07** MemoryRecord carries the full OC-MEMORY-001 §6 field set | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/v2/models.py` | tbd | `memory-usefulness` | MET |
+| **MEM-009-08** MemoryCandidate carries proposer, evidence, expected reuse, confidence | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/v2/models.py` | tbd | `memory-usefulness` | MET |
+| **MEM-009-09** Conflicts and write outcomes are typed and receipted | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/v2/conflict.py` | tbd | `memory-usefulness` | MET |
+| **MEM-009-10** Memory backends satisfy the OC-MEMORY-001 §26 Protocol | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/composite.py, memory/stores.py` | tbd | `memory-usefulness` | MET |
+| **MEM-009-11** The taxonomy covers the six OC-MEMORY-001 §5 memory types | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/v2/models.py` | tbd | `memory-usefulness` | MET |
+| **MEM-009-12** Only the Memory Harness promotes candidates, via the ordered lifecycle | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/v2/harness.py, memory/v2/promotion.py` | tbd | `memory-usefulness` | MET |
+| **MEM-009-13** Curated `.opencontext/memory/*.md` summaries are generated | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/project_memory.py` | tbd | `memory-usefulness` | MET |
+| **MEM-009-14** Retrieval is task-aware, budgeted, ordered, and observable | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/retrieval.py` | tbd | `context-token-efficiency` | MET |
+| **MEM-009-15** Runtime Intelligence uses memory for cost and selection | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/learning_seam.py` | tbd | `memory-usefulness` | MET |
+| **MEM-009-16** Memory is compressed before prompt injection by the Context Engine | `09-memory-architecture.md` | `pr-009-memory-v2` | `memory/composite.py` | tbd | `memory-usefulness` | MET |
+| **MEM-CONV** Learning-loop integration | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-009-memory-v2` | `memory/learning_seam.py` | tbd | `memory-usefulness` | MET |
+| **MEM-CONV** Memory quality score | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-009-memory-v2` | `memory/v2/quality.py` | tbd | `memory-usefulness` | MET |
+| **MEM-CONV** Stale memory audit | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-009-memory-v2` | `memory/stale_audit.py` | tbd | `memory-usefulness` | MET |
 | **MEM-CONV** Memory conflict reports | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
 | **MEM-CONV** Profile-aware memory retrieval | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `kg-retrieval-precision` | DEFERRED |
-| **MEM-CONV** No-chain-of-thought persistence checks | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-009-memory-v2` | `memory/ (new)` | tbd | `memory-usefulness` | DEFERRED |
+| **MEM-CONV** No-chain-of-thought persistence checks | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-009-memory-v2` | `memory/stores.py` | tbd | `memory-usefulness` | MET |
 
 ## PR-010 Context Engine v2
 
-Change folder: `pr-010-context-engine` · Source: `10-context-engineering-architecture.md` · 22 requirements (10 MET / 12 DEFERRED)
+Change folder: `pr-010-context-engine` · Source: `10-context-engineering-architecture.md` · 22 requirements (20 MET / 2 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
@@ -398,25 +400,25 @@ Change folder: `pr-010-context-engine` · Source: `10-context-engineering-archit
 | **CTX-010-05** Compression is multi-strategy, adaptive, and span-protecting | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/compression.py` | tbd | `context-token-efficiency` | MET |
 | **CTX-010-06** Retrieved context carries evidence provenance and confidence | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `models/evidence.py` | tbd | `context-token-efficiency` | MET |
 | **CTX-010-07** Retrieval prefers local evidence, KG, and symbols before files | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `retrieval/planner.py` | tbd | `kg-retrieval-precision` | MET |
-| **CTX-010-08** Context is delivered as a typed L3/L2/L1 envelope | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **CTX-010-09** The harness selects among the seven book strategies per node | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **CTX-010-10** Budgets are scoped per workflow and per node | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **CTX-010-11** The Context Harness validates the envelope token_estimate | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **CTX-010-12** Compression keeps engineering meaning per an explicit taxonomy | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
+| **CTX-010-08** Context is delivered as a typed L3/L2/L1 envelope | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/v2/envelope.py` | tbd | `context-token-efficiency` | MET |
+| **CTX-010-09** The harness selects among the seven book strategies per node | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/v2/routing.py` | tbd | `context-token-efficiency` | MET |
+| **CTX-010-10** Budgets are scoped per workflow and per node | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/v2/budget.py` | tbd | `context-token-efficiency` | MET |
+| **CTX-010-11** The Context Harness validates the envelope token_estimate | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/v2/engine.py` | tbd | `context-token-efficiency` | MET |
+| **CTX-010-12** Compression keeps engineering meaning per an explicit taxonomy | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/v2/compression.py` | tbd | `context-token-efficiency` | MET |
 | **CTX-010-13** Context is incrementally GC'd on defined triggers | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **CTX-010-14** Every retrieval emits query, budget, compression, and omission receipts | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **CTX-010-15** Five profiles tune retrieval, compression, and limits | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
+| **CTX-010-14** Every retrieval emits query, budget, compression, and omission receipts | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/v2/receipt.py` | tbd | `context-token-efficiency` | MET |
+| **CTX-010-15** Five profiles tune retrieval, compression, and limits | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/v2/routing.py` | tbd | `context-token-efficiency` | MET |
 | **CTX-010-16** Runtime Intelligence consumes context envelopes/receipts for cost and selection | `10-context-engineering-architecture.md` | `pr-010-context-engine` | `context/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **CTX-CONV** Semantic cache | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-010-context-engine` | `context/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **CTX-CONV** Context routing strategies | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-010-context-engine` | `context/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **CTX-CONV** Context usefulness scoring | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-010-context-engine` | `context/ (new)` | tbd | `memory-usefulness` | DEFERRED |
+| **CTX-CONV** Semantic cache | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-010-context-engine` | `cache/semantic_cache.py` | tbd | `context-token-efficiency` | MET |
+| **CTX-CONV** Context routing strategies | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-010-context-engine` | `context/v2/routing.py` | tbd | `context-token-efficiency` | MET |
+| **CTX-CONV** Context usefulness scoring | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-010-context-engine` | `context/v2/usefulness.py` | tbd | `memory-usefulness` | MET |
 | **CTX-CONV** Context omissions | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-010-context-engine` | `context/packing.py` | tbd | `context-token-efficiency` | MET |
 | **CTX-CONV** Context receipts | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-010-context-engine` | `context/receipt.py` | tbd | `context-token-efficiency` | MET |
 | **CTX-CONV** Prompt/context cache support | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-010-context-engine` | `context/prompt_cache.py` | tbd | `context-token-efficiency` | MET |
 
 ## PR-011 Runtime Intelligence
 
-Change folder: `pr-011-runtime-intelligence` · Source: `11-runtime-intelligence-architecture.md` · 25 requirements (8 MET / 17 DEFERRED)
+Change folder: `pr-011-runtime-intelligence` · Source: `11-runtime-intelligence-architecture.md` · 25 requirements (20 MET / 5 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
@@ -428,27 +430,27 @@ Change folder: `pr-011-runtime-intelligence` · Source: `11-runtime-intelligence
 | **RI-011-06** Comparison credits load-bearing capabilities honestly, not just tokens | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `evaluation/capability.py` | `tests/core/test_capability.py` | `context-token-efficiency` | MET |
 | **RI-011-07** Runtime improvements are proposed from evidence, never silently applied | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `learning/evolution.py` | tbd | `context-token-efficiency` | MET |
 | **RI-011-08** The runtime estimates cost before running and reconciles it against actuals | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **RI-011-09** When workflow is auto, alternatives are compared and the choice is receipted | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **RI-011-10** System-level confidence is computed across the eight runtime dimensions | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
+| **RI-011-09** When workflow is auto, alternatives are compared and the choice is receipted | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intel/whatif.py` | tbd | `context-token-efficiency` | MET |
+| **RI-011-10** System-level confidence is computed across the eight runtime dimensions | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime_intelligence/confidence.py` | tbd | `context-token-efficiency` | MET |
 | **RI-011-11** Low confidence recommends a bounded action; the Runtime enforces it | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **RI-011-12** A deterministic dry cognitive run predicts execution before running | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **RI-011-13** The profiler attributes time/tokens to components and names bottlenecks | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
+| **RI-011-12** A deterministic dry cognitive run predicts execution before running | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime_intelligence/simulator.py` | tbd | `context-token-efficiency` | MET |
+| **RI-011-13** The profiler attributes time/tokens to components and names bottlenecks | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime_intelligence/profiler.py` | tbd | `context-token-efficiency` | MET |
 | **RI-011-14** The full benchmark suite taxonomy and typed task/result schema exist | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **RI-011-15** System self-health is exposed across the ten health dimensions | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **RI-011-16** Promotion requires passing benchmarks and no first-run/token/security regression | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `first-run` | DEFERRED |
-| **RI-011-17** Intelligence emits named events/receipts to the canonical telemetry layout | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **RI-011-18** Studio surfaces cost, confidence, profiler, benchmark, and health views | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
+| **RI-011-15** System self-health is exposed across the ten health dimensions | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime_intelligence/health.py` | tbd | `context-token-efficiency` | MET |
+| **RI-011-16** Promotion requires passing benchmarks and no first-run/token/security regression | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `learning/v2/promotion_gate.py` | tbd | `first-run` | MET |
+| **RI-011-17** Intelligence emits named events/receipts to the canonical telemetry layout | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intel/, runtime/events.py` | tbd | `context-token-efficiency` | MET |
+| **RI-011-18** Studio surfaces cost, confidence, profiler, benchmark, and health views | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `packages/opencontext_studio/opencontext_studio/tui/s11_benchmark_status.py` | tbd | `context-token-efficiency` | MET |
 | **RI-011-19** Cost/latency estimates consume real provider metrics | `11-runtime-intelligence-architecture.md` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **RI-CONV** Runtime Optimizer | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **RI-CONV** Workflow what-if comparison | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **RI-CONV** Confidence calibration | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **RI-CONV** Cost calibration | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
+| **RI-CONV** Runtime Optimizer | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-011-runtime-intelligence` | `optimization/optimizer.py` | tbd | `context-token-efficiency` | MET |
+| **RI-CONV** Workflow what-if comparison | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-011-runtime-intelligence` | `runtime/intel/whatif.py` | tbd | `context-token-efficiency` | MET |
+| **RI-CONV** Confidence calibration | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-011-runtime-intelligence` | `runtime/intel/calibration.py` | tbd | `context-token-efficiency` | MET |
+| **RI-CONV** Cost calibration | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-011-runtime-intelligence` | `runtime/intel/calibration.py` | tbd | `context-token-efficiency` | MET |
 | **RI-CONV** Token-savings attribution | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-011-runtime-intelligence` | `evaluation/telemetry.py` | `tests/core/test_telemetry.py` | `context-token-efficiency` | MET |
 | **RI-CONV** Decision-quality metrics | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-011-runtime-intelligence` | `runtime/intelligence/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
 
 ## PR-012 Provider & Model Gateway
 
-Change folder: `pr-012-provider-gateway` · Source: `25-provider-model-gateway.md` · 21 requirements (8 MET / 13 DEFERRED)
+Change folder: `pr-012-provider-gateway` · Source: `25-provider-model-gateway.md` · 21 requirements (19 MET / 2 DEFERRED)
 
 | Requirement | Source Doc | PR | Module | Test | Benchmark | Status |
 |---|---|---|---|---|---|---|
@@ -459,20 +461,20 @@ Change folder: `pr-012-provider-gateway` · Source: `25-provider-model-gateway.m
 | **PROV-012-05** No external provider is reached when policy forbids it | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `safety/provider_policy.py` | tbd | `policy-security` | MET |
 | **PROV-012-06** Embeddings are produced behind a provider-neutral generator | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `embeddings/generators.py` | tbd | `provider-fallback` | MET |
 | **PROV-012-07** Every provider call is time-bounded | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/adapters.py` | `tests/core/test_adapters.py` | `provider-fallback` | MET |
-| **PROV-012-08** One gateway composes routing → policy → prompt → adapter | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `policy-security` | DEFERRED |
-| **PROV-012-09** Providers advertise capabilities and routing selects by capability | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `provider-fallback` | DEFERRED |
-| **PROV-012-10** A configurable strategy governs provider selection | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `provider-fallback` | DEFERRED |
-| **PROV-012-11** Failed calls fall back and retry within a limit, preserving contracts | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `provider-fallback` | DEFERRED |
-| **PROV-012-12** Every provider call records cost/latency metrics | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `provider-fallback` | DEFERRED |
-| **PROV-012-13** Provider lifecycle is observable via named events and receipts | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `provider-fallback` | DEFERRED |
+| **PROV-012-08** One gateway composes routing → policy → prompt → adapter | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/v2/gateway.py` | tbd | `policy-security` | MET |
+| **PROV-012-09** Providers advertise capabilities and routing selects by capability | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/v2/spec.py` | tbd | `provider-fallback` | MET |
+| **PROV-012-10** A configurable strategy governs provider selection | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/v2/routing.py` | tbd | `provider-fallback` | MET |
+| **PROV-012-11** Failed calls fall back and retry within a limit, preserving contracts | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/v2/fallback.py` | tbd | `provider-fallback` | MET |
+| **PROV-012-12** Every provider call records cost/latency metrics | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/v2/adapter.py` | tbd | `provider-fallback` | MET |
+| **PROV-012-13** Provider lifecycle is observable via named events and receipts | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/v2/, runtime/events.py` | tbd | `provider-fallback` | MET |
 | **PROV-012-14** Runtime Intelligence uses provider cost/latency for selection | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `provider-fallback` | DEFERRED |
 | **PROV-012-15** Context budget/memory/KG/compression/contract and reranker/OCR/speech/image | `25-provider-model-gateway.md` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `context-token-efficiency` | DEFERRED |
-| **PG-CONV** Provider capability model | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `provider-fallback` | DEFERRED |
-| **PG-CONV** Provider cost model | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `provider-fallback` | DEFERRED |
+| **PG-CONV** Provider capability model | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-012-provider-gateway` | `providers/v2/spec.py` | tbd | `provider-fallback` | MET |
+| **PG-CONV** Provider cost model | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-012-provider-gateway` | `providers/v2/spec.py` | tbd | `provider-fallback` | MET |
 | **PG-CONV** Provider policy redaction | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-012-provider-gateway` | `safety/firewall.py` | tbd | `policy-security` | MET |
-| **PG-CONV** Structured-output validation | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `provider-fallback` | DEFERRED |
-| **PG-CONV** Fallback receipts | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `provider-fallback` | DEFERRED |
-| **PG-CONV** Provider cache integration | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-012-provider-gateway` | `providers/ (new)` | tbd | `provider-fallback` | DEFERRED |
+| **PG-CONV** Structured-output validation | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-012-provider-gateway` | `providers/v2/spec.py` | tbd | `provider-fallback` | MET |
+| **PG-CONV** Fallback receipts | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-012-provider-gateway` | `providers/v2/fallback.py` | tbd | `provider-fallback` | MET |
+| **PG-CONV** Provider cache integration | `OC-FINAL-CONVERGENCE-001.md §6` | `pr-012-provider-gateway` | `cache/provider_cache.py` | tbd | `provider-fallback` | MET |
 
 ## PR-013 CLI & MCP Modernization
 
