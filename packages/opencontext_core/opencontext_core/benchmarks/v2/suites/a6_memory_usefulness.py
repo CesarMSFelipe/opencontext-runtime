@@ -1,41 +1,40 @@
-"""First-run user-flow benchmark suite — §A1 release gate.
+"""A6 — memory usefulness: save/search roundtrip + promotion policy.
 
-Mirrors :mod:`tests.e2e.test_first_run_user_flow` for the
-``opencontext benchmark release`` runner. This suite IS §A1 (first_run),
-one of the 12 §A release gates for the 1.0 verdict.
+Exercises the memory v2 promotion policy: a generic (no-op) run must be
+rated ``not_promoted`` (composite < 0.6). Runs via subprocess pytest over:
 
-The suite itself runs pytest against the e2e test file. If the test
-passes (full GREEN), the suite reports success. If the test skips
-(honest block) or fails (RED), the suite reports failure with the
-exit code in the detail — no silent degradation.
+- ``packages/opencontext_core/tests/memory/v2/test_promotion.py``
+  (unit: quality thresholds, evaluate_promotion behaviour)
+- ``tests/integration/test_memory_promotion_policy.py``
+  (integration: real OC Flow node_consolidation records promotion=not_promoted
+  for a generic task)
+
+Timeout: 120 s.
 """
 
 from __future__ import annotations
 
 import subprocess
 import sys
-from collections.abc import Callable
 from pathlib import Path
 
 from opencontext_core.benchmarks.v2.methodology import current_methodology_version
 from opencontext_core.benchmarks.v2.runner import BenchmarkResult
 
-SUITE_ID = "first_run_user_flow"
+SUITE_ID = "A6"
 _REPO_ROOT = Path(__file__).resolve().parents[6]
-_TIMEOUT = 300
+_TIMEOUT = 120
+_TARGETS = [
+    "packages/opencontext_core/tests/memory/v2/test_promotion.py",
+    "tests/integration/test_memory_promotion_policy.py",
+]
 
 
 def run() -> BenchmarkResult:
-    """Run the first-run user-flow E2E pytest and translate the result."""
+    """Run memory promotion policy tests and translate exit code honestly."""
     try:
         proc = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                "tests/e2e/test_first_run_user_flow.py",
-                "-q",
-            ],
+            [sys.executable, "-m", "pytest", *_TARGETS, "-q", "--tb=short"],
             capture_output=True,
             text=True,
             check=False,
@@ -49,6 +48,7 @@ def run() -> BenchmarkResult:
             methodology_version=current_methodology_version(),
             detail=f"timeout after {_TIMEOUT}s",
         )
+
     success = proc.returncode == 0
     out = (proc.stdout or proc.stderr).strip()
     detail = out.splitlines()[-1] if (not success and out) else ""
@@ -59,8 +59,3 @@ def run() -> BenchmarkResult:
         detail=detail,
         metrics={"returncode": proc.returncode},
     )
-
-
-# Registry: name → suite callable. Retained for backward compatibility; A1 is
-# wired directly in ``suites/__init__.py`` using this module's ``run`` function.
-REGISTRY: dict[str, Callable[[], BenchmarkResult]] = {SUITE_ID: run}
