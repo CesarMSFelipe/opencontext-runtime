@@ -318,7 +318,7 @@ class RuntimeBrain:
     # directly by oc_flow/runner.py at real selection sites — not brain
     # strategies.  brain.decide() refuses these with a clear ValueError.
     _RUNNER_LEVEL_KINDS: ClassVar[frozenset[DecisionKind]] = frozenset(
-        {DecisionKind.workflow, DecisionKind.memory_promotion}
+        {DecisionKind.workflow, DecisionKind.memory_promotion, DecisionKind.confidence_report}
     )
 
     # Strategy dispatch table — covers the eight brain-level DecisionKind

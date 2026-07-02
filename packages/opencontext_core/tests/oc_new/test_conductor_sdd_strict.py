@@ -14,8 +14,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from opencontext_core.agentic.config import AgenticFlowConfig
 from opencontext_core.oc_new.conductor import OcNewConductor
 from opencontext_core.oc_new.flow import OC_NEW_FLOW
@@ -54,7 +52,7 @@ def _make_pre_apply_state(
 
 def test_strict_mode_blocks_apply_without_failing_test(tmp_path: Path) -> None:
     """strict on + no failing_test.json → conductor blocks at apply."""
-    conductor, state, run_id = _make_pre_apply_state(tmp_path, tdd_mode="strict")
+    conductor, state, _run_id = _make_pre_apply_state(tmp_path, tdd_mode="strict")
 
     result = conductor._advance(state)
 
@@ -67,9 +65,9 @@ def test_strict_mode_blocks_apply_without_failing_test(tmp_path: Path) -> None:
         f"Expected phase='apply', got {result.next_action.phase!r}"
     )
     # The block reason must name the missing evidence honestly
-    instruction = result.next_action.instruction or ""
-    assert "strict" in instruction.lower() or "failing" in instruction.lower() or "test" in instruction.lower(), (
-        f"Expected honest TDD block reason. Got: {instruction!r}"
+    instruction = (result.next_action.instruction or "").lower()
+    assert "strict" in instruction or "failing" in instruction or "test" in instruction, (
+        f"Expected honest TDD block reason. Got: {result.next_action.instruction!r}"
     )
 
 
@@ -95,7 +93,7 @@ def test_strict_mode_proceeds_when_failing_test_present(tmp_path: Path) -> None:
 
 def test_non_strict_mode_proceeds_without_failing_test(tmp_path: Path) -> None:
     """tdd_mode='ask' (default) → conductor is not blocked at apply."""
-    conductor, state, run_id = _make_pre_apply_state(tmp_path, tdd_mode="ask")
+    conductor, state, _run_id = _make_pre_apply_state(tmp_path, tdd_mode="ask")
 
     result = conductor._advance(state)
 

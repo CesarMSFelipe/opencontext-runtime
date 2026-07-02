@@ -12,8 +12,6 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
 from opencontext_cli.commands.run_cmd import handle_run_inspect
 
 

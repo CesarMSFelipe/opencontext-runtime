@@ -26,9 +26,13 @@ _CONTEXT = {
 }
 
 # Brain-level kinds: the 8 DecisionKind values that RuntimeBrain has strategies
-# for.  workflow and memory_promotion are runner-level (emitted by
-# oc_flow/runner.py directly — not brain strategies).
-_BRAIN_KINDS = frozenset(DecisionKind) - {DecisionKind.workflow, DecisionKind.memory_promotion}
+# for.  workflow, memory_promotion, and confidence_report are runner-level
+# (emitted by oc_flow/runner.py directly — not brain strategies).
+_BRAIN_KINDS = frozenset(DecisionKind) - {
+    DecisionKind.workflow,
+    DecisionKind.memory_promotion,
+    DecisionKind.confidence_report,
+}
 
 
 def test_all_eight_kinds_return_a_runtime_decision() -> None:

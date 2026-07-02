@@ -15,9 +15,9 @@ from opencontext_core.runtime.decisions import (
 )
 
 
-def test_decision_kind_has_exactly_ten_members() -> None:
-    # 8 brain-level + 2 runner-level (C16 / product-closure-r13).
-    assert len(list(DecisionKind)) == 10
+def test_decision_kind_has_exactly_eleven_members() -> None:
+    # 8 brain-level + 3 runner-level (C16 / product-closure-r13 + R4 confidence).
+    assert len(list(DecisionKind)) == 11
     assert {k.value for k in DecisionKind} == {
         # Brain-level (RuntimeBrain._STRATEGIES entries).
         "next_node",
@@ -31,6 +31,8 @@ def test_decision_kind_has_exactly_ten_members() -> None:
         # Runner-level: emitted by oc_flow/runner.py, not brain strategies.
         "workflow",
         "memory_promotion",
+        # R4: post-run confidence report (runner-level, not a brain strategy).
+        "confidence_report",
     }
 
 
