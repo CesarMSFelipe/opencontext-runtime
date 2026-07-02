@@ -281,7 +281,9 @@ class TestDispatchWiring:
         _dispatch_tool(
             "update",
             tmp_path,
-            argparse.Namespace(id=obs_id, title="updated title", content=None, type=None, scope=None),
+            argparse.Namespace(
+                id=obs_id, title="updated title", content=None, type=None, scope=None
+            ),
         )
         out = capsys.readouterr().out
         assert "updated title" in out
