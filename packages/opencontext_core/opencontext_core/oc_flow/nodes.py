@@ -955,6 +955,9 @@ def node_consolidation(ctx: OCFlowContext) -> NodeResult:
     summary_path = ctx.artifacts_dir / "consolidation" / "summary.md"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(summary, encoding="utf-8")
+    # C13 (product-closure-r13): stable alias at the artifacts root for easy discovery.
+    alias_path = ctx.artifacts_dir / "run-summary.md"
+    alias_path.write_text(summary, encoding="utf-8")
     _write_json(ctx.artifacts_dir / "consolidation" / "cost-report.json", cost_report)
     return NodeResult(
         node="consolidation",
