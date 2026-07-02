@@ -7,6 +7,7 @@ import logging
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from opencontext_core.compat import UTC
 from opencontext_core.config import ProjectIndexConfig
@@ -70,7 +71,7 @@ class ProjectIndexer:
 
         # Populate knowledge graph with batch checkpointing
         # Checkpoint persists which files have been indexed so interrupted runs resume.
-        kg_stats = {"files_indexed": 0, "nodes": 0, "edges": 0}
+        kg_stats: dict[str, Any] = {"files_indexed": 0, "nodes": 0, "edges": 0}
         if self.knowledge_graph is not None:
             checkpoint_path = (
                 resolve_storage_path(project_root, StorageMode.local) / "index_checkpoint.json"

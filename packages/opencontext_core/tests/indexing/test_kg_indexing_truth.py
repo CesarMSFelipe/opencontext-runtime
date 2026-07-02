@@ -86,7 +86,7 @@ class TestK1JsTsGrammarsShip:
         parser = TreeSitterParser()
         _, edges = parser.parse_file("src/greeter.ts", _TS_SOURCE)
         assert len(edges) > 0, (
-            f"Expected at least one call edge from greeter.ts, got none"
+            "Expected at least one call edge from greeter.ts, got none"
         )
 
     def test_kg_indexes_ts_js_symbols_and_edges(self) -> None:
@@ -120,7 +120,9 @@ class TestK1JsTsGrammarsShip:
 class TestK2HonestUnparsedDiagnostic:
     """K2: unparsed_files counter in kg_stats + log warning when grammar unavailable."""
 
-    def test_unparsed_files_counter_in_manifest(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    def test_unparsed_files_counter_in_manifest(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """When grammar is unavailable, manifest carries unparsed_files counter."""
         from opencontext_core.config import ProjectIndexConfig
         from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
@@ -146,8 +148,9 @@ class TestK2HonestUnparsedDiagnostic:
             k: v for k, v in original_languages.items() if k not in ("javascript", "typescript")
         }
 
+        logger_name = "opencontext_core.indexing.project_indexer"
         with patch.object(indexer.knowledge_graph.parser, "_languages", stripped):
-            with caplog.at_level(logging.WARNING, logger="opencontext_core.indexing.project_indexer"):
+            with caplog.at_level(logging.WARNING, logger=logger_name):
                 manifest = indexer.build_manifest(project_root)
 
         kg_meta = manifest.metadata.get("knowledge_graph", {})
@@ -233,7 +236,6 @@ class TestK3MtimeCheckpoint:
         import time
         time.sleep(0.05)  # ensure mtime differs
         py_file.write_text("def hello(): return 42\ndef new_fn(): pass\n")
-        import os
         # Force mtime update (some filesystems have low mtime resolution)
         py_file.touch()
 
