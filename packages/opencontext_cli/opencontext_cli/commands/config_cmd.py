@@ -205,6 +205,25 @@ def _config_doctor(args: Any) -> None:
 
 # ── Dot-notation config paths ──────────────────────────────────────────────
 
+# Key prefixes that belong to opencontext.yaml rather than user-prefs.
+# Keys under these prefixes that are not in CONFIG_PATHS should direct the user
+# to edit opencontext.yaml directly (or use a future `config yaml set` command).
+_YAML_SECTION_PREFIXES: tuple[str, ...] = (
+    "runtime.",
+    "memory.",
+    "storage.",
+    "sdd.",
+    "context.",
+    "models.",
+    "security.",
+)
+
+
+def _is_yaml_section_key(key: str) -> bool:
+    """Return True when *key* starts with a known opencontext.yaml section prefix."""
+    return any(key.startswith(prefix) for prefix in _YAML_SECTION_PREFIXES)
+
+
 # Schema of configurable paths: "path" -> (type, description)
 CONFIG_PATHS: dict[str, tuple[type, str]] = {
     # Flat keys
@@ -315,6 +334,15 @@ def _config_set(key: str, value: str) -> None:
         except (ValueError, TypeError) as exc:
             err_console.error(f"Cannot set '{key}' to '{value}': {exc}")
             err_console.dim(f"Expected type: {_target_type.__name__}")
+    elif _is_yaml_section_key(key):
+        err_console.error(f"'{key}' is not a user-preference key.")
+        err_console.error(
+            "This key lives in opencontext.yaml — edit that file directly "
+            "or use 'opencontext config wizard' to change it."
+        )
+        err_console.dim("  Location: opencontext.yaml in your project root")
+        err_console.dim("  Future: `opencontext config yaml set <key> <value>` (coming soon)")
+        sys.exit(1)
     else:
         err_console.error(f"Unknown key: {key}")
         console.dim(f"Available paths ({len(CONFIG_PATHS)}):")
@@ -337,6 +365,14 @@ def _config_get(key: str) -> None:
         parent, attr = resolved
         value = getattr(parent, attr, "<not set>")
         console.print(f"{key} = {value}")
+    elif _is_yaml_section_key(key):
+        err_console.error(f"'{key}' is not a user-preference key.")
+        err_console.error(
+            "This key lives in opencontext.yaml — read it with 'opencontext config show' "
+            "or edit the file directly."
+        )
+        err_console.dim("  Location: opencontext.yaml in your project root")
+        sys.exit(1)
     else:
         err_console.error(f"Unknown key: {key}")
         # Suggest the closest key (replace dots with underscores for display)
