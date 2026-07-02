@@ -18,6 +18,7 @@ OC Flow models/inspection downward.
 
 from __future__ import annotations
 
+import difflib
 import json
 import re
 import subprocess
@@ -735,12 +736,41 @@ def node_mutate(ctx: OCFlowContext) -> NodeResult:
         ctx.block_reason = f"apply failed: {type(exc).__name__}"
         raise
 
-    patch_lines = [f"# {e.operation.value} {e.path} :: {e.reason}" for e in edits] or [
-        "# no edits proposed (honest no-op mutation)"
-    ]
+    # C10 (product-closure-r13): build a real unified diff from checkpoint before-bytes
+    # and current (post-edit) file bytes. OQ-1 resolved: CheckpointStore.create captures
+    # pre-edit bytes in checkpoint.dir/"files"/{index}.blob for every changed path.
+    patch_parts: list[str] = []
+    if edits and checkpoint is not None:
+        snap_by_path = {f.path: f for f in checkpoint.files}
+        for edit in edits:
+            abs_path = (ctx.root / edit.path).resolve()
+            snap = snap_by_path.get(abs_path)
+            if snap and snap.existed and snap.blob:
+                before_bytes = (checkpoint.dir / "files" / snap.blob).read_bytes()
+                before_lines = before_bytes.decode("utf-8", errors="replace").splitlines(
+                    keepends=True
+                )
+            else:
+                before_lines = []
+            after_lines = (
+                abs_path.read_bytes().decode("utf-8", errors="replace").splitlines(keepends=True)
+                if abs_path.exists()
+                else []
+            )
+            diff = list(
+                difflib.unified_diff(
+                    before_lines,
+                    after_lines,
+                    fromfile=f"a/{edit.path}",
+                    tofile=f"b/{edit.path}",
+                )
+            )
+            patch_parts.extend(diff)
+    if not patch_parts:
+        patch_parts = ["# no edits proposed (honest no-op mutation)\n"]
     patch_name = ctx.artifacts_dir / "patch.diff"
     patch_name.parent.mkdir(parents=True, exist_ok=True)
-    patch_name.write_text("\n".join(patch_lines) + "\n", encoding="utf-8")
+    patch_name.write_text("".join(patch_parts), encoding="utf-8")
     rec_name = _write_json(
         ctx.artifacts_dir / "apply-receipts.json",
         {"checkpoint_id": ctx.checkpoint_id, "receipts": receipts},
