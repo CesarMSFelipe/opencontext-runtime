@@ -474,7 +474,7 @@ class OCFlowRunner:
             _signals = ConfidenceSignals(
                 inspection_confidence=(
                     1.0 if (_inspection and _inspection.outcome == "passed") else
-                    0.0 if (_inspection and _inspection.outcome != "not_run") else None
+                    0.0 if _inspection is not None else None
                 ),
             )
             _cr = ConfidenceEngine().report(

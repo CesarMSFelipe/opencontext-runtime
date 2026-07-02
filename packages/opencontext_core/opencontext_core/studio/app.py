@@ -36,6 +36,8 @@ def create_app(root: Path | str = ".") -> Any:
         DeprecationWarning,
         stacklevel=2,
     )
+    # Lazy: core has no install-time dependency on the studio package; the
+    # shim only works where opencontext_studio is installed.
     from opencontext_studio.server_v2 import create_v2_app
 
     return create_v2_app(root=root)
