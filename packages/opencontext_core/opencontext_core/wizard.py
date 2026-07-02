@@ -143,9 +143,16 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
     prefs = store.load()
 
     if non_interactive:
-        mark_setup_complete(prefs)
-        store.save(prefs)
-        return prefs
+        import sys
+
+        print(
+            "opencontext config wizard --non-interactive is not supported.\n"
+            "To configure OpenContext non-interactively use:\n"
+            "  opencontext config set <key> <value>   # set individual keys\n"
+            "  edit opencontext.yaml directly          # full config control",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
 
     _print_section("OpenContext Configuration Wizard")
     console.print("\nWelcome! Let's set up OpenContext for your workflow.")

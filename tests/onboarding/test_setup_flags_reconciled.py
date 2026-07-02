@@ -34,16 +34,21 @@ def test_onboarding_service_reconciles_flags(tmp_path: Path, monkeypatch: Any) -
     assert prefs.first_run is False, "first_run must be cleared once setup completes"
 
 
-def test_root_wizard_reconciles_flags(tmp_path: Path, monkeypatch: Any) -> None:
+def test_root_wizard_non_interactive_exits_2(tmp_path: Path, monkeypatch: Any) -> None:
+    """run_wizard(non_interactive=True) now exits 2 with an actionable message.
+
+    Non-interactive wizard is not supported; users must use `config set` or
+    edit opencontext.yaml directly.  The old silent-success behavior was
+    misleading (applied defaults with no output).
+    """
+    import pytest
+
     _isolate_prefs(monkeypatch, tmp_path)
     from opencontext_core import wizard as wizard_mod
-    from opencontext_core.user_prefs import UserConfigStore
 
-    wizard_mod.run_wizard(non_interactive=True)
-
-    prefs = UserConfigStore().load()
-    assert prefs.first_run is False
-    assert prefs.setup_completed is True, "setup_completed must be set once the wizard runs"
+    with pytest.raises(SystemExit) as exc_info:
+        wizard_mod.run_wizard(non_interactive=True)
+    assert exc_info.value.code == 2
 
 
 def test_mark_configured_sets_both_flags(tmp_path: Path, monkeypatch: Any) -> None:
