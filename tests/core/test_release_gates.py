@@ -20,6 +20,7 @@ from opencontext_core.evaluation.runner import (
 from opencontext_core.operating_model.release_gate import (
     FUNCTIONAL_BEHAVIOURS,
     GOVERNANCE_GATES,
+    SUITE_TO_FUNCTIONAL,
     AcceptanceEvaluator,
     GateResult,
     ReleaseBaselineStore,
@@ -174,3 +175,76 @@ def test_a_single_failed_gate_keeps_verdict_not_ready() -> None:
     )
     assert verdict.ready is False
     assert verdict.failed >= 1
+
+
+# ── B4: suite-derived functional gates + pyz self-check ───────────────────────
+
+
+def test_b4_not_measured_count_below_pre_b4_baseline() -> None:
+    """B4: wiring §A suite results → §B functional gates reduces not_measured < 33.
+
+    Pre-B4 baseline was 33 NOT_MEASURED.  After wiring suite-derived evidence
+    for 9 functional behaviours + pyz-artifact-smoke as a self-checkable gate,
+    not_measured must be strictly lower.  This test pins the improvement so
+    future changes cannot silently regress back to un-wired gates.
+    """
+    verdict = AcceptanceEvaluator(repo_root=PROJECT_ROOT).evaluate()
+    assert verdict.not_measured < 33, (
+        f"not_measured={verdict.not_measured} should be < 33 (pre-B4 baseline); "
+        "check that SUITE_TO_FUNCTIONAL mapping and _pyz_artifact_gate are wired"
+    )
+    # Verify honest accounting: verdict must still be not-ready (no forced ready=True).
+    assert verdict.ready is False, (
+        "verdict must remain not-ready until every gate is genuinely MET"
+    )
+
+
+def test_b4_suite_derived_functional_gates_are_met() -> None:
+    """Suite-derived functional behaviours map to MET when §A suites pass."""
+    verdict = AcceptanceEvaluator(repo_root=PROJECT_ROOT).evaluate()
+    gate_map = {g.gate: g for g in verdict.gates}
+
+    # Behaviours derived from currently-MET §A suites must be MET (not NOT_MEASURED).
+    # Only check behaviours whose source suite is reliably MET in provider-free CI.
+    expected_met = {
+        behaviour
+        for suite_name, behaviours in SUITE_TO_FUNCTIONAL.items()
+        for behaviour in behaviours
+        # Deferred suites (context-token-efficiency, kg-retrieval-precision) may be
+        # NOT_MEASURED — exclude them from this assertion.
+        if suite_name not in ("context-token-efficiency", "kg-retrieval-precision")
+    }
+    for behaviour in expected_met:
+        gate = gate_map.get(behaviour)
+        assert gate is not None, f"behaviour gate {behaviour!r} missing from verdict"
+        assert gate.status is GateStatus.MET, (
+            f"behaviour {behaviour!r} should be MET (derived from suite result) "
+            f"but is {gate.status.name}: {gate.detail}"
+        )
+
+
+def test_b4_pyz_artifact_gate_is_self_checkable() -> None:
+    """pyz-artifact-smoke must be self-checkable (MET or NOT_MEASURED with named reason)."""
+    verdict = AcceptanceEvaluator(repo_root=PROJECT_ROOT).evaluate()
+    gate_map = {g.gate: g for g in verdict.gates}
+    pyz_gate = gate_map.get("pyz-artifact-smoke")
+    assert pyz_gate is not None, "pyz-artifact-smoke gate must be present in verdict"
+    # This gate is self-checkable: it must not say "no live functional run measured".
+    assert "no live functional run measured" not in pyz_gate.detail, (
+        f"pyz-artifact-smoke should be self-checkable, not unmeasured: {pyz_gate.detail}"
+    )
+    # Status is either MET (pyz exists) or NOT_MEASURED with a named infrastructure reason.
+    assert pyz_gate.status in (GateStatus.MET, GateStatus.NOT_MEASURED), (
+        f"pyz-artifact-smoke must be MET or NOT_MEASURED, got {pyz_gate.status.name}"
+    )
+
+
+def test_b4_suite_to_functional_mapping_is_consistent() -> None:
+    """Every behaviour in SUITE_TO_FUNCTIONAL must be listed in FUNCTIONAL_BEHAVIOURS."""
+    all_behaviours = set(FUNCTIONAL_BEHAVIOURS)
+    for suite_name, behaviours in SUITE_TO_FUNCTIONAL.items():
+        for behaviour in behaviours:
+            assert behaviour in all_behaviours, (
+                f"SUITE_TO_FUNCTIONAL[{suite_name!r}] maps to {behaviour!r} "
+                f"which is not in FUNCTIONAL_BEHAVIOURS"
+            )

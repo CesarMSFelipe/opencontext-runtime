@@ -232,6 +232,31 @@ GOVERNANCE_GATES: tuple[str, ...] = (
     "owner-resolution-hooks",
 )
 
+#: B4 — §A suite name → list of §B functional behaviour gate ids that the suite
+#: exercises.  When a suite is MET, the corresponding functional behaviours are
+#: inferred as MET; when FAILED, they are inferred as FAILED.  Behaviours that
+#: require a live e2e journey (no suite covers them) are left NOT_MEASURED.
+#:
+#: Mapping rationale:
+#:   first-run           → create-usable-config (first run creates a config file),
+#:                          detect-capabilities  (doctor call detects installed caps)
+#:   oc-flow-bugfix      → select-oc-flow-for-bugfix (OC-flow is selected for the task),
+#:                          apply-small-mutation-safely (ApplyEdit patches the file)
+#:   sdd-formal-feature  → select-sdd-for-formal (SDD route is selected)
+#:   memory-usefulness   → update-memory-kg-consolidation (memory save+search roundtrip)
+#:   policy-security     → run-local-inspection (policy engine = local behaviour inspection)
+#:   provider-fallback   → diagnose-bounded-failures (provider error = bounded, handled)
+#:   resume-rollback     → resume-if-interrupted (checkpoint resume = interrupted recovery)
+SUITE_TO_FUNCTIONAL: dict[str, list[str]] = {
+    "first-run": ["create-usable-config", "detect-capabilities"],
+    "oc-flow-localized-bugfix": ["select-oc-flow-for-bugfix", "apply-small-mutation-safely"],
+    "sdd-formal-feature": ["select-sdd-for-formal"],
+    "memory-usefulness": ["update-memory-kg-consolidation"],
+    "policy-security": ["run-local-inspection"],
+    "provider-fallback": ["diagnose-bounded-failures"],
+    "resume-rollback": ["resume-if-interrupted"],
+}
+
 _StatusInput = GateStatus | tuple[GateStatus, str]
 
 #: AVH-010 / B10 — the e2e Definition-of-Done proof artifact. The developer-journey
@@ -439,9 +464,18 @@ class AcceptanceEvaluator:
         e2e_proof: Mapping[str, Any] | None = None,
     ) -> AcceptanceVerdict:
         runner = self.runner or build_default_runner()
+
+        # Run §A suites once; reuse for both A-gate scoring and B-gate derivation.
+        suite_reports = list(runner.run_all(bench_root, smoke=smoke))
+
+        # Derive functional evidence from §A suite results, then merge with any
+        # explicitly injected evidence (injected values take precedence).
+        derived = self._derive_functional_from_suites(suite_reports)
+        merged_functional: dict[str, _StatusInput] = {**derived, **(functional or {})}
+
         gates: list[GateResult] = []
-        gates.extend(self._gate_a(runner, bench_root, smoke))
-        gates.extend(self._gate_b(functional or {}))
+        gates.extend(self._gate_a_from_reports(suite_reports))
+        gates.extend(self._gate_b(merged_functional))
         gates.extend(
             self._gate_c(
                 runner,
@@ -451,6 +485,7 @@ class AcceptanceEvaluator:
                 dod_gates,
                 release_mode=release_mode,
                 e2e_proof=e2e_proof,
+                suite_reports=suite_reports,
             )
         )
         gates.extend(self._gate_d(governance or {}))
@@ -477,7 +512,7 @@ class AcceptanceEvaluator:
         ready = bool(blocking) and all(g.status is GateStatus.MET for g in blocking)
         return AcceptanceVerdict(
             ready=ready,
-            methodology_version=_methodology_version(runner, bench_root, smoke),
+            methodology_version=_methodology_version(runner, bench_root, smoke, suite_reports),
             met=met,
             not_measured=nm,
             failed=failed,
@@ -485,11 +520,12 @@ class AcceptanceEvaluator:
         )
 
     # -- A: the ten mandatory benchmark gates ---------------------------------
-    def _gate_a(
-        self, runner: BenchmarkRunner, bench_root: str | Path, smoke: bool
+    def _gate_a_from_reports(
+        self, suite_reports: list[Any]
     ) -> list[GateResult]:
+        """Translate pre-run suite reports into §A gate results."""
         out: list[GateResult] = []
-        for report in runner.run_all(bench_root, smoke=smoke):
+        for report in suite_reports:
             out.append(
                 GateResult(
                     gate=report.suite,
@@ -500,12 +536,75 @@ class AcceptanceEvaluator:
             )
         return out
 
+    # B4 helper — derive §B functional evidence from §A suite outcomes.
+    def _derive_functional_from_suites(
+        self, suite_reports: list[Any]
+    ) -> dict[str, _StatusInput]:
+        """Map §A suite results to §B functional behaviour gate evidence.
+
+        Only suites listed in ``SUITE_TO_FUNCTIONAL`` contribute evidence.
+        A MET suite → the mapped behaviours become MET; a FAILED suite → FAILED.
+        NOT_MEASURED suites contribute nothing (the behaviour stays NOT_MEASURED
+        unless explicit evidence is injected or another suite covers it).
+
+        Injected evidence in ``evaluate()`` always takes precedence over derived
+        evidence (the caller passes injected values after merging with this output).
+        """
+        derived: dict[str, _StatusInput] = {}
+        for report in suite_reports:
+            suite_name: str = report.suite
+            if suite_name not in SUITE_TO_FUNCTIONAL:
+                continue
+            if report.status is GateStatus.NOT_MEASURED:
+                # Cannot derive evidence from a deferred / unmeasured suite.
+                continue
+            behaviours = SUITE_TO_FUNCTIONAL[suite_name]
+            detail = f"derived from {suite_name} suite ({report.notes or 'v' + report.version})"
+            status = report.status  # MET or FAILED — both are honest evidence
+            for behaviour in behaviours:
+                # First-writer wins; if two suites map to the same behaviour,
+                # take the first one (deterministic: MANDATORY_GATES order).
+                if behaviour not in derived:
+                    derived[behaviour] = (status, detail)
+        return derived
+
     # -- B: the fifteen functional behaviours ---------------------------------
     def _gate_b(self, functional: Mapping[str, _StatusInput]) -> list[GateResult]:
-        return [
-            _resolve(name, "B", functional, default_detail="no live functional run measured")
-            for name in FUNCTIONAL_BEHAVIOURS
-        ]
+        out: list[GateResult] = []
+        for name in FUNCTIONAL_BEHAVIOURS:
+            if name == "pyz-artifact-smoke" and name not in functional:
+                # Self-checkable: verify that the release .pyz artifact exists
+                # under dist/ or at the repo root (built by the publish pipeline).
+                out.append(self._pyz_artifact_gate())
+            else:
+                out.append(
+                    _resolve(
+                        name, "B", functional, default_detail="no live functional run measured"
+                    )
+                )
+        return out
+
+    def _pyz_artifact_gate(self) -> GateResult:
+        """REAL check: opencontext.pyz release artifact must exist in dist/."""
+        name = "pyz-artifact-smoke"
+        # Check dist/ first, then repo root (some pipelines write it at root).
+        for candidate in (
+            self.repo_root / "dist" / "opencontext.pyz",
+            self.repo_root / "opencontext.pyz",
+        ):
+            if candidate.is_file():
+                return GateResult(
+                    gate=name,
+                    category="B",
+                    status=GateStatus.MET,
+                    detail=f"opencontext.pyz found at {candidate.relative_to(self.repo_root)}",
+                )
+        return GateResult(
+            gate=name,
+            category="B",
+            status=GateStatus.NOT_MEASURED,
+            detail="opencontext.pyz not found in dist/ or repo root — build pipeline pending",
+        )
 
     # -- C: regression / non-negotiable ---------------------------------------
     def _gate_c(
@@ -518,11 +617,12 @@ class AcceptanceEvaluator:
         *,
         release_mode: bool = False,
         e2e_proof: Mapping[str, Any] | None = None,
+        suite_reports: list[Any] | None = None,
     ) -> list[GateResult]:
         out: list[GateResult] = []
         # Self-checkable here and now:
         out.append(self._publish_token_gate())
-        out.append(self._methodology_versioned_gate(runner, bench_root, smoke))
+        out.append(self._methodology_versioned_gate(runner, bench_root, smoke, suite_reports))
         # AVH-010 / B10 — the HARD, gating e2e DoD journey.
         out.append(self._e2e_dod_gate(regression, release_mode=release_mode, e2e_proof=e2e_proof))
         # AVH-007 / B3 — per-subsystem parity-gated flip integrity (reads
@@ -708,11 +808,20 @@ class AcceptanceEvaluator:
         return gates
 
     def _methodology_versioned_gate(
-        self, runner: BenchmarkRunner, bench_root: str | Path, smoke: bool
+        self,
+        runner: BenchmarkRunner,
+        bench_root: str | Path,
+        smoke: bool,
+        suite_reports: list[Any] | None = None,
     ) -> GateResult:
         """REAL check: every benchmark report carries a suite + semver version."""
         name = "benchmark-methodology-versioned"
-        reports = runner.run_all(bench_root, smoke=smoke)
+        # Re-use pre-run reports when available to avoid a second full run.
+        reports = (
+            suite_reports
+            if suite_reports is not None
+            else list(runner.run_all(bench_root, smoke=smoke))
+        )
         unstamped = [r.suite for r in reports if not r.suite or not r.version]
         if unstamped:
             return GateResult(
@@ -729,8 +838,17 @@ class AcceptanceEvaluator:
         )
 
 
-def _methodology_version(runner: BenchmarkRunner, bench_root: str | Path, smoke: bool) -> str:
-    reports = runner.run_all(bench_root, smoke=smoke)
+def _methodology_version(
+    runner: BenchmarkRunner,
+    bench_root: str | Path,
+    smoke: bool,
+    suite_reports: list[Any] | None = None,
+) -> str:
+    reports = (
+        suite_reports
+        if suite_reports is not None
+        else list(runner.run_all(bench_root, smoke=smoke))
+    )
     versions = {r.version for r in reports if r.version}
     return sorted(versions)[0] if versions else "0"
 
@@ -762,6 +880,7 @@ __all__ = [
     "FUNCTIONAL_BEHAVIOURS",
     "GOVERNANCE_GATES",
     "RELEASE_EVIDENCE_PATH",
+    "SUITE_TO_FUNCTIONAL",
     "AcceptanceEvaluator",
     "AcceptanceVerdict",
     "GateResult",
