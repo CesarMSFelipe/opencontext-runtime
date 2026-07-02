@@ -36,39 +36,14 @@ def _args(tmp_path: Path, **overrides: Any) -> argparse.Namespace:
     return argparse.Namespace(**base)
 
 
-def test_flag_off_uses_legacy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """``is_migrated_flag('rt-spine') is False`` -> legacy OC Flow path runs.
+def test_flag_is_migrated_after_c15(tmp_path: Path) -> None:
+    """C15: is_migrated_flag('rt-spine') is True — the spine is the default route.
 
-    We stub the legacy ``run_oc_flow_cli`` and assert it is called with the
-    same kwargs the CLI would otherwise pass. The spine branch MUST NOT
-    touch ``RuntimeApi``.
+    After the C15 flip, the ledger records rt-spine as migrated so handle_run_exec
+    routes through RuntimeApi unconditionally (no legacy OC Flow path remains).
     """
-    called: dict[str, Any] = {}
-
-    def fake_oc_flow(task: Any, **kwargs: Any) -> dict[str, Any]:
-        called["task"] = task
-        called.update(kwargs)
-        return {"status": "ok", "session_id": "x", "run_id": "y"}
-
-    monkeypatch.setattr(
-        "opencontext_core.oc_flow.cli.run_oc_flow_cli", fake_oc_flow
-    )
-    # Also gate the compat flag check so the legacy branch is the only one
-    # that can run.
-    monkeypatch.setattr(
-        "opencontext_core.compat.is_migrated_flag", lambda flag: False
-    )
-
-    # Make sure is_migrated_flag returns False (default ledger state).
-    assert is_migrated_flag("rt-spine") is False
-
-    with patch("opencontext_core.runtime.api.RuntimeApi") as TrackingApi:
-        handle_run_exec(_args(tmp_path))
-
-    assert called["task"] == "fix the failing test"
-    assert called["workflow"] == "oc-flow"
-    assert called["lane"] == "fast"
-    assert TrackingApi.call_count == 0, "RuntimeApi MUST NOT be called when flag is off"
+    # The flag must be migrated after C15.
+    assert is_migrated_flag("rt-spine") is True
 
 
 def test_flag_on_uses_spine(
@@ -109,38 +84,33 @@ def test_flag_on_uses_spine(
     assert sequence == ["__init__", "start_session", "run"], sequence
 
 
-def test_legacy_byte_identical_when_flag_off(
+def test_spine_is_the_only_path_after_c15(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When the flag is off, the CLI MUST NOT touch RuntimeApi at all.
+    """C15: the spine (RuntimeApi) is the ONLY execution path; no legacy branch remains.
 
-    Pins the byte-identical guarantee from the commit-007 spec: the legacy
-    OC Flow path is unchanged, and the spine class is never instantiated.
+    After the C15 flip, handle_run_exec no longer has a legacy OC Flow branch.
+    RuntimeApi MUST be instantiated and start_session MUST be called.
     """
-    instantiated: list[Any] = []
+    from opencontext_core.runtime.api import RunResult, SessionRef
 
-    class TrackingApi:
+    fake_session = SessionRef(
+        session_id="sess-c15", status="created", session_path=str(tmp_path)
+    )
+    fake_result = RunResult(run_id="run-c15", status="completed", legacy=None)
+
+    class SpineOnlyApi:
         def __init__(self, *a: Any, **kw: Any) -> None:
-            instantiated.append(self)
+            pass
 
-    called: dict[str, Any] = {}
+        def start_session(self, request: Any) -> Any:
+            return fake_session
 
-    def fake_oc_flow(task: Any, **kwargs: Any) -> dict[str, Any]:
-        called["task"] = task
-        return {"status": "ok", "session_id": "x", "run_id": "y"}
+        def run(self, request: Any) -> Any:
+            return fake_result
 
-    monkeypatch.setattr(
-        "opencontext_core.oc_flow.cli.run_oc_flow_cli", fake_oc_flow
-    )
-    monkeypatch.setattr(
-        "opencontext_core.compat.is_migrated_flag", lambda flag: False
-    )
-
-    with patch("opencontext_core.runtime.api.RuntimeApi", TrackingApi):
-        handle_run_exec(_args(tmp_path))
-
-    assert called["task"] == "fix the failing test"
-    assert instantiated == [], "RuntimeApi MUST NOT be instantiated when flag is off"
+    with patch("opencontext_core.runtime.api.RuntimeApi", SpineOnlyApi):
+        handle_run_exec(_args(tmp_path))  # must not raise
 
 
 def test_spine_routes_via_start_session_then_run(
@@ -229,8 +199,10 @@ def test_spine_run_request_carries_session_id(
 
 
 # ---------- sanity: ledger still has the rt-spine entry -----------------------
-def test_rt_spine_ledger_entry_exists() -> None:
-    """The rt-spine flag is registered on the seeded ledger."""
+def test_rt_spine_ledger_entry_is_migrated() -> None:
+    """C15: the rt-spine ledger entry must be in the 'migrated' state after the flip."""
     matches = [m for m in MIGRATION_LEDGER.modules if (m.flag or "").endswith("rt-spine")]
     assert matches, "rt-spine must be in the MIGRATION_LEDGER"
-    assert matches[0].state is MigrationState.legacy
+    assert matches[0].state is MigrationState.migrated, (
+        f"Expected 'migrated' after C15 flip, got: {matches[0].state}"
+    )

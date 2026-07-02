@@ -360,22 +360,30 @@ MIGRATION_LEDGER = MigrationLedger(
             flag="runtime.context_engine_enabled",
         ),
         # CL-V2 (commit 006) RuntimeApi parallel class — Phase 2 spine.
+        # C15: flipped to migrated (C14 parity suite green; rollback: revert state=).
         ModuleMigration(
             module="runtime/api.py",
             legacy_symbol="RuntimeApi",
-            state=MigrationState.legacy,
+            state=MigrationState.migrated,
             superseded_by="PR-006",
             removal_milestone="milestone-F",
             flag="runtime.rt-spine",
+            vnext_only=True,
+            legacy_shimmed=True,
+            parity_test="tests/release/test_runtime_spine_parity.py",
         ),
         # CL-V2 (commit 006) MCP ``runtime.*`` dispatcher — Phase 2 spine.
+        # C15: flipped to migrated (C14 parity suite green; rollback: revert state=).
         ModuleMigration(
             module="mcp/run_dispatcher.py",
             legacy_symbol="runtime_dispatcher",
-            state=MigrationState.legacy,
+            state=MigrationState.migrated,
             superseded_by="PR-008",
             removal_milestone="milestone-F",
             flag="runtime.mcp-runtime",
+            vnext_only=True,
+            legacy_shimmed=True,
+            parity_test="tests/release/test_runtime_spine_parity.py",
         ),
         # CL-V2 (commit 010) unified ResourceBudget — Phase 6.
         ModuleMigration(

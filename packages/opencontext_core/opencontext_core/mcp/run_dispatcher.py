@@ -1,8 +1,15 @@
-"""MCP run dispatcher.
+"""MCP run dispatcher — shim over the vNext RuntimeApi spine (C15).
 
-One small seam for agent hosts: OC Flow uses the same product path as the CLI,
-while formal SDD workflows still go through RuntimeApi until the SDD validator
-slice lands.
+C15 spine flip: ``dispatch_mcp_run`` retains the legacy ``run_oc_flow_cli``
+path for backward-compatible OC Flow MCP calls.  The ``mcp-runtime`` migration
+flag controls TOOL REGISTRATION (``runtime_dispatcher.registered_tools()``
+returns the 9-method session API when migrated); it does NOT change this
+function's routing because ``dispatch_mcp_run`` is a different entry point from
+the ``runtime.*`` tool dispatcher.
+
+Rollback for C15: revert ``state=MigrationState.migrated`` to
+``state=MigrationState.legacy`` for rt-spine and mcp-runtime in
+``compat/migration.py``.
 """
 
 from __future__ import annotations
@@ -26,6 +33,11 @@ def dispatch_mcp_run(
     lane: str = "fast",
 ) -> dict[str, Any] | None:
     """Dispatch MCP run requests that already have a current product path.
+
+    This function is the backward-compatible OC Flow MCP entry point.  The vNext
+    session-first API is exposed via ``runtime_dispatcher.registered_tools()``
+    and ``runtime_dispatcher.handle_tool_call()`` once the mcp-runtime flag is
+    migrated.
 
     Returns ``None`` for workflows not owned by this dispatcher yet.
     """

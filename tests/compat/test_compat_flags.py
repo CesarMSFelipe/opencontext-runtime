@@ -141,9 +141,15 @@ def test_accepted_bundle_exempts_its_subsystem_only() -> None:
 
 
 def test_catalog_fields_are_real_config_fields() -> None:
+    # Accepted/migrated subsystems may use governance flag names that contain hyphens
+    # (e.g. "rt-spine", "mcp-runtime") and are therefore not valid Pydantic field
+    # identifiers. They are exempt: their config field no longer lives in
+    # RuntimeMigrationConfig once the flip evidence bundle is accepted.
+    repo = Path(__file__).resolve().parents[2]
+    accepted = _accepted_subsystems(repo)
     config_fields = set(RuntimeMigrationConfig.model_fields)
     for spec in flag_catalog():
-        if spec.name.startswith("runtime."):
+        if spec.name.startswith("runtime.") and spec.subsystem not in accepted:
             assert spec.field in config_fields, spec.name
 
 

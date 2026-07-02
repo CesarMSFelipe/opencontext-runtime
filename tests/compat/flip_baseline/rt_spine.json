@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "subsystem": "rt_spine",
+  "flag": "runtime.rt-spine",
+  "config_before": {
+    "runtime.rt-spine": false
+  },
+  "config_after": {
+    "runtime.rt-spine": true
+  },
+  "benchmark_before": {
+    "run": "C7-certified-2026-07-02",
+    "verdict": "1.0_READY",
+    "tests": {
+      "passed": 2798,
+      "failed": 0
+    }
+  },
+  "benchmark_after": {
+    "run": "C14-89567c5-parity-suite-green",
+    "tests": {
+      "passed": 2798,
+      "failed": 0
+    }
+  },
+  "parity": {
+    "subsystem": "rt_spine",
+    "flag": "runtime.rt-spine",
+    "passed": true,
+    "mismatch": null
+  },
+  "rollback_flag": "runtime.rt-spine",
+  "rollback_path": "packages/opencontext_core/opencontext_core/compat/migration.py",
+  "accepted": true,
+  "reverted": false,
+  "reason": "parity passed; benchmark not worse; flip accepted",
+  "generated_at": "2026-07-02T12:00:00.000000+00:00"
+}

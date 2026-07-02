@@ -18,8 +18,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 # The repo root is four parents up from this file:
 # tests/architecture/ -> tests/ -> repo root
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -63,18 +61,12 @@ def _collect_importers(roots: tuple[Path, ...]) -> list[str]:
     return importers
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "C15 spine flip: run_cmd.py will route through RuntimeApi and stop "
-        "importing run_oc_flow_cli directly. Remove xfail after C15 lands."
-    ),
-)
 def test_no_direct_run_oc_flow_cli_importers_outside_shim() -> None:
     """No production code outside the designated shim imports run_oc_flow_cli directly.
 
-    This test is expected to fail in C14 (run_cmd.py still imports directly) and
-    turn GREEN in C15 once the spine flip routes CLI through RuntimeApi.
+    C15: run_cmd.py now routes through RuntimeApi — the direct run_oc_flow_cli
+    import has been removed from that file. The only legal production importer is
+    mcp/run_dispatcher.py (the shim), which is in the allowlist.
     """
     violators = _collect_importers(_PRODUCTION_ROOTS)
     assert violators == [], (

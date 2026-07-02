@@ -94,19 +94,17 @@ def add_run_exec_parser(subparsers: Any) -> None:
 
 
 def handle_run_exec(args: Any) -> None:
-    """Dispatch the ``run`` execution command.
+    """Dispatch the ``run`` execution command via RuntimeApi (C15 spine flip).
 
-    Two paths (commit-007 / amendment A1):
+    Routes through :class:`~opencontext_core.runtime.api.RuntimeApi`:
+    ``start_session()`` then ``run()``.  NEVER ``run_workflow`` (amendment A1).
 
-    * ``compat.is_migrated_flag("rt-spine") is True`` -- route through
-      :class:`~opencontext_core.runtime.api.RuntimeApi`:
-      ``start_session()`` then ``run()``. NEVER ``run_workflow``.
-    * otherwise -- keep the legacy OC Flow path byte-identical (FLOW-16).
+    Rollback: revert ``state=MigrationState.migrated`` to ``state=MigrationState.legacy``
+    for rt-spine and mcp-runtime in ``compat/migration.py`` and restore the legacy
+    branch below.
     """
-    from opencontext_core.compat import is_migrated_flag
-    from opencontext_core.config import load_config_or_defaults
     from opencontext_core.config_resolver import missing_config_hint, resolve_config_path
-    from opencontext_core.oc_flow.cli import run_oc_flow_cli
+    from opencontext_core.runtime.api import RunRequest, RuntimeApi, StartSessionRequest
 
     root = _root(args)
     # B2 / ADR-A2: read the SAME path install writes (<root>/opencontext.yaml),
@@ -120,60 +118,38 @@ def handle_run_exec(args: Any) -> None:
         # `json.load(stdout)` clean.
         print(missing_config_hint(root), file=sys.stderr)
 
-    if is_migrated_flag("rt-spine"):
-        # Spine path (commit-007): start_session -> run. NO run_workflow.
-        from opencontext_core.runtime.api import (
-            RunRequest,
-            RuntimeApi,
-            StartSessionRequest,
-        )
-
-        task = getattr(args, "task", None) or ""
-        workflow = getattr(args, "workflow", "oc-flow")
-        profile = getattr(args, "profile", "balanced")
-        api = RuntimeApi(root)
-        session = api.start_session(
-            StartSessionRequest(task=task, root=str(root), profile=profile)
-        )
-        result = api.run(
-            RunRequest(session_id=session.session_id, workflow_id=workflow, task=task)
-        )
-        summary = {
-            "status": result.status,
-            "session_id": session.session_id,
-            "run_id": result.run_id,
-            "workflow": workflow,
-        }
-        if getattr(args, "json", False):
-            print(json.dumps(summary, indent=2))
-        else:
-            print(f"OC Flow (spine): {summary.get('status')}")
-            print(f"  workflow: {summary.get('workflow')}")
-            print(f"  session_id: {summary.get('session_id')}")
-            print(f"  run_id: {summary.get('run_id')}")
-        return
-
-    enabled = True
-    try:
-        config = load_config_or_defaults(config_path, auto_detect=False)
-        enabled = bool(getattr(config.runtime, "oc_flow_enabled", False))
-    except Exception:  # config is advisory for the gate; default-on for the explicit CLI
-        enabled = True
-
-    summary = run_oc_flow_cli(
-        getattr(args, "task", None),
-        root=root,
-        workflow=getattr(args, "workflow", "oc-flow"),
-        lane=getattr(args, "lane", "fast"),
-        profile=getattr(args, "profile", "balanced"),
-        resume=getattr(args, "resume", None),
-        enabled=enabled,
-        as_json=getattr(args, "json", False),
+    # Spine path (commit-007 / C15): start_session -> run. NO run_workflow.
+    task = getattr(args, "task", None) or ""
+    workflow = getattr(args, "workflow", "oc-flow")
+    profile = getattr(args, "profile", "balanced")
+    api = RuntimeApi(root)
+    session = api.start_session(
+        StartSessionRequest(task=task, root=str(root), profile=profile)
     )
+    result = api.run(
+        RunRequest(session_id=session.session_id, workflow_id=workflow, task=task)
+    )
+    # B1 / PROD-004: extract the real OC Flow status from the legacy carrier so
+    # needs_executor / needs_provider are reported honestly (the spine wrapper maps
+    # them to "completed" via _legacy_status; we surface the carrier value first).
+    oc_status = str(getattr(result.legacy, "status", result.status) or result.status)
+    summary = {
+        "status": oc_status,
+        "session_id": session.session_id,
+        "run_id": result.run_id,
+        "workflow": workflow,
+    }
+    if getattr(args, "json", False):
+        print(json.dumps(summary, indent=2))
+    else:
+        print(f"OC Flow (spine): {summary.get('status')}")
+        print(f"  workflow: {summary.get('workflow')}")
+        print(f"  session_id: {summary.get('session_id')}")
+        print(f"  run_id: {summary.get('run_id')}")
     # B1 / PROD-004: a mutation that found no executor/provider is reported honestly
-    # as needs_executor/needs_provider. Print an actionable next step naming at least
-    # one concrete remedy. STDERR keeps the --json STDOUT payload pure JSON.
-    if isinstance(summary, dict) and summary.get("status") in {"needs_executor", "needs_provider"}:
+    # as needs_executor / needs_provider. Print an actionable next step naming at
+    # least one concrete remedy. STDERR keeps the --json STDOUT payload pure JSON.
+    if oc_status in {"needs_executor", "needs_provider"}:
         print(
             "Hint: enable mutation by configuring a provider "
             "(export ANTHROPIC_API_KEY=... / OPENAI_API_KEY=...), an MCP sampler, or "
