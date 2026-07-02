@@ -4,18 +4,15 @@ Asserts:
 1. ``all_suites()`` returns exactly 12 callable suites.
 2. ``suites/__init__.py`` source contains no ``_stub`` factory.
 3. ``A11`` (benchmark_evidence) runs and passes the self-referential integrity check.
-4. (xfail until B3) All 12 suites exercise real behaviour — no pending entries.
+4. All 12 suites exercise real behaviour — no pending entries.
 
-The test LANDS RED in B1 because ``suites/__init__.py`` still has ``_stub`` before
-the B1 implementation commits. After B1 the first three assertions are GREEN; the
-xfail covers suites pending B2/B3 and is REMOVED in the batch that completes all 12.
+All 12 §A suites are wired as of B3.  This file intentionally contains no
+xfail markers: all four assertions must pass green.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-
-import pytest
 
 from opencontext_core.benchmarks.v2.suites import all_suites
 
@@ -24,9 +21,6 @@ _SUITES_INIT = (
     _REPO_ROOT
     / "packages/opencontext_core/opencontext_core/benchmarks/v2/suites/__init__.py"
 )
-
-# Suites not yet real after B2 — replaced with real behaviour in B3.
-_PENDING_AFTER_B2: frozenset[str] = frozenset({"A4", "A7", "A8", "A9", "A12"})
 
 
 # ---------------------------------------------------------------------------
@@ -78,22 +72,24 @@ def test_a11_benchmark_evidence_passes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 4 — xfail until B3: all suites must be real
+# Test 4 — all 12 suites must be real (B3 complete)
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "A4 A7 A8 A9 A12 are honest-fail pending suites — "
-        "wired in B3. Remove this xfail when all 12 are real."
-    ),
-    strict=False,
-)
 def test_all_twelve_suites_are_real() -> None:
-    """No §A suite may be a pending placeholder when all 12 are implemented.
+    """No §A suite may use the _pending_suite factory once all 12 are wired.
 
-    This xfail is removed by the B3 agent once every suite exercises real behaviour.
+    All 12 suites are wired as of B3.  Each suite callable must NOT be a
+    ``_pending_suite.<locals>.run`` function (checked by A11 introspection and
+    by the source guard in test 2).  Additionally, none of the §A suite IDs
+    should resolve to a function whose ``__qualname__`` contains ``_pending``.
     """
     suites = all_suites()
-    still_pending = [sid for sid in _PENDING_AFTER_B2 if sid in suites]
-    assert not still_pending, f"Suites still pending: {still_pending}"
+    still_pending = [
+        sid
+        for sid, fn in suites.items()
+        if "_pending" in getattr(fn, "__qualname__", "")
+    ]
+    assert not still_pending, (
+        f"Suites still using _pending_suite factory: {still_pending}"
+    )
