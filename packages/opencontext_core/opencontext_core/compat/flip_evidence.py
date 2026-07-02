@@ -74,6 +74,8 @@ FLIP_SEQUENCE: tuple[str, ...] = (
     "persona_registry",  # runtime.persona_registry_enabled
     "skill_registry",  # runtime.skill_registry_enabled
     "harness_registry",  # runtime.harness_registry_enabled
+    "rt_spine",  # runtime.rt-spine (Phase-2 spine — RuntimeApi default route)
+    "mcp_runtime",  # runtime.mcp-runtime (Phase-2 MCP session dispatcher)
     "runtime_brain",  # runtime_brain.enabled (advisory)
     "runtime_intelligence",  # runtime_intelligence_enabled (advisory)
 )
@@ -90,6 +92,8 @@ SUBSYSTEM_FLAGS: dict[str, str] = {
     "persona_registry": "runtime.persona_registry_enabled",
     "skill_registry": "runtime.skill_registry_enabled",
     "harness_registry": "runtime.harness_registry_enabled",
+    "rt_spine": "runtime.rt-spine",
+    "mcp_runtime": "runtime.mcp-runtime",
     "runtime_brain": "runtime_brain.enabled",
     "runtime_intelligence": "runtime_intelligence_enabled",
 }

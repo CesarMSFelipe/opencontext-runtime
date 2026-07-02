@@ -202,6 +202,33 @@ def flag_catalog() -> list[FlagSpec]:
             note="Run the post-run Learning Loop (Decision Log + learning candidates).",
         )
     )
+
+    # Phase-2 spine flags use hyphenated names so they live outside
+    # RuntimeMigrationConfig (Python field names cannot contain hyphens). They are
+    # added here explicitly so FLIP_SEQUENCE membership tests can resolve them via
+    # flag_catalog() / flag_spec() without scanning the migration ledger.
+    specs.append(
+        FlagSpec(
+            name="runtime.rt-spine",
+            field="rt-spine",
+            subsystem="rt_spine",
+            default=False,
+            migration_state=MigrationState.legacy,
+            superseding_pr="PR-006",
+            note="Route all consumers through RuntimeApi (Phase-2 spine flip).",
+        )
+    )
+    specs.append(
+        FlagSpec(
+            name="runtime.mcp-runtime",
+            field="mcp-runtime",
+            subsystem="mcp_runtime",
+            default=False,
+            migration_state=MigrationState.legacy,
+            superseding_pr="PR-008",
+            note="Enable the runtime.* MCP session dispatcher (Phase-2 spine flip).",
+        )
+    )
     return specs
 
 
