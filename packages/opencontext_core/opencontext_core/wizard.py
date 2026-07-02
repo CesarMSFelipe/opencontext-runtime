@@ -420,6 +420,24 @@ def show_config(root: Path | None = None) -> None:
             else:
                 console.print("    models.roles: (not set)")
 
+            # --- Provenance section (7-layer resolution) ----------------------
+            _label("Provenance")
+            try:
+                from opencontext_core.config_resolver import resolve as _resolve
+
+                resolved = _resolve(project_path=project_root)
+                prov = resolved.provenance
+                # Show the winning layer for the three key dimensions.
+                for dotted_key, top_key in [
+                    ("memory.provider", "memory"),
+                    ("storage.mode", "storage"),
+                    ("sdd.flow_mode", "sdd"),
+                ]:
+                    layer = prov.layer_of(top_key)
+                    console.print(f"    {dotted_key}: [dim]{layer}[/]")
+            except Exception as exc:
+                console.print(f"    [dim](provenance unavailable: {exc})[/]")
+
 
 def reset_config() -> None:
     """Reset to factory defaults."""
