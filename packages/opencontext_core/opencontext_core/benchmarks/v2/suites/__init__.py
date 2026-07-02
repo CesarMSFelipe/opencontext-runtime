@@ -4,15 +4,15 @@ Each suite is a callable returning a :class:`BenchmarkResult`. The
 twelve §A suites are:
 
 * A1  first_run              — end-to-end first-run probe (real: B1)
-* A2  oc_flow_bugfix         — bugfix flow on a seeded project (real: B2)
-* A3  sdd_feature            — SDD feature flow (real: B2)
+* A2  oc_flow_bugfix         — bugfix flow on a seeded project (real: B1+B2)
+* A3  sdd_feature            — SDD feature flow (real: B1+B2)
 * A4  context_token_efficiency (real: B3)
 * A5  kg_retrieval_precision  — KG indexing + caller/callee assertions (real: B1)
 * A6  memory_usefulness       — memory v2 promotion policy roundtrip (real: B1)
 * A7  policy_security        (real: B3)
 * A8  plugin_compatibility   (real: B3)
 * A9  provider_fallback      (real: B3)
-* A10 resume_rollback        — checkpoint/resume tests (real: B2)
+* A10 resume_rollback        — checkpoint/resume tests (real: B1+B2)
 * A11 benchmark_evidence     — self-referential integrity gate (real: B1)
 * A12 release_signature      (real: B3)
 
@@ -69,8 +69,11 @@ def _pending_suite(suite_id: str, detail: str) -> Callable[[], BenchmarkResult]:
 # ---------------------------------------------------------------------------
 
 from opencontext_core.benchmarks.v2.suites import (  # noqa: E402
+    a2_oc_flow_bugfix,
+    a3_sdd_feature,
     a5_kg_retrieval_precision,
     a6_memory_usefulness,
+    a10_resume_rollback,
     a11_benchmark_evidence,
     first_run_user_flow,
 )
@@ -81,10 +84,10 @@ _SUITES: dict[str, Callable[[], BenchmarkResult]] = {
     "A5": a5_kg_retrieval_precision.run,
     "A6": a6_memory_usefulness.run,
     "A11": a11_benchmark_evidence.run,
-    # B2 — pending (wired in B2 batch)
-    "A2": _pending_suite("A2", "oc_flow_bugfix pending — wired in B2"),
-    "A3": _pending_suite("A3", "sdd_feature pending — wired in B2"),
-    "A10": _pending_suite("A10", "resume_rollback pending — wired in B2"),
+    # B2 — real
+    "A2": a2_oc_flow_bugfix.run,
+    "A3": a3_sdd_feature.run,
+    "A10": a10_resume_rollback.run,
     # B3 — pending (wired in B3 batch)
     "A4": _pending_suite("A4", "context_token_efficiency pending — wired in B3"),
     "A7": _pending_suite("A7", "policy_security pending — wired in B3"),

@@ -25,10 +25,8 @@ _SUITES_INIT = (
     / "packages/opencontext_core/opencontext_core/benchmarks/v2/suites/__init__.py"
 )
 
-# Suites not yet real after B1 — replaced with real behaviour in B2/B3.
-_PENDING_AFTER_B1: frozenset[str] = frozenset(
-    {"A2", "A3", "A4", "A7", "A8", "A9", "A10", "A12"}
-)
+# Suites not yet real after B2 — replaced with real behaviour in B3.
+_PENDING_AFTER_B2: frozenset[str] = frozenset({"A4", "A7", "A8", "A9", "A12"})
 
 
 # ---------------------------------------------------------------------------
@@ -86,8 +84,8 @@ def test_a11_benchmark_evidence_passes() -> None:
 
 @pytest.mark.xfail(
     reason=(
-        "A2 A3 A4 A7 A8 A9 A10 A12 are honest-fail pending suites — "
-        "wired in B2/B3. Remove this xfail when all 12 are real."
+        "A4 A7 A8 A9 A12 are honest-fail pending suites — "
+        "wired in B3. Remove this xfail when all 12 are real."
     ),
     strict=False,
 )
@@ -97,5 +95,5 @@ def test_all_twelve_suites_are_real() -> None:
     This xfail is removed by the B3 agent once every suite exercises real behaviour.
     """
     suites = all_suites()
-    still_pending = [sid for sid in _PENDING_AFTER_B1 if sid in suites]
+    still_pending = [sid for sid in _PENDING_AFTER_B2 if sid in suites]
     assert not still_pending, f"Suites still pending: {still_pending}"
