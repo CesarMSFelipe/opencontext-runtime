@@ -32,8 +32,8 @@ def run_studio(root: Path | str = ".", *, port: int = 8765, no_browser: bool = F
     absent (ImportError).
     """
     try:
-        from opencontext_studio.server_v2 import create_v2_app  # type: ignore[import]
-        import uvicorn  # type: ignore[import]
+        import uvicorn
+        from opencontext_studio.server_v2 import create_v2_app
 
         app = create_v2_app()
         uvicorn.run(app, host="127.0.0.1", port=port)
