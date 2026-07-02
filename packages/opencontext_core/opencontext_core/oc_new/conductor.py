@@ -87,9 +87,13 @@ class OcNewConductor:
     def start(self, task: str, config: AgenticFlowConfig | None = None) -> OcNewRunState:
         """Start a new oc-new run, optionally with an AgenticFlowConfig.
 
-        The config is persisted in OcNewRunState so that resume() is faithful
-        to the original preset and flow-mode settings.
+        When *config* is None the conductor reads ``sdd.flow_mode`` from the
+        project's ``opencontext.yaml`` (if present) so that a user-configured
+        flow_mode is honoured without needing an explicit ``--flow`` flag.
+        An explicit *config* always wins over the yaml value.
         """
+        if config is None:
+            config = self._config_from_yaml()
         identity = ChangeIdentity.from_task(task)
         phases = [PhaseState(name=phase.name) for phase in OC_NEW_FLOW]
         state = OcNewRunState(identity=identity, task=task, phases=phases, config=config)
@@ -584,6 +588,27 @@ class OcNewConductor:
         from opencontext_core.agentic.modes import should_execute_code
 
         return should_execute_code(state.config.flow_mode)
+
+    def _config_from_yaml(self) -> AgenticFlowConfig | None:
+        """Build a minimal AgenticFlowConfig seeded from opencontext.yaml sdd.flow_mode.
+
+        Returns None when no yaml is found or the value cannot be parsed, so
+        the rest of the conductor can keep treating None as 'no config given'.
+        """
+        try:
+            from opencontext_core.agentic.config import AgenticFlowConfig as _AFC
+            from opencontext_core.agentic.config import FlowMode
+            from opencontext_core.config import find_config, load_config
+
+            config_path = find_config(self.root)
+            if config_path is None:
+                return None
+            oc_cfg = load_config(config_path)
+            raw_mode = str(oc_cfg.sdd.flow_mode.value)
+            flow_mode = FlowMode(raw_mode)
+            return _AFC(flow_mode=flow_mode)
+        except Exception:
+            return None
 
     def _write_handoff_artifact(
         self, state: OcNewRunState, phase_name: str, handoff: AgentHandoff
