@@ -121,7 +121,22 @@ def handle_run_exec(args: Any) -> None:
     # Spine path (commit-007 / C15): start_session -> run. NO run_workflow.
     task = getattr(args, "task", None) or ""
     workflow = getattr(args, "workflow", "oc-flow")
+    lane = getattr(args, "lane", "fast")
     profile = getattr(args, "profile", "balanced")
+
+    # R2: pre-run cost estimate hint — one stderr line, never blocks, silent on failure.
+    try:
+        from opencontext_core.runtime_intelligence.cost import CostEngine
+
+        _est = CostEngine().estimate(task, workflow, lane, root=root)
+        print(
+            f"[oc] estimate: ~{_est.estimated_input_tokens} tokens"
+            f", ~{_est.estimated_duration_s}s ({workflow}, {lane} lane)",
+            file=sys.stderr,
+        )
+    except Exception:
+        pass  # estimate failure is a silent skip per honesty rules
+
     api = RuntimeApi(root)
     session = api.start_session(
         StartSessionRequest(task=task, root=str(root), profile=profile)
