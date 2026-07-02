@@ -1,6 +1,7 @@
 # OpenContext Runtime Installer for Windows (PowerShell)
 # One-liner: irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 | iex
 
+# NOTE: bump $Version when cutting a release; the PyPI publish must precede merging the version bump.
 param(
     [string]$Version = "1.6.0",
     [string]$RepoUrl = "https://github.com/CesarMSFelipe/OpenContext-Runtime",

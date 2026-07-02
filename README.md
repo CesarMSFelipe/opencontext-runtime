@@ -252,7 +252,7 @@ Prefer Python tooling? Use `pipx install opencontext-cli` instead.
 
 ### Proof, Not Promises
 
-Every benchmark runs on a public repository. No hidden dataset. No hosted service. No benchmark-only path. Fully reproducible with `opencontext explain`.
+Every benchmark runs on a public repository. No hidden dataset. No hosted service. No benchmark-only path. Fully reproducible with `opencontext pack` (see [`docs/benchmarks/`](docs/benchmarks/) for the exact commands and pinned commits).
 
 **Benchmark methodology:** each case clones a public repo at a pinned commit, runs `opencontext index`, then compares OpenContext's one-call pack against reading the relevant files whole — the same token counter on both sides. Measured reductions: **42–87% fewer tokens** (psf/requests, tiangolo/fastapi, django/django). This measures context tokens, not model quality or end-task success — real agent behavior varies by model, editor, and tool strategy. Full numbers, pinned commits, and a one-command reproduction live in [`docs/benchmarks/`](docs/benchmarks/).
 
@@ -310,8 +310,17 @@ task: fix crash in auth middleware
 task_type: bugfix
 risk_tier: precise
 token_budget: 16000
-required_symbols: ['*crash*', '*auth*', '*middleware*']
-must_verify: [run-tests, lint, type-check]
+required_symbols:
+- '*crash*'
+- '*auth*'
+- '*middleware*'
+must_verify:
+- id: run-tests
+  required: true
+- id: lint
+  required: true
+- id: type-check
+  required: true
 ```
 
 **Risk Tiers**
@@ -336,7 +345,7 @@ opencontext bytecode decode <path.aicx>
 
 ### Local Code Graph
 
-SQLite + FTS5, fully offline. Indexes symbols, call chains, imports, and framework routes. Python works out of the box; TypeScript, JavaScript, Go, Rust, Java, and PHP add full symbol extraction once their tree-sitter grammar is installed (`pip install tree-sitter-typescript`, etc.). Files in any language are still indexed and searchable.
+SQLite + FTS5, fully offline. Indexes symbols, call chains, imports, and framework routes. Python, JavaScript, and TypeScript work out of the box (bundled grammars); Go, Rust, Java, PHP, C, C++, Ruby, Swift, and Kotlin add full symbol extraction once their tree-sitter grammar is installed (`pip install tree-sitter-go`, etc.). Files in any language are still indexed and searchable.
 
 <p align="center">
   <img src="docs/assets/local-code-graph.svg" alt="Graph layers: files → symbols → imports + call graph → routes → bridges. Index once, query offline." width="100%">
@@ -356,7 +365,7 @@ SQLite + FTS5, fully offline. Indexes symbols, call chains, imports, and framewo
 
 Symbols are surfaced from the **call graph**, not just the query text — a caller is pulled in because it *calls* a matched symbol (the way `prepare_auth` links in `HTTPBasicAuth`), so you get what the code actually depends on, not only string matches.
 
-> **Call-graph scope**: call edges are extracted via tree-sitter for Python, JavaScript/TypeScript, Go, Rust, Java, and PHP. For languages without a loaded tree-sitter grammar the index falls back to regex symbol extraction (no call edges); context packs for those files are query-match ranked only, not call-graph traced.
+> **Call-graph scope**: call edges are extracted via tree-sitter for Python, JavaScript, TypeScript (bundled), and Go, Rust, Java, PHP, C, C++, Ruby, Swift, Kotlin (optional — `pip install tree-sitter-<lang>`). For languages without a loaded tree-sitter grammar the index falls back to regex symbol extraction (no call edges); context packs for those files are query-match ranked only, not call-graph traced.
 
 ```bash
 opencontext index .
@@ -587,7 +596,7 @@ The everyday commands, grouped by layer. The full surface (40+ commands) lives i
 | Memory | `memory` | Reuse project knowledge |
 | Optimization | `benchmark` · `tokens` · `bytecode` | Measure + reduce context cost |
 
-Run `opencontext` with no arguments for the navigable menu — settings and tools in one place, no flags.
+Run `opencontext` with no arguments for the navigable menu — settings and tools in one place, no flags. Requires an interactive terminal; in non-interactive environments (CI, pipes) use `opencontext config show` instead.
 
 <!-- ─────────────── STATUS, LIMITS & CLAIMS ─────────────── -->
 
@@ -613,7 +622,7 @@ Production-oriented local runtime. The context, code-graph, MCP, and memory path
 ### Known limitations
 
 - Best on repos above ~50 files; tiny repos see little benefit.
-- Full symbol extraction needs the language's tree-sitter grammar (Python works out of the box; others after `pip install tree-sitter-<lang>`). Files in any language are still indexed and searchable.
+- Full symbol extraction: Python, JavaScript, and TypeScript work out of the box (bundled grammars). Go, Rust, Java, PHP, C, C++, Ruby, Swift, and Kotlin require `pip install tree-sitter-<lang>`. Files in any language are still indexed and searchable.
 - Standalone generative phases need a provider or local model; without one they run planned-only.
 - No semantic/embedding search by default — deterministic graph + FTS only. A deliberate choice, not an oversight.
 - Windows is exercised in CI but is not the primary development target.

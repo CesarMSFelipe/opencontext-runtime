@@ -4,6 +4,7 @@
 
 set -euo pipefail
 
+# NOTE: bump this when cutting a release; the PyPI publish must precede merging the version bump.
 OPENCONTEXT_VERSION="1.6.0"
 REPO_URL="https://github.com/CesarMSFelipe/OpenContext-Runtime"
 VENV_DIR="${HOME}/.opencontext/venv"
