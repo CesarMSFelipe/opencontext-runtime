@@ -13,7 +13,10 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
+from opencontext_core.config_resolver import (
+    resolve_active_storage_path,
+    resolve_active_workspace_path,
+)
 
 
 class ContextSubstrateReport(BaseModel, extra="forbid"):
@@ -68,7 +71,7 @@ class ContextSubstrateBuilder:
             )
             no_kg_reason = "knowledge_graph.json not found"
         else:
-            kg_file = resolve_workspace_path(self.root, StorageMode.local) / "knowledge_graph.json"
+            kg_file = resolve_active_workspace_path(self.root) / "knowledge_graph.json"
             if kg_file.exists():
                 try:
                     kg_data = json.loads(kg_file.read_text(encoding="utf-8"))
@@ -101,7 +104,7 @@ class ContextSubstrateBuilder:
             else:
                 # NOTE: SQLite index present but no JSON KG — derive hash + tokens
                 # from the GraphDatabase nodes table using the same reader as graph.py.
-                sqlite_db = resolve_storage_path(self.root, StorageMode.local) / "context_graph.db"
+                sqlite_db = resolve_active_storage_path(self.root) / "context_graph.db"
                 try:
                     from opencontext_core.indexing.graph_db import GraphDatabase
 
@@ -131,7 +134,7 @@ class ContextSubstrateBuilder:
             else:
                 try:
                     raw_content = (
-                        resolve_workspace_path(self.root, StorageMode.local)
+                        resolve_active_workspace_path(self.root)
                         / "knowledge_graph.json"
                     ).read_text(encoding="utf-8")
                     selected_tokens = int(len(raw_content.split()) * 1.3)
@@ -167,11 +170,11 @@ class ContextSubstrateBuilder:
         that the current indexer writes to .storage/opencontext/context_graph.db.
         """
         # Primary: SQLite KG written by the current indexer.
-        sqlite_db = resolve_storage_path(self.root, StorageMode.local) / "context_graph.db"
+        sqlite_db = resolve_active_storage_path(self.root) / "context_graph.db"
         if sqlite_db.exists():
             return True, "indexed"
         # Fallback: legacy JSON snapshot.
-        oc_dir = resolve_workspace_path(self.root, StorageMode.local)
+        oc_dir = resolve_active_workspace_path(self.root)
         if not oc_dir.exists():
             return False, "not_indexed"
         kg_file = oc_dir / "knowledge_graph.json"

@@ -35,9 +35,10 @@ from opencontext_core.config import (
     _normalize_legacy_config,
     default_config_data,
     find_config,
+    load_config_or_defaults,
 )
 from opencontext_core.config_profiles import BUILTIN_PROFILES, DEFAULT_PROFILE
-from opencontext_core.paths import StorageMode, resolve_workspace_path
+from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 
 # Ordered layer names (lowest precedence first). Public so callers/tests can
 # assert ordering without hard-coding strings.
@@ -243,3 +244,33 @@ def missing_config_hint(root: str | Path) -> str:
         f"No OpenContext config found (expected {canonical}). "
         "Run 'opencontext init' to create one, or pass --config <path>."
     )
+
+
+def resolve_active_storage_path(root: str | Path) -> Path:
+    """Return the storage path for *root* using the config-driven active mode.
+
+    Canonical pattern from ``runtime/__init__.py:305``, composed as a reusable
+    helper so divergent consumers do not pin ``StorageMode.local``:
+
+    1. ``resolve_config_path(root)`` — find the canonical config location
+    2. ``load_config_or_defaults(path, auto_detect=False)`` — zero-config fallback
+    3. ``resolve_storage_path(root, mode, custom)`` — the path resolver
+
+    The config's ``storage.mode`` and ``storage.custom_path`` fields drive the
+    resolution, so ``OPENCONTEXT_STORAGE_MODE`` env-override and custom paths
+    continue to work transparently.
+    """
+    root_path = Path(root)
+    cfg = load_config_or_defaults(resolve_config_path(root_path), auto_detect=False)
+    return resolve_storage_path(root_path, cfg.storage.mode, cfg.storage.custom_path)
+
+
+def resolve_active_workspace_path(root: str | Path) -> Path:
+    """Return the workspace path for *root* using the config-driven active mode.
+
+    Same composition as :func:`resolve_active_storage_path` but for the
+    workspace directory (harness / SDD / skill artifacts).
+    """
+    root_path = Path(root)
+    cfg = load_config_or_defaults(resolve_config_path(root_path), auto_detect=False)
+    return resolve_workspace_path(root_path, cfg.storage.mode, cfg.storage.custom_path)

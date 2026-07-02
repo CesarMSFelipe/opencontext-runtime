@@ -87,7 +87,9 @@ def check_knowledge_graph() -> CheckResult:
     if not prefs.features.knowledge_graph:
         return CheckResult("Knowledge Graph", "skipped", "Not enabled")
 
-    db_path = Path(prefs.custom_storage_path) / "context_graph.db"
+    from opencontext_core.config_resolver import resolve_active_storage_path
+
+    db_path = resolve_active_storage_path(Path.cwd()) / "context_graph.db"
     if not db_path.exists():
         return CheckResult(
             "Knowledge Graph",

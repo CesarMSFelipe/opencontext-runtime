@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, ClassVar
 
+from opencontext_core.config_resolver import resolve_active_storage_path
 from opencontext_core.harness.models import (
     AuditLevel,
     GateStatus,
@@ -12,7 +13,6 @@ from opencontext_core.harness.models import (
     PhaseLedger,
     PrivacyRule,
 )
-from opencontext_core.paths import StorageMode, resolve_storage_path
 
 
 class ProjectIndexExistsGate:
@@ -21,7 +21,7 @@ class ProjectIndexExistsGate:
     id = "project_index_exists"
 
     def evaluate(self, root: Path) -> PhaseGate:
-        manifest = resolve_storage_path(root, StorageMode.local) / "project_manifest.json"
+        manifest = resolve_active_storage_path(root) / "project_manifest.json"
         if manifest.exists():
             return PhaseGate(
                 id=self.id,
