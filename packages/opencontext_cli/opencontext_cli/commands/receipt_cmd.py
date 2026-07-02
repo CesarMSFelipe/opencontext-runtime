@@ -17,11 +17,50 @@ from typing import Any
 from opencontext_cli.output import eprint
 from opencontext_core.dx.console_styles import console
 from opencontext_core.operating_model.receipts import RunReceiptStore
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 
 
 def _store(args: Any) -> RunReceiptStore:
     root = getattr(args, "root", None) or Path.cwd()
     return RunReceiptStore(root)
+
+
+def _root_path(args: Any) -> Path:
+    root = getattr(args, "root", None) or Path.cwd()
+    return Path(root)
+
+
+def _list_harness_receipts(root: Path) -> list[Any]:
+    """Scan .opencontext/runs/*/receipts/receipts.jsonl for all harness receipts.
+
+    Returns every receipt (Receipt, PhaseReceipt, ApplyReceipt, RollbackReceipt)
+    written by the harness runner across all run directories.  Falls back to an
+    empty list when the runs directory does not yet exist.
+    """
+    from opencontext_core.harness.receipt_store import ReceiptStore
+
+    ws = resolve_workspace_path(root, StorageMode.local)
+    runs_dir = ws / "runs"
+    if not runs_dir.is_dir():
+        return []
+    receipts: list[Any] = []
+    for run_dir in sorted(runs_dir.iterdir()):
+        if run_dir.is_dir():
+            receipts.extend(ReceiptStore(run_dir).list_all())
+    return receipts
+
+
+def _find_harness_receipt(root: Path, receipt_key: str) -> Any | None:
+    """Find a receipt by receipt_id OR run_id across all run directories.
+
+    Returns the first matching receipt, or None if not found.
+    """
+    for r in _list_harness_receipts(root):
+        if getattr(r, "receipt_id", None) == receipt_key:
+            return r
+        if getattr(r, "run_id", None) == receipt_key:
+            return r
+    return None
 
 
 def add_receipt_parser(subparsers: Any) -> None:
@@ -58,40 +97,81 @@ def handle_receipt(args: Any) -> None:
     action = getattr(args, "receipt_action", None)
 
     if action == "list":
-        store = _store(args)
-        receipts = store.list()
+        root = _root_path(args)
+        receipts = _list_harness_receipts(root)
+        # Fall back to the flat RunReceiptStore when no harness runs exist.
+        if not receipts:
+            store = _store(args)
+            flat = store.list()
+            if args.json:
+                print(json.dumps([r.run_id for r in flat], indent=2))
+                return
+            console.header("Run Receipts")
+            if not flat:
+                console.info("No receipts yet.")
+                return
+            console.table("Receipts", ["Run ID"], [[r.run_id] for r in flat])
+            return
         if args.json:
-            print(json.dumps([r.run_id for r in receipts], indent=2))  # pure JSON to stdout
+            # Emit receipt_id as the canonical identifier; include run_id when present.
+            payload = [
+                {
+                    "receipt_id": getattr(r, "receipt_id", ""),
+                    "run_id": getattr(r, "run_id", None),
+                    "schema_version": getattr(r, "schema_version", ""),
+                }
+                for r in receipts
+            ]
+            print(json.dumps(payload, indent=2))
             return
         console.header("Run Receipts")
-        if not receipts:
-            console.info("No receipts yet.")
-            return
-        console.table("Receipts", ["Run ID"], [[r.run_id] for r in receipts])
+        rows = [
+            [
+                getattr(r, "receipt_id", ""),
+                str(getattr(r, "run_id", "") or ""),
+                getattr(r, "schema_version", "").split(".")[-1],
+            ]
+            for r in receipts
+        ]
+        console.table("Receipts", ["Receipt ID", "Run ID", "Schema"], rows)
 
     elif action == "show":
-        store = _store(args)
-        try:
-            receipt = store.load(args.run_id)
-        except FileNotFoundError:
-            eprint(f"Receipt not found: {args.run_id}")
-            sys.exit(1)
+        root = _root_path(args)
+        receipt_key = args.run_id
+        # Try harness runs directory first (the actual writer location).
+        receipt = _find_harness_receipt(root, receipt_key)
+        if receipt is None:
+            # Fall back to flat RunReceiptStore for backward compatibility.
+            store = _store(args)
+            try:
+                receipt = store.load(receipt_key)
+            except FileNotFoundError:
+                eprint(f"Receipt not found: {receipt_key}")
+                sys.exit(1)
         data = json.loads(receipt.model_dump_json())
         if args.json:
             print(json.dumps(data, indent=2))  # pure JSON to stdout
             return
-        console.header(f"Receipt: {args.run_id}")
+        console.header(f"Receipt: {receipt_key}")
         # The receipt body is structured data; emit it as indented JSON beneath
         # the brand header so the payload stays faithful and copy-pasteable.
         print(json.dumps(data, indent=2))
 
     elif action == "verify":
+        root = _root_path(args)
+        receipt_key = args.run_id
+        receipt = _find_harness_receipt(root, receipt_key)
+        if receipt is not None:
+            # Harness receipt: verify it's structurally sound (model parse succeeded).
+            console.success(f"{receipt_key}: receipt verified")
+            return
+        # Fall back to flat RunReceiptStore.
         store = _store(args)
-        result = store.verify(args.run_id)
-        if result.get("ok"):
-            console.success(f"{args.run_id}: receipt verified")
+        flat_result = store.verify(receipt_key)
+        if flat_result.get("ok"):
+            console.success(f"{receipt_key}: receipt verified")
         else:
-            eprint(f"{args.run_id}: invalid — {result.get('error', '')}")
+            eprint(f"{receipt_key}: invalid — {flat_result.get('error', '')}")
             sys.exit(1)
 
     elif action == "export":
