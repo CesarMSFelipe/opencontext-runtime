@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.agentic.context_substrate import (
     ContextSubstrateBuilder,
 )
@@ -35,8 +37,14 @@ def test_build_for_phase_used_tokens_is_zero(tmp_path: Path) -> None:
     assert report.available_tokens == 4000
 
 
-def test_build_for_phase_real_hash_when_kg_present(tmp_path: Path) -> None:
+def test_build_for_phase_real_hash_when_kg_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """TASK-004: when KG exists, context_pack_hash is a sha256 hex digest."""
+    # Use local mode so resolve_active_workspace_path finds .opencontext/knowledge_graph.json
+    # (C1 migration: resolver now uses config-driven path). Pattern: commit 038d392.
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
+
     oc_dir = tmp_path / ".opencontext"
     oc_dir.mkdir()
     kg = {"nodes": [{"id": "a"}, {"id": "b"}]}

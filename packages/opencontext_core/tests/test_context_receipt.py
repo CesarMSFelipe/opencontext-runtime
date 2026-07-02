@@ -6,6 +6,8 @@ import json
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.context.receipt import ContextReceipt, ContextSavingsReport
 
 
@@ -66,7 +68,15 @@ class TestContextReceiptQualityGate:
 
 
 class TestContextSubstrateBuilderTokens:
-    def test_baseline_tokens_populated_with_kg(self) -> None:
+    def test_baseline_tokens_populated_with_kg(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Use local mode so resolve_active_workspace_path finds the JSON KG at
+        # .opencontext/knowledge_graph.json (C1 migration: resolver now uses
+        # config-driven path, not the hardcoded local path). Same pattern as
+        # commit 038d392.
+        monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
+
         from opencontext_core.context.receipt import ContextSubstrateBuilder
 
         with tempfile.TemporaryDirectory() as tmp:
