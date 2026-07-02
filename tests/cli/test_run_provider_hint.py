@@ -41,7 +41,7 @@ def _make_stub_api(legacy_status: str):
 
     class _FakeLegacy:
         status = legacy_status
-        workflow_selection: dict[str, str] = {}
+        workflow_selection: dict[str, str] = {}  # noqa: RUF012
 
     class _FakeResult:
         run_id = "r1"

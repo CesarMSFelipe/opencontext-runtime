@@ -217,7 +217,7 @@ def test_oc_flow_harness_adapter_routes_to_ocflow_runner(tmp_path: Path) -> None
     return HarnessRunResult with GateStatus.PASSED='passed').
     """
     from opencontext_core.oc_flow.runner import OCFlowRunResult
-    from opencontext_core.runtime.api import RuntimeApi, RunRequest, StartSessionRequest
+    from opencontext_core.runtime.api import RunRequest, RuntimeApi, StartSessionRequest
 
     api = RuntimeApi(tmp_path)
     ref = api.start_session(StartSessionRequest(task="Fix bug", root=str(tmp_path)))
