@@ -13,12 +13,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from opencontext_core.config import load_config_or_defaults
 from opencontext_core.config_resolver import (
     resolve_active_storage_path,
     resolve_active_workspace_path,
     resolve_config_path,
 )
-from opencontext_core.config import load_config_or_defaults
 
 
 class ContextSubstrateReport(BaseModel, extra="forbid"):

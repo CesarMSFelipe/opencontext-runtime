@@ -1,7 +1,7 @@
 """Tests for S2 + S3: adapter sync_state honest status (no fake noop).
 
-S3 RED: claude-code returns {"status":"ok",...}, others return not_configured.
-S2 RED: sync_state carries context_pack_hash after build_for_phase persists it.
+S3: claude-code returns {"status":"ok",...}, others return not_configured.
+S2: sync_state carries context_pack_hash after build_for_phase persists it.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from opencontext_sdd.agents import registry
 
 
@@ -35,7 +34,10 @@ def test_claude_code_sync_state_is_ok_or_not_configured() -> None:
     )
 
 
-def test_claude_code_sync_state_exports_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_claude_code_sync_state_exports_memory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """claude-code adapter sync_state exports memory and returns count + path."""
     from opencontext_core.memory_usability.context_repository import ContextRepository
 
@@ -70,15 +72,16 @@ def test_other_adapters_return_not_configured() -> None:
         )
 
 
-def test_sync_state_carries_substrate_hash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_sync_state_carries_substrate_hash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """After build_for_phase persists the report, sync_state includes the hash (S2)."""
-    import json
-
     from opencontext_core.agentic.context_substrate import ContextSubstrateBuilder
 
     monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
 
-    # Set up a minimal indexed project
+    # Set up a minimal indexed project.
     oc_dir = tmp_path / ".opencontext"
     oc_dir.mkdir()
     kg = {"nodes": [{"id": "a"}, {"id": "b"}]}
@@ -88,8 +91,7 @@ def test_sync_state_carries_substrate_hash(tmp_path: Path, monkeypatch: pytest.M
     report = builder.build_for_phase(task="test", phase="explore", budget=8000)
     assert report.context_pack_hash is not None
 
-    # The substrate report must be persisted so adapters can read it
-    storage_dir = oc_dir  # local mode uses .opencontext
+    # The substrate report must be persisted so adapters can read it.
     report_files = list(tmp_path.rglob("substrate_report.json"))
     assert report_files, "build_for_phase must persist substrate_report.json"
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from opencontext_sdd.agents.interface import Adapter
 
@@ -56,9 +56,9 @@ class ClaudeCodeAdapter(Adapter):
         ``<project_root>/.opencontext/memory_sync.json``.
     """
 
-    id: str = "claude-code"
-    display_name: str = "Claude Code"
-    config_paths: tuple[str, ...] = ("~/.claude/",)
+    id: ClassVar[str] = "claude-code"
+    display_name: ClassVar[str] = "Claude Code"
+    config_paths: ClassVar[tuple[str, ...]] = ("~/.claude/",)
 
     def __init__(
         self,
