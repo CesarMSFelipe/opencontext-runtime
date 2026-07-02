@@ -28,11 +28,14 @@ from opencontext_core.models.memory import MemoryConflict, MemoryQuery, MemoryRe
 class MemoryProvider(Protocol):
     """Book memory backend surface used by upper layers (OC-MEMORY-001 §26).
 
-    PR2.d extends the protocol with three concrete methods ``opencontext_memory``
-    consumers need (REQ-OMS-002, REQ-OMPD-005, REQ-OMT-016). The extensions are
-    additive — concrete providers that pre-date PR2.d keep satisfying the
-    5-method baseline; providers that want full parity with the new store
-    surface override the new methods.
+    This is the 5-method BASELINE every concrete provider must satisfy; upper
+    layers depend on it, not a concrete store. The PR2.d store extensions
+    (``bm25_search`` / ``topic_upsert`` / ``judge_relation``) are additive and
+    live on :class:`MemoryStoreSurface`, so a baseline provider keeps satisfying
+    ``isinstance(provider, MemoryProvider)`` — the extensions are NOT bundled
+    into the runtime-checkable baseline (a single ``@runtime_checkable`` protocol
+    would force every provider to implement all eight methods to pass isinstance,
+    which contradicts the "additive baseline" contract).
     """
 
     def search(self, query: MemoryQuery) -> list[MemoryRecord]:
@@ -55,7 +58,17 @@ class MemoryProvider(Protocol):
         """Return typed conflicts between a candidate and active beliefs."""
         ...
 
-    # --- PR2.d additions (REQ-OMS-002 / REQ-OMPD-005 / REQ-OMT-016) -----
+
+@runtime_checkable
+class MemoryStoreSurface(MemoryProvider, Protocol):
+    """The full store surface: the 5-method baseline PLUS the PR2.d store extensions.
+
+    A provider satisfies this ONLY when it offers the three extra methods
+    ``opencontext_memory`` consumers need (REQ-OMS-002 / REQ-OMPD-005 /
+    REQ-OMT-016). It extends :class:`MemoryProvider`, so anything satisfying
+    ``MemoryStoreSurface`` also satisfies the baseline; a baseline-only provider
+    (e.g. :class:`MemoryStoreProvider` over a ``LocalMemoryStore``) does not.
+    """
 
     def bm25_search(self, query: str, *, limit: int = 10) -> list[MemoryRecord]:
         """Full-text BM25 search across the raw store.
