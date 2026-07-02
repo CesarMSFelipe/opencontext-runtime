@@ -13,6 +13,18 @@ from opencontext_core.agentic.context_substrate import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _local_storage_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin OPENCONTEXT_STORAGE_MODE=local so resolve_active_storage_path resolves
+    tmp_path-relative .storage/opencontext instead of the global user path.
+
+    r13 Wave 1 routed context_substrate.py off the pinned StorageMode.local onto the
+    config-driven resolver; without this pin the builder probes the global storage
+    dir and the tmp-created SQLite KG is never found (matches the fixture added for
+    tests/core/test_substrate_sqlite_index.py in c5d04a1)."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
+
+
 def test_report_round_trips(tmp_path) -> None:
     builder = ContextSubstrateBuilder(root=tmp_path)
     report = builder.build_for_phase(task="add health", phase="explore", budget=8000)
