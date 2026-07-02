@@ -170,6 +170,23 @@ def create_v2_app(root: Path | str = ".") -> FastAPI:
     reader = StudioReader(root)
     app = FastAPI(title="opencontext-studio-v2")
 
+    @app.get("/")
+    def root_index() -> dict[str, Any]:
+        """Minimal JSON index — lists the seven available API routes."""
+        return {
+            "service": "opencontext-studio-v2",
+            "version": "v2",
+            "endpoints": [
+                "/api/v2/health",
+                "/api/v2/decision_log/{decision_id}",
+                "/api/v2/brain_state",
+                "/api/v2/capability_graph",
+                "/api/v2/context_budget",
+                "/api/v2/cache_metrics",
+                "/api/v2/learning_candidates",
+            ],
+        }
+
     @app.get("/api/v2/health")
     def health() -> dict[str, Any]:
         return _payload(version="v2")

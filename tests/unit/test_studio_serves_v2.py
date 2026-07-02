@@ -147,3 +147,26 @@ def test_studio_no_v2_flag_in_help() -> None:
         opt for action in studio_parser._actions for opt in action.option_strings
     ]
     assert "--v2" not in option_strings, f"Unexpected --v2 in studio parser: {option_strings}"
+
+
+# ---------------------------------------------------------------------------
+# P1.1 — GET / returns 200 JSON index with service + endpoint list
+# ---------------------------------------------------------------------------
+
+
+def test_studio_v2_root_returns_200_index() -> None:
+    """GET / on the v2 app returns HTTP 200 with service name and endpoint list."""
+    try:
+        from opencontext_studio.server_v2 import create_v2_app
+        from starlette.testclient import TestClient
+    except ImportError:
+        pytest.skip("opencontext_studio or starlette not installed")
+
+    app = create_v2_app()
+    client = TestClient(app)
+    resp = client.get("/")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("service") == "opencontext-studio-v2"
+    assert isinstance(body.get("endpoints"), list)
+    assert len(body["endpoints"]) == 7  # seven /api/v2/* routes
