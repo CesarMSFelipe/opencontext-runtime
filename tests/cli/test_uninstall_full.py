@@ -495,8 +495,10 @@ def test_verify_no_global_traces_detects_state_dirs(tmp_path, monkeypatch):
 def test_verify_flag_exits_1_on_global_only_residue(tmp_path, monkeypatch):
     """A clean project but global HOME state present must make --verify exit non-zero.
 
-    Anti-regression for the old `passed = len(residue) == 0` that ignored global
-    residue, so verify reported clean while ~/.config/opencontext survived.
+    Anti-regression: --verify with scope 'all' (or 'global') must detect global
+    HOME residue even when no project-local traces exist. Uses scope='all' to
+    match the C5 scope-aware verify semantics (scope='workspace' only scans
+    project state; 'all' scans both project + HOME).
     """
     home = tmp_path / "home"
     home.mkdir()
@@ -514,7 +516,7 @@ def test_verify_flag_exits_1_on_global_only_residue(tmp_path, monkeypatch):
         yes=False,
         dry_run=False,
         json=False,
-        scope="local",
+        scope="all",  # must include global tier to detect HOME residue
         root=str(project),
         all_agents=False,
         agents=[],
