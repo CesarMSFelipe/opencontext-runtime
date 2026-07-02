@@ -962,7 +962,13 @@ def node_consolidation(ctx: OCFlowContext) -> NodeResult:
     return NodeResult(
         node="consolidation",
         outcome=NodeOutcome.OK,
-        outputs={"reindexed": list(ctx.changed_files), "cost": cost_report},
+        # C16 (product-closure-r13): expose promotion_verdict so runner.py can emit
+        # a typed memory_promotion RuntimeDecision without re-importing promotion here.
+        outputs={
+            "reindexed": list(ctx.changed_files),
+            "cost": cost_report,
+            "promotion_verdict": verdict.value,
+        },
         llm_tokens=_budget_for("consolidation"),
         artifacts=[mem_name, graph_name, "consolidation/summary.md"],
     )

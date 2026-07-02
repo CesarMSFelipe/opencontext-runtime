@@ -38,7 +38,12 @@ def _now_iso() -> str:
 
 
 class DecisionKind(StrEnum):
-    """The eight selection kinds the Runtime Brain can decide (book §11)."""
+    """The eight selection kinds the Runtime Brain can decide (book §11).
+
+    ``workflow`` and ``memory_promotion`` are OC Flow runner extensions:
+    workflow = which workflow was selected (oc-flow vs sdd);
+    memory_promotion = the PromotionPolicyV2 verdict from consolidation.
+    """
 
     next_node = "next_node"
     persona = "persona"
@@ -48,6 +53,9 @@ class DecisionKind(StrEnum):
     provider = "provider"
     execution_profile = "execution_profile"
     retry_policy = "retry_policy"
+    # C16 (product-closure-r13): runner-level selections.
+    workflow = "workflow"
+    memory_promotion = "memory_promotion"
 
 
 class RuntimeDecision(BaseModel):

@@ -253,6 +253,8 @@ class OCFlowRunner:
         if verify_required and test_command is None:
             test_command = _discover_test_command(self.root)
         run_external_inspection = run_external_inspection or bool(test_command)
+        # C16: compute once, use for both ctx and the retry_policy decision below.
+        _max_attempts_resolved = resolve_max_attempts(profile=profile, lane=lane_enum)
         ctx = OCFlowContext(
             root=self.root,
             artifacts_dir=artifacts_dir,
@@ -260,7 +262,7 @@ class OCFlowRunner:
             lane=lane_enum,
             profile=profile,
             executor=executor,
-            max_attempts=resolve_max_attempts(profile=profile, lane=lane_enum),
+            max_attempts=_max_attempts_resolved,
             seed_paths=seed_paths or [],
             cache=self.cache,
             run_external_inspection=run_external_inspection,
@@ -298,6 +300,92 @@ class OCFlowRunner:
             },
         )
 
+        # C16 (product-closure-r13): emit RuntimeDecision records for the real
+        # selection points made by this run.  Only record decisions for selection
+        # points that ACTUALLY EXIST in OC Flow today (book §Brain restrictions):
+        #   workflow, context_strategy, provider, execution_profile, retry_policy.
+        #   NOT emitted (no real selection): persona (deterministic lookup),
+        #   skill_bundle (not in OC Flow runner today).
+        decisions.append(
+            RuntimeDecision(
+                kind="workflow",
+                chosen=selection.workflow,
+                reason=selection.reason,
+                alternatives=["sdd"] if selection.workflow == "oc-flow" else ["oc-flow"],
+                confidence=0.9,
+                inputs={"signals": list(selection.signals), "lane": lane_enum.value},
+            )
+        )
+        _context_strategy = (
+            "context_engine" if self._context_engine_enabled else
+            ("kg_v2" if self._kg_v2_enabled else "legacy")
+        )
+        decisions.append(
+            RuntimeDecision(
+                kind="context_strategy",
+                chosen=_context_strategy,
+                reason=(
+                    "context_engine_enabled flag"
+                    if self._context_engine_enabled
+                    else ("kg_v2_enabled flag" if self._kg_v2_enabled else "default legacy gather")
+                ),
+                alternatives=(
+                    ["kg_v2", "legacy"] if self._context_engine_enabled else
+                    (["context_engine", "legacy"] if self._kg_v2_enabled else
+                     ["context_engine", "kg_v2"])
+                ),
+                confidence=1.0,
+                inputs={
+                    "context_engine_enabled": self._context_engine_enabled,
+                    "kg_v2_enabled": self._kg_v2_enabled,
+                },
+            )
+        )
+        _provider_chosen = "deterministic" if not bool(
+            getattr(executor, "provider_available", False)
+        ) else "model"
+        decisions.append(
+            RuntimeDecision(
+                kind="provider",
+                chosen=_provider_chosen,
+                reason=(
+                    "no model provider configured; deterministic executor active"
+                    if _provider_chosen == "deterministic"
+                    else "model provider available"
+                ),
+                alternatives=(
+                    ["model"] if _provider_chosen == "deterministic" else ["deterministic"]
+                ),
+                confidence=1.0,
+                inputs={"provider_available": _provider_chosen != "deterministic"},
+            )
+        )
+        decisions.append(
+            RuntimeDecision(
+                kind="execution_profile",
+                chosen=profile or "balanced",
+                reason=f"profile='{profile or 'balanced'}' passed by caller",
+                confidence=1.0,
+                inputs={"lane": lane_enum.value},
+            )
+        )
+        decisions.append(
+            RuntimeDecision(
+                kind="retry_policy",
+                chosen=str(_max_attempts_resolved),
+                reason=(
+                    f"resolve_max_attempts(profile={profile!r}, lane={lane_enum.value!r})"
+                    f" → {_max_attempts_resolved}"
+                ),
+                confidence=1.0,
+                inputs={
+                    "profile": profile,
+                    "lane": lane_enum.value,
+                    "max_attempts": _max_attempts_resolved,
+                },
+            )
+        )
+
         while node not in self.definition.terminal_nodes:
             steps += 1
             if steps > _MAX_STEPS:
@@ -317,6 +405,28 @@ class OCFlowRunner:
                 node,
                 {"outcome": result.outcome.value, "tokens": result.llm_tokens},
             )
+
+            # C16: after consolidation, emit the memory_promotion decision so
+            # decisions.json captures the PromotionPolicyV2 verdict.
+            if node == "consolidation":
+                verdict_str = str(result.outputs.get("promotion_verdict", "not_promoted"))
+                decisions.append(
+                    RuntimeDecision(
+                        kind="memory_promotion",
+                        chosen=verdict_str,
+                        reason=(
+                            "PromotionPolicyV2 evaluated composite score from run signals "
+                            "(inspection outcome + changed-file count)"
+                        ),
+                        confidence=0.8,
+                        inputs={
+                            "changed_files": len(ctx.changed_files),
+                            "inspection_outcome": (
+                                ctx.inspection.outcome if ctx.inspection else "not_run"
+                            ),
+                        },
+                    )
+                )
 
             # Exit-condition guard (book §7-§11): refuse to advance until met.
             if not can_exit(node, ctx):
