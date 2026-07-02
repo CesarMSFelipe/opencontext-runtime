@@ -151,7 +151,11 @@ def check_mcp_config() -> CheckResult:
             "warning",
             f"MCP config present without opencontext entry: {agents}",
         )
-    return CheckResult("MCP Server", "warning", "Not configured — use 'opencontext install'")
+    return CheckResult(
+        "MCP Server",
+        "warning",
+        "Not wired into any agent config — run 'opencontext install' to configure",
+    )
 
 
 def check_plugins() -> CheckResult:
