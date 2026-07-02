@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 # Textual from opencontext_cli. The dep test enforces this.
 dependencies = [
     "opencontext_core",
+    "uvicorn>=0.30",
 ]
 
 [build-system]

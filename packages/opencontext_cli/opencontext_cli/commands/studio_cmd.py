@@ -32,13 +32,16 @@ def run_studio(root: Path | str = ".", *, port: int = 8765, no_browser: bool = F
     absent (ImportError).
     """
     try:
-        import uvicorn  # type: ignore[import-not-found]
+        import uvicorn
         from opencontext_studio.server_v2 import create_v2_app
 
         app = create_v2_app(root=root)
         uvicorn.run(app, host="127.0.0.1", port=port)
         return f"http://127.0.0.1:{port}"
     except ImportError:
+        import sys
+
+        print("FastAPI/uvicorn unavailable — serving minimal stub", file=sys.stderr)
         from opencontext_core.studio.server import serve
 
         return serve(root, port=port, open_browser=not no_browser)

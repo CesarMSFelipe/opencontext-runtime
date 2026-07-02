@@ -109,6 +109,32 @@ def test_run_studio_fallback_on_import_error(
     assert serve_calls, "Fallback serve() was not called when server_v2 unavailable"
 
 
+def test_run_studio_fallback_prints_stderr_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """run_studio must emit a stderr line when falling back to the stdlib stub."""
+    monkeypatch.setitem(sys.modules, "opencontext_studio.server_v2", None)  # type: ignore[assignment]
+
+    for key in list(sys.modules):
+        if "studio_cmd" in key:
+            del sys.modules[key]
+
+    import opencontext_core.studio.server as _srv
+
+    monkeypatch.setattr(
+        _srv, "serve", lambda root, *, port, open_browser: f"http://localhost:{port}"
+    )
+
+    from opencontext_cli.commands.studio_cmd import run_studio
+
+    run_studio(root=tmp_path, port=8765, no_browser=True)
+
+    err = capsys.readouterr().err
+    assert "FastAPI/uvicorn unavailable" in err, (
+        f"Expected fallback stderr warning, got: {err!r}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # --v2 flag must NOT appear in help
 # ---------------------------------------------------------------------------

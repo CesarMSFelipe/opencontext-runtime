@@ -234,7 +234,7 @@ class V2StudioServer:
         return self.port
 
     def start(self) -> None:
-        import uvicorn  # type: ignore[import-not-found]
+        import uvicorn
 
         config = uvicorn.Config(self._app, host=self.host, port=self.port, log_level="warning")
         self._server = uvicorn.Server(config)
