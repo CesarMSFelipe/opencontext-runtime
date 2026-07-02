@@ -4,6 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _local_storage_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin OPENCONTEXT_STORAGE_MODE=local so resolve_active_storage_path uses
+    tmp_path-relative .storage/opencontext instead of the global user path."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
+
 
 def test_sqlite_db_triggers_indexed_true(tmp_path: Path) -> None:
     """A temp dir with only .storage/opencontext/context_graph.db → indexed=True."""
