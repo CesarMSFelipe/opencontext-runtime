@@ -168,7 +168,7 @@ def start_new_change(app: object, *, refresh: Callable[[], None] | None = None) 
     app_any = app
     refresh_fn = refresh
 
-    # ponytail: object typing avoids importing Textual App just for one callback.
+    # NOTE: object typing avoids importing Textual App just for one callback.
     def _start(result: dict[str, str] | None) -> None:
         if not result:
             return

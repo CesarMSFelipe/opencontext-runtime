@@ -27,7 +27,7 @@ class ContextRanker:
 
     def _score(self, item: dict[Any, Any], query: str) -> float:
         content = item.get("content", "")
-        recency = item.get("recency", 0.5)  # ponytail: default 0.5 if missing
+        recency = item.get("recency", 0.5)  # NOTE: default 0.5 if missing
         return self._bm25_sim(content, query) * float(recency)
 
     def _bm25_sim(self, content: str, query: str) -> float:

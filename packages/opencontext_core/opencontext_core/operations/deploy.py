@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 
-# ponytail: spec REQ-ops-deploy-001 names the 5 modes by these exact identifiers.
+# NOTE: spec REQ-ops-deploy-001 names the 5 modes by these exact identifiers.
 # Values stay lowercase (CLI / env var friendly) — we only ever compare by .value.
 class DeployMode(StrEnum):
     LOCAL = "local"
@@ -59,7 +59,7 @@ class DeployConfig:
     mode: DeployMode
     remote_url: str | None = None
     telemetry_opt_in: bool = False
-    # ponytail: extra passthrough for future fields (e.g. backup target).
+    # NOTE: extra passthrough for future fields (e.g. backup target).
     # frozen=True + field(default_factory=...) is the standard recipe.
     extras: dict[str, str] = field(default_factory=dict)
 

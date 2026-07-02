@@ -23,7 +23,7 @@ from typing import Any, Literal
 # Public env-var name so tests + callers can reference the same string.
 LIFECYCLE_OVERRIDES_ENV = "OPENCONTEXT_MEMORY_DECAY_OVERRIDES"
 
-# ponytail: canonical per-type decay table. PR2.d replaces the inline
+# NOTE: canonical per-type decay table. PR2.d replaces the inline
 # 4-type subset mem_review shipped in PR2.c.ii with this 7-type version
 # (pattern + config + discovery + manual default added).
 DECAY_DAYS: dict[str, int] = {

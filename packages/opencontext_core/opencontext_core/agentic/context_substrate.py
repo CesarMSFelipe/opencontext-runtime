@@ -140,7 +140,7 @@ class ContextSubstrateBuilder:
                     selected_tokens = int(len(raw_content.split()) * 1.3)
                 except Exception:
                     selected_tokens = 0
-            # ponytail: no real pack object here; use conservative no-compression metrics
+            # NOTE: no real pack object here; use conservative no-compression metrics
             # until ContextPackBuilder is wired into this adapter.
             baseline_tokens = selected_tokens
             compressed_tokens = selected_tokens

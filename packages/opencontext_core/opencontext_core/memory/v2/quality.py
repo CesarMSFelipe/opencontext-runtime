@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# ponytail: each axis saturates at a small constant; we cap at 1.0 instead of
+# NOTE: each axis saturates at a small constant; we cap at 1.0 instead of
 # letting large records inflate the score. Re-tune weights only with explicit
 # benchmark evidence (memory_usefulness_benchmark).
 _CLARITY_MIN_LEN = 20
@@ -98,7 +98,7 @@ def _reusability(record: dict[Any, Any]) -> float:
     breadth = min(1.0, n_sources / 2.0)
     score = 0.55 * confidence + 0.25 * breadth + 0.2 * has_topic
     if record.get("topic_key"):
-        # ponytail: small flat bonus for having a stable topic_key (dedup
+        # NOTE: small flat bonus for having a stable topic_key (dedup
         # handle). Bounded so it can't dominate confidence.
         score = min(1.0, score + _REUSABILITY_TOPIC_BONUS)
     return round(min(1.0, max(0.0, score)), 4)

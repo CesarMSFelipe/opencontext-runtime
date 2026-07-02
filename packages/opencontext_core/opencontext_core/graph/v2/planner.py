@@ -45,7 +45,7 @@ class ContextQueryPlanner:
         )
 
     def _estimate_tokens(self, text: str) -> int:
-        # ponytail: ~4 chars per token heuristic
+        # NOTE: ~4 chars per token heuristic
         return max(1, len(text) // 4)
 
 

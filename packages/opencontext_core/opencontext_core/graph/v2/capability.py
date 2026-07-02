@@ -29,5 +29,5 @@ class OwnerResolver:
     """Resolve ownership from CODEOWNERS, git-log, or emit unknown event."""
 
     def resolve(self, file_path: str) -> OwnerRef:
-        # ponytail: stub — full resolution in PR-008.e
+        # NOTE: stub — full resolution in PR-008.e
         return OwnerRef(path=file_path, owner="unknown", source="unknown")

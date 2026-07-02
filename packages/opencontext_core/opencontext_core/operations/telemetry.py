@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 from opencontext_core.operations.deploy import DeployConfig, DeployMode
 
-# ponytail: spec REQ-ops-deploy-004 lists the exact redaction key set.
+# NOTE: spec REQ-ops-deploy-004 lists the exact redaction key set.
 # Defense-in-depth: even when opt_in=True, these keys are redacted at the
 # sender. The glob patterns ("*_TOKEN", "*_SECRET") are matched by the
 # sender, not by this module.

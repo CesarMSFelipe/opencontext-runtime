@@ -40,7 +40,7 @@ def _make(adapter_id: str, display: str = "", paths: tuple[str, ...] = ()) -> ty
     return cls
 
 
-# ponytail: 18 ids = active_clients (17) + hermes.
+# NOTE: 18 ids = active_clients (17) + hermes.
 ADAPTERS: dict[str, type[Adapter]] = {
     "claude-code": _make("claude-code", "Claude Code", ("~/.claude/",)),
     "opencode": _make("opencode", "opencode CLI", ("~/.config/opencode/",)),

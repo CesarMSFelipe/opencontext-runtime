@@ -51,7 +51,7 @@ def run_via_runtime_api(
     ``RuntimeApi.run_workflow``, which is deprecated by amendment A1).
     """
     # Per-node dispatch reference: ``WorkflowEngine.execute_node(...)``.
-    # ponytail: a real call site lands when the engine exposes execute_node
+    # NOTE: a real call site lands when the engine exposes execute_node
     # directly; the session-first path is what this wrapper enforces.
     session = api.start_session(session_request)
     run_request.session_id = session.session_id

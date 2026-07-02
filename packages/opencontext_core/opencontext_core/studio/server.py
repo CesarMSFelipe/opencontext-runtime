@@ -91,7 +91,7 @@ def serve(
     ``_run=False`` skips ``serve_forever`` so tests can bind + assert the
     URL without blocking (SPEC-STU-014-12).
     """
-    del root  # ponytail: stdlib handler is root-agnostic
+    del root  # NOTE: stdlib handler is root-agnostic
 
     url = studio_url(port)
     print(url, file=sys.stdout, flush=True)
@@ -100,7 +100,7 @@ def serve(
         try:
             webbrowser.open(url)
         except Exception:
-            pass  # ponytail: degrade silently when no display
+            pass  # NOTE: degrade silently when no display
 
     if not _run:
         return url
@@ -121,4 +121,4 @@ __all__ = [
     "TimelineEntry",
     "serve",
     "studio_url",
-]  # ponytail: stable order for commit-023
+]  # NOTE: stable order for commit-023

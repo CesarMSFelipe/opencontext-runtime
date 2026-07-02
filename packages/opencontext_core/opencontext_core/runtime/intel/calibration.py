@@ -105,7 +105,7 @@ class ConfidenceCalibrator:
         baseline: float = DEFAULT_BASELINE,
         tolerance: float = DEFAULT_TOLERANCE,
     ) -> float:
-        # ponytail: `calibrate` returns the Brier score; drift surfaced via report
+        # NOTE: `calibrate` returns the Brier score; drift surfaced via report
         return self.build_report(history, baseline=baseline, tolerance=tolerance).brier_score
 
     def raises_on_drift(

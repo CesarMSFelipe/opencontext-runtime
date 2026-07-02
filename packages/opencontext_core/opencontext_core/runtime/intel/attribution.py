@@ -45,7 +45,7 @@ class TokenSavings:
 
     @property
     def savings_pct(self) -> float:
-        # ponytail: 0% when no baseline; no division by zero, no surprises
+        # NOTE: 0% when no baseline; no division by zero, no surprises
         if self.baseline_tokens <= 0:
             return 0.0
         return self.total / self.baseline_tokens

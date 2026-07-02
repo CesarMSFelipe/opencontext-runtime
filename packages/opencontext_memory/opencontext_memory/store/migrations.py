@@ -21,7 +21,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-# ponytail: empty registry for now. Schema-version bookkeeping is enough for
+# NOTE: empty registry for now. Schema-version bookkeeping is enough for
 # PR2.d's test; future migrations register here as `1: fn, 2: fn, ...`. The
 # `flag` parameter is honoured in ``migrate(...)`` so destructive steps can
 # be added later without changing the public signature.

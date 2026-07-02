@@ -66,7 +66,7 @@ class InProcessWorker:
     def submit_job(self, payload: dict[str, Any]) -> JobHandle:
         # In-process: the work has "completed" by the time we return the
         # handle. A real impl would kick off a coroutine / thread.
-        # ponytail: LOCAL/CI should be frictionless — auto-connect on first
+        # NOTE: LOCAL/CI should be frictionless — auto-connect on first
         # submit if the caller forgot. The Protocol contract is preserved
         # (connect() still works explicitly).
         if not self._connected:
@@ -75,7 +75,7 @@ class InProcessWorker:
         return JobHandle(id=f"local-{self._counter}", status="completed", mode=self._mode)
 
 
-# ponytail: env var name + error class are spec-level choices; keep them
+# NOTE: env var name + error class are spec-level choices; keep them
 # in one place so the error message stays consistent across call sites.
 _REMOTE_URL_ENVVAR = "OPENCONTEXT_REMOTE_URL"
 
@@ -137,7 +137,7 @@ class _NoNetworkRemote:
         self._connected = False
 
     def submit_job(self, payload: dict[str, Any]) -> JobHandle:
-        # ponytail: real HTTP wiring is a later PR; for now the test suite
+        # NOTE: real HTTP wiring is a later PR; for now the test suite
         # never reaches here because tests inject _FakeRemote. If you see
         # this in production logs, an HTTP client PR hasn't landed yet.
         raise NotImplementedError(

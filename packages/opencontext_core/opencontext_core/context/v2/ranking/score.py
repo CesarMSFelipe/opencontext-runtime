@@ -17,7 +17,7 @@ class UsefulnessWeights:
 
 
 DEFAULT_WEIGHTS = UsefulnessWeights(relevance=0.5, freshness=0.3, confidence=0.2)
-LAYER_WEIGHTS = DEFAULT_WEIGHTS  # ponytail: L4 layer uses the same defaults.
+LAYER_WEIGHTS = DEFAULT_WEIGHTS  # NOTE: L4 layer uses the same defaults.
 
 
 @dataclass

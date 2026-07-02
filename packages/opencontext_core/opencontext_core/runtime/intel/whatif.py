@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 from opencontext_core.runtime.intel.simulator import CostEstimator
 
-# ponytail: lanes are a small fixed set; new ones go in design.md.
+# NOTE: lanes are a small fixed set; new ones go in design.md.
 LANES: tuple[str, ...] = ("default", "deep", "fast", "experimental")
 
 
@@ -65,7 +65,7 @@ class WhatIfAnalysis:
         return sorted(estimates, key=lambda e: e.cost_usd)
 
     def _project(self, plan: Plan) -> CostEstimate:
-        # ponytail: split 70/30 input/output as the spec doesn't dictate; explicit assumption
+        # NOTE: split 70/30 input/output as the spec doesn't dictate; explicit assumption
         input_tokens = int(plan.tokens * 0.7)
         output_tokens = plan.tokens - input_tokens
         cost_usd = self._estimator.estimate(plan.tokens, plan.model)
@@ -77,7 +77,7 @@ class WhatIfAnalysis:
             tool_calls=plan.tool_calls,
             duration_s=plan.duration_s,
             cost_usd=cost_usd,
-            # ponytail: confidence inversely proportional to cost; cheaper plans more certain
+            # NOTE: confidence inversely proportional to cost; cheaper plans more certain
             confidence=_confidence_for(plan),
             assumptions=[
                 f"model={plan.model}",
@@ -88,7 +88,7 @@ class WhatIfAnalysis:
 
 
 def _confidence_for(plan: Plan) -> float:
-    # ponytail: heuristic — small token budgets are more predictable
+    # NOTE: heuristic — small token budgets are more predictable
     if plan.tokens <= 500:
         return 0.9
     if plan.tokens <= 5_000:

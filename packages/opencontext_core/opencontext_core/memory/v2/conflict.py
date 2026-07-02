@@ -23,7 +23,7 @@ class ConflictKindV2(StrEnum):
     AMBIGUOUS = "ambiguous"
 
 
-# ponytail: confidence delta default; same threshold as v1 detector so the v2
+# NOTE: confidence delta default; same threshold as v1 detector so the v2
 # rules match the existing store behavior. Tighten only with explicit reason.
 DEFAULT_CONFIDENCE_DELTA = 0.3
 

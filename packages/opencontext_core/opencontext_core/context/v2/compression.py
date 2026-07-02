@@ -17,7 +17,7 @@ class ContextCompressor:
         trimmed: list[dict[Any, Any]] = []
         used = 0
         for item in envelope.items:
-            tokens = len(item.get("content", "")) // 4  # ponytail: rough 4-chars/token
+            tokens = len(item.get("content", "")) // 4  # NOTE: rough 4-chars/token
             if used + tokens > target:
                 envelope.omissions.append(f"omitted {item.get('id', '?')} for budget")
                 continue
