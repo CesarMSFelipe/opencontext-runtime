@@ -102,3 +102,78 @@ def test_list_unions_runstore_index_and_disk(tmp_path, capsys) -> None:
 def test_unknown_action_exits(tmp_path) -> None:
     with pytest.raises(SystemExit):
         handle_run_inspect(SimpleNamespace(runs_action=None, root=str(tmp_path)))
+
+
+# ---------------------------------------------------------------------------
+# OC Flow sessions layout — runs written under
+# .opencontext/sessions/<session_id>/runs/<run_id>/ with state.json
+# (not run.json) as the primary artifact (OCFlowRunner._persist).
+# ---------------------------------------------------------------------------
+
+
+def _make_oc_flow_run(
+    root: Path, session_id: str, run_id: str, *, status: str = "completed"
+) -> Path:
+    """Write a minimal OC Flow run under sessions/<session_id>/runs/<run_id>/."""
+    run_dir = root / ".opencontext" / "sessions" / session_id / "runs" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    state = {
+        "schema_version": "opencontext.oc_flow.run_state.v1",
+        "run_id": run_id,
+        "session_id": session_id,
+        "workflow": "oc-flow",
+        "task": "fix failing test",
+        "lane": "fast",
+        "profile": "balanced",
+        "status": status,
+        "graph_status": "completed",
+        "completion_reason": "graph reached terminal node",
+        "mutation_required": False,
+        "visited": ["start", "gather", "completed"],
+        "changed_files": [],
+    }
+    (run_dir / "state.json").write_text(json.dumps(state), encoding="utf-8")
+    return run_dir
+
+
+def test_runs_list_finds_oc_flow_sessions_layout(tmp_path, capsys) -> None:
+    """runs list must return run IDs written by oc_flow under sessions/*/runs/*.
+
+    Previous implementation only scanned .opencontext/runs/* and missed this path.
+    """
+    _make_oc_flow_run(tmp_path, "sess-ocf-001", "ocflow-list-001")
+
+    handle_run_inspect(SimpleNamespace(runs_action="list", root=str(tmp_path), json=True))
+    ids = json.loads(capsys.readouterr().out)
+    assert "ocflow-list-001" in ids, f"Expected ocflow-list-001 in list, got: {ids}"
+
+
+def test_runs_show_finds_oc_flow_sessions_layout(tmp_path, capsys) -> None:
+    """runs show <run_id> must find a run in sessions/<session_id>/runs/<run_id>."""
+    _make_oc_flow_run(tmp_path, "sess-ocf-002", "ocflow-show-001")
+
+    handle_run_inspect(
+        SimpleNamespace(
+            runs_action="show",
+            run_id="ocflow-show-001",
+            root=str(tmp_path),
+            json=True,
+            profile=False,
+        )
+    )
+
+    out = json.loads(capsys.readouterr().out)
+    assert out["run_id"] == "ocflow-show-001"
+    assert out["workflow"] == "oc-flow"
+    assert out["status"] == "completed"
+
+
+def test_runs_list_finds_both_legacy_and_sessions_layout(tmp_path, capsys) -> None:
+    """runs list must include runs from both .opencontext/runs/* AND sessions/*/runs/*."""
+    _make_run(tmp_path, "harness-run-001")
+    _make_oc_flow_run(tmp_path, "sess-ocf-003", "ocflow-mixed-001")
+
+    handle_run_inspect(SimpleNamespace(runs_action="list", root=str(tmp_path), json=True))
+    ids = json.loads(capsys.readouterr().out)
+    assert "harness-run-001" in ids, "Legacy harness run missing from list"
+    assert "ocflow-mixed-001" in ids, "OC Flow sessions-layout run missing from list"

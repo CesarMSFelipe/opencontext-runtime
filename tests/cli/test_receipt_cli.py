@@ -109,3 +109,107 @@ def test_receipt_show_not_found_exits_1(tmp_path: Path) -> None:
             )
         )
     assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# OC Flow sessions layout — writer puts artifacts under
+# .opencontext/sessions/<session_id>/runs/<run_id>/receipts/receipts.jsonl
+# (same shape as the harness ReceiptStore, different base path).
+# ---------------------------------------------------------------------------
+
+
+def _write_phase_receipt_sessions_layout(
+    root: Path,
+    session_id: str,
+    run_id: str,
+    receipt_id: str,
+    phase: str = "apply",
+) -> Path:
+    """Write a PhaseReceipt under sessions/<session_id>/runs/<run_id>/receipts/."""
+    receipts_dir = (
+        root / ".opencontext" / "sessions" / session_id / "runs" / run_id / "receipts"
+    )
+    receipts_dir.mkdir(parents=True, exist_ok=True)
+    jsonl_path = receipts_dir / "receipts.jsonl"
+    receipt = {
+        "schema_version": "opencontext.phase_receipt.v1",
+        "receipt_id": receipt_id,
+        "run_id": run_id,
+        "session_id": session_id,
+        "workflow_id": None,
+        "phase": phase,
+        "status": "passed",
+        "artifact_refs": [],
+        "gate_digest": {},
+        "required_harnesses": [],
+        "decision_refs": [],
+        "trace_id": None,
+        "created_at": "2026-07-02T00:00:00+00:00",
+    }
+    with jsonl_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(receipt) + "\n")
+    return jsonl_path
+
+
+def test_receipt_list_finds_oc_flow_sessions_layout(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """receipt list must find receipts written under sessions/<session>/runs/<run>/receipts/.
+
+    This is the layout oc_flow (OCFlowRunner) and RuntimeApi._durable_apply use.
+    The previous implementation only scanned .opencontext/runs/* and missed this path.
+    """
+    _write_phase_receipt_sessions_layout(
+        tmp_path, "sess-oc-001", "run-oc-001", "rcpt-oc-001"
+    )
+
+    handle_receipt(SimpleNamespace(receipt_action="list", root=tmp_path, json=True))
+
+    out = capsys.readouterr().out.strip()
+    data = json.loads(out)
+    assert len(data) >= 1, f"Expected at least 1 receipt, got {len(data)}"
+    ids = [str(item) for item in data]
+    assert any("rcpt-oc-001" in i for i in ids), (
+        f"Expected receipt_id 'rcpt-oc-001' in list output, got: {data}"
+    )
+
+
+def test_receipt_show_finds_oc_flow_sessions_layout(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """receipt show <receipt_id> must find a receipt in the sessions layout."""
+    _write_phase_receipt_sessions_layout(
+        tmp_path, "sess-oc-002", "run-oc-002", "rcpt-oc-002", phase="spec"
+    )
+
+    handle_receipt(
+        SimpleNamespace(
+            receipt_action="show", run_id="rcpt-oc-002", root=tmp_path, json=True
+        )
+    )
+
+    out = capsys.readouterr().out.strip()
+    data = json.loads(out)
+    assert data["receipt_id"] == "rcpt-oc-002"
+    assert data["run_id"] == "run-oc-002"
+    assert data["phase"] == "spec"
+
+
+def test_receipt_list_finds_both_legacy_and_sessions_layout(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """receipt list must return receipts from both .opencontext/runs/* AND sessions/*."""
+    # Legacy harness layout
+    _write_phase_receipt(tmp_path, "run-legacy-001", "rcpt-legacy-001")
+    # OC Flow sessions layout
+    _write_phase_receipt_sessions_layout(
+        tmp_path, "sess-oc-003", "run-oc-003", "rcpt-oc-003"
+    )
+
+    handle_receipt(SimpleNamespace(receipt_action="list", root=tmp_path, json=True))
+
+    out = capsys.readouterr().out.strip()
+    data = json.loads(out)
+    ids = [str(item) for item in data]
+    assert any("rcpt-legacy-001" in i for i in ids), "Legacy receipt missing from list"
+    assert any("rcpt-oc-003" in i for i in ids), "Sessions-layout receipt missing from list"

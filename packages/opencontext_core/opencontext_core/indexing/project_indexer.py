@@ -79,6 +79,23 @@ class ProjectIndexer:
             # K3: checkpoint is now dict[str, float] (path → mtime); legacy list
             # format is transparently upgraded to empty dict → one-time full reindex.
             done_mtimes: dict[str, float] = _load_checkpoint(checkpoint_path)
+            # K4 (checkpoint validity guard): the checkpoint is only meaningful
+            # relative to an existing, non-empty KG database.  When the KG has
+            # zero nodes — because install indexed into a different storage path,
+            # the DB was cleared, or this is the very first real index run — the
+            # checkpoint is stale evidence and must be ignored so files are
+            # re-indexed into the live database.
+            if done_mtimes:
+                try:
+                    _kg_nodes = self.knowledge_graph.db.get_stats().get("nodes", 0)
+                    if _kg_nodes == 0:
+                        _log.debug(
+                            "indexer: checkpoint exists but KG has 0 nodes "
+                            "— ignoring checkpoint, full reindex"
+                        )
+                        done_mtimes = {}
+                except Exception as _exc:
+                    _log.debug("indexer: checkpoint validity check failed (%s), proceeding", _exc)
             indexed_files: list[tuple[str, str]] = []
             batch_size = 50
             batch_count = 0

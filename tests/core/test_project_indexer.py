@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -122,6 +123,51 @@ def test_kg_extensions_cover_all_kg_languages() -> None:
     covered = {LANGUAGE_EXTENSIONS[ext] for ext in _KG_EXTENSIONS}
     assert covered == set(_KG_LANGUAGES)
     assert {".py", ".js", ".ts", ".go", ".rs", ".java", ".php"} <= _KG_EXTENSIONS
+
+
+def test_checkpoint_ignored_when_kg_is_empty(tmp_path: Path) -> None:
+    """Indexer must do a full reindex when checkpoint exists but KG has 0 nodes.
+
+    Reproduces the first-run UX bug: install writes the checkpoint to
+    .storage/opencontext/index_checkpoint.json, then the user's next
+    ``opencontext index .`` loads the same checkpoint and skips all files
+    even though the target KG database is empty (created in a different storage
+    location or cleared). The fix: ignore the checkpoint when the KG has no nodes.
+    """
+    from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+    from opencontext_core.paths import StorageMode, resolve_storage_path
+
+    # Create a Python source file to be indexed.
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("class App: pass\n", encoding="utf-8")
+
+    config = ProjectIndexConfig(root=str(tmp_path), profile="generic", ignore=[])
+
+    # Simulate a stale checkpoint: mark src/app.py as already indexed with a
+    # plausible mtime so the indexer would normally skip it.
+    checkpoint_path = resolve_storage_path(tmp_path, StorageMode.local) / "index_checkpoint.json"
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    stale = {"src/app.py": (tmp_path / "src" / "app.py").stat().st_mtime}
+    checkpoint_path.write_text(json.dumps(stale), encoding="utf-8")
+
+    # Create a FRESH (empty) KG database at the same storage location.
+    kg_db_path = resolve_storage_path(tmp_path, StorageMode.local) / "context_graph.db"
+    kg = KnowledgeGraph(db_path=kg_db_path)
+
+    # Pre-condition: KG is empty despite the checkpoint saying the file is done.
+    assert kg.db.get_stats()["nodes"] == 0, "KG should start empty"
+
+    manifest = ProjectIndexer(config, "checkpoint-guard", knowledge_graph=kg).build_manifest()
+
+    # Post-condition: file was re-indexed despite the stale checkpoint.
+    kg_meta = manifest.metadata.get("knowledge_graph", {})
+    assert kg_meta.get("files_indexed", 0) >= 1, (
+        "Expected at least 1 file indexed after checkpoint-guard (checkpoint was stale)"
+    )
+    # The KG must now have nodes (confirming a real reindex happened, not just a skip).
+    assert kg.db.get_stats()["nodes"] > 0, (
+        "KG must have nodes after reindex — checkpoint was correctly ignored"
+    )
 
 
 def test_reindex_prunes_kg_nodes_for_files_no_longer_scanned(tmp_path: Path) -> None:

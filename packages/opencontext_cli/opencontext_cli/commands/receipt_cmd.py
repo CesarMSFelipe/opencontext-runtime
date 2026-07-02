@@ -31,22 +31,41 @@ def _root_path(args: Any) -> Path:
 
 
 def _list_harness_receipts(root: Path) -> list[Any]:
-    """Scan .opencontext/runs/*/receipts/receipts.jsonl for all harness receipts.
+    """Scan all known receipt locations for every harness/oc_flow receipt.
+
+    Covers two on-disk layouts:
+    - Legacy harness layout: ``.opencontext/runs/<run_id>/receipts/receipts.jsonl``
+    - OC Flow / RuntimeApi durable-apply layout:
+      ``.opencontext/sessions/<session_id>/runs/<run_id>/receipts/receipts.jsonl``
 
     Returns every receipt (Receipt, PhaseReceipt, ApplyReceipt, RollbackReceipt)
-    written by the harness runner across all run directories.  Falls back to an
-    empty list when the runs directory does not yet exist.
+    across all run directories.  Falls back to an empty list when neither tree
+    exists yet.
     """
     from opencontext_core.harness.receipt_store import ReceiptStore
 
     ws = resolve_workspace_path(root, StorageMode.local)
-    runs_dir = ws / "runs"
-    if not runs_dir.is_dir():
-        return []
     receipts: list[Any] = []
-    for run_dir in sorted(runs_dir.iterdir()):
-        if run_dir.is_dir():
-            receipts.extend(ReceiptStore(run_dir).list_all())
+
+    # Legacy layout: .opencontext/runs/<run_id>/
+    runs_dir = ws / "runs"
+    if runs_dir.is_dir():
+        for run_dir in sorted(runs_dir.iterdir()):
+            if run_dir.is_dir():
+                receipts.extend(ReceiptStore(run_dir).list_all())
+
+    # Sessions layout: .opencontext/sessions/<session_id>/runs/<run_id>/
+    sessions_dir = ws / "sessions"
+    if sessions_dir.is_dir():
+        for session_dir in sorted(sessions_dir.iterdir()):
+            if not session_dir.is_dir():
+                continue
+            runs_subdir = session_dir / "runs"
+            if runs_subdir.is_dir():
+                for run_dir in sorted(runs_subdir.iterdir()):
+                    if run_dir.is_dir():
+                        receipts.extend(ReceiptStore(run_dir).list_all())
+
     return receipts
 
 

@@ -29,19 +29,74 @@ def _runs_dir(root: Path) -> Path:
     return root / ".opencontext" / "runs"
 
 
+def _sessions_run_dirs(root: Path) -> list[Path]:
+    """All run directories under the sessions layout.
+
+    Covers ``.opencontext/sessions/<session_id>/runs/<run_id>/`` — the path
+    used by OCFlowRunner and RuntimeApi._durable_apply.
+    """
+    sessions_dir = root / ".opencontext" / "sessions"
+    if not sessions_dir.is_dir():
+        return []
+    dirs: list[Path] = []
+    for session_dir in sorted(sessions_dir.iterdir()):
+        if not session_dir.is_dir():
+            continue
+        runs_subdir = session_dir / "runs"
+        if runs_subdir.is_dir():
+            dirs.extend(d for d in sorted(runs_subdir.iterdir()) if d.is_dir())
+    return dirs
+
+
 def _list_run_ids(root: Path) -> list[str]:
-    """Run ids from the RunStore index, unioned with on-disk run dirs."""
+    """Run IDs from the RunStore index, unioned with both on-disk run layouts."""
     ids: set[str] = set(RunStore(root).list_run_ids())
+    # Legacy harness layout: .opencontext/runs/<run_id>/run.json
     runs_dir = _runs_dir(root)
     if runs_dir.is_dir():
         for child in runs_dir.iterdir():
             if child.is_dir() and (child / "run.json").exists():
                 ids.add(child.name)
+    # OC Flow / durable-apply sessions layout: .opencontext/sessions/*/runs/*/
+    for run_dir in _sessions_run_dirs(root):
+        # Accept dirs that contain either run.json (RuntimeApi) or state.json (oc_flow).
+        if (run_dir / "run.json").exists() or (run_dir / "state.json").exists():
+            ids.add(run_dir.name)
     return sorted(ids)
 
 
+def _find_run_dir(root: Path, run_id: str) -> Path:
+    """Locate a run directory by run_id, checking both legacy and sessions layouts.
+
+    Returns the first matching directory. Preference order:
+    1. Legacy ``.opencontext/runs/<run_id>/``
+    2. Sessions ``.opencontext/sessions/*/runs/<run_id>/``
+
+    If neither exists, returns the legacy path (callers check ``is_dir()``/
+    ``run.json`` existence and handle the not-found case themselves).
+    """
+    legacy = _runs_dir(root) / run_id
+    if legacy.is_dir():
+        return legacy
+    for run_dir in _sessions_run_dirs(root):
+        if run_dir.name == run_id:
+            return run_dir
+    # Not found in either layout — return the legacy path for consistent
+    # "not found" error handling in callers.
+    return legacy
+
+
 def _run_dir(root: Path, run_id: str) -> Path:
-    return _runs_dir(root) / run_id
+    return _find_run_dir(root, run_id)
+
+
+def _read_run_json(run_dir: Path) -> "dict[str, Any] | None":
+    """Read run metadata from run.json (harness) or state.json (oc_flow), in that order."""
+    data = _read_json(run_dir / "run.json")
+    if data is not None:
+        return data  # type: ignore[no-any-return]
+    # OC Flow writes state.json with the same surface fields (run_id, workflow, task, status).
+    return _read_json(run_dir / "state.json")  # type: ignore[no-any-return]
 
 
 def _read_json(path: Path) -> Any:
@@ -384,7 +439,7 @@ def handle_run_inspect(args: Any) -> None:
 
     if action == "show":
         run_dir = _run_dir(root, args.run_id)
-        run_json = _read_json(run_dir / "run.json")
+        run_json = _read_run_json(run_dir)
         if run_json is None:
             print(f"Run not found: {args.run_id}", file=sys.stderr)
             sys.exit(1)
