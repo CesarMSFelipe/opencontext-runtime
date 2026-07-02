@@ -7,6 +7,7 @@ Per openspec/changes/agentic-parity-engram-gentle/design/pr3-cli-fastapi.md
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Any
 
@@ -247,6 +248,140 @@ class TestDispatchWiring:
     def test_unwired_tool_exits_nonzero(self, tmp_path: Path) -> None:
         from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
 
+        # "stats" has no backend implementation — must exit 2 always
         with pytest.raises(SystemExit) as excinfo:
-            _dispatch_tool("doctor", tmp_path, argparse.Namespace())
+            _dispatch_tool("stats", tmp_path, argparse.Namespace())
         assert excinfo.value.code == 2
+
+    # --- T6: lifecycle roundtrip ---
+
+    def test_lifecycle_roundtrip(self, tmp_path: Path, capsys: Any) -> None:
+        """save → get → update → pin → unpin → delete lifecycle."""
+        from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
+
+        # save
+        save_args = argparse.Namespace(
+            title="lifecycle test",
+            content="test content for lifecycle",
+            type="manual",
+            scope="project",
+            topic_key=None,
+            no_capture_prompt=True,
+        )
+        _dispatch_tool("save", tmp_path, save_args)
+        out = capsys.readouterr().out
+        obs_id = json.loads(out)["receipt"]["id"]
+
+        # get
+        _dispatch_tool("get", tmp_path, argparse.Namespace(id=str(obs_id)))
+        out = capsys.readouterr().out
+        assert "lifecycle test" in out
+
+        # update
+        _dispatch_tool(
+            "update",
+            tmp_path,
+            argparse.Namespace(id=obs_id, title="updated title", content=None, type=None, scope=None),
+        )
+        out = capsys.readouterr().out
+        assert "updated title" in out
+
+        # pin
+        _dispatch_tool("pin", tmp_path, argparse.Namespace(id=obs_id))
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert data["pinned"]  # 1 or True
+
+        # unpin
+        _dispatch_tool("unpin", tmp_path, argparse.Namespace(id=obs_id))
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert not data["pinned"]  # 0 or False
+
+        # delete (soft)
+        _dispatch_tool("delete", tmp_path, argparse.Namespace(id=obs_id, hard=False))
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert data["deleted"] is True
+
+    def test_session_trio(self, tmp_path: Path, capsys: Any) -> None:
+        """session-start → session-summary → session-end lifecycle."""
+        from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
+
+        sess_id = "test-session-trio"
+
+        _dispatch_tool(
+            "session-start",
+            tmp_path,
+            argparse.Namespace(id=sess_id, directory=str(tmp_path), project=None),
+        )
+        out = capsys.readouterr().out
+        assert sess_id in out
+
+        _dispatch_tool(
+            "session-summary",
+            tmp_path,
+            argparse.Namespace(id=sess_id, goal="test the session trio"),
+        )
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert data["goal"] == "test the session trio"
+
+        _dispatch_tool(
+            "session-end",
+            tmp_path,
+            argparse.Namespace(id=sess_id, summary=None),
+        )
+        out = capsys.readouterr().out
+        assert sess_id in out
+
+    def test_suggest_topic_key(self, tmp_path: Path, capsys: Any) -> None:
+        """suggest-topic-key returns a deterministic kebab slug."""
+        from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
+
+        _dispatch_tool(
+            "suggest-topic-key",
+            tmp_path,
+            argparse.Namespace(title="Auth Redesign", project=None),
+        )
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert "auth-redesign" in data["key"]
+
+    def test_doctor(self, tmp_path: Path, capsys: Any) -> None:
+        """doctor emits a DoctorReport JSON with a 'checks' key."""
+        from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
+
+        _dispatch_tool("doctor", tmp_path, argparse.Namespace())
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert "checks" in data
+
+    def test_current_project(self, tmp_path: Path, capsys: Any) -> None:
+        """current-project returns a DetectionResult JSON."""
+        from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
+
+        _dispatch_tool("current-project", tmp_path, argparse.Namespace())
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        # DetectionResult has at minimum "source" and "project" fields
+        assert "source" in data
+
+    def test_capture_passive(self, tmp_path: Path, capsys: Any) -> None:
+        """capture-passive extracts Key Learnings bullets."""
+        from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
+
+        content = "## Key Learnings:\n- learned A\n- learned B\n"
+        _dispatch_tool("capture-passive", tmp_path, argparse.Namespace(content=content))
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert "learned A" in data
+
+    def test_backendless_verbs_exit_2(self, tmp_path: Path) -> None:
+        """stats, timeline, merge-projects have no backend and must exit 2."""
+        from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
+
+        for verb in ("stats", "timeline", "merge-projects"):
+            with pytest.raises(SystemExit) as excinfo:
+                _dispatch_tool(verb, tmp_path, argparse.Namespace())
+            assert excinfo.value.code == 2, f"{verb}: expected exit 2, got {excinfo.value.code}"

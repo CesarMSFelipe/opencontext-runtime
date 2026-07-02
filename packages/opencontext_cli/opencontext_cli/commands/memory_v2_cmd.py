@@ -105,7 +105,8 @@ def add_memory_v2_parser(subparsers: Any) -> argparse.ArgumentParser:
     p.add_argument("--id", default="", help="Observation ID.")
 
     # --- Save-prompt ---
-    _tool("save-prompt", "Save a user prompt for context tracking.")
+    p = _tool("save-prompt", "Save a user prompt for context tracking.")
+    p.add_argument("--content", default="", help="The user prompt text.")
 
     # --- Update ---
     p = _tool("update", "Update an existing observation by ID.")
@@ -135,7 +136,9 @@ def add_memory_v2_parser(subparsers: Any) -> argparse.ArgumentParser:
     p.add_argument("--id", default="", help="Session identifier.")
     p.add_argument("--summary", default="", help="Session summary.")
 
-    _tool("session-summary", "Save a comprehensive end-of-session summary.")
+    p = _tool("session-summary", "Save a comprehensive end-of-session summary.")
+    p.add_argument("--id", default="", help="Session identifier.")
+    p.add_argument("--goal", default="", help="Session goal summary.")
 
     # --- Pin / Unpin ---
     p = _tool("pin", "Pin a memory so it is never auto-pruned.")
@@ -182,6 +185,7 @@ def add_memory_v2_parser(subparsers: Any) -> argparse.ArgumentParser:
         help="Relation verb.",
     )
     p.add_argument("--confidence", type=float, default=1.0)
+    p.add_argument("--reasoning", default="", help="Reasoning for the comparison.")
 
     # --- Delete ---
     p = _tool("delete", "Delete an observation (soft delete by default).")
@@ -231,10 +235,14 @@ def _open_store(cwd: Path) -> Any:
 def _dispatch_tool(tool: str, cwd: Path, args: argparse.Namespace) -> None:
     """Call the matching opencontext_memory entry point.
 
-    ``save`` and ``search`` are wired to the local SQLite store. Every other
-    verb exits non-zero instead of silently succeeding, so users never lose
-    data to a no-op.
+    Every tool is wired to the local SQLite store (via ``_open_store``) or
+    dispatched as a pure function when the tool takes no store.
+
+    Verbs without a backend implementation (``stats``, ``timeline``,
+    ``merge-projects``) exit 2 with an honest message so the caller is never
+    silently swallowed by a no-op.
     """
+    # --- save ---
     if tool == "save":
         from opencontext_memory import mem_save
 
@@ -254,6 +262,8 @@ def _dispatch_tool(tool: str, cwd: Path, args: argparse.Namespace) -> None:
             raise SystemExit(2) from exc
         print(receipt.model_dump_json(indent=2))
         return
+
+    # --- search ---
     if tool == "search":
         from opencontext_memory import mem_search
 
@@ -266,9 +276,251 @@ def _dispatch_tool(tool: str, cwd: Path, args: argparse.Namespace) -> None:
         )
         print(json.dumps(rows, indent=2, default=str))
         return
+
+    # --- context ---
+    if tool == "context":
+        from opencontext_memory import mem_context
+
+        project = getattr(args, "project", None) or cwd.name
+        rows = mem_context(
+            _open_store(cwd),
+            project=project,
+            scope="project",
+            limit=20,
+            all_projects=False,
+        )
+        print(json.dumps(rows, indent=2, default=str))
+        return
+
+    # --- get ---
+    if tool == "get":
+        from opencontext_memory import mem_get_observation
+        from opencontext_memory.tools.mem_get_observation import MemoryNotFound
+
+        try:
+            obs_id = int(getattr(args, "id", 0))
+            result = mem_get_observation(_open_store(cwd), observation_id=obs_id)
+        except (MemoryNotFound, LookupError, ValueError) as exc:
+            print(f"memory v2 get: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    # --- save-prompt ---
+    if tool == "save-prompt":
+        from opencontext_memory import mem_save_prompt
+
+        try:
+            receipt = mem_save_prompt(
+                _open_store(cwd),
+                session_id=f"cli-{cwd.name}",
+                content=getattr(args, "content", ""),
+                project=getattr(args, "project", None) or cwd.name,
+            )
+        except ValueError as exc:
+            print(f"memory v2 save-prompt: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        print(receipt.model_dump_json(indent=2))
+        return
+
+    # --- update ---
+    if tool == "update":
+        from opencontext_memory import mem_update
+
+        obs_id = int(getattr(args, "id", 0))
+        fields: dict[str, Any] = {}
+        for field in ("title", "content", "type", "scope"):
+            val = getattr(args, field, None)
+            if val is not None:
+                fields[field] = val
+        try:
+            result = mem_update(_open_store(cwd), observation_id=obs_id, **fields)
+        except (ValueError, LookupError) as exc:
+            print(f"memory v2 update: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    # --- review ---
+    if tool == "review":
+        from opencontext_memory import mem_review
+
+        review_result = mem_review(_open_store(cwd), action="list")
+        if isinstance(review_result, list):
+            print(
+                json.dumps(
+                    [r.model_dump() if hasattr(r, "model_dump") else r for r in review_result],
+                    indent=2,
+                    default=str,
+                )
+            )
+        else:
+            print(json.dumps(review_result, indent=2, default=str))
+        return
+
+    # --- suggest-topic-key (pure — no store) ---
+    if tool == "suggest-topic-key":
+        from opencontext_memory import mem_suggest_topic_key
+
+        key = mem_suggest_topic_key(title=getattr(args, "title", ""))
+        print(json.dumps({"key": key}, indent=2))
+        return
+
+    # --- capture-passive (pure — no store) ---
+    if tool == "capture-passive":
+        from opencontext_memory import mem_capture_passive
+
+        bullets = mem_capture_passive(content=getattr(args, "content", ""))
+        print(json.dumps(bullets, indent=2))
+        return
+
+    # --- session-start ---
+    if tool == "session-start":
+        from opencontext_memory import mem_session_start
+
+        record = mem_session_start(
+            _open_store(cwd),
+            session_id=getattr(args, "id", None) or f"cli-{cwd.name}",
+            directory=getattr(args, "directory", None) or str(cwd),
+            project=getattr(args, "project", None) or cwd.name,
+        )
+        print(record.model_dump_json(indent=2))
+        return
+
+    # --- session-end ---
+    if tool == "session-end":
+        from opencontext_memory import mem_session_end
+
+        raw_summary = getattr(args, "summary", None)
+        summary = raw_summary if raw_summary else None
+        try:
+            record = mem_session_end(
+                _open_store(cwd),
+                session_id=getattr(args, "id", None) or f"cli-{cwd.name}",
+                summary=summary,
+            )
+        except ValueError as exc:
+            print(f"memory v2 session-end: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        print(record.model_dump_json(indent=2))
+        return
+
+    # --- session-summary ---
+    if tool == "session-summary":
+        from opencontext_memory import mem_session_summary
+
+        try:
+            summary_record = mem_session_summary(
+                _open_store(cwd),
+                session_id=getattr(args, "id", None) or f"cli-{cwd.name}",
+                goal=getattr(args, "goal", "") or "",
+                instructions="",
+                discoveries=[],
+                accomplished=[],
+                next_steps=[],
+                relevant_files=[],
+            )
+        except ValueError as exc:
+            print(f"memory v2 session-summary: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        print(summary_record.model_dump_json(indent=2))
+        return
+
+    # --- pin ---
+    if tool == "pin":
+        from opencontext_memory import mem_pin
+        from opencontext_memory.tools.mem_get_observation import MemoryNotFound
+
+        try:
+            result = mem_pin(_open_store(cwd), observation_id=int(getattr(args, "id", 0)))
+        except (MemoryNotFound, LookupError) as exc:
+            print(f"memory v2 pin: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    # --- unpin ---
+    if tool == "unpin":
+        from opencontext_memory import mem_unpin
+        from opencontext_memory.tools.mem_get_observation import MemoryNotFound
+
+        try:
+            result = mem_unpin(_open_store(cwd), observation_id=int(getattr(args, "id", 0)))
+        except (MemoryNotFound, LookupError) as exc:
+            print(f"memory v2 unpin: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    # --- judge ---
+    if tool == "judge":
+        from opencontext_memory import mem_judge
+
+        try:
+            row = mem_judge(
+                _open_store(cwd),
+                judgment_id=getattr(args, "judgment_id", ""),
+                relation=getattr(args, "relation", ""),
+                confidence=getattr(args, "confidence", 1.0),
+                reason=getattr(args, "reason", None),
+            )
+        except (ValueError, LookupError) as exc:
+            print(f"memory v2 judge: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        print(row.model_dump_json(indent=2))
+        return
+
+    # --- compare ---
+    if tool == "compare":
+        from opencontext_memory import mem_compare
+
+        try:
+            compare_result = mem_compare(
+                _open_store(cwd),
+                memory_id_a=int(getattr(args, "id_a", 0)),
+                memory_id_b=int(getattr(args, "id_b", 0)),
+                relation=getattr(args, "relation", ""),
+                confidence=getattr(args, "confidence", 1.0),
+                reasoning=getattr(args, "reasoning", ""),
+            )
+        except ValueError as exc:
+            print(f"memory v2 compare: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        print(compare_result.model_dump_json(indent=2))
+        return
+
+    # --- delete ---
+    if tool == "delete":
+        from opencontext_memory import mem_delete
+
+        mem_delete(
+            _open_store(cwd),
+            observation_id=int(getattr(args, "id", 0)),
+            hard=getattr(args, "hard", False),
+        )
+        print(json.dumps({"deleted": True}, indent=2))
+        return
+
+    # --- doctor ---
+    if tool == "doctor":
+        from opencontext_memory import mem_doctor
+
+        report = mem_doctor(_open_store(cwd))
+        print(report.model_dump_json(indent=2))
+        return
+
+    # --- current-project (no store — pure cwd detection) ---
+    if tool == "current-project":
+        from opencontext_memory import mem_current_project
+
+        detection = mem_current_project(cwd=cwd)
+        print(detection.model_dump_json(indent=2))
+        return
+
+    # --- backendless verbs: honest exit-2 ---
     print(
-        f"memory v2 {tool}: not wired yet — use 'opencontext memory {tool}' "
-        "or the Engram MCP tools instead.",
+        f"memory v2 {tool}: backend not implemented — no '{tool}' tool in "
+        "opencontext_memory. Use 'opencontext memory' or the Engram MCP tools.",
         file=sys.stderr,
     )
     raise SystemExit(2)
