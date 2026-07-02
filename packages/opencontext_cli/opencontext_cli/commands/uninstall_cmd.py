@@ -140,7 +140,13 @@ def add_uninstall_parser(subparsers: Any) -> None:
         "--all", dest="all_agents", action="store_true", help="Remove from every known agent."
     )
     parser.add_argument(
-        "--scope", choices=["global", "local"], default="local", help="Where config was written."
+        "--scope",
+        choices=["workspace", "global", "all", "local"],  # local = legacy alias for workspace
+        default="workspace",
+        help=(
+            "Purge scope: 'workspace' (project state), 'global' (HOME OC state), "
+            "'all' (both). Legacy alias 'local' maps to 'workspace'."
+        ),
     )
     parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation.")
     parser.add_argument("--json", action="store_true", help="Emit the report as JSON.")
@@ -179,6 +185,26 @@ def _global_state_targets() -> list[Path]:
         home / ".config" / "opencontext",
         home / ".opencontext" / "backups",
     ]
+
+
+def resolve_uninstall_scope(args: Any) -> str:
+    """Return the effective purge scope from parsed args.
+
+    Resolution order (highest → lowest precedence):
+      1. --full without explicit scope → 'all' (covers both tiers)
+      2. --scope <value> → normalise alias 'local' → 'workspace'
+      3. default → 'workspace'
+
+    The scope returned is always one of: 'workspace', 'global', 'all'.
+    """
+    raw_scope = getattr(args, "scope", "workspace") or "workspace"
+    # Normalise legacy alias.
+    if raw_scope == "local":
+        raw_scope = "workspace"
+    # --full implies scope=all when no more-specific scope was given.
+    if getattr(args, "full", False) and raw_scope == "workspace":
+        return "all"
+    return raw_scope
 
 
 def _purge_global_state() -> list[str]:
@@ -483,10 +509,13 @@ def handle_uninstall(args: Any) -> None:
     yes = _resolve_flag(getattr(args, "yes", False), "OPENCONTEXT_YES")
     root = getattr(args, "root", ".")
 
-    # --verify: read-only trace scan
+    # --verify: read-only trace scan scoped to the resolved scope.
     if getattr(args, "verify", False):
-        residue = verify_no_traces(root)
-        global_residue = verify_no_global_traces([])
+        effective_scope = resolve_uninstall_scope(args)
+        residue = verify_no_traces(root) if effective_scope in ("workspace", "all") else []
+        global_residue = (
+            verify_no_global_traces([]) if effective_scope in ("global", "all") else []
+        )
         passed = len(residue) == 0 and len(global_residue) == 0
         if json_output:
             print(
@@ -541,8 +570,15 @@ def handle_uninstall(args: Any) -> None:
             ):
                 console.warning("Full uninstall cancelled.")
                 return
+        effective_scope = resolve_uninstall_scope(args)
         _run_full_uninstall(
-            root, scope, json_output, global_state=getattr(args, "global_state", False)
+            root,
+            scope,
+            json_output,
+            global_state=(
+                effective_scope in ("global", "all")
+                or getattr(args, "global_state", False)
+            ),
         )
         return
 
