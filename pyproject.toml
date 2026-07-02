@@ -59,3 +59,11 @@ exclude = [
 module = "InquirerPy.*"
 ignore_missing_imports = true
 follow_imports = "skip"
+
+# uvicorn is an optional runtime dep; studio_cmd guards its import inside a
+# try/except. Using ignore_missing_imports (not an inline # type: ignore) keeps
+# mypy clean in both envs: no error when uvicorn is absent, no unused-ignore
+# when it IS present (because a per-module override never becomes unused).
+[[tool.mypy.overrides]]
+module = "uvicorn.*"
+ignore_missing_imports = true
