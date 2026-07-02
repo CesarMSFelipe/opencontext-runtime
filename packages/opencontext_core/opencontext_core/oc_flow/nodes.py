@@ -154,14 +154,25 @@ class DeterministicNodeExecutor:
         for rel in list(seed_paths)[: max(1, depth) * 4]:
             items.append(
                 ContextEnvelopeItem(
-                    source="file", ref=rel, summary=f"seed file for: {task[:60]}", tokens=200
+                    source="file",
+                    ref=rel,
+                    summary=f"seed file for: {task[:60]}",
+                    tokens=200,
+                    # C17: why_included records source type + selection reason.
+                    why_included="file:seed",
                 )
             )
         if not items:
             # No seeds resolved — still produce a usable, minimal envelope so the
             # run can proceed, and record the omission (book §8).
             items.append(
-                ContextEnvelopeItem(source="memory", ref="task", summary=task[:120], tokens=120)
+                ContextEnvelopeItem(
+                    source="memory",
+                    ref="task",
+                    summary=task[:120],
+                    tokens=120,
+                    why_included="memory:task-statement-fallback",
+                )
             )
             omissions.append("no source files seeded; planning from task statement only")
         return ContextEnvelope(
@@ -575,6 +586,29 @@ def node_gather_context(ctx: OCFlowContext) -> NodeResult:
         else:
             envelope = ctx.executor.gather_context(ctx.task, ctx.seed_paths, depth)
     envelope = envelope.model_copy(update={"cache_hit": cache_hit})
+    # C17 (product-closure-r13): enrich envelope with receipt provenance fields so
+    # context-envelope.json carries full auditability.  All fields are optional; this
+    # is additive — callers that already set these values keep them unchanged.
+    import hashlib
+    import uuid as _uuid
+
+    _budget_cap = OC_FLOW_BUDGETS["gather_context"][1]
+    _ranking_hash = hashlib.sha1(
+        "|".join(i.ref for i in envelope.items).encode()
+    ).hexdigest()[:12]
+    receipt_updates: dict[str, Any] = {}
+    if not envelope.receipt_id:
+        receipt_updates["receipt_id"] = str(_uuid.uuid4())
+    if not envelope.ranking_hash:
+        receipt_updates["ranking_hash"] = _ranking_hash
+    if envelope.budget_used == 0:
+        receipt_updates["budget_used"] = envelope.token_estimate
+    if envelope.budget_available == 0:
+        receipt_updates["budget_available"] = _budget_cap
+    if not envelope.why_omitted:
+        receipt_updates["why_omitted"] = list(envelope.omissions)
+    if receipt_updates:
+        envelope = envelope.model_copy(update=receipt_updates)
     ctx.envelope = envelope
     name = _write_json(ctx.artifacts_dir / "context-envelope.json", envelope.model_dump())
     tokens = (

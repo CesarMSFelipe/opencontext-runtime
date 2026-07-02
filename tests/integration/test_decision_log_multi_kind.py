@@ -20,11 +20,6 @@ def test_decisions_json_has_multiple_kinds(tmp_path: Path) -> None:
     runner = OCFlowRunner(tmp_path)
     result = runner.run("Describe the project layout", lane=Lane.FAST)
 
-    run_dir = (
-        result.artifacts_dir.parent.parent  # sessions/<sid>/runs/<rid>
-        if result.artifacts_dir
-        else None
-    )
     # Locate the run directory from session/run ids
     session_dir = (
         Path(tmp_path)

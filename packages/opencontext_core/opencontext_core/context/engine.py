@@ -364,13 +364,24 @@ def envelope_l3_from_subgraph(subgraph: Any) -> dict[str, Any]:
     }
 
 
-def to_surgical_envelope(envelope: ContextEnvelope) -> SurgicalEnvelope:
+def to_surgical_envelope(
+    envelope: ContextEnvelope,
+    *,
+    budget: int = 0,
+) -> SurgicalEnvelope:
     """Project the canonical envelope onto the OC Flow surgical seam (PR-007).
 
     Reconciliation: there is one canonical :class:`ContextEnvelope`; the OC Flow
     ``ContextEnvelope`` is a *projection* of it. Imported lazily so this L5 module
     does not pull OC Flow (L9) at import time.
+
+    C17 (product-closure-r13): the projection now carries the full set of receipt
+    provenance fields so the written artifact is fully auditable.  ``budget`` is
+    the per-node token budget limit when available; defaults to 0 (unknown).
     """
+    import hashlib
+    import uuid as _uuid
+
     from opencontext_core.oc_flow.models import ContextEnvelope as SurgicalEnvelope
     from opencontext_core.oc_flow.models import ContextEnvelopeItem
 
@@ -378,6 +389,9 @@ def to_surgical_envelope(envelope: ContextEnvelope) -> SurgicalEnvelope:
     for raw in envelope.l1.get("items", []) if isinstance(envelope.l1, dict) else []:
         if not isinstance(raw, dict):
             continue
+        usefulness = raw.get("usefulness")
+        score_tag = f"score={usefulness:.2f}" if isinstance(usefulness, float) else "ranked"
+        why = f"{raw.get('source_type', 'file')}:{score_tag}"
         items.append(
             ContextEnvelopeItem(
                 source=str(raw.get("source_type", "file")),
@@ -385,13 +399,28 @@ def to_surgical_envelope(envelope: ContextEnvelope) -> SurgicalEnvelope:
                 summary=str(raw.get("summary", "")),
                 tokens=int(raw.get("tokens", 0)),
                 full_file_reason=str(raw.get("full_file_reason", "")),
+                # C17: why_included from ranking metadata.
+                why_included=why,
             )
         )
+
+    omission_reasons = [o.reason for o in envelope.omissions]
+    ranking_hash = hashlib.sha1(
+        "|".join(i.ref for i in items).encode()
+    ).hexdigest()[:12]
+
     return SurgicalEnvelope(
         task=envelope.task,
         items=items,
-        omissions=[o.reason for o in envelope.omissions],
+        omissions=omission_reasons,
         token_estimate=envelope.token_estimate,
+        # C17: receipt provenance fields.
+        receipt_id=str(_uuid.uuid4()),
+        why_omitted=omission_reasons,
+        confidence=envelope.confidence,
+        budget_used=envelope.token_estimate,
+        budget_available=budget,
+        ranking_hash=ranking_hash,
     )
 
 
