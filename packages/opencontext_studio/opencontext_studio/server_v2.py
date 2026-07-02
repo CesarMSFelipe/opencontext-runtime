@@ -173,7 +173,7 @@ def create_v2_app(root: Path | str = ".") -> FastAPI:
     def decision_log(decision_id: str) -> dict[str, Any]:
         entry = _find_decision(reader, decision_id)
         if entry is None:
-            return _payload(decision_id=decision_id, available=False)
+            return _payload(decision_id=decision_id, rationale=None, available=False)
         return _payload(**entry)
 
     @app.get("/api/v2/brain_state")

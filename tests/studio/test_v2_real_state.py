@@ -158,6 +158,7 @@ def test_v2_unknown_decision_id_returns_unavailable(tmp_path: Path) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body.get("available") is False
+    assert body.get("rationale") is None  # schema key present but null when not found
     assert "stub" not in json.dumps(body)
 
 
