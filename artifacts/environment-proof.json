@@ -1,12 +1,12 @@
 {
   "schema_version": "1.0",
-  "git_head": "c8effdeaba4e07f1d74bce854efcdf35639afb49",
-  "git_status": "M packages/opencontext_core/opencontext_core/compat/migration.py\n?? artifacts/\n?? packages/opencontext_core/opencontext_core/runtime/spine.py\n?? packages/opencontext_core/tests/runtime/\n?? scripts/environment_proof.py\n?? tests/environment/",
+  "git_head": "6e43daedbfe52b647b06925b9284a8473ab9e4a3",
+  "git_status": "",
   "python_version": "3.12.3",
   "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.39",
-  "runner_sha256": "df42ce2b1b260403cc0e81b43a79f2c32c2a5e0f39f037553f7673dbfd0c6379",
+  "runner_sha256": "79d9ddb8fab7f42e50d432dd10a7b088a24da04357c7dd7dbcddcb26ef6ef8d4",
   "runner_py_compile_ok": true,
   "compileall_ok": true,
-  "created_at": "2026-07-01T18:02:36.212828+00:00",
+  "created_at": "2026-07-02T12:27:59.806692+00:00",
   "notes": []
 }

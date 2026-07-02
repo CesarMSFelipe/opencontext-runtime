@@ -22,6 +22,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from opencontext_core.benchmarks.v2.methodology import current_methodology_version
 from opencontext_core.benchmarks.v2.runner import BenchmarkResult
@@ -34,7 +35,7 @@ SUITE_ID = "A4"
 _REDUCTION_THRESHOLD = 0.0
 
 
-def _build_kg_payload(node_count: int = 80) -> dict:
+def _build_kg_payload(node_count: int = 80) -> dict[str, Any]:
     """Build a representative KG with nodes + call edges (non-trivial JSON)."""
     nodes = [
         {

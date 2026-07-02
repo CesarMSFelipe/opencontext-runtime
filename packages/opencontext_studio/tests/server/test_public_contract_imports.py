@@ -26,6 +26,12 @@ PUBLIC_CONTRACT_ALLOWLIST: frozenset[str] = frozenset(
         "opencontext_core.decision_log",
         "opencontext_core.kg.reader",
         "opencontext_core.memory.reader",
+        # studio-serving-consolidation: StudioReader is the sanctioned read
+        # contract for all v2 endpoint data, and core redaction (SinkGuard via
+        # redact_value) is the single redaction path applied at the response
+        # boundary. Both are deliberate public-contract additions.
+        "opencontext_core.studio.reader",
+        "opencontext_core.studio.redaction",
     }
 )
 
