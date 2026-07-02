@@ -908,12 +908,32 @@ def node_escalation(ctx: OCFlowContext) -> NodeResult:
 
 def node_consolidation(ctx: OCFlowContext) -> NodeResult:
     """Finalize: deltas, summary, reindex, cost report (book §14, FLOW-14)."""
-    memory_delta = {
+    # C11 (product-closure-r13): gate durable_notes behind PromotionPolicyV2.
+    # Composite score derived from run signals: inspection outcome + changed-file count.
+    # A generic no-op run scores 0.0 → REJECT (below keep threshold 0.6).
+    from opencontext_core.memory.v2.promotion import (
+        PromotionPolicyV2,
+        PromotionVerdictV2,
+        evaluate_promotion,
+    )
+
+    score = 0.0
+    if ctx.inspection and ctx.inspection.outcome in ("ok", "passed"):
+        score += 0.3
+    score += min(len(ctx.changed_files), 5) * 0.1
+    score = min(score, 1.0)
+
+    verdict = evaluate_promotion(score, PromotionPolicyV2())
+
+    memory_delta: dict[str, Any] = {
         "task": ctx.task,
-        "durable_notes": [f"OC Flow change: {ctx.task[:160]}"],
         "failed_strategies": list(ctx.failed_strategies),
         "saved_chain_of_thought": False,  # book §14: never save CoT
     }
+    if verdict == PromotionVerdictV2.PROMOTE:
+        memory_delta["durable_notes"] = [f"OC Flow change: {ctx.task[:160]}"]
+    else:
+        memory_delta["promotion"] = "not_promoted"
     graph_delta = {
         "reindexed_files": list(ctx.changed_files),
         "changed_areas": list(ctx.contract.changed_areas) if ctx.contract else [],
