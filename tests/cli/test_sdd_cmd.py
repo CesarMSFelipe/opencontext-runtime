@@ -7,6 +7,8 @@ Per openspec/changes/agentic-parity-engram-gentle/design/pr3-cli-fastapi.md
 from __future__ import annotations
 
 import argparse
+import subprocess
+import sys
 
 from opencontext_cli.commands.sdd_cmd import SUBCOMMANDS, add_sdd_parser
 
@@ -161,3 +163,51 @@ def test_sdd_list_shows_active_changes() -> None:
     parser = _build_parent()
     args = parser.parse_args(["sdd", "list", "--cwd", "."])
     assert args.sdd_command == "list"
+
+
+# ---------------------------------------------------------------------------
+# T2 product-polish-r14: --json flag on status + honest argparse errors
+# ---------------------------------------------------------------------------
+
+
+def test_sdd_status_json_flag_accepted() -> None:
+    """sdd status --json must be accepted by argparse (not an unrecognized flag)."""
+    parser = _build_parent()
+    # This MUST NOT raise SystemExit — --json must be a registered flag on status.
+    args = parser.parse_args(["sdd", "status", "--change", "my-change", "--json"])
+    assert args.sdd_command == "status"
+    assert args.change == "my-change"
+    assert getattr(args, "json", None) is True
+
+
+def test_sdd_status_exit_0_with_json_flag() -> None:
+    """subprocess: sdd status --json exits 0 (flag recognized, JSON output)."""
+    result = subprocess.run(
+        [sys.executable, "-m", "opencontext_cli", "sdd", "status", "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+    assert result.returncode == 0, (
+        f"Expected exit 0 but got {result.returncode}.\nstderr: {result.stderr}"
+    )
+
+
+def test_sdd_bogus_flag_says_unrecognized_not_removed() -> None:
+    """subprocess: sdd status --bogus-flag must print argparse error, not 'has been removed'."""
+    result = subprocess.run(
+        [sys.executable, "-m", "opencontext_cli", "sdd", "status", "--bogus-flag"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+    assert result.returncode != 0, "Expected non-zero exit for bogus flag"
+    combined = result.stdout + result.stderr
+    assert "has been removed" not in combined, (
+        f"Got the wrong error message. Output: {combined!r}"
+    )
+    assert "unrecognized" in combined.lower() or "error" in combined.lower(), (
+        f"Expected argparse error message, got: {combined!r}"
+    )

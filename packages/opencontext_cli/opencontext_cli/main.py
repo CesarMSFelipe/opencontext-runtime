@@ -425,7 +425,9 @@ class _DeprecationAwareParser(argparse.ArgumentParser):
             "governance",
             "evidence",
             # v1.0 removals:
-            "sdd",
+            # NOTE: "sdd" intentionally omitted — it is a live subcommand registered
+            # via add_sdd_parser(). Keeping it here would cause argparse errors on
+            # valid sdd sub-flags (e.g. --json) to print "'sdd' has been removed."
             "check",
             "packs",
             "cost",

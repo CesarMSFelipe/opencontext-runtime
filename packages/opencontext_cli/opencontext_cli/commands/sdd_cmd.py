@@ -92,6 +92,14 @@ def add_sdd_parser(subparsers: Any) -> argparse.ArgumentParser:
         if verb == "explore":
             p.add_argument("--topic", default=None, help="Exploration topic.")
 
+        if verb == "status":
+            p.add_argument(
+                "--json",
+                action="store_true",
+                default=False,
+                help="Emit structured JSON output (status is always JSON; flag is explicit).",
+            )
+
         if verb == "apply":
             p.add_argument("--task", default=None, help="Task ID to apply (e.g. T3.1).")
 
