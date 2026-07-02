@@ -8,7 +8,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import yaml
 
@@ -152,6 +152,9 @@ from opencontext_core.safety.provider_policy import ProviderPolicyEnforcer
 from opencontext_core.safety.redaction import SinkGuard
 from opencontext_core.update import EcosystemUpdateChecker, UpdateChecker
 from opencontext_core.workspace.layout import ensure_workspace
+
+if TYPE_CHECKING:
+    from opencontext_core.agentic.config import AgenticFlowConfig
 
 try:
     from opencontext_profiles import first_party_profiles
@@ -939,7 +942,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _storage_sub = _storage_parser.add_subparsers(dest="storage_command")
     _migrate_parser = _storage_sub.add_parser(
         "migrate",
-        help="Move legacy in-repo state (.storage/opencontext, .opencontext) to the user XDG directory.",
+        help="Move legacy in-repo state (.storage/opencontext, .opencontext) to the user XDG dir.",
     )
     _migrate_parser.add_argument(
         "project",
@@ -2232,7 +2235,7 @@ def _print_agent_instructions(agents: list[Any], console: Any) -> None:
             )
 
 
-def _build_agentic_cfg_from_args(args: argparse.Namespace) -> AgenticFlowConfig:  # type: ignore[name-defined]
+def _build_agentic_cfg_from_args(args: argparse.Namespace) -> AgenticFlowConfig:
     """Build an AgenticFlowConfig from CLI flags (shared between dry-run and real install).
 
     Explicit flags take precedence over preset/default (flag > preset > default).
@@ -2269,7 +2272,7 @@ def _build_agentic_cfg_from_args(args: argparse.Namespace) -> AgenticFlowConfig:
     return cfg
 
 
-def _apply_agentic_flags_to_yaml(yaml_path: Path, cfg: AgenticFlowConfig) -> None:  # type: ignore[name-defined]
+def _apply_agentic_flags_to_yaml(yaml_path: Path, cfg: AgenticFlowConfig) -> None:
     """Apply an AgenticFlowConfig overlay to an existing opencontext.yaml.
 
     Only non-default flag values are written; default values are left unchanged so
@@ -2294,7 +2297,7 @@ def _apply_agentic_flags_to_yaml(yaml_path: Path, cfg: AgenticFlowConfig) -> Non
     if not yaml_path.exists():
         return
 
-    data: dict = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    data: dict[str, Any] = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
 
     # ── memory flags ────────────────────────────────────────────────────────
     if cfg.memory_mode not in (MemoryMode.AUTO,):
@@ -2405,9 +2408,7 @@ def _storage_migrate(project: Path, *, dry_run: bool = False) -> None:
         moves.append((legacy.workspace_path, dest))
 
     if not moves:
-        dx_console.print(
-            "[green]Nothing to migrate — all detected dirs are already user-owned.[/]"
-        )
+        dx_console.print("[green]Nothing to migrate — all detected dirs are already user-owned.[/]")
         return
 
     if dry_run:
@@ -4393,6 +4394,18 @@ def _preset(command: str, name: str | None, root: str = ".", dry_run: bool = Fal
 
         config_path.write_text(yaml.safe_dump(updated, sort_keys=False), encoding="utf-8")
         dx_console.print(f"[green]✓ Preset '{name}' applied to {config_path}[/]")
+
+        # Warn when the resulting config enables air-gapped mode because it silently
+        # disables MCP adapters, which breaks several commands.
+        _resulting_security_mode = (
+            updated.get("security", {}).get("mode", "") if isinstance(updated, dict) else ""
+        )
+        if _resulting_security_mode == "air_gapped":
+            dx_console.print(
+                "[yellow]Warning: air-gapped mode disables MCP adapters. "
+                "The following commands will not work until the mode is changed:\n"
+                "  clarify, explain, memory collect[/]"
+            )
         return
 
     _scaffold_deprecated(f"preset {command}", "opencontext preset list")
