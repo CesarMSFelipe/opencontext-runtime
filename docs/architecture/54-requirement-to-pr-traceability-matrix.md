@@ -10,7 +10,7 @@ Authority: `OC-FINAL-CONVERGENCE-001.md` §7.2 (and §7 Output 1 / §11). This m
 
 **Last reconciled: 2026-07-02 (post deferred-program CH-1..CH-5)**
 
-**Totals:** 453 requirements across 22 PRs — **378 MET**, **0 PROPOSED**, **75 DEFERRED**.
+**Totals:** 453 requirements across 22 PRs — **312 MET**, **0 PROPOSED**, **141 DEFERRED** (row-derived; `opencontext architecture coverage` is the source of truth).
 
 **Benchmark gates** referenced below are the mandatory 1.0 acceptance gates defined in `57-final-1-0-acceptance-gates.md` §A: `first-run`, `oc-flow-localized-bugfix`, `sdd-formal-feature`, `context-token-efficiency`, `kg-retrieval-precision`, `memory-usefulness`, `policy-security`, `plugin-compatibility`, `provider-fallback`, `resume-rollback`.
 
