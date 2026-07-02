@@ -5004,49 +5004,25 @@ def _memory(args: argparse.Namespace) -> None:
 
 
 def _memory_export(repo: Any, output: str) -> None:
-    """Write all memory items to a shareable JSON file (commit it for the team)."""
-    items = repo.list_items(include_archive=True)
-    payload = {
-        "version": 1,
-        "count": len(items),
-        "items": [item.model_dump(mode="json") for item in items],
-    }
-    out = Path(output)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    console.success(f"Exported {len(items)} memory item(s) to {out}")
+    """Write all memory items to a shareable JSON file (commit it for the team).
+
+    Delegates to :func:`opencontext_core.memory.transfer.memory_export` so the
+    same logic is available to adapters without importing the CLI layer.
+    """
+    from opencontext_core.memory.transfer import memory_export as _core_export
+
+    _core_export(repo, output)
 
 
 def _memory_import(repo: Any, path: str) -> None:
-    """Import memory items from an exported file, skipping ids already present."""
-    from datetime import datetime
+    """Import memory items from an exported file, skipping ids already present.
 
-    source = Path(path)
-    if not source.exists():
-        eprint(f"file not found: {source}")
-        raise SystemExit(1)
-    payload = json.loads(source.read_text(encoding="utf-8"))
-    items = payload.get("items", []) if isinstance(payload, dict) else []
-    existing = {item.id for item in repo.list_items(include_archive=True)}
-    imported = 0
-    skipped = 0
-    for entry in items:
-        mem_id = entry.get("id")
-        if not mem_id or mem_id in existing:
-            skipped += 1
-            continue
-        valid_until = entry.get("valid_until")
-        repo.store(
-            content=entry.get("content", ""),
-            kind=entry.get("kind", "fact"),
-            source=entry.get("source", "import"),
-            pin=bool(entry.get("pin", False)),
-            memory_id=mem_id,
-            valid_until=datetime.fromisoformat(valid_until) if valid_until else None,
-            metadata=entry.get("metadata") or {},
-        )
-        imported += 1
-    console.success(f"Imported {imported} item(s), skipped {skipped} (already present or invalid).")
+    Delegates to :func:`opencontext_core.memory.transfer.memory_import` so the
+    same logic is available to adapters without importing the CLI layer.
+    """
+    from opencontext_core.memory.transfer import memory_import as _core_import
+
+    _core_import(repo, path)
 
 
 def _memory_doctor() -> None:
