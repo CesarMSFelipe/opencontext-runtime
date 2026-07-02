@@ -150,9 +150,18 @@ class ContextSubstrateBuilder:
         # Use compress_item() directly to measure compression savings on the full
         # KG payload regardless of budget.  pack() is budget-management; here we
         # want raw stats: "how much would the engine shrink this content?".
+        #
+        # NOTE (SUGGESTION-6): SQLite/JSON asymmetry — when the project uses a
+        # SQLite-backed KG (no knowledge_graph.json), raw_kg_content is empty.
+        # Compressing the synthetic {"note": "sqlite-backed kg"} placeholder
+        # would produce baseline/compressed counts (char-based estimate_tokens)
+        # that are inconsistent with selected_tokens (word-count × 1.3 from
+        # real SQLite content), breaking the invariant selected_tokens >= used_tokens.
+        # For the SQLite path we skip CompressionEngine entirely — all token fields
+        # remain anchored to the same sqlite_tokens estimate so the report is honest.
         compression_enabled = False
         compression_savings = 0
-        if context_pack_hash is not None and selected_tokens > 0:
+        if context_pack_hash is not None and selected_tokens > 0 and raw_kg_content:
             try:
                 from opencontext_core.context.budgeting import estimate_tokens
                 from opencontext_core.context.compression import CompressionEngine
@@ -168,13 +177,10 @@ class ContextSubstrateBuilder:
 
                 # Build a single ContextItem representing the KG text payload.
                 # Use estimate_tokens (char-based) for consistency with the engine.
-                kg_text = raw_kg_content or json.dumps(
-                    {"note": "sqlite-backed kg"}, indent=2
-                )
-                kg_token_count = estimate_tokens(kg_text)
+                kg_token_count = estimate_tokens(raw_kg_content)
                 kg_item = ContextItem(
                     id="kg:context_substrate",
-                    content=kg_text,
+                    content=raw_kg_content,
                     source="knowledge_graph",
                     source_type="file",
                     priority=ContextPriority.P1,
