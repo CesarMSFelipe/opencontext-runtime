@@ -86,3 +86,39 @@ def test_all_consumers_resolve_same_path_local_mode(
     assert workspace_a == root / ".opencontext", (
         f"Local-mode workspace path wrong: {workspace_a}"
     )
+
+
+def test_health_kg_path_uses_resolver(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """RuntimeHealth.report must route through resolve_active_storage_path (R1).
+
+    Before the fix health.py used the hardcoded constant
+    ``".storage/opencontext/context_graph.db"`` relative to root. Under XDG
+    (user) mode the KG lives at a completely different path, so health always
+    reported "KG unavailable". After the fix every consumer converges on the
+    same config-driven resolver.
+    """
+    from opencontext_core.config_resolver import resolve_active_storage_path
+    from opencontext_core.indexing.graph_health import GraphHealthReport
+    from opencontext_core.runtime_intelligence.health import RuntimeHealth
+
+    captured: list[Path] = []
+
+    def fake_compute(db_path: "str | Path") -> GraphHealthReport:  # noqa: UP037
+        captured.append(Path(db_path))
+        return GraphHealthReport(status="unavailable", indexed=False)
+
+    monkeypatch.setattr(
+        "opencontext_core.runtime_intelligence.health.compute_graph_health",
+        fake_compute,
+    )
+
+    RuntimeHealth().report(root=tmp_project)
+
+    assert len(captured) == 1, "compute_graph_health was not called"
+    expected = resolve_active_storage_path(tmp_project) / "context_graph.db"
+    assert captured[0] == expected, (
+        f"health.py must use the config-driven resolver; "
+        f"got {captured[0]!r}, expected {expected!r}"
+    )

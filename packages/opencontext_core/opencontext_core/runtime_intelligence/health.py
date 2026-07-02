@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from opencontext_core.config_resolver import resolve_active_storage_path
 from opencontext_core.indexing.graph_health import GraphHealthReport, compute_graph_health
 from opencontext_core.models.intelligence import (
     HEALTH_DIMENSIONS,
@@ -25,9 +26,6 @@ from opencontext_core.models.intelligence import (
 )
 from opencontext_core.runtime_intelligence import events as ri_events
 from opencontext_core.runtime_intelligence import telemetry_layout
-
-# Default KG database location relative to the project root.
-_DEFAULT_KG_DB = ".storage/opencontext/context_graph.db"
 
 _NEUTRAL = 0.5  # only used as the kg score for an unknown graph status (still a real read).
 _CRITICAL = 0.4  # below this a measured dimension is a critical finding.
@@ -104,7 +102,9 @@ class RuntimeHealth:
     ) -> RuntimeHealthReport:
         """Build the 10-dimension report, composing existing health signals."""
         if graph_health is None:
-            graph_health = compute_graph_health(Path(root) / _DEFAULT_KG_DB)
+            graph_health = compute_graph_health(
+                resolve_active_storage_path(root) / "context_graph.db"
+            )
 
         signals = dict(extra_signals or {})
         dq = decision_quality_metrics(decision_log) if decision_log is not None else {}
