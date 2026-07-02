@@ -10,10 +10,6 @@ import json
 import uuid
 import warnings
 from pathlib import Path
-from typing import Any
-
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers — seed minimal project state
@@ -218,7 +214,7 @@ def test_create_app_and_create_v2_app_are_same_factory_or_shim_warns() -> None:
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         from opencontext_core.studio.app import create_app
-        core_app = create_app()
+        create_app()
 
     is_same_factory = create_app is create_v2_app
     has_deprecation = any(issubclass(x.category, DeprecationWarning) for x in w)

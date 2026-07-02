@@ -93,7 +93,12 @@ def _capability_graph_payload(reader: Any) -> dict[str, Any]:
     missing = [n.id for n in view.nodes if not n.available]
     degraded = [n.id for n in view.nodes if not n.available and n.unmet_dependencies]
     install_hint = {n.id: n.remediation for n in view.nodes if n.remediation}
-    return {"available": available, "missing": missing, "degraded": degraded, "install_hint": install_hint}
+    return {
+        "available": available,
+        "missing": missing,
+        "degraded": degraded,
+        "install_hint": install_hint,
+    }
 
 
 def _context_budget_payload(reader: Any) -> dict[str, Any]:

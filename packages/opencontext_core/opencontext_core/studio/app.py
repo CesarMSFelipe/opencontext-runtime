@@ -36,6 +36,6 @@ def create_app(root: Path | str = ".") -> Any:
         DeprecationWarning,
         stacklevel=2,
     )
-    from opencontext_studio.server_v2 import create_v2_app  # type: ignore[import-not-found]
+    from opencontext_studio.server_v2 import create_v2_app
 
     return create_v2_app(root=root)
