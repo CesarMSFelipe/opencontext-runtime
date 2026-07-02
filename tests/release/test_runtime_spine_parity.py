@@ -100,9 +100,7 @@ def test_runtime_api_run_produces_run_result_with_parity_fields(tmp_path: Path) 
 
     api = RuntimeApi(tmp_path, harness_factory=lambda root: _StubHarness())
     ref = api.start_session(StartSessionRequest(task="fix test", root=str(tmp_path)))
-    result = api.run(
-        RunRequest(session_id=ref.session_id, workflow_id="oc-flow", task="fix test")
-    )
+    result = api.run(RunRequest(session_id=ref.session_id, workflow_id="oc-flow", task="fix test"))
     assert result.run_id
     assert result.status
     # The legacy carrier exposes final_node and status for downstream projection.
@@ -118,9 +116,7 @@ def test_runtime_api_run_threads_session_id(tmp_path: Path) -> None:
 
     api = RuntimeApi(tmp_path, harness_factory=lambda root: _StubHarness())
     ref = api.start_session(StartSessionRequest(task="task", root=str(tmp_path)))
-    result = api.run(
-        RunRequest(session_id=ref.session_id, workflow_id="oc-flow", task="task")
-    )
+    result = api.run(RunRequest(session_id=ref.session_id, workflow_id="oc-flow", task="task"))
     # run_id and session_id are different identifiers in the session-first contract.
     assert result.run_id != ref.session_id
 
@@ -230,13 +226,49 @@ def test_oc_flow_harness_adapter_routes_to_ocflow_runner(tmp_path: Path) -> None
     )
     # Public status must be in the OC Flow terminal vocabulary (not "passed").
     oc_flow_vocab = {
-        "completed", "needs_executor", "needs_provider", "blocked",
-        "escalated", "needs_verification", "needs_user_edit",
+        "completed",
+        "needs_executor",
+        "needs_provider",
+        "blocked",
+        "escalated",
+        "needs_verification",
+        "needs_user_edit",
     }
     assert result.status in oc_flow_vocab, (
         f"status {result.status!r} is not in OC Flow vocabulary; "
         "the harness vocabulary leak ('passed') has been reintroduced"
     )
+
+
+def test_oc_flow_disabled_yaml_returns_blocked_not_crash(tmp_path: Path) -> None:
+    """runtime.oc_flow_enabled: false in YAML must return a blocked result, not raise.
+
+    F2: _OCFlowHarness must read the project config and honor oc_flow_enabled=false
+    by returning an OCFlowRunResult(status='blocked') instead of running the flow.
+    """
+    import yaml
+
+    from opencontext_core.oc_flow.runner import OCFlowRunResult
+    from opencontext_core.runtime.api import RunRequest, RuntimeApi, StartSessionRequest
+
+    # Write a project config that disables OC Flow.
+    (tmp_path / "opencontext.yaml").write_text(
+        yaml.safe_dump({"runtime": {"oc_flow_enabled": False}}),
+        encoding="utf-8",
+    )
+
+    api = RuntimeApi(tmp_path)
+    ref = api.start_session(StartSessionRequest(task="Fix bug", root=str(tmp_path)))
+    # Must NOT raise; must return a blocked result.
+    result = api.run(RunRequest(session_id=ref.session_id, workflow_id="oc-flow", task="Fix bug"))
+
+    assert isinstance(result.legacy, OCFlowRunResult), (
+        f"expected OCFlowRunResult, got {type(result.legacy).__name__}"
+    )
+    assert result.legacy.status == "blocked", (
+        f"expected status='blocked' when oc_flow_enabled=false, got {result.legacy.status!r}"
+    )
+    assert result.status == "blocked"
 
 
 def test_tui_data_set_state_accepts_runtime_api_session(tmp_path: Path) -> None:

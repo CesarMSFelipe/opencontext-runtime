@@ -209,9 +209,32 @@ class _OCFlowHarness:
     def __init__(self, root: Path) -> None:
         self._root = root
 
+    def _oc_flow_enabled(self) -> bool:
+        """Read ``runtime.oc_flow_enabled`` from the project config (advisory)."""
+        try:
+            from opencontext_core.config import load_config_or_defaults
+            from opencontext_core.config_resolver import resolve_config_path
+
+            cfg = load_config_or_defaults(resolve_config_path(self._root), auto_detect=False)
+            return bool(getattr(cfg.runtime, "oc_flow_enabled", True))
+        except Exception:
+            return True  # config is advisory; default to enabled
+
     def run(self, workflow: str, task: str, **_kw: Any) -> Any:
         from opencontext_core.oc_flow.cli import _resolve_executor
-        from opencontext_core.oc_flow.runner import OCFlowRunner
+        from opencontext_core.oc_flow.runner import OCFlowRunResult, OCFlowRunner
+        from uuid import uuid4
+
+        if not self._oc_flow_enabled():
+            return OCFlowRunResult(
+                run_id=f"disabled-{uuid4().hex[:8]}",
+                session_id="",
+                status="blocked",
+                final_node="disabled",
+                completion_reason=(
+                    "OC Flow is disabled; set runtime.oc_flow_enabled: true to enable"
+                ),
+            )
 
         executor = _resolve_executor(self._root)
         return OCFlowRunner(root=self._root, executor=executor).run(task)
