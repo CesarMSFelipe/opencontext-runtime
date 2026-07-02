@@ -2205,8 +2205,12 @@ def _print_agent_instructions(agents: list[Any], console: Any) -> None:
             )
 
 
-def _install_dry_run(args: argparse.Namespace) -> None:
-    """Print the agentic install plan without making any changes."""
+def _build_agentic_cfg_from_args(args: argparse.Namespace) -> "AgenticFlowConfig":  # type: ignore[name-defined]
+    """Build an AgenticFlowConfig from CLI flags (shared between dry-run and real install).
+
+    Explicit flags take precedence over preset/default (flag > preset > default).
+    Returns an ``AgenticFlowConfig`` with only the explicitly requested values set.
+    """
     from opencontext_core.agentic.config import (
         AgenticFlowConfig,
         BudgetMode,
@@ -2215,7 +2219,6 @@ def _install_dry_run(args: argparse.Namespace) -> None:
         OpenSpecMode,
         PresetId,
     )
-    from opencontext_core.agentic.install_plan import build_install_plan, render_dry_run
     from opencontext_core.agentic.presets import preset_config
 
     preset_str = getattr(args, "preset", None)
@@ -2224,7 +2227,6 @@ def _install_dry_run(args: argparse.Namespace) -> None:
     else:
         cfg = AgenticFlowConfig()
 
-    # NOTE: Explicit flags take precedence over preset/default (flag > preset > default).
     overlay: dict[str, object] = {}
     if getattr(args, "memory_mode", None):
         overlay["memory_mode"] = MemoryMode(args.memory_mode)
@@ -2232,11 +2234,90 @@ def _install_dry_run(args: argparse.Namespace) -> None:
         overlay["budget_mode"] = BudgetMode(args.budget_mode)
     if getattr(args, "git_mode", None):
         overlay["git_mode"] = GitMode(args.git_mode)
-    if getattr(args, "openspec", None):
-        overlay["openspec_mode"] = OpenSpecMode(args.openspec)
+    if getattr(args, "openspec_mode", None):
+        overlay["openspec_mode"] = OpenSpecMode(args.openspec_mode)
     if overlay:
         cfg = cfg.model_copy(update=overlay)
 
+    return cfg
+
+
+def _apply_agentic_flags_to_yaml(yaml_path: Path, cfg: "AgenticFlowConfig") -> None:  # type: ignore[name-defined]
+    """Apply an AgenticFlowConfig overlay to an existing opencontext.yaml.
+
+    Only non-default flag values are written; default values are left unchanged so
+    a bare ``opencontext install`` with no flags is a no-op for all agentic keys.
+
+    YAML key mapping
+    ----------------
+    memory_mode  engram   → memory.provider=engram, memory.mode=engram
+    memory_mode  local    → memory.provider=local,  memory.mode=local
+    memory_mode  off      → memory.mode=off
+    budget_mode  strict   → context.budget_mode=strict
+    budget_mode  off      → context.budget_mode=off
+    openspec_mode full    → sdd.artifact_store.mode=openspec
+    openspec_mode minimal → sdd.artifact_store.mode=engram
+    git_mode stacked_prs  → sdd.delivery_strategy=auto-chain, sdd.chain_strategy=stacked-to-main
+    git_mode single_pr    → sdd.delivery_strategy=single-pr
+    """
+    import yaml as _yaml
+
+    from opencontext_core.agentic.config import BudgetMode, GitMode, MemoryMode, OpenSpecMode
+
+    if not yaml_path.exists():
+        return
+
+    data: dict = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+
+    # ── memory flags ────────────────────────────────────────────────────────
+    if cfg.memory_mode not in (MemoryMode.AUTO,):
+        memory = data.setdefault("memory", {})
+        if cfg.memory_mode == MemoryMode.ENGRAM:
+            memory["provider"] = "engram"
+            memory["mode"] = "engram"
+        elif cfg.memory_mode == MemoryMode.LOCAL:
+            memory["provider"] = "local"
+            memory["mode"] = "local"
+        elif cfg.memory_mode == MemoryMode.OFF:
+            memory["mode"] = "off"
+        # hybrid/engram_only handled via mode key only (provider stays at default)
+        elif cfg.memory_mode in (MemoryMode.HYBRID, MemoryMode.ENGRAM_ONLY):
+            memory["mode"] = str(cfg.memory_mode)
+
+    # ── budget mode ─────────────────────────────────────────────────────────
+    if cfg.budget_mode != BudgetMode.WARN:  # WARN is the YAML default
+        context = data.setdefault("context", {})
+        context["budget_mode"] = str(cfg.budget_mode)
+
+    # ── openspec mode → sdd.artifact_store.mode ─────────────────────────────
+    if cfg.openspec_mode != OpenSpecMode.OFF:
+        sdd = data.setdefault("sdd", {})
+        artifact_store = sdd.setdefault("artifact_store", {})
+        if cfg.openspec_mode == OpenSpecMode.FULL:
+            artifact_store["mode"] = "openspec"
+        elif cfg.openspec_mode == OpenSpecMode.MINIMAL:
+            artifact_store["mode"] = "engram"
+
+    # ── git mode → sdd delivery keys ─────────────────────────────────────────
+    if cfg.git_mode not in (GitMode.NONE, GitMode.LOCAL_BRANCH, GitMode.COMMIT_ONLY):
+        sdd = data.setdefault("sdd", {})
+        if cfg.git_mode == GitMode.STACKED_PRS:
+            sdd["delivery_strategy"] = "auto-chain"
+            sdd["chain_strategy"] = "stacked-to-main"
+        elif cfg.git_mode == GitMode.SINGLE_PR:
+            sdd["delivery_strategy"] = "single-pr"
+        elif cfg.git_mode == GitMode.PER_TASK_PRS:
+            sdd["delivery_strategy"] = "auto-chain"
+            sdd["chain_strategy"] = "feature-branch-chain"
+
+    yaml_path.write_text(_yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+
+
+def _install_dry_run(args: argparse.Namespace) -> None:
+    """Print the agentic install plan without making any changes."""
+    from opencontext_core.agentic.install_plan import build_install_plan, render_dry_run
+
+    cfg = _build_agentic_cfg_from_args(args)
     plan = build_install_plan(cfg)
     console.header("Install Plan (Dry Run)")
     # Payload is a pre-rendered multi-line plan — print raw so rich never tries to
@@ -2390,6 +2471,16 @@ def _install(args: argparse.Namespace) -> None:
         except Exception as exc:
             console.print(f"  [red]✗ Setup failed: {exc}[/]")
             return
+
+    # ── Apply agentic-flow flags to the written opencontext.yaml ─────────────
+    # OnboardingService writes the YAML first; we overlay the explicitly requested
+    # flags on top so they are not silently ignored (F1 fix).
+    _agentic_cfg = _build_agentic_cfg_from_args(args)
+    _yaml_path = root / "opencontext.yaml"
+    try:
+        _apply_agentic_flags_to_yaml(_yaml_path, _agentic_cfg)
+    except Exception as exc:
+        summary.append(f"⚠ Agentic flags not applied: {exc}")
 
     mgr = InstallationManager()
     try:
