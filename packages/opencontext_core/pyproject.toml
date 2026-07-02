@@ -24,7 +24,9 @@ dependencies = [
   "pydantic>=2.6",
   "PyYAML>=6.0",
   "tree-sitter>=0.24",
+  "tree-sitter-javascript>=0.23",
   "tree-sitter-python>=0.25",
+  "tree-sitter-typescript>=0.23",
   "watchdog>=6.0",
   "rich>=13.0",
   # prompts.py drives every interactive selector through InquirerPy; it pulls
