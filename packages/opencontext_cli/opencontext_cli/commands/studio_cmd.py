@@ -25,10 +25,23 @@ def add_studio_parser(subparsers: Any) -> None:
 
 
 def run_studio(root: Path | str = ".", *, port: int = 8765, no_browser: bool = False) -> str:
-    """Start the local Studio server; return the bound URL."""
-    from opencontext_core.studio.server import serve
+    """Start the local Studio server; return the bound URL.
 
-    return serve(root, port=port, open_browser=not no_browser)
+    Prefers the v2 FastAPI app (opencontext_studio.server_v2.create_v2_app)
+    served via uvicorn. Falls back to the stdlib stub when either package is
+    absent (ImportError).
+    """
+    try:
+        from opencontext_studio.server_v2 import create_v2_app  # type: ignore[import]
+        import uvicorn  # type: ignore[import]
+
+        app = create_v2_app()
+        uvicorn.run(app, host="127.0.0.1", port=port)
+        return f"http://127.0.0.1:{port}"
+    except ImportError:
+        from opencontext_core.studio.server import serve
+
+        return serve(root, port=port, open_browser=not no_browser)
 
 
 def handle_studio(args: Any) -> None:
