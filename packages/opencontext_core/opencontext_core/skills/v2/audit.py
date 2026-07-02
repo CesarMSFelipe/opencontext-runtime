@@ -81,6 +81,10 @@ class SkillAudit:
                     )
                 )
                 continue
+            # Skill definition files declare an 'id' key; general project configs
+            # (e.g. opencontext.yaml) do not — skip them silently.
+            if "id" not in data:
+                continue
             self._check_one(yaml_file, data, report)
             skills.append((yaml_file, data))
         self._check_confusables(skills, report)

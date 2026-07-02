@@ -92,3 +92,23 @@ def test_skill_catalog_generate_check_exits_zero_when_synced(tmp_path: Path) -> 
     )
     code = _run_skill(["skill", "catalog", "generate", "--check", "--root", str(tmp_path)])
     assert code == 0
+
+
+# ---------------------------------------------------------------------------
+# P0.3 — audit scope: exclude non-skill yaml files (e.g. opencontext.yaml)
+# ---------------------------------------------------------------------------
+
+
+def test_skill_audit_excludes_general_config_yaml(tmp_path: Path) -> None:
+    """audit with only a project config yaml (no 'id' key) exits 0 — not a skill file."""
+    (tmp_path / "opencontext.yaml").write_text("project: {}\n", encoding="utf-8")
+    code = _run_skill(["skill", "audit", "--root", str(tmp_path)])
+    assert code == 0
+
+
+def test_skill_audit_still_catches_malformed_skill_yaml(tmp_path: Path) -> None:
+    """audit still flags a yaml that declares 'id' but omits required skill fields."""
+    (tmp_path / "opencontext.yaml").write_text("project: {}\n", encoding="utf-8")
+    (tmp_path / "bad-skill.yaml").write_text("id: bad\nname: Bad\n", encoding="utf-8")
+    code = _run_skill(["skill", "audit", "--root", str(tmp_path)])
+    assert code == 1
