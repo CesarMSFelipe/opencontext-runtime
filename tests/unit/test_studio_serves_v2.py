@@ -55,7 +55,7 @@ def test_run_studio_calls_create_v2_app(
 
     class FakeServerV2:
         @staticmethod
-        def create_v2_app() -> object:
+        def create_v2_app(root: object = ".") -> object:
             calls.append("create_v2_app")
             return object()
 

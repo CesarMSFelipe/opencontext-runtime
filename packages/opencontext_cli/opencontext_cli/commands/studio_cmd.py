@@ -35,7 +35,7 @@ def run_studio(root: Path | str = ".", *, port: int = 8765, no_browser: bool = F
         import uvicorn  # type: ignore[import-not-found]
         from opencontext_studio.server_v2 import create_v2_app
 
-        app = create_v2_app()
+        app = create_v2_app(root=root)
         uvicorn.run(app, host="127.0.0.1", port=port)
         return f"http://127.0.0.1:{port}"
     except ImportError:
