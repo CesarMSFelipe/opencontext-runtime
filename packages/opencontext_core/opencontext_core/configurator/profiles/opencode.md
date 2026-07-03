@@ -27,6 +27,13 @@ OpenContext gives you a semantic knowledge graph + verified context for this pro
 2. Before any edit: call `opencontext_impact` on the symbol you're about to change
 3. Use host-native commands only when your OpenCode setup actually provides them
 
+## Running workflows (`opencontext_run`)
+
+OpenCode supports MCP sampling: `opencontext_run` executes the workflow
+directly with YOUR selected model (OpenContext asks it to generate the edits
+via `sampling/createMessage`) — zero provider config needed. The run applies
+the edits, verifies them, and returns receipts.
+
 ## Keep the index fresh
 
 Run `opencontext index .` after large changes.

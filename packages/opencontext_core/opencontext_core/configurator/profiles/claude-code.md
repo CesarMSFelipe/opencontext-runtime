@@ -27,6 +27,20 @@ OpenContext gives you a semantic knowledge graph + verified context for this pro
 2. For context: call `opencontext_context` with your task description
 3. For edits: use `opencontext_replace_symbol_body` instead of writing raw file edits
 
+## Running workflows (`opencontext_run`)
+
+Claude Code does not support MCP sampling, so OpenContext cannot execute with
+your model. With no provider configured, a mutation run returns
+`status: "agent_execute"` — a working handoff, not a dead end:
+
+1. Read the returned `task_contract` and `context.items`.
+2. Make the edits yourself with your own tools.
+3. Call `opencontext_session_apply` with `kind="agent_edits"` and
+   `payload.changed_files` (add `payload.test_command` when a test proves the
+   change), exactly as given in the response's `follow_up`. OpenContext then
+   verifies the edits, records receipts, and completes the run.
+4. If it reports `inspection_failed` or `needs_verification`, fix and re-call.
+
 ## Keep the index fresh
 
 Run `opencontext index .` after large changes.

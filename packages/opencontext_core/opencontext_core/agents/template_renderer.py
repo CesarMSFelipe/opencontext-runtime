@@ -164,6 +164,21 @@ _RUN_QUALITY_SECTION = """## Workflows, Quality, and Sessions
 - `opencontext_workflow_explain` and `opencontext_profile_explain` answer
   "which workflow fits this task" and "what does this profile gate"
   respectively — call them when the choice is not obvious.
+
+### How `opencontext_run` executes (depends on your host)
+
+- If your host supports MCP **sampling** (it advertises the `sampling`
+  capability at initialize — e.g. OpenCode), `opencontext_run` executes the
+  workflow directly with YOUR selected model. Zero provider config.
+- If your host does NOT support sampling (e.g. Claude Code, Codex) and no
+  provider is configured in `opencontext.yaml`, a mutation run returns
+  `status: "agent_execute"` instead of executing: it carries the task
+  contract, a bounded context summary, ordered instructions, and the exact
+  follow-up call. Do the edits yourself, then call
+  `opencontext_session_apply` with `kind="agent_edits"` and
+  `payload.changed_files` (plus `payload.test_command` when a test proves the
+  change) so OpenContext verifies the edits, records receipts, and completes
+  the run. Re-call it after fixing anything it reports.
 """
 
 
