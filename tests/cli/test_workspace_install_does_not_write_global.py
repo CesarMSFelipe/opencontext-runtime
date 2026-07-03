@@ -74,9 +74,18 @@ def test_workspace_install_skips_global_agent_installer(tmp_path, monkeypatch):
 
 
 def test_global_install_uses_agent_installer(tmp_path, monkeypatch):
-    """Default (global) install DOES call AgentInstaller."""
+    """Default (global) install DOES call AgentInstaller.
+
+    HOME must be isolated: only AgentInstaller is mocked, so every OTHER real
+    component _install() runs (configurator, skills, config sync) resolves
+    Path.home() live. Without the setenv this test configured the developer's
+    REAL ~/.claude, ~/.codex/config.toml, ~/.config/opencode, ... on every run.
+    """
+    fake_home = tmp_path / "fake_home"
+    fake_home.mkdir()
     project_root = tmp_path / "project"
     project_root.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
     monkeypatch.chdir(project_root)
 
     args = argparse.Namespace(
