@@ -338,7 +338,7 @@ Context packs are serialized as AICX bytecode — compact, verifiable, with a cr
 ```bash
 opencontext bytecode compile --query "fix auth bug"
 opencontext bytecode inspect
-opencontext bytecode decode <path.aicx>
+opencontext bytecode decode
 ```
 
 <!-- ─────────────── LOCAL CODE GRAPH ─────────────── -->
