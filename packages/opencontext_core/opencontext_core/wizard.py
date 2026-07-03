@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rich.console import Console
 from rich.table import Table
 
 from opencontext_core import prompts
 from opencontext_core.config import SecurityMode
+from opencontext_core.dx.console_styles import console
 from opencontext_core.plugin_system import (
     PluginInstaller,
     PluginRegistry,
@@ -27,8 +27,6 @@ from opencontext_core.user_prefs import (
 # Enum-aligned security choices; deriving from SecurityMode guarantees the
 # saved preference is always a value the runtime config can load.
 _SECURITY_MODE_CHOICES = [mode.value for mode in SecurityMode]
-
-console = Console()
 
 
 def _ask_bool(question: str, default: bool = True) -> bool:
@@ -51,9 +49,9 @@ def _ask_int(question: str, default: int, min_val: int = 1, max_val: int = 10000
 
 
 def _print_section(title: str) -> None:
-    """Print a section header."""
+    """Print a brand section header."""
 
-    console.rule(f"[bold]{title}[/]", style="cyan")
+    console.section(title)
 
 
 def _plugin_wizard_step(prefs: UserPreferences) -> None:
@@ -74,6 +72,8 @@ def _plugin_wizard_step(prefs: UserPreferences) -> None:
 
     if available:
         console.print("[bold]Available plugins:[/]")
+        # NOTE: deliberate exception — headerless list layout with per-column
+        # styling that console_styles.table (titled, uniform style) can't render.
         table = Table(box=None, show_header=False)
         table.add_column("")
         table.add_column("Plugin", style="cyan")
@@ -328,7 +328,6 @@ def show_config(root: Path | None = None) -> None:
         emitted instead of a section header with keys.
     """
     from opencontext_core.dx.console_styles import BRAND_PRIMARY
-    from opencontext_core.dx.console_styles import console as brand_console
 
     store = UserConfigStore()
     prefs = store.load()
@@ -340,7 +339,7 @@ def show_config(root: Path | None = None) -> None:
         console.print(f"\n  [bold {BRAND_PRIMARY}]{text}[/]")
 
     # Canonical brand header (logo + brand panel) — replaces the ad-hoc cyan rule.
-    brand_console.header("Current Configuration")
+    console.header("Current Configuration")
     console.print(f"\n  Config file: {store.CONFIG_FILE}")
     console.print(f"  First run: {'Yes' if prefs.first_run else 'No'}")
     if prefs.install_date:
