@@ -250,9 +250,10 @@ class OCFlowRunner:
         ``kg_first_subgraph`` returns None for a missing DB, so kg_v2 stays active but
         non-fatal on an unindexed project (the gather falls back to the legacy path).
         """
-        storage = resolve_storage_path(self.root, StorageMode.local)
+        from opencontext_core.config_resolver import resolve_active_storage_file
+
         for name in ("context_graph.db", "codegraph.db"):
-            candidate = storage / name
+            candidate = resolve_active_storage_file(self.root, name)
             if candidate.exists():
                 return candidate
         return None

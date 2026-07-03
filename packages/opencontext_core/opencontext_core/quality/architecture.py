@@ -171,7 +171,8 @@ class ArchitectureAnalyzer:
     ) -> None:
         """Bind to the graph DB and (optionally) the scanned source.
 
-        ``db_path`` is ``<root>/.storage/opencontext/context_graph.db``.
+        ``db_path`` is the project's persisted ``context_graph.db`` (resolved
+        by the caller via the active storage mode).
         ``scanned_files`` supplies the file-level import graph (for cycles), the
         per-file LOC (for god-files), and the source content (for complexity); if
         it is ``None`` those passes that *need* source degrade honestly — import

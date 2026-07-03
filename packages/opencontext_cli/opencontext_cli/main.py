@@ -5218,9 +5218,11 @@ def _memory(args: argparse.Namespace) -> None:
         import uuid
         from datetime import UTC, datetime
 
+        from opencontext_core.config_resolver import resolve_active_storage_file
         from opencontext_core.memory.graph import LocalMemoryStore
 
-        db_path = Path(".storage/opencontext/memory.db")
+        # Same storage-mode resolution the writers use (legacy in-repo fallback).
+        db_path = resolve_active_storage_file(Path.cwd(), "memory.db")
         if not db_path.exists():
             console.info(f"No memory store at {db_path} yet — nothing to review.")
             return

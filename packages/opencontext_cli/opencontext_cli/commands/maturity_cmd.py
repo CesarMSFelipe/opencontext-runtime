@@ -47,9 +47,13 @@ def _dim(name: str, ready: bool, basic: bool, recommendation: str) -> dict[str, 
 
 
 def _assess(root: Path) -> dict[str, Any]:
+    from opencontext_core.config_resolver import resolve_active_storage_file
+
     oc = root / ".opencontext"
     config_file = root / "opencontext.yaml"
-    kg_db = root / ".storage" / "opencontext" / "context_graph.db"
+    # KG lives wherever the active storage mode puts it (user-mode XDG by
+    # default), with a legacy in-repo fallback for unmigrated projects.
+    kg_db = resolve_active_storage_file(root, "context_graph.db")
     sessions = oc / "sessions"
     runs = oc / "runs"
     memory = oc / "memory"

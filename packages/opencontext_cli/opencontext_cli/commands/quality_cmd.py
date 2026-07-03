@@ -182,17 +182,19 @@ def handle_quality_gate(args: Any) -> None:
 def handle_quality_test_gaps(args: Any) -> None:
     """List symbols with no test reference (structural test-gap) and exit 0.
 
-    Reads the persisted knowledge graph at ``<root>/.storage/opencontext/
-    context_graph.db`` and reports functions/methods in non-test files that no
-    test file references. Informational (never blocks): exits 0 even when gaps
-    exist, so it slots into CI as a report rather than a hard gate.
+    Reads the persisted knowledge graph (resolved via the active storage mode,
+    with a legacy in-repo fallback) and reports functions/methods in non-test
+    files that no test file references. Informational (never blocks): exits 0
+    even when gaps exist, so it slots into CI as a report rather than a hard
+    gate.
     """
+    from opencontext_core.config_resolver import resolve_active_storage_file
     from opencontext_core.indexing.graph_db import GraphDatabase
 
     root = Path(getattr(args, "path", ".") or ".").resolve()
     json_output = bool(getattr(args, "json", False))
 
-    db_path = root / ".storage" / "opencontext" / "context_graph.db"
+    db_path = resolve_active_storage_file(root, "context_graph.db")
     if not db_path.exists():
         console.warning(f"No knowledge graph at {db_path}. Run `opencontext index .` first.")
         raise SystemExit(0)

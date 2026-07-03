@@ -27,7 +27,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 from opencontext_core.studio.views import (
     StudioBenchmarkCoverageView,
     StudioBenchmarkSuiteCoverage,
@@ -364,9 +364,10 @@ class StudioReader:
         if session is None:
             return StudioKgView(session_id=sid)
         try:
+            from opencontext_core.config_resolver import resolve_active_storage_file
             from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 
-            db = resolve_storage_path(self._root, StorageMode.local) / "context_graph.db"
+            db = resolve_active_storage_file(self._root, "context_graph.db")
             kg = KnowledgeGraph(db_path=str(db))
             if kg.get_stats().get("nodes", 0) == 0:
                 return StudioKgView(session_id=sid, available=False, query=session.task)

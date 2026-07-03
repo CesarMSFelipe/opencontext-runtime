@@ -102,20 +102,24 @@ def _compile(args: argparse.Namespace) -> int:
 
 def _plan_from_runtime(query: str, root: Path, risk: str, budget: int) -> EvidencePlan | None:
     try:
+        from opencontext_core.config_resolver import resolve_active_storage_file
         from opencontext_core.retrieval.contracts import EvidenceRequest, RetrievalSurface
         from opencontext_core.retrieval.planner import RetrievalPlanner
 
-        manifest_path = root / ".storage" / "opencontext" / "project_manifest.json"
+        # Resolve the manifest through the active storage mode (legacy in-repo
+        # fallback for unmigrated projects); the graph db lives beside it.
+        manifest_path = resolve_active_storage_file(root, "project_manifest.json")
         if not manifest_path.exists():
             return None
+        storage = manifest_path.parent
 
         from opencontext_core.runtime import OpenContextRuntime
 
-        rt = OpenContextRuntime(storage_path=root / ".storage" / "opencontext")
+        rt = OpenContextRuntime(storage_path=storage)
         manifest = rt.load_manifest()
         planner = RetrievalPlanner(
             manifest,
-            graph_db_path=root / ".storage" / "opencontext" / "context_graph.db",
+            graph_db_path=storage / "context_graph.db",
         )
         return planner.plan(
             EvidenceRequest(
@@ -267,11 +271,14 @@ def _load_bc(path: str | None) -> Any:
             eprint(f"Failed to parse bytecode: {exc}")
             return None
 
-    # Try last_bytecode.json (written by `bytecode compile`)
+    # Try last_bytecode.json (written by `bytecode compile` into the active
+    # storage path; legacy in-repo fallback for unmigrated projects).
     try:
+        from opencontext_core.config_resolver import resolve_active_storage_file
         from opencontext_core.context.bytecode.session_cache import load_last_bytecode
 
-        bc = load_last_bytecode(".storage/opencontext")
+        cache = resolve_active_storage_file(Path.cwd(), "last_bytecode.json")
+        bc = load_last_bytecode(cache.parent)
         if bc is not None:
             return bc
     except Exception:

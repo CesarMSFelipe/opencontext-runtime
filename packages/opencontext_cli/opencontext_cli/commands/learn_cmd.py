@@ -84,12 +84,15 @@ def handle_learn(args: argparse.Namespace) -> None:
 
 def _build_orchestrator(args: argparse.Namespace) -> Any:
     """Construct a LearningOrchestrator for the given project root."""
+    from opencontext_core.config_resolver import resolve_active_storage_file
     from opencontext_core.learning.learning_orchestrator import LearningOrchestrator
 
     root = Path(getattr(args, "root", ".")).resolve()
+    # Resolve through the active storage mode (same resolver the writers use),
+    # with a legacy in-repo fallback for unmigrated projects.
     return LearningOrchestrator(
-        storage_path=root / ".storage" / "opencontext" / "learning",
-        kg_db_path=root / ".storage" / "opencontext" / "context_graph.db",
+        storage_path=resolve_active_storage_file(root, "learning"),
+        kg_db_path=resolve_active_storage_file(root, "context_graph.db"),
     )
 
 

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 
 
 def _sha(text: str) -> str:
@@ -96,10 +96,11 @@ def build_lockfile(root: str | Path = ".") -> AICXLockfile:
         )
     )
 
-    # 3. Knowledge-graph shape — the indexed surface a run grounds on.
-    graph = compute_graph_health(
-        resolve_storage_path(Path(root), StorageMode.local) / "context_graph.db"
-    )
+    # 3. Knowledge-graph shape — the indexed surface a run grounds on. The db
+    # lives wherever the active storage mode puts it (legacy in-repo fallback).
+    from opencontext_core.config_resolver import resolve_active_storage_file
+
+    graph = compute_graph_health(resolve_active_storage_file(Path(root), "context_graph.db"))
     graph_sig = json.dumps(
         {
             "status": graph.status,

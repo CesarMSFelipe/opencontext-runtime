@@ -397,9 +397,10 @@ class ExplorePhase(HarnessPhase):
         kg_available: bool = False
         kg_error: str | None = None
         try:
+            from opencontext_core.config_resolver import resolve_active_storage_file
             from opencontext_core.indexing.impact_analysis import ImpactAnalyzer
 
-            db_path = resolve_storage_path(state.root, StorageMode.local) / "context_graph.db"
+            db_path = resolve_active_storage_file(state.root, "context_graph.db")
             if db_path.exists():
                 from opencontext_core.indexing.graph_db import GraphDatabase
 
