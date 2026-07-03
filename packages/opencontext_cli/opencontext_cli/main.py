@@ -277,6 +277,14 @@ def _force_utf8_output() -> None:
 def main() -> None:
     """CLI entry point."""
     _force_utf8_output()
+    # The runtime emits the legacy-state notice via BOTH warnings.warn (kept for
+    # programmatic detection / tests) AND the opencontext logger. In the CLI we
+    # only want the single clean logger line — suppressing the raw warning display
+    # stops Python from dumping an internal source path (main.py:NNNN: UserWarning)
+    # over the user. Tests still catch it via their own catch_warnings(record=True).
+    import warnings as _warnings
+
+    _warnings.filterwarnings("ignore", message="legacy local state detected.*")
     try:
         from opencontext_core.i18n import load_language_from_config
 
@@ -1787,6 +1795,7 @@ def _dispatch(args: argparse.Namespace) -> None:
         else:
             from opencontext_core.skills.registry import refresh as _skill_refresh
 
+            console.header("Skill Registry")
             _sr_out = _skill_refresh(_sr_root)
             console.success(f"Skill registry written: {_sr_out}")
         return
@@ -4410,6 +4419,7 @@ def _preset(command: str, name: str | None, root: str = ".", dry_run: bool = Fal
     from opencontext_core.workflow.presets import find_presets, load_preset
 
     if command == "list":
+        dx_console.header("Presets")
         presets = find_presets(root)
         dx_console.table(
             "Available Presets",
@@ -4426,6 +4436,7 @@ def _preset(command: str, name: str | None, root: str = ".", dry_run: bool = Fal
     if command == "apply":
         if not name:
             raise OpenContextError("preset name is required")
+        dx_console.header("Preset Apply")
         resolved_preset = load_preset(name, root=root)
         if resolved_preset is None:
             available = ", ".join(p.name for p in find_presets(root)) or "(none)"
@@ -4448,12 +4459,12 @@ def _preset(command: str, name: str | None, root: str = ".", dry_run: bool = Fal
         updated = compose(current, resolved_preset)
 
         if dry_run:
-            dx_console.print(f"[yellow]Dry run — would apply preset '{name}':[/]")
+            dx_console.info(f"Dry run — would apply preset '{name}':")
             dx_console.print(yaml.safe_dump(updated, sort_keys=False))
             return
 
         config_path.write_text(yaml.safe_dump(updated, sort_keys=False), encoding="utf-8")
-        dx_console.print(f"[green]✓ Preset '{name}' applied to {config_path}[/]")
+        dx_console.success(f"Preset '{name}' applied to {config_path}")
 
         # Warn when the resulting config enables air-gapped mode because it silently
         # disables MCP adapters, which breaks several commands.
@@ -4461,10 +4472,10 @@ def _preset(command: str, name: str | None, root: str = ".", dry_run: bool = Fal
             updated.get("security", {}).get("mode", "") if isinstance(updated, dict) else ""
         )
         if _resulting_security_mode == "air_gapped":
-            dx_console.print(
-                "[yellow]Warning: air-gapped mode disables MCP adapters. "
-                "The following commands will not work until the mode is changed:\n"
-                "  clarify, explain, memory collect[/]"
+            dx_console.warning(
+                "air-gapped mode disables MCP adapters. "
+                "The following commands will not work until the mode is changed: "
+                "clarify, explain, memory collect"
             )
         return
 
@@ -5031,6 +5042,8 @@ def _agent_memory_store(args: argparse.Namespace) -> Any:
 def _memory(args: argparse.Namespace) -> None:
     """Handle memory subcommands."""
     command = args.memory_command
+    # Delegated subcommands own their full surface (their own branded header and
+    # output format), so they return before the shared "Memory" header below.
     if command == "migrate":
         raise SystemExit(handle_migrate("memory", args))
     if command == "audit":
@@ -5038,6 +5051,21 @@ def _memory(args: argparse.Namespace) -> None:
     if command == "v2":
         handle_memory_v2(args)
         return
+    if command == "doctor":
+        _memory_doctor()
+        return
+    if command == "benchmark":
+        handle_memory_benchmark(args)
+        return
+    if command == "export":
+        _memory_export(ContextRepository(Path(".")), args.output)
+        return
+    if command == "import":
+        _memory_import(ContextRepository(Path(".")), args.path)
+        return
+    # Every remaining subcommand renders under the shared branded header, so the
+    # whole memory family carries the same brand chrome as `config`, `index`, etc.
+    console.header("Memory")
     repo = ContextRepository(Path("."))
     if command == "init":
         created = repo.init_layout()
@@ -5046,7 +5074,6 @@ def _memory(args: argparse.Namespace) -> None:
             print(f"  - {path}")
         return
     if command == "list":
-        console.header("Memory")
         # Canonical SQLite store first (what the agent recalls), markdown second.
         shown = False
         store = _agent_memory_store(args)
@@ -5269,18 +5296,6 @@ def _memory(args: argparse.Namespace) -> None:
             kind = next((t.split(":", 1)[1] for t in rec.tags if t.startswith("kind:")), "?")
             print(f"  {rec.id} [{kind}] {rec.content[:80]}")
         console.dim("Confirm with 'memory review --confirm <id>' or correct with --supersede <id>.")
-        return
-    if command == "export":
-        _memory_export(repo, args.output)
-        return
-    if command == "import":
-        _memory_import(repo, args.path)
-        return
-    if command == "doctor":
-        _memory_doctor()
-        return
-    if command == "benchmark":
-        handle_memory_benchmark(args)
         return
     _unreachable(command)
 

@@ -78,6 +78,18 @@ def _compile(args: argparse.Namespace) -> int:
     report = AICXValidator().validate(bc)
     metrics = compute_metrics(plan, bc)
 
+    # Persist as this project's last bytecode so a bare `bytecode inspect` /
+    # `bytecode decode` (no --path) resolves it — the sequence the README shows.
+    # Best-effort: a cache-write failure must never fail the compile.
+    try:
+        from opencontext_core.config_resolver import resolve_active_storage_file
+        from opencontext_core.context.bytecode.session_cache import save_last_bytecode
+
+        _cache_dir = resolve_active_storage_file(root, "last_bytecode.json").parent
+        save_last_bytecode(_cache_dir, bc)
+    except Exception:
+        pass
+
     saved_path: Path | None = None
     if args.save:
         saved_path = Path(args.save)
@@ -296,7 +308,7 @@ def _load_bc(path: str | None) -> Any:
     except Exception:
         pass
 
-    eprint("No AICX bytecode found. Run 'opencontext bytecode compile' first.")
+    console.error("No AICX bytecode found. Run 'opencontext bytecode compile' first.")
     return None
 
 

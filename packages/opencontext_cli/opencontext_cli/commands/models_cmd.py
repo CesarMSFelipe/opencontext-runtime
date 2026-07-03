@@ -14,7 +14,6 @@ from typing import Any
 
 import yaml
 
-from opencontext_cli.output import eprint
 from opencontext_core.dx.console_styles import console
 
 ROLES = (
@@ -84,8 +83,9 @@ def add_models_parser(subparsers: Any) -> None:
 def handle_models(args: Any) -> int:
     """Dispatch a ``models`` subcommand. Returns a process exit code."""
     cfg_path = _find_config()
+    console.header("Models")
     if cfg_path is None:
-        eprint("No opencontext.yaml found. Run 'opencontext init' first.")
+        console.error("No opencontext.yaml found. Run 'opencontext init' first.")
         return 1
 
     command = args.models_command
@@ -114,7 +114,6 @@ def _show(cfg_path: Path) -> int:
     default = (models.get("default", {}) or {}).get("model", "—")
     persona_models = (data.get("sdd", {}) or {}).get("persona_models", {}) or {}
 
-    console.header("Models")
     console.print(f"[bold]default[/] (your client's model): {default}")
 
     console.table(
