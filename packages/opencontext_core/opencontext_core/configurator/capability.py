@@ -75,7 +75,10 @@ _FLOW_CAPS: dict[str, dict[str, object]] = {
         "supports_slash_commands": False,
         "supports_subagents": True,
         "supports_task_tool": False,
-        "supports_sampling": True,
+        # Not advertised at MCP initialize as of opencode 1.17.12; capability
+        # detection auto-upgrades to the sampling path if a future version
+        # advertises it.
+        "supports_sampling": False,
         "supports_streaming_status": True,
         "supports_tool_approvals": True,
         "supports_hooks": False,

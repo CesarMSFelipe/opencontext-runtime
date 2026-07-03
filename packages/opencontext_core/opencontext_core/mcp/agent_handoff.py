@@ -1,9 +1,10 @@
 """Agent-execute handoff for MCP clients that cannot sample.
 
-Sampling-capable MCP clients (OpenCode, ...) drive OC Flow / SDD with their own
-selected model via ``sampling/createMessage`` — zero provider config. Clients
-WITHOUT the ``sampling`` capability (notably Claude Code and Codex) used to
-dead-end in ``status: needs_executor`` when no provider was configured.
+MCP clients that advertise the ``sampling`` capability at initialize drive
+OC Flow / SDD with their own selected model via ``sampling/createMessage`` —
+zero provider config. Clients that do NOT advertise it (none of the known
+clients do today, verified against opencode 1.17.12) used to dead-end in
+``status: needs_executor`` when no provider was configured.
 
 This module turns that dead-end into a WORKING handoff: ``opencontext_run``
 returns ``status: "agent_execute"`` with the frozen task contract, a

@@ -2,11 +2,13 @@
 
 Truth matrix (from the live capability matrix + MCP protocol reality):
 
-* OpenCode advertises the ``sampling`` capability → ``opencontext_run`` executes
-  the workflow directly with the client's selected model.
-* Claude Code and Codex do NOT sample → with no provider configured,
-  ``opencontext_run`` returns the ``agent_execute`` handoff and the agent
-  completes the run via ``opencontext_session_apply`` (``kind="agent_edits"``).
+* None of the known clients advertise the ``sampling`` capability at MCP
+  initialize today (verified against opencode 1.17.12) → with no provider
+  configured, ``opencontext_run`` returns the ``agent_execute`` handoff and
+  the agent completes the run via ``opencontext_session_apply``
+  (``kind="agent_edits"``). Runtime capability detection upgrades to the
+  direct sampling path automatically if a future client version advertises
+  ``sampling``.
 * Codex IS an MCP client: the installer registers the server in
   ``~/.codex/config.toml`` (TOML ``mcp_servers``), so its profile must not claim
   MCP tools are unavailable to it.
@@ -28,7 +30,9 @@ def test_capability_matrix_pins_sampling_support() -> None:
     from opencontext_core.configurator.capability import build_capability_matrix
 
     matrix = build_capability_matrix()
-    assert matrix.get("opencode").supports_sampling is True
+    # opencode 1.17.12 does not advertise `sampling` at MCP initialize; the
+    # matrix must state the truth, not the marketing claim.
+    assert matrix.get("opencode").supports_sampling is False
     assert matrix.get("claude-code").supports_sampling is False
     assert matrix.get("codex").supports_sampling is False
 
@@ -50,10 +54,17 @@ def test_codex_profile_documents_mcp_and_agent_execute_contract() -> None:
     assert "opencontext_session_apply" in body
 
 
-def test_opencode_profile_documents_direct_sampling_execution() -> None:
+def test_opencode_profile_documents_agent_execute_contract() -> None:
     body = _profile("opencode")
+    # opencode does not advertise sampling at initialize (as of 1.17.12), so
+    # its profile must document the agent_execute contract, plus the automatic
+    # upgrade to direct sampling if a future release advertises it.
+    assert "agent_execute" in body
+    assert "opencontext_session_apply" in body
+    assert "agent_edits" in body
     assert "sampling" in body
     assert "opencontext_run" in body
+    assert "does not advertise" in body
 
 
 def test_rendered_instructions_document_both_execution_models() -> None:

@@ -29,10 +29,22 @@ OpenContext gives you a semantic knowledge graph + verified context for this pro
 
 ## Running workflows (`opencontext_run`)
 
-OpenCode supports MCP sampling: `opencontext_run` executes the workflow
-directly with YOUR selected model (OpenContext asks it to generate the edits
-via `sampling/createMessage`) — zero provider config needed. The run applies
-the edits, verifies them, and returns receipts.
+OpenCode does not advertise the MCP `sampling` capability at initialize (as of
+OpenCode 1.17.12), so OpenContext cannot execute with your model. With no
+provider configured, a mutation run returns `status: "agent_execute"` — a
+working handoff, not a dead end:
+
+1. Read the returned `task_contract` and `context.items`.
+2. Make the edits yourself with your own tools.
+3. Call `opencontext_session_apply` with `kind="agent_edits"` and
+   `payload.changed_files` (add `payload.test_command` when a test proves the
+   change), exactly as given in the response's `follow_up`. OpenContext then
+   verifies the edits, records receipts, and completes the run.
+4. If it reports `inspection_failed` or `needs_verification`, fix and re-call.
+
+If a future OpenCode release advertises `sampling` at initialize, OpenContext's
+capability detection engages the direct sampling path automatically — no
+reconfiguration needed.
 
 ## Keep the index fresh
 
