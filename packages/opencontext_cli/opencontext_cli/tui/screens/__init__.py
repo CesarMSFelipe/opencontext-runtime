@@ -7,8 +7,9 @@ from opencontext_cli.tui.screens.memory import MemoryBrowserScreen
 from opencontext_cli.tui.screens.new_change import NewChangeScreen
 from opencontext_cli.tui.screens.receipt import ReceiptViewer
 
-# NOTE: InstallWizard / WizardStep are internal; access via
-# opencontext_cli.tui.screens.install_wizard directly.
+# NOTE: the former install_wizard screen was a display-only mock (no choice
+# handling, applied nothing) and was removed. `opencontext install` uses the
+# framed prompt wizard (opencontext_core.dx.wizard_frame) instead.
 
 __all__ = [
     "BudgetScreen",
