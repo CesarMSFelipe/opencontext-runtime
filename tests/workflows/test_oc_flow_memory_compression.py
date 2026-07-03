@@ -328,3 +328,74 @@ def test_gather_context_compression_disabled_records_reason(tmp_path: Path) -> N
     evidence = receipt["compression"]
     assert evidence["enabled"] is False
     assert evidence["applied"] is False
+
+
+# ------------------------------------------------------------- runner config wiring
+def _spy_context(monkeypatch: object) -> dict[str, object]:
+    """Capture the kwargs the runner passes to OCFlowContext (returns the real one)."""
+    import opencontext_core.oc_flow.runner as runner_mod
+
+    captured: dict[str, object] = {}
+    real = runner_mod.OCFlowContext
+
+    def _factory(**kwargs: object) -> OCFlowContext:
+        captured.update(kwargs)
+        return real(**kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(runner_mod, "OCFlowContext", _factory)  # type: ignore[attr-defined]
+    return captured
+
+
+def test_runner_threads_memory_and_compression_into_context(tmp_path, monkeypatch) -> None:
+    from opencontext_core.oc_flow.runner import OCFlowRunner
+
+    captured = _spy_context(monkeypatch)
+    runner = OCFlowRunner(root=tmp_path)
+    result = runner.run("Fix failing test", lane=Lane.FAST)
+
+    # Defaults: memory.enabled + harvest_after_run + memory_v2 + compression all on.
+    assert captured["memory_enabled"] is True
+    assert captured["memory_store"] is not None
+    assert captured["memory_harvest_enabled"] is True
+    assert captured["memory_v2_enabled"] is True
+    assert captured["compression_enabled"] is True
+    assert captured["compression_config"] is not None
+    assert captured["run_id"] == result.run_id
+
+
+def test_runner_memory_disabled_by_config(tmp_path, monkeypatch) -> None:
+    from opencontext_core.oc_flow.runner import OCFlowRunner
+
+    (tmp_path / "opencontext.yaml").write_text(
+        "project:\n  name: x\nmemory:\n  enabled: false\n",
+        encoding="utf-8",
+    )
+    captured = _spy_context(monkeypatch)
+    OCFlowRunner(root=tmp_path).run("Fix failing test", lane=Lane.FAST)
+
+    assert captured["memory_enabled"] is False
+    assert captured["memory_store"] is None
+
+
+def test_runner_accepts_injected_memory_store(tmp_path, monkeypatch) -> None:
+    from opencontext_core.oc_flow.runner import OCFlowRunner
+
+    store = _FakeMemoryStore()
+    captured = _spy_context(monkeypatch)
+    OCFlowRunner(root=tmp_path, memory_store=store).run("Fix failing test", lane=Lane.FAST)
+
+    assert captured["memory_store"] is store
+
+
+def test_runner_run_persists_memory_and_receipt_end_to_end(tmp_path) -> None:
+    from opencontext_core.oc_flow.runner import OCFlowRunner
+
+    result = OCFlowRunner(root=tmp_path).run("Fix failing test", lane=Lane.FAST)
+
+    assert result.artifacts_dir is not None
+    delta = json.loads((result.artifacts_dir / "consolidation" / "memory-delta.json").read_text())
+    assert delta["harvest"]["persisted"] is True
+    assert delta["harvest"]["run_id"] == result.run_id
+    assert delta["harvest"]["origin"] == "agent"
+    receipt = json.loads((result.artifacts_dir / "context-receipt.json").read_text())
+    assert receipt["compression"]["enabled"] is True

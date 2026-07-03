@@ -147,6 +147,7 @@ class OCFlowRunner:
         enabled: bool = True,
         context_engine_enabled: bool | None = None,
         kg_v2_enabled: bool | None = None,
+        memory_store: Any | None = None,
     ) -> None:
         self.root = Path(root)
         self.definition = oc_flow_definition()
@@ -174,6 +175,18 @@ class OCFlowRunner:
         # path for opportunistic KG grounding even without kg_v2_enabled=True. On an
         # unindexed project _resolve_graph_db_path() returns None so no seeding occurs.
         self._graph_db_path = self._resolve_graph_db_path()
+        # Memory + compression parity (SDD harness/context substrate): resolve the
+        # agent memory store and the compression config from the project config so
+        # gather_context reads memory / compresses oversized content and
+        # consolidation persists the memory delta through the harvester/harness.
+        # An injected store (tests/hosts) wins over config resolution.
+        self._memory_enabled = False
+        self._memory_harvest_enabled = False
+        self._memory_v2_enabled = False
+        self._memory_store: Any | None = memory_store
+        self._compression_enabled = False
+        self._compression_config: Any | None = None
+        self._resolve_memory_and_compression()
 
     # -- config / kg resolution ----------------------------------------------
     def _load_runtime_config(self) -> Any:
@@ -191,6 +204,45 @@ class OCFlowRunner:
             return config.runtime
         except Exception:  # pragma: no cover - config is advisory; default to legacy.
             return None
+
+    def _resolve_memory_and_compression(self) -> None:
+        """Resolve memory flags/store + compression config from the project config.
+
+        Mirrors the SDD harness runner: the store MUST resolve to the same DB
+        (path + provider) the runtime's recall path reads, so it comes from
+        ``BackendFactory.create_memory_store`` honoring ``memory.provider`` and the
+        storage mode. Best-effort: any failure degrades to no-memory /
+        no-compression and the nodes record the omission or no-op reason honestly.
+        """
+        try:
+            from opencontext_core.config import load_config_or_defaults
+            from opencontext_core.config_resolver import resolve_config_path
+
+            config = load_config_or_defaults(resolve_config_path(self.root), auto_detect=False)
+        except Exception:  # config is advisory; run without memory/compression
+            return
+        memory_cfg = getattr(config, "memory", None)
+        self._memory_enabled = bool(getattr(memory_cfg, "enabled", False))
+        self._memory_harvest_enabled = bool(getattr(memory_cfg, "harvest_after_run", False))
+        self._memory_v2_enabled = bool(
+            getattr(getattr(config, "runtime", None), "memory_v2_enabled", False)
+        )
+        compression_cfg = getattr(getattr(config, "context", None), "compression", None)
+        self._compression_enabled = bool(getattr(compression_cfg, "enabled", False))
+        self._compression_config = compression_cfg
+        if self._memory_store is None and self._memory_enabled:
+            try:
+                from opencontext_core.backends.factory import BackendFactory
+
+                storage_path = resolve_storage_path(
+                    self.root,
+                    config.storage.mode,
+                    getattr(config.storage, "custom_path", None),
+                )
+                storage_path.mkdir(parents=True, exist_ok=True)
+                self._memory_store = BackendFactory.create_memory_store(config, storage_path)
+            except Exception:  # store is optional — gather/consolidation degrade
+                self._memory_store = None
 
     def _resolve_graph_db_path(self) -> Path | None:
         """Locate the project's KG v2 index under ``root``, or None when unindexed.
@@ -275,6 +327,16 @@ class OCFlowRunner:
             context_engine_enabled=self._context_engine_enabled,
             kg_v2_enabled=self._kg_v2_enabled,
             graph_db_path=self._graph_db_path,
+            # Memory + compression parity: gather_context folds memory recall and
+            # compresses oversized content; consolidation persists the memory delta
+            # through the harvester/harness with this run's provenance.
+            memory_enabled=self._memory_enabled,
+            memory_store=self._memory_store,
+            memory_harvest_enabled=self._memory_harvest_enabled,
+            memory_v2_enabled=self._memory_v2_enabled,
+            run_id=run_id,
+            compression_enabled=self._compression_enabled,
+            compression_config=self._compression_config,
         )
 
         # B6 / AVH-013: the explainable workflow-selection receipt (same shared
