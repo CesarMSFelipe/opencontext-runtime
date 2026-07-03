@@ -31,9 +31,10 @@ SB="${OC_DEMO_SANDBOX:-/tmp/oc-demo-sandbox}"
 # vhs uses the system Chrome, not a HOME cache, so this is safe + leak-proof.
 export HOME="$SB/home"
 export XDG_CONFIG_HOME="$SB/config"
-# Keep runtime state in-repo (<project>/.storage/opencontext) so the brand
-# header and the TUI graph explorer — which read the local layout — see the
-# index the demos build. Also keeps every recording artifact inside $SB.
+# Keep runtime state in-repo (<project>/.storage/opencontext) for explicitness.
+# Readers resolve the active storage mode, so demos also work in the default
+# user mode (state would land under the sandboxed $HOME/.local/state); local
+# mode just keeps every recording artifact visibly inside the sandbox project.
 export OPENCONTEXT_STORAGE_MODE=local
 rm -rf "$SB/config" "$SB/home" "$SB/install-demo"
 mkdir -p "$HOME"
