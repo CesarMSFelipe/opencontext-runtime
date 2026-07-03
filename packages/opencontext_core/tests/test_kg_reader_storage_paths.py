@@ -213,3 +213,29 @@ class TestIndexerCheckpointLocation:
         indexer.build_manifest()
         assert (kg_db.parent / "index_checkpoint.json").exists()
         assert not (user_mode_root / ".storage").exists()
+
+
+# ---------------------------------------------------------------------------
+# Doctor learning check
+# ---------------------------------------------------------------------------
+
+
+class TestDoctorLearningCheck:
+    def test_reads_active_storage_and_does_not_pollute_repo(
+        self, user_mode_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The learning stats check must not create legacy in-repo state.
+
+        ``LearningOrchestrator`` mkdirs its storage path on construction, so a
+        default-arg construction pollutes the repo with
+        ``.storage/opencontext/learning`` and reads stats from the wrong
+        location in user mode.
+        """
+        from opencontext_core.config import load_config_or_defaults
+        from opencontext_core.doctor.checks import _check_learning
+
+        monkeypatch.chdir(user_mode_root)
+        config = load_config_or_defaults(user_mode_root / "opencontext.yaml", auto_detect=False)
+        check = _check_learning(config)
+        assert check.ok
+        assert not (user_mode_root / ".storage").exists()
