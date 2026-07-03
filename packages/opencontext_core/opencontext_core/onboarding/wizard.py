@@ -23,6 +23,8 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from opencontext_core import prompts
 from opencontext_core.config import SecurityMode
 from opencontext_core.dx.console_styles import show_logo
+from opencontext_core.dx.wizard_frame import WizardStep as FrameStep
+from opencontext_core.dx.wizard_frame import render_frame, wizard_status_line
 from opencontext_core.onboarding.checklist import DxChecklist, run_checklist
 from opencontext_core.onboarding.metrics import DxMetrics
 from opencontext_core.onboarding.service import (
@@ -34,6 +36,47 @@ from opencontext_core.onboarding.service import (
 console = Console()
 
 _TEMPLATE_CHOICES = ("generic", "enterprise", "air_gapped")
+
+# Detail cards for the interactive onboarding steps — rendered by the shared
+# wizard frame in the config-TUI info-pane format. The memory card only shows
+# when a co-resident Engram install is detected.
+_ONBOARDING_STEP_CARDS: dict[str, FrameStep] = {
+    "template": FrameStep(
+        title="Configuration template",
+        effect="Chooses the opencontext.yaml baseline this wizard writes.",
+        recommended="generic for most projects.",
+        risk="enterprise/air_gapped block external providers and network features.",
+        cli="opencontext init --template <generic|enterprise|air_gapped>",
+    ),
+    "security_mode": FrameStep(
+        title="Security mode",
+        effect="Controls redaction, external providers, and provider safety defaults.",
+        recommended="private_project — redaction on, external providers off.",
+        risk="developer allows more integrations; air_gapped is fully offline.",
+        cli="opencontext init --security-mode <mode>",
+    ),
+    "tdd": FrameStep(
+        title="TDD mode",
+        effect="Controls whether SDD apply phases must start from a failing test.",
+        recommended="ask for exploratory work, strict for core code.",
+        risk="off can reduce regression coverage.",
+        cli="opencontext init --tdd <ask|strict|off>",
+    ),
+    "agents": FrameStep(
+        title="AI coding agents",
+        effect="Writes MCP config and agent persona files for each selection.",
+        recommended="The agents detected on this machine (pre-checked).",
+        risk="Unselected agents get no OpenContext wiring until re-run.",
+        cli="opencontext init --agent <agent[,agent]>",
+    ),
+    "memory": FrameStep(
+        title="Memory backend",
+        effect="Couples episodic/semantic memory to Engram or keeps everything local.",
+        recommended="local unless you already rely on Engram.",
+        risk="Engram is an external process; local is project-scoped.",
+        cli="opencontext config set memory.provider <local|engram>",
+    ),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +99,8 @@ class InteractiveOnboardingWizard:
     def __init__(self, root: str | Path = ".") -> None:
         self.root = Path(root).resolve()
         self._interactive = self._is_interactive()
+        self._step_plan: list[str] = []
+        self._status_line = ""
 
     # ------------------------------------------------------------------
     # Public API
@@ -81,6 +126,7 @@ class InteractiveOnboardingWizard:
         if force_non_interactive:
             self._interactive = False
 
+        self._plan_steps(overrides)
         self._show_welcome()
 
         template = overrides.get("template") or self._choose_template()
@@ -119,17 +165,49 @@ class InteractiveOnboardingWizard:
     # Steps
     # ------------------------------------------------------------------
 
+    def _plan_steps(self, overrides: dict[str, Any]) -> None:
+        """Compute which steps will actually prompt, so ``Step N/M`` is truthful.
+
+        Overridden choices (CLI flags) never prompt and are left out; the memory
+        step only exists when a co-resident Engram install is detected.
+        """
+        plan = [
+            key for key in ("template", "security_mode", "tdd", "agents") if not overrides.get(key)
+        ]
+        if self._interactive and not overrides.get("memory_provider"):
+            try:
+                from opencontext_core.memory.engram_bridge import detect_engram
+
+                if detect_engram():
+                    plan.append("memory")
+            except Exception:
+                pass
+        self._step_plan = plan
+        self._status_line = wizard_status_line(self.root) if self._interactive else ""
+
+    def _frame(self, key: str) -> None:
+        """Render the shared wizard frame for one planned step (TTY only)."""
+        if not self._interactive or key not in self._step_plan:
+            return
+        render_frame(
+            self._step_plan.index(key) + 1,
+            len(self._step_plan),
+            _ONBOARDING_STEP_CARDS[key],
+            self._status_line,
+        )
+
     def _show_welcome(self) -> None:
         if self._interactive:
             console.clear()
         show_logo()
+        steps = self._step_plan or ["template", "security_mode", "tdd", "agents"]
+        step_lines = "".join(
+            f"[cyan]{i}.[/] {_ONBOARDING_STEP_CARDS[key].title}\n" for i, key in enumerate(steps, 1)
+        )
         welcome = Panel(
             f"[bold]Project:[/] {self.root}\n"
-            + "\nThis wizard will guide you through 4 steps:\n"
-            + "[cyan]1.[/] Configuration template\n"
-            + "[cyan]2.[/] Security mode\n"
-            + "[cyan]3.[/] TDD mode\n"
-            + "[cyan]4.[/] AI coding agents to configure\n",
+            + f"\nThis wizard will guide you through {len(steps)} steps:\n"
+            + step_lines,
             title="OpenContext Setup",
             border_style="cyan",
             padding=(1, 2),
@@ -143,8 +221,7 @@ class InteractiveOnboardingWizard:
         if not self._interactive:
             return "generic"
 
-        console.print()
-        console.rule("[bold cyan]Step 1 / 4 — Configuration Template[/]")
+        self._frame("template")
         console.print()
 
         choices = [
@@ -167,8 +244,7 @@ class InteractiveOnboardingWizard:
         if not self._interactive:
             return SecurityMode.PRIVATE_PROJECT.value
 
-        console.print()
-        console.rule("[bold cyan]Step 2 / 4 — Security Mode[/]")
+        self._frame("security_mode")
         console.print()
 
         choices = [
@@ -201,8 +277,7 @@ class InteractiveOnboardingWizard:
         if not self._interactive:
             return "ask"
 
-        console.print()
-        console.rule("[bold cyan]Step 3 / 4 — TDD Mode[/]")
+        self._frame("tdd")
         console.print()
 
         choices = [
@@ -231,8 +306,7 @@ class InteractiveOnboardingWizard:
             # so a default wizard run wires the user's real agent. Opencode fallback.
             return default_active_clients()
 
-        console.print()
-        console.rule("[bold cyan]Step 4 / 4 — AI Coding Agents[/]")
+        self._frame("agents")
         console.print(
             "[dim]OpenContext will write MCP config and agent persona files for each selection.[/]\n"  # noqa: E501
         )
@@ -276,8 +350,7 @@ class InteractiveOnboardingWizard:
         if not detect_engram():
             return "local"  # nothing to offer — use OpenContext's own memory
 
-        console.print()
-        console.rule("[bold cyan]Memory — Engram detected[/]")
+        self._frame("memory")
         console.print(
             "[dim]You already have Engram. OpenContext can keep using it for episodic "
             "& semantic memory and layer its own engine on top, or use only its own.[/]\n"

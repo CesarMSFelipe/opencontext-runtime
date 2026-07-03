@@ -98,6 +98,7 @@ from opencontext_core.dx.console_styles import BrandConsole, console
 from opencontext_core.dx.instructions import import_instructions
 from opencontext_core.dx.security_reports import scan_project
 from opencontext_core.dx.tokens import build_token_report
+from opencontext_core.dx.wizard_frame import WizardStep
 from opencontext_core.errors import OpenContextError
 from opencontext_core.evaluation import (
     BasicEvaluator,
@@ -2086,30 +2087,80 @@ _SAMPLING_CLIENTS = {
 }
 
 
+# Detail cards for the install wizard steps — the shared wizard frame renders
+# these in the config-TUI info-pane format (Current/Effect/Recommended/Risk/CLI).
+_INSTALL_WIZARD_STEPS: dict[str, WizardStep] = {
+    "language": WizardStep(
+        title="Interface language",
+        effect="Sets the CLI/TUI copy language; writes ui_language to opencontext.yaml.",
+        recommended="Your team language.",
+        risk="Logs and artifacts may still contain English schema fields.",
+        cli="opencontext config set ui_language <en|es>",
+    ),
+    "editor": WizardStep(
+        title="AI coding editor",
+        effect="Chooses which agent gets MCP config, instructions, and persona files.",
+        recommended="The agent CLI you actually use.",
+        risk="Only the selected editor is wired now; add others via opencontext setup.",
+        cli="opencontext install --agent <agent>",
+    ),
+    "model_routing": WizardStep(
+        title="Model routing (SDD phases)",
+        effect="Routes explore/propose/spec/design/tasks/apply/verify to a model profile.",
+        recommended="default — your client's model for every phase.",
+        risk="premium may cost more; cheap may reduce design quality.",
+        cli="opencontext config set sdd.model_profile <profile>",
+    ),
+    "provider": WizardStep(
+        title="LLM provider key",
+        effect="Sets the chosen provider API key for this shell session only.",
+        recommended="Skip when your editor's model runs the phases (MCP sampling).",
+        risk="The key is never written to disk; add it to your shell profile to keep it.",
+        cli="export <PROVIDER>_API_KEY=<key>",
+    ),
+}
+
+
 def _install_wizard(args: Any, console: Any) -> None:
-    """Interactive wizard: language → editor → API key."""
+    """Interactive wizard: language → editor → model routing → API key.
+
+    Every step renders the shared wizard frame (brand logo + live status line +
+    progress + detail card) so install carries the same aspect as the config TUI.
+    """
     from opencontext_core import prompts
+    from opencontext_core.dx.wizard_frame import render_frame, wizard_status_line
 
     # Interstitial prints share the caller's brand console; only the prompts
     # themselves come from opencontext_core.prompts.
     _c = console
     root = Path(getattr(args, "root", "."))
+    _total = len(_INSTALL_WIZARD_STEPS)
+    _status = wizard_status_line(root)
 
     # Step 1 — Language
     try:
         from opencontext_core.i18n import set_language, t
 
+        cfg_path = root / "opencontext.yaml"
+        cfg: dict[str, Any] = {}
+        current_lang = "en"
+        if cfg_path.exists():
+            import yaml as _yaml
+
+            cfg = _yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+            current_lang = str(cfg.get("ui_language") or "en")
+        render_frame(
+            1, _total, _INSTALL_WIZARD_STEPS["language"].with_current(current_lang), _status
+        )
         lang = prompts.select(
             t("onboarding.language_prompt"),
             [("en", "English (en)"), ("es", "Español (es)")],
             default="en",
         )
         set_language(lang)
-        cfg_path = root / "opencontext.yaml"
         if cfg_path.exists():
             import yaml as _yaml
 
-            cfg = _yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
             cfg["ui_language"] = lang
             cfg_path.write_text(_yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
     except Exception:
@@ -2123,7 +2174,7 @@ def _install_wizard(args: Any, console: Any) -> None:
         def _t(k: str, **kw: str) -> str:  # type: ignore[misc]
             return k
 
-    _c.print()
+    render_frame(2, _total, _INSTALL_WIZARD_STEPS["editor"], _status)
     _EDITORS = [
         ("claude-code", "Claude Code (Anthropic)"),
         ("cursor", "Cursor"),
@@ -2146,9 +2197,10 @@ def _install_wizard(args: Any, console: Any) -> None:
         except Exception:
             pass
 
-    # Step 2b — model routing across SDD phases. 'default' = your client's model
+    # Step 3 — model routing across SDD phases. 'default' = your client's model
     # everywhere (no surprise model picks); presets route per phase/persona and
     # can be tuned later with `opencontext models set-persona`.
+    render_frame(3, _total, _INSTALL_WIZARD_STEPS["model_routing"], _status)
     chosen_profile = prompts.select(
         "Model routing across SDD phases?",
         [
@@ -2167,13 +2219,18 @@ def _install_wizard(args: Any, console: Any) -> None:
         except Exception:
             pass
 
-    # Step 3 — API key (only if not already set and editor needs LLM)
+    # Step 4 — API key (only if not already set and editor needs LLM)
     try:
         from opencontext_core.providers.detect import detect_provider
 
         current = detect_provider()
         if current.source == "fallback":
-            _c.print()
+            render_frame(
+                4,
+                _total,
+                _INSTALL_WIZARD_STEPS["provider"].with_current("no provider detected"),
+                _status,
+            )
             _c.print("[bold]No LLM provider detected.[/bold]")
             _c.print("Agentic phases (loop, spec, design) need a real LLM provider.")
             _PROVIDERS = [
@@ -2511,17 +2568,25 @@ def _install(args: argparse.Namespace) -> None:
     tdd = getattr(args, "tdd", None) or ("strict" if has_pytest else "ask")
     flow = getattr(args, "flow", "oc-new") or "oc-new"
     agent_arg = getattr(args, "agent", None)
-    console.print("  Will configure:")
-    console.print("    • Project index + knowledge graph")
-    console.print(f"    • SDD/TDD (mode: {tdd})")
-    console.print(f"    • Agent integration ({agent_arg or 'auto-detect'})")
-    console.print(f"    • Flow: {flow}")
-    console.print("    • Harness workflow")
-    console.print()
 
-    # Interactive wizard (language + editor + API key)
+    def _print_install_plan(agent_label: str) -> None:
+        console.print("  Will configure:")
+        console.print("    • Project index + knowledge graph")
+        console.print(f"    • SDD/TDD (mode: {tdd})")
+        console.print(f"    • Agent integration ({agent_label})")
+        console.print(f"    • Flow: {flow}")
+        console.print("    • Harness workflow")
+        console.print()
+
+    _print_install_plan(agent_arg or "auto-detect")
+
+    # Interactive wizard (language + editor + model routing + API key). The
+    # framed steps clear the screen, so recap the plan before the confirm.
     if not args.yes and sys.stdout.isatty():
         _install_wizard(args, console)
+        console.print()
+        wizard_editor = os.environ.get("_OC_WIZARD_EDITOR", "").strip()
+        _print_install_plan(agent_arg or wizard_editor or "auto-detect")
 
     if not args.yes:
         proceed = prompts.confirm("Proceed with setup?", default=not already_setup)
