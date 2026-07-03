@@ -19,6 +19,26 @@ from opencontext_core.configurator import KNOWN_AGENTS, Configurator
 from opencontext_core.configurator.constants import MCP_LABEL
 from opencontext_core.configurator.mcp_strategy import McpShape
 from opencontext_core.dx.console_styles import console
+from opencontext_core.dx.wizard_frame import WizardStep, render_frame
+
+# Detail cards for the interactive uninstall steps — the shared wizard frame
+# renders these in the config-TUI info-pane format.
+_UNINSTALL_WIZARD_STEPS: dict[str, WizardStep] = {
+    "scope": WizardStep(
+        title="Uninstall scope",
+        effect="Chooses what is removed: this project's wiring, HOME state, or both.",
+        recommended="workspace — keeps global config for other projects.",
+        risk="full removes all traces, including HOME-level OpenContext state.",
+        cli="opencontext uninstall --scope <workspace|global> | --full",
+    ),
+    "confirm": WizardStep(
+        title="Confirm removal",
+        effect="Strips the managed config and MCP entries for the selected scope.",
+        recommended="Preview first with --dry-run.",
+        risk="Destructive; --purge additionally deletes local state directories.",
+        cli="opencontext uninstall --yes [--dry-run]",
+    ),
+}
 
 
 def _strip_project_managed_blocks(root: object, scope: str) -> None:
@@ -499,6 +519,7 @@ def _select_scope_interactive(args: Any) -> None:
     path (scope=all) runs; otherwise the chosen scope is recorded on
     ``args.scope`` exactly as if the flag had been passed.
     """
+    render_frame(1, 2, _UNINSTALL_WIZARD_STEPS["scope"])
     choice = prompts.select(
         "What should be uninstalled?",
         [
@@ -526,6 +547,7 @@ def handle_uninstall(args: Any) -> None:
     # Bare interactive run (no scope flags, no automation flags) → offer the
     # same choice the flags encode instead of silently assuming workspace.
     # Non-TTY runs never prompt (they fall through to the existing guards).
+    framed_wizard = False
     if (
         getattr(args, "scope", None) is None
         and not getattr(args, "full", False)
@@ -536,6 +558,7 @@ def handle_uninstall(args: Any) -> None:
         and sys.stdin.isatty()
     ):
         _select_scope_interactive(args)
+        framed_wizard = True
 
     scope = getattr(args, "scope", None) or "workspace"
 
@@ -592,6 +615,8 @@ def handle_uninstall(args: Any) -> None:
             eprint("--full requires --yes in non-interactive mode.")
             sys.exit(1)
         if not yes:
+            if framed_wizard:
+                render_frame(2, 2, _UNINSTALL_WIZARD_STEPS["confirm"].with_current("full removal"))
             console.warning("--full will delete all OpenContext traces under the project root.")
             if not prompts.confirm("Proceed?", default=False):
                 console.warning("Full uninstall cancelled.")
@@ -654,6 +679,8 @@ def handle_uninstall(args: Any) -> None:
         if not sys.stdin.isatty():
             eprint("Refusing non-interactive uninstall; pass --yes (or --dry-run to preview).")
             sys.exit(2)
+        if framed_wizard:
+            render_frame(2, 2, _UNINSTALL_WIZARD_STEPS["confirm"].with_current(", ".join(valid)))
         console.print(f"About to remove OpenContext from: [bold]{', '.join(valid)}[/]")
         if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE"):
             console.warning(

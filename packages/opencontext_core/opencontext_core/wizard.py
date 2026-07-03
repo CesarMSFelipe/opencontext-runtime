@@ -13,6 +13,7 @@ from rich.table import Table
 from opencontext_core import prompts
 from opencontext_core.config import SecurityMode
 from opencontext_core.dx.console_styles import console
+from opencontext_core.dx.wizard_frame import WizardStep, render_frame
 from opencontext_core.plugin_system import (
     PluginInstaller,
     PluginRegistry,
@@ -27,6 +28,53 @@ from opencontext_core.user_prefs import (
 # Enum-aligned security choices; deriving from SecurityMode guarantees the
 # saved preference is always a value the runtime config can load.
 _SECURITY_MODE_CHOICES = [mode.value for mode in SecurityMode]
+
+# Detail cards for every config-wizard section — the shared wizard frame renders
+# these in the config-TUI info-pane format (Current/Effect/Recommended/Risk/CLI).
+_CONFIG_WIZARD_STEPS: dict[str, WizardStep] = {
+    "security": WizardStep(
+        title="Security & privacy",
+        effect="Sets the security posture; air_gapped also disables network features.",
+        recommended="private_project for local work.",
+        risk="Lower postures may allow more external integrations.",
+        cli="opencontext config set security_mode <mode>",
+    ),
+    "features": WizardStep(
+        title="Features",
+        effect="Enables KG, call graph, learning, governance, embeddings, MCP, git.",
+        recommended="Knowledge Graph on.",
+        risk="More features can add indexing work.",
+        cli="opencontext config set features.<name> <true|false>",
+    ),
+    "tokens": WizardStep(
+        title="Token budgets",
+        effect="Caps context size per operation and the max input tokens.",
+        recommended="8k-16k budget for normal repos.",
+        risk="Too low can hide needed evidence.",
+        cli="opencontext config set default_token_budget <n>",
+    ),
+    "agents": WizardStep(
+        title="Agent integrations",
+        effect="Marks which AI agents OpenContext integrates with.",
+        recommended="Only the agents you actually use.",
+        risk="Integration files are written by install/setup, not by this toggle.",
+        cli="opencontext install --agent <agent>",
+    ),
+    "plugins": WizardStep(
+        title="Plugins",
+        effect="Installs registry plugins and sets plugin auto-update preferences.",
+        recommended="Keep minimal until a workflow needs a plugin.",
+        risk="Third-party plugins extend the local tool surface.",
+        cli="opencontext plugin install <name>",
+    ),
+    "learning": WizardStep(
+        title="Learning & optimization",
+        effect="Toggles auto token-budget optimization and anonymous usage stats.",
+        recommended="Auto-optimize on; share stats only if you opt in.",
+        risk="Sharing sends anonymized usage counters only.",
+        cli="opencontext config set auto_optimize <true|false>",
+    ),
+}
 
 
 def _ask_bool(question: str, default: bool = True) -> bool:
@@ -143,11 +191,18 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
         )
         raise SystemExit(2)
 
+    def _frame(step_index: int, key: str, current: str = "") -> None:
+        """Shared wizard frame per section (brand logo + status + detail card)."""
+        card = _CONFIG_WIZARD_STEPS[key]
+        if current:
+            card = card.with_current(current)
+        render_frame(step_index, len(_CONFIG_WIZARD_STEPS), card)
+
     _print_section("OpenContext Configuration Wizard")
     console.print("\nWelcome! Let's set up OpenContext for your workflow.")
     console.print("You can re-run this anytime with: opencontext config wizard")
 
-    _print_section("Step 1: Security & Privacy")
+    _frame(1, "security", prefs.security_mode or "not set")
     console.print("\nChoose your security mode:")
     console.print("  developer        - Local dev posture, fewest restrictions")
     console.print("  private_project  - Local only, no external APIs")
@@ -169,8 +224,6 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
         prefs.features.semantic_search = False
         console.print("\nAir-gapped mode: disabling network features.")
 
-    _print_section("Step 2: Features")
-
     # One multi-select instead of a long yes/no chain. Network features are
     # hidden (and stay off) in air-gapped mode.
     feature_opts: list[tuple[str, str]] = [
@@ -187,11 +240,16 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
     feature_opts.append(("git_integration", "Git Integration (context from git history)"))
 
     enabled_defaults = [key for key, _ in feature_opts if getattr(prefs.features, key)]
+    _frame(2, "features", f"{len(enabled_defaults)} of {len(feature_opts)} enabled")
     selected = set(prompts.checkbox("Enable features", feature_opts, defaults=enabled_defaults))
     for key, _ in feature_opts:
         setattr(prefs.features, key, key in selected)
 
-    _print_section("Step 3: Token Budgets")
+    _frame(
+        3,
+        "tokens",
+        f"budget {prefs.default_token_budget} · max input {prefs.max_input_tokens}",
+    )
     console.print("\nConfigure default token limits:")
 
     prefs.default_token_budget = _ask_int(
@@ -200,12 +258,13 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
     prefs.max_input_tokens = _ask_int("Max input tokens", prefs.max_input_tokens, 1000, 200000)
 
     # Step 4: Agent Integrations
-    _print_section("Step 4: Agent Integrations")
     if prefs.context_first_mode:
+        _print_section("Step 4: Agent Integrations")
         console.print("[dim]Skipped (context-first mode)[/dim]")
     else:
         agent_keys = list(prefs.agent_integrations.keys())
         defaults = [a for a in agent_keys if prefs.agent_integrations[a]]
+        _frame(4, "agents", ", ".join(defaults) or "none")
         selected = set(
             prompts.checkbox("Which AI agents do you use?", agent_keys, defaults=defaults)
         )
@@ -213,14 +272,15 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
             prefs.agent_integrations[agent] = agent in selected
 
     # Step 5: Plugins
-    _print_section("Step 5: Plugins")
     if prefs.context_first_mode:
+        _print_section("Step 5: Plugins")
         console.print("[dim]Skipped (context-first mode)[/dim]")
     else:
+        _frame(5, "plugins")
         _plugin_wizard_step(prefs)
 
     # Step 6: Learning & Analytics
-    _print_section("Step 6: Learning & Optimization")
+    _frame(6, "learning", f"auto-optimize {'on' if prefs.learning_auto_optimize else 'off'}")
 
     prefs.learning_auto_optimize = _ask_bool(
         "Auto-optimize token budgets based on usage?", prefs.learning_auto_optimize
@@ -276,12 +336,20 @@ def reconfigure(section: str | None = None) -> None:
     store = UserConfigStore()
     prefs = store.load()
 
+    def _frame_section(key: str, current: str = "") -> None:
+        """One-section rerun still carries the shared wizard frame (Step 1/1)."""
+        card = _CONFIG_WIZARD_STEPS[key]
+        if current:
+            card = card.with_current(current)
+        render_frame(1, 1, card)
+
     if section == "security":
         current = (
             _SECURITY_MODE_CHOICES.index(prefs.security_mode)
             if prefs.security_mode in _SECURITY_MODE_CHOICES
             else _SECURITY_MODE_CHOICES.index(SecurityMode.PRIVATE_PROJECT.value)
         )
+        _frame_section("security", str(getattr(prefs, "security_mode", "") or ""))
         prefs.security_mode = _ask_choice(
             "Security mode:",
             _SECURITY_MODE_CHOICES,
@@ -294,18 +362,22 @@ def reconfigure(section: str | None = None) -> None:
             ("learning_system", "Learning System"),
         ]
         enabled = [key for key, _ in feature_opts if getattr(prefs.features, key)]
+        _frame_section("features", f"{len(enabled)} of {len(feature_opts)} enabled")
         selected = set(prompts.checkbox("Features", feature_opts, defaults=enabled))
         for key, _ in feature_opts:
             setattr(prefs.features, key, key in selected)
     elif section == "tokens":
+        _frame_section("tokens", f"budget {prefs.default_token_budget}")
         prefs.default_token_budget = _ask_int("Token budget", prefs.default_token_budget)
     elif section == "agents":
         agent_keys = list(prefs.agent_integrations.keys())
         defaults = [a for a in agent_keys if prefs.agent_integrations[a]]
+        _frame_section("agents", ", ".join(defaults) or "none")
         selected = set(prompts.checkbox("Agent integrations", agent_keys, defaults=defaults))
         for agent in agent_keys:
             prefs.agent_integrations[agent] = agent in selected
     elif section == "plugins":
+        _frame_section("plugins")
         _plugin_wizard_step(prefs)
     else:
         console.print(f"Unknown section: {section}")

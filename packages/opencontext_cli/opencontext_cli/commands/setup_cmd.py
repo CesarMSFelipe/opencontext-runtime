@@ -13,7 +13,8 @@ from opencontext_core.adapters.agent_manifest import AgentTarget
 from opencontext_core.agent_installer import AgentInstaller
 from opencontext_core.agent_installer import AgentTarget as GlobalAgentTarget
 from opencontext_core.configurator import KNOWN_AGENTS, Configurator
-from opencontext_core.dx.console_styles import console, show_logo
+from opencontext_core.dx.console_styles import console
+from opencontext_core.dx.wizard_frame import WizardStep, render_frame
 from opencontext_core.runtime import OpenContextRuntime
 from opencontext_core.sdd_runtime import write_sdd_context
 from opencontext_core.setup.plan import InstallAction, build_plan
@@ -46,28 +47,69 @@ def _save_install_ledger(report: dict[str, Any]) -> None:
         pass
 
 
+# Detail cards for the interactive setup steps — the shared wizard frame renders
+# these in the config-TUI info-pane format (Current/Effect/Recommended/Risk/CLI).
+_SETUP_WIZARD_STEPS: dict[str, WizardStep] = {
+    "preset": WizardStep(
+        title="Preset",
+        effect="Chooses which component set the install plan applies.",
+        recommended="context-first for most projects.",
+        risk="Nothing is written until you confirm the plan in the last step.",
+        cli="opencontext setup --preset <id>",
+    ),
+    "profile": WizardStep(
+        title="Profile",
+        effect="Applies security mode and feature defaults for a role.",
+        recommended="The profile suggested for your preset.",
+        risk="security-officer profiles lock down external providers.",
+        cli="opencontext setup --profile <id>",
+    ),
+    "components": WizardStep(
+        title="Components",
+        effect="Selects the exact components the plan installs.",
+        recommended="Keep the preset's component list.",
+        risk="Removing knowledge-graph disables context packs and KG queries.",
+        cli="opencontext setup --component <id> (repeatable)",
+    ),
+    "agents_tdd": WizardStep(
+        title="Agent clients & TDD",
+        effect="Writes MCP config + instructions per agent and sets TDD enforcement.",
+        recommended="The agents you actually use; TDD ask.",
+        risk="strict TDD requires a working test harness in the project.",
+        cli="opencontext setup --agent <id> --tdd <ask|strict|off>",
+    ),
+    "sdd_profile": WizardStep(
+        title="SDD model profile",
+        effect="Routes SDD phases (explore/design/apply...) to a model profile.",
+        recommended="default — one model for all phases.",
+        risk="premium may cost more; cheap may reduce design quality.",
+        cli="opencontext setup --sdd-profile <profile>",
+    ),
+    "review": WizardStep(
+        title="Plan review",
+        effect="Shows every planned action; confirming applies the plan.",
+        recommended="Read the action list before applying.",
+        risk="Apply writes config, agent files, SDD context, and indexes the project.",
+        cli="opencontext setup --dry-run",
+    ),
+}
+
+
 def _wizard_clear(
     step: int,
     total: int,
+    key: str,
     context: list[tuple[str, str]] | None = None,
 ) -> None:
-    """Clear the terminal and render a compact wizard step header."""
-    try:
-        console.clear()
-    except Exception:
-        pass
+    """Clear the terminal and render the shared wizard frame for one step.
 
-    show_logo(compact=True)
-    dots = "  ".join(
-        "[bold #00C9A7]●[/]" if i <= step else "[dim]○[/]" for i in range(1, total + 1)
-    )
-    console.print(
-        f"\n  [bold white]OpenContext Setup[/bold white]   {dots}   [dim]step {step}/{total}[/dim]"
-    )
+    Choices made so far (*context*) show as the card's ``Current:`` line so the
+    breadcrumb trail survives the per-step clear. Renders nothing on a non-TTY.
+    """
+    card = _SETUP_WIZARD_STEPS[key]
     if context:
-        crumbs = "   [dim]•[/dim]   ".join(f"[dim]{k}:[/dim] [bold]{v}[/bold]" for k, v in context)
-        console.print(f"  {crumbs}")
-    console.print()
+        card = card.with_current(" · ".join(f"{k} {v}" for k, v in context))
+    render_frame(step, total, card)
 
 
 def _check_first_run() -> bool:
@@ -499,17 +541,17 @@ def _run_interactive(
     """Run interactive setup with rich prompts."""
     # ── Step 1: Preset ──────────────────────────────────────────────────
     if not preset:
-        _wizard_clear(1, 6)
+        _wizard_clear(1, 6, "preset")
         preset = _choose_preset()
 
     # ── Step 2: Profile ─────────────────────────────────────────────────
     if not profile:
-        _wizard_clear(2, 6, [("preset", preset)])
+        _wizard_clear(2, 6, "profile", [("preset", preset)])
         profile = _choose_profile(preset)
 
     # ── Step 3: Components ──────────────────────────────────────────────
     if not components:
-        _wizard_clear(3, 6, [("preset", preset), ("profile", profile)])
+        _wizard_clear(3, 6, "components", [("preset", preset), ("profile", profile)])
         components = resolve_preset_components(preset)
         console.print(f"[bold]Components ({len(components)}):[/]")
         for c in components:
@@ -523,6 +565,7 @@ def _run_interactive(
     _wizard_clear(
         4,
         6,
+        "agents_tdd",
         [("preset", preset), ("profile", profile), ("components", str(len(components)))],
     )
     agents = _choose_agents(agents)
@@ -533,6 +576,7 @@ def _run_interactive(
         _wizard_clear(
             5,
             6,
+            "sdd_profile",
             [("preset", preset), ("profile", profile), ("tdd", tdd_mode)],
         )
         sdd_profile = _choose_sdd_profile()
@@ -541,6 +585,7 @@ def _run_interactive(
     _wizard_clear(
         6,
         6,
+        "review",
         [("preset", preset), ("profile", profile), ("tdd", tdd_mode), ("sdd", sdd_profile)],
     )
     plan = build_plan(preset_id=preset, profile_id=profile, components=components)
