@@ -16,13 +16,14 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from opencontext_core.context.budgeting import estimate_tokens
 from opencontext_core.models.agent_memory import (
     DecayPolicy,
     MemoryLayer,
     MemoryRecord,
 )
 from opencontext_core.oc_flow.budgets import OC_FLOW_BUDGETS
-from opencontext_core.oc_flow.models import Lane
+from opencontext_core.oc_flow.models import ContextEnvelope, ContextEnvelopeItem, Lane
 from opencontext_core.oc_flow.nodes import (
     DeterministicNodeExecutor,
     OCFlowContext,
@@ -223,3 +224,107 @@ def test_consolidation_memory_noop_reason_when_store_missing(tmp_path: Path) -> 
     assert delta["harvest"]["persisted"] is False
     assert "store" in delta["harvest"]["reason"]
     assert result.outputs["memory_persisted"] is False
+
+
+# ------------------------------------------------------- compression (gather/pack)
+class _StubEnvelopeExecutor(DeterministicNodeExecutor):
+    """Executor returning a pre-built envelope (drives oversized-content cases)."""
+
+    def __init__(self, envelope: ContextEnvelope) -> None:
+        super().__init__()
+        self._envelope = envelope
+
+    def gather_context(self, task: str, seed_paths: object, depth: int) -> ContextEnvelope:
+        return self._envelope
+
+
+def _oversized_file_envelope(task: str) -> ContextEnvelope:
+    # Well above the gather budget cap so compression must engage.
+    big_text = "the quick brown fox jumps over the lazy dog. " * 700
+    tokens = estimate_tokens(big_text)
+    assert tokens > OC_FLOW_BUDGETS["gather_context"][1]
+    item = ContextEnvelopeItem(
+        source="file",
+        ref="pkg/big_module.py",
+        summary=big_text,
+        tokens=tokens,
+        why_included="file:seed",
+    )
+    return ContextEnvelope(task=task, items=[item], token_estimate=tokens)
+
+
+def test_gather_context_compresses_oversized_envelope(tmp_path: Path) -> None:
+    envelope = _oversized_file_envelope("Fix failing auth token test")
+    baseline = envelope.token_estimate
+    ctx = _ctx(tmp_path, compression_enabled=True)
+    ctx.executor = _StubEnvelopeExecutor(envelope)
+    node_gather_context(ctx)
+
+    receipt = json.loads((ctx.artifacts_dir / "context-receipt.json").read_text())
+    evidence = receipt["compression"]
+    assert evidence["enabled"] is True
+    assert evidence["applied"] is True
+    assert evidence["baseline_tokens"] == baseline
+    assert evidence["compressed_tokens"] < baseline
+    assert 0.0 < evidence["ratio"] < 1.0
+    # The envelope itself carries the compressed content and budget accounting.
+    assert ctx.envelope is not None
+    assert ctx.envelope.token_estimate == evidence["compressed_tokens"]
+    assert ctx.envelope.token_estimate == sum(i.tokens for i in ctx.envelope.items)
+
+
+def test_gather_context_compression_skips_sqlite_kg_items(tmp_path: Path) -> None:
+    # An oversized envelope made ONLY of KG items: content is derived from the
+    # SQLite-backed graph, so compression must honestly skip (substrate parity).
+    cap = OC_FLOW_BUDGETS["gather_context"][1]
+    items = [
+        ContextEnvelopeItem(
+            source="kg",
+            ref=f"pkg/mod_{i}.py",
+            summary=f"function symbol_{i}",
+            tokens=cap // 4,
+            why_included="kg:score=0.90",
+            confidence=0.9,
+        )
+        for i in range(6)
+    ]
+    envelope = ContextEnvelope(
+        task="Fix failing auth token test",
+        items=items,
+        token_estimate=sum(i.tokens for i in items),
+    )
+    baseline = envelope.token_estimate
+    ctx = _ctx(tmp_path, compression_enabled=True)
+    ctx.executor = _StubEnvelopeExecutor(envelope)
+    node_gather_context(ctx)
+
+    receipt = json.loads((ctx.artifacts_dir / "context-receipt.json").read_text())
+    evidence = receipt["compression"]
+    assert evidence["enabled"] is True
+    assert evidence["applied"] is False
+    assert len(evidence["skipped"]) == 6
+    assert all("kg" in s["reason"] for s in evidence["skipped"])
+    # Token accounting stays anchored to the graph-derived estimate (honest skip).
+    assert ctx.envelope is not None
+    assert ctx.envelope.token_estimate == baseline
+
+
+def test_gather_context_compression_not_applied_within_budget(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path, compression_enabled=True)
+    node_gather_context(ctx)  # deterministic small envelope
+
+    receipt = json.loads((ctx.artifacts_dir / "context-receipt.json").read_text())
+    evidence = receipt["compression"]
+    assert evidence["enabled"] is True
+    assert evidence["applied"] is False
+    assert "budget" in evidence["reason"]
+
+
+def test_gather_context_compression_disabled_records_reason(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)  # compression disabled (default at node level)
+    node_gather_context(ctx)
+
+    receipt = json.loads((ctx.artifacts_dir / "context-receipt.json").read_text())
+    evidence = receipt["compression"]
+    assert evidence["enabled"] is False
+    assert evidence["applied"] is False

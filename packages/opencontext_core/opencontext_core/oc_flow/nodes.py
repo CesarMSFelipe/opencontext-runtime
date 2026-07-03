@@ -104,6 +104,11 @@ class OCFlowContext:
     memory_harvest_enabled: bool = False  # memory.harvest_after_run
     memory_v2_enabled: bool = False  # runtime.memory_v2_enabled → MemoryHarness routing
     run_id: str = ""  # run provenance carried into harvested memory records
+    # Compression parity (context substrate): when enabled, gather_context runs the
+    # CompressionEngine over oversized envelope content (SQLite-KG items honestly
+    # skipped) and records the evidence in context-receipt.json.
+    compression_enabled: bool = False
+    compression_config: Any | None = None  # config.CompressionConfig (None → defaults)
 
     # live state produced by nodes
     init_done: bool = False
@@ -611,9 +616,17 @@ def node_gather_context(ctx: OCFlowContext) -> NodeResult:
                     )
     envelope = envelope.model_copy(update={"cache_hit": cache_hit})
     # Memory recall parity (SDD ExplorePhase): fold prior memory into the envelope.
-    # A cached envelope was already folded on its original build, so skip re-folding.
+    # A cached envelope was already folded + compressed on its original build, so
+    # neither step re-runs on a cache hit.
     if not cache_hit:
         envelope = _fold_memory_recall(ctx, envelope)
+        envelope, compression_evidence = _compress_envelope(ctx, envelope)
+    else:
+        compression_evidence = {
+            "enabled": bool(ctx.compression_enabled),
+            "applied": False,
+            "reason": "cache hit; envelope reused verbatim",
+        }
     # C17 (product-closure-r13): enrich envelope with receipt provenance fields so
     # context-envelope.json carries full auditability.  All fields are optional; this
     # is additive — callers that already set these values keep them unchanged.
@@ -664,6 +677,9 @@ def node_gather_context(ctx: OCFlowContext) -> NodeResult:
         "ranking_hash": envelope.ranking_hash,
         "decision_dependency": envelope.decision_dependency,
         "confidence": envelope.confidence,
+        # Compression evidence (context substrate parity): ratio, savings and the
+        # honestly-skipped items are auditable next to the envelope items.
+        "compression": compression_evidence,
     }
     receipt_name = _write_json(ctx.artifacts_dir / "context-receipt.json", receipt_payload)
     tokens = (
@@ -764,6 +780,127 @@ def _kg_v2_seed_items(ctx: OCFlowContext) -> list[ContextEnvelopeItem] | None:
         )
         for n in subgraph.nodes
     ]
+
+
+# Items whose carried content estimates below this are left uncompressed: shrinking
+# an already-small summary would claim savings the envelope never actually spends.
+_COMPRESSION_MIN_ITEM_TOKENS = 256
+
+# Honest-skip reason for KG-sourced items (context substrate SQLite/JSON asymmetry):
+# their summaries derive from the SQLite-backed graph, not a raw text payload, so
+# compressing them would produce char-based token counts inconsistent with the
+# graph-anchored estimate.
+_KG_SQLITE_SKIP_REASON = (
+    "sqlite-backed kg content; honest skip (token accounting stays graph-anchored)"
+)
+
+
+def _compress_envelope(
+    ctx: OCFlowContext, envelope: ContextEnvelope
+) -> tuple[ContextEnvelope, dict[str, Any]]:
+    """Apply the CompressionEngine to oversized envelope content (substrate parity).
+
+    Runs only when ``ctx.compression_enabled`` and the envelope exceeds the
+    gather_context budget cap. KG-sourced items are honestly skipped (see
+    :data:`_KG_SQLITE_SKIP_REASON`); compressed items re-anchor their token count
+    to the char-based estimate of the compressed content. Returns the (possibly
+    updated) envelope plus the evidence dict recorded in context-receipt.json.
+    Best-effort: any engine failure leaves the envelope untouched with a reason.
+    """
+    if not ctx.compression_enabled:
+        return envelope, {
+            "enabled": False,
+            "applied": False,
+            "reason": "compression disabled (context.compression.enabled=false)",
+        }
+    budget_cap = OC_FLOW_BUDGETS["gather_context"][1]
+    baseline = envelope.token_estimate
+    if baseline <= budget_cap:
+        return envelope, {
+            "enabled": True,
+            "applied": False,
+            "reason": "envelope within gather budget; no compression needed",
+            "baseline_tokens": baseline,
+            "compressed_tokens": baseline,
+            "ratio": 1.0,
+            "skipped": [],
+        }
+    try:
+        from opencontext_core.context.budgeting import estimate_tokens
+        from opencontext_core.context.compression import CompressionEngine
+        from opencontext_core.models.context import ContextItem, ContextPriority
+
+        config = ctx.compression_config
+        if config is None:
+            from opencontext_core.config import CompressionConfig
+
+            config = CompressionConfig()
+        engine = CompressionEngine(config)
+    except Exception as exc:  # compression is optional — never break the gather
+        return envelope, {
+            "enabled": True,
+            "applied": False,
+            "reason": f"compression engine unavailable: {type(exc).__name__}",
+            "baseline_tokens": baseline,
+            "compressed_tokens": baseline,
+            "ratio": 1.0,
+            "skipped": [],
+        }
+    skipped: list[dict[str, str]] = []
+    new_items: list[ContextEnvelopeItem] = []
+    compressed_any = False
+    for item in envelope.items:
+        if item.source == "kg":
+            skipped.append({"ref": item.ref, "reason": _KG_SQLITE_SKIP_REASON})
+            new_items.append(item)
+            continue
+        content = item.summary
+        content_tokens = estimate_tokens(content)
+        if content_tokens < _COMPRESSION_MIN_ITEM_TOKENS:
+            new_items.append(item)
+            continue
+        try:
+            result = engine.compress_item(
+                ContextItem(
+                    id=item.ref,
+                    content=content,
+                    source=item.ref,
+                    source_type=item.source,
+                    priority=ContextPriority.P2,
+                    tokens=content_tokens,
+                    score=item.confidence or 0.5,
+                )
+            )
+        except Exception:
+            new_items.append(item)
+            continue
+        if result.compressed_tokens >= content_tokens:
+            new_items.append(item)  # engine kept it (protected spans / no gain)
+            continue
+        new_items.append(
+            item.model_copy(
+                update={"summary": result.item.content, "tokens": result.compressed_tokens}
+            )
+        )
+        compressed_any = True
+    total = sum(i.tokens for i in new_items)
+    evidence: dict[str, Any] = {
+        "enabled": True,
+        "applied": compressed_any,
+        "baseline_tokens": baseline,
+        "compressed_tokens": total,
+        "savings": max(0, baseline - total),
+        "ratio": round(total / baseline, 4) if baseline else 1.0,
+        "skipped": skipped,
+    }
+    if not compressed_any:
+        evidence["reason"] = (
+            "no compressible items (kg content honestly skipped)"
+            if skipped
+            else "no compressible items"
+        )
+        return envelope, evidence
+    return envelope.model_copy(update={"items": new_items, "token_estimate": total}), evidence
 
 
 # Omission notes recorded when memory recall cannot run (silent degrade, book §8).
