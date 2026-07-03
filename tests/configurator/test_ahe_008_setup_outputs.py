@@ -172,7 +172,7 @@ def test_setup_opencode_local_writes_project_agents_md(home: Path, project: Path
     result = report["results"][0]
 
     assert str(project / "AGENTS.md") in result["local_files_written"]
-    assert any(p.endswith(".config/opencode/mcp.json") for p in result["global_files_written"])
+    assert any(p.endswith(".config/opencode/opencode.json") for p in result["global_files_written"])
     # Global personas live under ~/.config/opencode/agents/.
     assert any(".config/opencode/agents" in p for p in result["global_files_written"])
     assert result["global_write_reason"].startswith("Host-constrained local setup")

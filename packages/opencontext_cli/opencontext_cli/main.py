@@ -2217,7 +2217,7 @@ def _print_agent_instructions(agents: list[Any], console: Any) -> None:
         ),
         "opencode": (
             "OpenCode ready.\n"
-            "OpenContext MCP configured at ~/.config/opencode/mcp.json\n"
+            "OpenContext MCP configured at ~/.config/opencode/opencode.json\n"
             "Use /context, /impact, /search commands in OpenCode."
         ),
         "codex": (
@@ -3718,31 +3718,20 @@ def _mcp_serve(db_path: str, workflow_tools: bool = False) -> None:
 
 
 def _setup_mcp_for_opencode() -> None:
-    """Configure MCP integration for OpenCode."""
-    import json
-    from pathlib import Path
+    """Configure MCP integration for OpenCode.
 
-    opencode_dir = Path.home() / ".config" / "opencode"
-    if not opencode_dir.exists():
-        opencode_dir.mkdir(parents=True, exist_ok=True)
+    Routes through the configurator's per-agent layout so the entry lands in
+    ``opencode.json`` in OpenCode's native ``mcp`` shape. The historical
+    hand-rolled writer emitted ``mcp.json`` in ``mcpServers`` shape — a file
+    OpenCode never reads.
+    """
+    from opencontext_core.configurator import constants
+    from opencontext_core.configurator.mcp_strategy import write_mcp_servers
 
-    mcp_config_path = opencode_dir / "mcp.json"
-    mcp_config = {
-        "mcpServers": {"opencontext": {"type": "stdio", "command": "opencontext", "args": ["mcp"]}}
-    }
-
-    # Merge with existing config if present
-    if mcp_config_path.exists():
-        try:
-            existing = json.loads(mcp_config_path.read_text(encoding="utf-8"))
-            if "mcpServers" not in existing:
-                existing["mcpServers"] = {}
-            existing["mcpServers"]["opencontext"] = mcp_config["mcpServers"]["opencontext"]
-            mcp_config = existing
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    mcp_config_path.write_text(json.dumps(mcp_config, indent=2), encoding="utf-8")
+    mcp_config_path = constants.mcp_config_path("opencode")
+    mcp_config_path.parent.mkdir(parents=True, exist_ok=True)
+    servers = {constants.MCP_LABEL: dict(constants.MCP_SERVER_ENTRY)}
+    write_mcp_servers(mcp_config_path, servers, shape=constants.mcp_shape("opencode"))
     console.success(f"MCP config written to: {mcp_config_path}")
 
 

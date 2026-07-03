@@ -54,6 +54,56 @@ def test_emitted_mcp_command_opts_in_to_workflow_tools() -> None:
     assert getattr(args, "workflow_tools", False) is True
 
 
+def test_opencode_shape_writes_native_mcp_entry(tmp_path: Path) -> None:
+    """OpenCode reads ``opencode.json`` with a root ``mcp`` key and
+    ``{"type": "local", "command": [cmd, *args], "enabled": true}`` entries.
+
+    Regression: registration wrote ``~/.config/opencode/mcp.json`` in
+    ``mcpServers`` shape — a file OpenCode never reads (verified against the
+    real CLI: the server never appeared in ``opencode mcp list``), so installs
+    silently did nothing for OpenCode.
+    """
+    path = tmp_path / "opencode.json"
+    write_mcp_servers(path, _SERVER, shape=McpShape.JSON_OPENCODE_MCP)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    entry = data["mcp"]["opencontext"]
+    assert entry == {
+        "type": "local",
+        "command": ["opencontext", "mcp"],
+        "enabled": True,
+    }
+    assert "mcpServers" not in data
+
+
+def test_opencode_shape_merges_and_removes(tmp_path: Path) -> None:
+    """User keys and other servers survive a merge, and removal is clean."""
+    from opencontext_core.configurator.mcp_strategy import remove_mcp_server
+
+    path = tmp_path / "opencode.json"
+    path.write_text(
+        json.dumps({"mcp": {"mine": {"type": "local", "command": ["x"]}}, "theme": "dark"}),
+        encoding="utf-8",
+    )
+    write_mcp_servers(path, _SERVER, shape=McpShape.JSON_OPENCODE_MCP)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert "mine" in data["mcp"]
+    assert "opencontext" in data["mcp"]
+    assert data["theme"] == "dark"
+
+    assert remove_mcp_server(path, "opencontext", shape=McpShape.JSON_OPENCODE_MCP)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert "opencontext" not in data["mcp"]
+    assert "mine" in data["mcp"]
+
+
+def test_opencode_agent_uses_native_config_file() -> None:
+    """The opencode adapter must target ``opencode.json`` with the native shape."""
+    from opencontext_core.configurator import constants
+
+    assert constants.mcp_config_path("opencode").name == "opencode.json"
+    assert constants.mcp_shape("opencode") is McpShape.JSON_OPENCODE_MCP
+
+
 def test_json_mcp_servers_shape(tmp_path: Path) -> None:
     path = tmp_path / "mcp.json"
     write_mcp_servers(path, _SERVER, shape=McpShape.JSON_MCP_SERVERS)

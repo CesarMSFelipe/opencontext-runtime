@@ -78,9 +78,10 @@ class TestAgentInstaller:
         assert result["agents_configured"] == 1
         assert result["results"][0]["agent"] == "opencode"
 
-        # Check files were created
+        # Check files were created. OpenCode's native config is opencode.json
+        # (a sibling mcp.json is a file OpenCode never reads).
         config_dir = tmp_path / ".config" / "opencode"
-        assert (config_dir / "mcp.json").exists()
+        assert (config_dir / "opencode.json").exists()
         assert (config_dir / "agents" / "oc-orchestrator.md").exists()
         assert not (config_dir / "agents" / "sdd-orchestrator.json").exists()
 
