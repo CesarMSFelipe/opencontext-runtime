@@ -31,6 +31,10 @@ SB="${OC_DEMO_SANDBOX:-/tmp/oc-demo-sandbox}"
 # vhs uses the system Chrome, not a HOME cache, so this is safe + leak-proof.
 export HOME="$SB/home"
 export XDG_CONFIG_HOME="$SB/config"
+# Keep runtime state in-repo (<project>/.storage/opencontext) so the brand
+# header and the TUI graph explorer — which read the local layout — see the
+# index the demos build. Also keeps every recording artifact inside $SB.
+export OPENCONTEXT_STORAGE_MODE=local
 rm -rf "$SB/config" "$SB/home" "$SB/install-demo"
 mkdir -p "$HOME"
 
@@ -62,18 +66,55 @@ cp -r "$PROJ" "$UNINST"
 "$OC" setup claude-code cursor --scope local --yes --non-interactive --root "$UNINST" >/dev/null 2>&1
 export OC_DEMO_UNINSTALL="$UNINST"
 
+# Tiny fixture repo with a REAL failing test so `run` has honest work on camera.
+# The sandbox has no LLM executor, so the recorded outcome is the honest
+# needs_executor refusal — exactly the behavior the README documents.
+RUNDEMO="$SB/run-demo"
+rm -rf "$RUNDEMO"
+mkdir -p "$RUNDEMO"
+cat > "$RUNDEMO/pricing.py" <<'EOF'
+"""Tiny pricing helpers for the demo shop."""
+
+
+def subtotal(prices: list[float]) -> float:
+    """Sum of item prices."""
+    return sum(prices)
+
+
+def apply_discount(total: float, percent: float) -> float:
+    """Apply a percentage discount to a total."""
+    return total - total * percent  # BUG: percent is 0-100, not 0-1
+EOF
+cat > "$RUNDEMO/test_pricing.py" <<'EOF'
+from pricing import apply_discount, subtotal
+
+
+def test_subtotal() -> None:
+    assert subtotal([10.0, 5.0]) == 15.0
+
+
+def test_apply_discount() -> None:
+    assert apply_discount(100.0, 10) == 90.0
+EOF
+git -C "$RUNDEMO" init -q
+git -C "$RUNDEMO" add -A
+git -C "$RUNDEMO" -c user.email=demo@example.com -c user.name=Demo commit -qm "shop pricing" >/dev/null
+"$OC" install --yes "$RUNDEMO" >/dev/null 2>&1
+"$OC" index "$RUNDEMO" >/dev/null 2>&1
+export OC_DEMO_RUN="$RUNDEMO"
+
 echo "==> rendering tapes"
 # Home (`opencontext`) and config (`opencontext config`) are now the unified Textual
 # app; demo-config walks every setting through that menu (in-place selects + native
 # modals), so the old per-setting cfg-* command gifs are retired as redundant.
-for name in explain kept-out install menu config uninstall graph; do
+for name in explain kept-out install menu config uninstall graph run-preflight; do
   echo "  - $name"
   vhs "docs/demos/tapes/$name.tape"
 done
 
 echo "==> sizes (hard limit 10 MB, target < 5 MB)"
 status=0
-for name in demo-explain demo-kept-out demo-install demo-menu demo-config demo-uninstall demo-graph; do
+for name in demo-explain demo-kept-out demo-install demo-menu demo-config demo-uninstall demo-graph demo-run-preflight; do
   f="docs/assets/$name.gif"
   sz=$(stat -c%s "$f")
   printf "  %-28s %6s KiB\n" "$f" "$((sz / 1024))"

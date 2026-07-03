@@ -493,6 +493,16 @@ The base flow ends with `review` (the final quality gate) then `archive`. The `q
 
 **OC Flow** is the fast path behind `opencontext run` for localized work such as “fix this failing test”. It builds the context, chooses the small mutation path, asks a generative executor for a structured `ApplyEdit`, blocks unsafe edits, applies behind a checkpoint, then runs verification. If no executor exists, it returns `needs_executor`; it does not invent a patch or fake completion.
 
+Before anything executes, `opencontext run` briefs you: the execution plan, the node spine, the evidence artifacts it will produce, the gates that will judge the run, a cost estimate, and live subsystem status — then asks. Every option carries the same detail card the config TUI uses (current · effect · recommendation · risk · CLI equivalent).
+
+<p align="center">
+  <img src="docs/assets/demo-run-preflight.gif" alt="Real recording of the opencontext run preflight: a branded briefing shows the execution plan, node spine, evidence artifacts, gates, cost estimate, and subsystem status, then an options selector with detail cards; with no model configured the flow honestly returns needs_executor instead of inventing a patch" width="100%">
+</p>
+
+<p align="center">
+  <sub>Real recording · the run preflight — plan · spine · gates · cost · subsystems, then Proceed / change workflow / change lane / cancel. No model in the sandbox → the honest <code>needs_executor</code> answer, never a fake patch</sub>
+</p>
+
 <!-- ─────────────── OFFLINE BY DEFAULT ─────────────── -->
 
 ### Offline by Default
