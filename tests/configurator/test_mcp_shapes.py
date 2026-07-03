@@ -37,6 +37,23 @@ def test_emitted_mcp_command_parses_against_the_cli() -> None:
     assert args.command == "mcp"
 
 
+def test_emitted_mcp_command_opts_in_to_workflow_tools() -> None:
+    """The registered server must be able to serve the flow the instructions promise.
+
+    Regression: rendered client instructions tell every agent to call
+    ``opencontext_run`` (and finish agent_execute via
+    ``opencontext_session_apply``), but the emitted launch command started a
+    vanilla server whose safe-default policy denies those tools — every
+    installed client got ``tool_not_allowlisted``.
+    """
+    from opencontext_cli.main import _build_parser
+    from opencontext_core.configurator.constants import MCP_SERVER_ENTRY
+
+    parser = _build_parser()
+    args = parser.parse_args(list(MCP_SERVER_ENTRY["args"]))
+    assert getattr(args, "workflow_tools", False) is True
+
+
 def test_json_mcp_servers_shape(tmp_path: Path) -> None:
     path = tmp_path / "mcp.json"
     write_mcp_servers(path, _SERVER, shape=McpShape.JSON_MCP_SERVERS)

@@ -16,7 +16,11 @@ MCP_LABEL = "opencontext"
 MCP_SERVER_ENTRY: dict[str, object] = {
     "type": "stdio",
     "command": "opencontext",
-    "args": ["mcp"],
+    # --workflow-tools: the rendered client instructions tell every agent to
+    # call opencontext_run and finish agent_execute handoffs via
+    # opencontext_session_apply, so the registered server must allowlist the
+    # workflow tools. Symbol-write tools stay behind their own opt-in.
+    "args": ["mcp", "--workflow-tools"],
 }
 
 # The opencontext MCP read tools (knowledge graph) in claude-code allow-list form

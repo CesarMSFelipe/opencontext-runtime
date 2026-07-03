@@ -1044,6 +1044,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to knowledge graph database (default: resolved from storage config).",
     )
+    mcp_parser.add_argument(
+        "--workflow-tools",
+        action="store_true",
+        help=(
+            "Also allowlist opencontext_run and the session step tools "
+            "(agent-driven OC Flow / SDD runs). Symbol-write tools stay opt-in."
+        ),
+    )
     security_parser = subparsers.add_parser("security", help="Security commands.")
     security_sub = security_parser.add_subparsers(dest="security_command", required=True)
     security_scan = security_sub.add_parser("scan")
@@ -1895,7 +1903,10 @@ def _dispatch(args: argparse.Namespace) -> None:
     elif command == "provider":
         _provider_simulate(args.provider, args.classification, runtime, args.mode)
     elif command == "mcp":
-        _mcp_serve(getattr(args, "db_path", None) or str(runtime.storage_path / "context_graph.db"))
+        _mcp_serve(
+            getattr(args, "db_path", None) or str(runtime.storage_path / "context_graph.db"),
+            workflow_tools=getattr(args, "workflow_tools", False),
+        )
     else:
         _unreachable(command)
 
@@ -3681,7 +3692,7 @@ def _checkpoint(action: str) -> None:
     _unreachable(action)
 
 
-def _mcp_serve(db_path: str) -> None:
+def _mcp_serve(db_path: str, workflow_tools: bool = False) -> None:
     """Start MCP server for agent integration."""
     from pathlib import Path
 
@@ -3697,7 +3708,7 @@ def _mcp_serve(db_path: str) -> None:
     except Exception:
         runtime = None
 
-    server = MCPServer(db_path=db_path, runtime=runtime)
+    server = MCPServer(db_path=db_path, runtime=runtime, allow_workflow_tools=workflow_tools)
     try:
         server.run()
     except KeyboardInterrupt:

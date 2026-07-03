@@ -255,6 +255,21 @@ _TOOL_SUCCESS_KEYS: dict[str, tuple[str, ...]] = {
     "opencontext_memory_judge": ("id", "relation", "ok"),
 }
 
+# Workflow tools unlocked by the ``allow_workflow_tools`` opt-in (the
+# ``opencontext mcp --workflow-tools`` flag configured agents launch with).
+# These drive OC Flow / SDD runs and the agent_execute follow-up; they write
+# session state and run receipts, never source files directly — the
+# symbol-write tools stay behind their own explicit policy opt-in.
+WORKFLOW_TOOL_NAMES: tuple[str, ...] = (
+    "opencontext_run",
+    "opencontext_session_start",
+    "opencontext_session_next",
+    "opencontext_session_observe",
+    "opencontext_session_apply",
+    "opencontext_session_resume",
+    "opencontext_session_archive",
+)
+
 
 def _tool_output_schema(name: str) -> dict[str, Any]:
     """Permissive per-tool output schema for ``tools/list`` (C3).
@@ -447,6 +462,7 @@ class MCPServer:
         policy: ToolPermissionPolicy | None = None,
         runtime: OpenContextRuntime | None = None,
         project_root: str | Path | None = None,
+        allow_workflow_tools: bool = False,
     ) -> None:
         # When a runtime is provided, context/impact route through the verified
         # pipeline (gates/trust/trace). Without it, the legacy raw behavior is kept
@@ -462,11 +478,17 @@ class MCPServer:
         self.context_builder = ContextBuilder(db_path=db_path)
         self.kg = KnowledgeGraph(db_path=db_path)
         # Permission gate: every tool call goes through ``policy.allows()``
-        # before the handler runs. Default policy allowlists every tool the
-        # server exposes; callers can tighten it via the constructor.
-        self.policy: ToolPermissionPolicy = policy or ToolPermissionPolicy(
-            allowed_tools=set(self._default_tool_names())
-        )
+        # before the handler runs. The safe default allowlists read + memory
+        # tools only; ``allow_workflow_tools=True`` (the ``opencontext mcp
+        # --workflow-tools`` opt-in every configured agent is registered with)
+        # additionally unlocks ``opencontext_run`` and the session step tools —
+        # NEVER the symbol-write tools. An explicit ``policy`` always wins.
+        if policy is None:
+            allowed = set(self._default_tool_names())
+            if allow_workflow_tools:
+                allowed.update(WORKFLOW_TOOL_NAMES)
+            policy = ToolPermissionPolicy(allowed_tools=allowed)
+        self.policy: ToolPermissionPolicy = policy
         # Raw stdin line buffer (see _next_line): we manage line splitting ourselves
         # so select() can't strand a buffered line on a batched write.
         self._inbuf: str = ""

@@ -37,7 +37,11 @@ def test_configure_claude_writes_project_mcp_json(home: Path, tmp_path: Path) ->
     assert project_mcp.exists(), "project-level .mcp.json was not written"
     data = json.loads(project_mcp.read_text(encoding="utf-8"))
     entry = data["mcpServers"]["opencontext"]
-    assert entry == {"type": "stdio", "command": "opencontext", "args": ["mcp"]}
+    assert entry == {
+        "type": "stdio",
+        "command": "opencontext",
+        "args": ["mcp", "--workflow-tools"],
+    }
 
 
 def test_project_mcp_json_merges_and_reverses(home: Path, tmp_path: Path) -> None:
