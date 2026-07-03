@@ -265,6 +265,32 @@ def resolve_active_storage_path(root: str | Path) -> Path:
     return resolve_storage_path(root_path, cfg.storage.mode, cfg.storage.custom_path)
 
 
+def resolve_active_storage_file(root: str | Path, name: str) -> Path:
+    """Locate storage artifact *name* for *root* honoring the active storage mode.
+
+    Readers must look for runtime-generated state (``context_graph.db``,
+    ``memory.db``, ``learning/``, ...) where the writers put it: the
+    config/env-resolved storage path (:func:`resolve_active_storage_path`).
+    Precedence:
+
+    1. ``<resolved storage path>/<name>`` when it exists
+    2. legacy in-repo ``<root>/.storage/opencontext/<name>`` when it exists
+       (projects indexed before ``opencontext storage migrate``)
+    3. the resolved path from (1) even though it is missing, so callers report
+       the canonical location in their "not found" messages
+
+    Never creates directories or files.
+    """
+    root_path = Path(root)
+    resolved = resolve_active_storage_path(root_path) / name
+    if resolved.exists():
+        return resolved
+    legacy = resolve_storage_path(root_path, StorageMode.local) / name
+    if legacy.exists():
+        return legacy
+    return resolved
+
+
 def resolve_active_workspace_path(root: str | Path) -> Path:
     """Return the workspace path for *root* using the config-driven active mode.
 

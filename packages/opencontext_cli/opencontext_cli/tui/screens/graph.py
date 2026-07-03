@@ -91,7 +91,9 @@ def _connect(root: Path | str) -> Any:
     GraphDatabase wrapper would be GC'd and close the connection mid-use."""
     import sqlite3
 
-    db_path = Path(root) / ".storage" / "opencontext" / "context_graph.db"
+    from opencontext_core.config_resolver import resolve_active_storage_file
+
+    db_path = resolve_active_storage_file(Path(root), "context_graph.db")
     if not db_path.exists():
         return None
     conn = sqlite3.connect(str(db_path))
