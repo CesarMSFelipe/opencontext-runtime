@@ -746,6 +746,10 @@ class MCPServer:
                 "parameters": {
                     "session_id": {"type": "string"},
                     "kind": {"type": "string", "default": "edit"},
+                    # NOTE: the nested properties MUST be declared. Strict hosts
+                    # serialize an object parameter with no declared properties as
+                    # {} (observed live: OpenCode + MiniMax sent payload={} on
+                    # every call), which strands agent_execute follow-ups.
                     "payload": {
                         "type": "object",
                         "description": (
@@ -753,6 +757,30 @@ class MCPServer:
                             "{changed_files: [paths], oc_flow?: {session_id, run_id}, "
                             "test_command?: [argv]}"
                         ),
+                        "properties": {
+                            "changed_files": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": ("Relative paths of every file the agent edited"),
+                            },
+                            "oc_flow": {
+                                "type": "object",
+                                "description": (
+                                    "Linked OC Flow run to complete (from the handoff)"
+                                ),
+                                "properties": {
+                                    "session_id": {"type": "string"},
+                                    "run_id": {"type": "string"},
+                                },
+                                "additionalProperties": True,
+                            },
+                            "test_command": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": ("Optional argv to run for verification evidence"),
+                            },
+                        },
+                        "additionalProperties": True,
                     },
                     "root": {"type": "string", "description": "Project root (optional)"},
                 },

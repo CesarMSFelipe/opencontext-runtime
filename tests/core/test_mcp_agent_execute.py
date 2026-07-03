@@ -470,3 +470,31 @@ def test_sdd_agent_edits_follow_up_completes_plain_session(
     )
     assert status_out["data"]["status"] == "completed"
     server.close()
+
+
+# --------------------------------------------------------------------------- #
+# tools/list schema: the follow-up's object parameter must declare properties.
+# --------------------------------------------------------------------------- #
+
+
+def test_session_apply_payload_schema_declares_properties(tmp_path: Path) -> None:
+    """``payload`` must declare its nested properties, or strict hosts empty it.
+
+    Observed live: OpenCode 1.17.12 (MiniMax M3) serialized every
+    ``opencontext_session_apply`` call with ``payload: {}`` because the
+    inputSchema declared a bare ``{"type": "object"}`` — the host/model had no
+    declared properties to emit, so the agent_execute follow-up could never
+    complete and the run stayed dangling in ``needs_executor``.
+    """
+    server = _server(tmp_path)
+    payload = server.tools["opencontext_session_apply"]["parameters"]["payload"]
+    props = payload.get("properties", {})
+    assert props.get("changed_files", {}).get("type") == "array"
+    assert props.get("test_command", {}).get("type") == "array"
+    assert props.get("oc_flow", {}).get("type") == "object"
+    oc_flow_props = props.get("oc_flow", {}).get("properties", {})
+    assert "session_id" in oc_flow_props
+    assert "run_id" in oc_flow_props
+    # Forward-compatible: extra payload keys must not be rejected by validators.
+    assert payload.get("additionalProperties") is True
+    server.close()
