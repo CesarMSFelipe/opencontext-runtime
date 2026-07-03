@@ -10,9 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
-
 
 # ---------------------------------------------------------------------------
 # Unit tests: _apply_agentic_flags_to_yaml helper (pure function, tested first)
@@ -32,8 +30,8 @@ def _default_yaml(tmp_path: Path) -> dict:
 
 def test_apply_flags_memory_engram(tmp_path: Path) -> None:
     """--memory engram must set memory.provider=engram in the YAML."""
-    from opencontext_core.agentic.config import AgenticFlowConfig, MemoryMode
     from opencontext_cli.main import _apply_agentic_flags_to_yaml
+    from opencontext_core.agentic.config import AgenticFlowConfig, MemoryMode
 
     _default_yaml(tmp_path)
     cfg = AgenticFlowConfig(memory_mode=MemoryMode.ENGRAM)
@@ -47,8 +45,8 @@ def test_apply_flags_memory_engram(tmp_path: Path) -> None:
 
 def test_apply_flags_memory_local(tmp_path: Path) -> None:
     """--memory local must set memory.provider=local."""
-    from opencontext_core.agentic.config import AgenticFlowConfig, MemoryMode
     from opencontext_cli.main import _apply_agentic_flags_to_yaml
+    from opencontext_core.agentic.config import AgenticFlowConfig, MemoryMode
 
     _default_yaml(tmp_path)
     cfg = AgenticFlowConfig(memory_mode=MemoryMode.LOCAL)
@@ -60,8 +58,8 @@ def test_apply_flags_memory_local(tmp_path: Path) -> None:
 
 def test_apply_flags_budget_strict(tmp_path: Path) -> None:
     """--budget strict must set context.budget_mode=strict."""
-    from opencontext_core.agentic.config import AgenticFlowConfig, BudgetMode
     from opencontext_cli.main import _apply_agentic_flags_to_yaml
+    from opencontext_core.agentic.config import AgenticFlowConfig, BudgetMode
 
     _default_yaml(tmp_path)
     cfg = AgenticFlowConfig(budget_mode=BudgetMode.STRICT)
@@ -75,8 +73,8 @@ def test_apply_flags_budget_strict(tmp_path: Path) -> None:
 
 def test_apply_flags_openspec_full(tmp_path: Path) -> None:
     """--openspec full must set sdd.artifact_store.mode != none."""
-    from opencontext_core.agentic.config import AgenticFlowConfig, OpenSpecMode
     from opencontext_cli.main import _apply_agentic_flags_to_yaml
+    from opencontext_core.agentic.config import AgenticFlowConfig, OpenSpecMode
 
     _default_yaml(tmp_path)
     cfg = AgenticFlowConfig(openspec_mode=OpenSpecMode.FULL)
@@ -91,8 +89,8 @@ def test_apply_flags_openspec_full(tmp_path: Path) -> None:
 
 def test_apply_flags_git_stacked_prs(tmp_path: Path) -> None:
     """--git stacked_prs must update sdd.delivery_strategy away from plan-only."""
-    from opencontext_core.agentic.config import AgenticFlowConfig, GitMode
     from opencontext_cli.main import _apply_agentic_flags_to_yaml
+    from opencontext_core.agentic.config import AgenticFlowConfig, GitMode
 
     _default_yaml(tmp_path)
     cfg = AgenticFlowConfig(git_mode=GitMode.STACKED_PRS)
@@ -107,8 +105,8 @@ def test_apply_flags_git_stacked_prs(tmp_path: Path) -> None:
 
 def test_apply_flags_defaults_are_noop(tmp_path: Path) -> None:
     """An all-default AgenticFlowConfig must not alter the YAML (no-op)."""
-    from opencontext_core.agentic.config import AgenticFlowConfig
     from opencontext_cli.main import _apply_agentic_flags_to_yaml
+    from opencontext_core.agentic.config import AgenticFlowConfig
 
     _default_yaml(tmp_path)
     before = (tmp_path / "opencontext.yaml").read_text(encoding="utf-8")
@@ -119,5 +117,9 @@ def test_apply_flags_defaults_are_noop(tmp_path: Path) -> None:
     before_data = yaml.safe_load(before)
     after_data = yaml.safe_load(after)
     # Only keys touched by flags should differ; defaults = no-op means no diff.
-    assert before_data.get("memory", {}).get("provider") == after_data.get("memory", {}).get("provider")
-    assert before_data.get("context", {}).get("budget_mode") == after_data.get("context", {}).get("budget_mode")
+    before_memory = before_data.get("memory", {})
+    after_memory = after_data.get("memory", {})
+    assert before_memory.get("provider") == after_memory.get("provider")
+    before_context = before_data.get("context", {})
+    after_context = after_data.get("context", {})
+    assert before_context.get("budget_mode") == after_context.get("budget_mode")
