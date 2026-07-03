@@ -71,11 +71,17 @@ def _print_state(state: OcNewRunState, *, json_out: bool = False) -> None:
     ]
     console.table("Phases", ["", "Phase", "Status", "Artifacts"], rows)
 
+    # Keep the per-phase next-action text intact — agents read this to drive the
+    # flow; only the surrounding chrome is branded. Gate states (approval /
+    # blocked) get a guided panel with the exact commands to continue.
+    na = state.next_action
+    if na and na.kind in {"request_approval", "blocked"}:
+        from opencontext_cli.flow_preflight import render_gate_panel
+
+        render_gate_panel(state)
+        return
     if state.blocked_reason:
         console.warning(f"Blocked: {state.blocked_reason}")
-    # Keep the per-phase next-action text intact — agents read this to drive the
-    # flow; only the surrounding chrome is branded.
-    na = state.next_action
     if na:
         console.section("Next Action")
         console.print(f"  Kind        : {na.kind}")
@@ -126,6 +132,17 @@ def add_oc_new_parser(subparsers: Any) -> None:
         choices=["automatic", "stepwise", "hybrid", "engram_only", "openspec_only", "observe_only"],
         help="Flow mode controlling when the conductor pauses (default: automatic).",
     )
+    start.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip the interactive preflight and start immediately.",
+    )
+    start.add_argument(
+        "--non-interactive",
+        dest="non_interactive",
+        action="store_true",
+        help="Never prompt (same as --yes; also implied by --json or a non-TTY).",
+    )
 
     status = sub.add_parser("status", help="Show current run state.")
     status.add_argument("--run-id", dest="run_id", default=None)
@@ -160,6 +177,26 @@ def _build_start_config(args: Any) -> Any:
     return AgenticFlowConfig(flow_mode=FlowMode(flow_str))
 
 
+def _resolve_flow_mode(args: Any, root: Path) -> tuple[str, str]:
+    """Resolve the flow mode this run would use, with its source for the briefing.
+
+    Precedence mirrors the conductor: ``--flow`` flag wins, then the project's
+    ``opencontext.yaml`` ``sdd.flow_mode``, then the built-in default.
+    """
+    flow: str | None = getattr(args, "flow", None)
+    if flow:
+        return flow, "--flow flag"
+    try:
+        from opencontext_core.config import find_config, load_config
+
+        config_path = find_config(root)
+        if config_path is not None:
+            return str(load_config(config_path).sdd.flow_mode.value), "opencontext.yaml"
+    except Exception:
+        pass
+    return "automatic", "default"
+
+
 def handle_oc_new(args: Any) -> None:
     root = _root(args)
     conductor = OcNewConductor(root)
@@ -169,6 +206,23 @@ def handle_oc_new(args: Any) -> None:
 
     if cmd == "start":
         config = _build_start_config(args)
+        # Guided preflight (TTY only; --json/--yes/--non-interactive skip it):
+        # explain the flow and ask for the execution mode before starting. The
+        # chosen mode applies to THIS RUN ONLY — the config file is never written.
+        from opencontext_cli.flow_preflight import is_interactive, oc_new_preflight
+
+        if is_interactive(args):
+            current_mode, source = _resolve_flow_mode(args, root)
+            decision = oc_new_preflight(
+                task=args.task, flow_mode=current_mode, source=source, root=root
+            )
+            if not decision.proceed:
+                console.dim("oc-new start cancelled — nothing was created.")
+                return
+            if decision.flow_mode != current_mode:
+                from opencontext_core.agentic.config import AgenticFlowConfig, FlowMode
+
+                config = AgenticFlowConfig(flow_mode=FlowMode(decision.flow_mode))
         state = conductor.start(args.task, config=config)
         _print_state(state, json_out=json_out)
 
