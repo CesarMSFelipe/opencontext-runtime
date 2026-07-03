@@ -13,8 +13,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from rich.panel import Panel
-
 from opencontext_cli.output import eprint
 from opencontext_core import prompts
 from opencontext_core.configurator import KNOWN_AGENTS, Configurator
@@ -334,12 +332,7 @@ def _run_full_uninstall(
         print(json.dumps(report, indent=2))
         return
     console.header("Full Uninstall")
-    console.print(
-        Panel.fit(
-            "[bold green]Full uninstall complete[/bold green]",
-            border_style="green",
-        )
-    )
+    console.panel("[bold green]Full uninstall complete[/bold green]", style="success", fit=True)
     if report.get("purged"):
         console.dim(f"  purged: {', '.join(report['purged'])}")
     if report.get("global_removed"):
@@ -513,9 +506,7 @@ def handle_uninstall(args: Any) -> None:
     if getattr(args, "verify", False):
         effective_scope = resolve_uninstall_scope(args)
         residue = verify_no_traces(root) if effective_scope in ("workspace", "all") else []
-        global_residue = (
-            verify_no_global_traces([]) if effective_scope in ("global", "all") else []
-        )
+        global_residue = verify_no_global_traces([]) if effective_scope in ("global", "all") else []
         passed = len(residue) == 0 and len(global_residue) == 0
         if json_output:
             print(
@@ -576,8 +567,7 @@ def handle_uninstall(args: Any) -> None:
             scope,
             json_output,
             global_state=(
-                effective_scope in ("global", "all")
-                or getattr(args, "global_state", False)
+                effective_scope in ("global", "all") or getattr(args, "global_state", False)
             ),
         )
         return
@@ -662,11 +652,10 @@ def handle_uninstall(args: Any) -> None:
         return
     removed_n = report["agents_removed"]
     console.header("Uninstall OpenContext")
-    console.print(
-        Panel.fit(
-            f"[bold green]Removed OpenContext from {removed_n} agent(s)[/bold green]",
-            border_style="green",
-        )
+    console.panel(
+        f"[bold green]Removed OpenContext from {removed_n} agent(s)[/bold green]",
+        style="success",
+        fit=True,
     )
     for result in report.get("results", []):
         console.print(f"  [bold]{result['agent']}[/]")

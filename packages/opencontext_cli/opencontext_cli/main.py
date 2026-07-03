@@ -356,11 +356,8 @@ def _check_first_run(command: str) -> None:
     if not sys.stdout.isatty():
         return
 
-    from rich.console import Console
-    from rich.panel import Panel
-
-    fr_console = Console(file=sys.stderr)
-    banner = Panel(
+    # Brand chrome on stderr (err_console) so JSON stdout stays clean.
+    err_console.panel(
         "[bold cyan]Welcome to OpenContext![/]\n\n"
         "It looks like this is your first time using OpenContext in this project.\n"
         "The setup wizard will help you configure:\n"
@@ -369,10 +366,7 @@ def _check_first_run(command: str) -> None:
         "  • AI coding agent integrations\n"
         "  • Project indexing",
         title="First Run",
-        border_style="cyan",
-        padding=(1, 2),
     )
-    fr_console.print(banner)
 
     try:
         from opencontext_core import prompts
@@ -386,9 +380,9 @@ def _check_first_run(command: str) -> None:
 
         wizard = InteractiveOnboardingWizard(root=root)
         wizard.run()
-        fr_console.print("[green]Setup complete! Run `opencontext doctor` to verify.[/]")
+        err_console.success("Setup complete! Run `opencontext doctor` to verify.")
     else:
-        fr_console.print("[dim]Run `opencontext init` anytime to set up your project.[/]")
+        err_console.dim("Run `opencontext init` anytime to set up your project.")
 
 
 def _notify_outdated(args: argparse.Namespace) -> None:
@@ -2083,11 +2077,11 @@ _SAMPLING_CLIENTS = {
 
 def _install_wizard(args: Any, console: Any) -> None:
     """Interactive wizard: language → editor → API key."""
-    from rich.console import Console as _Console
-
     from opencontext_core import prompts
 
-    _c = _Console()
+    # Interstitial prints share the caller's brand console; only the prompts
+    # themselves come from opencontext_core.prompts.
+    _c = console
     root = Path(getattr(args, "root", "."))
 
     # Step 1 — Language
@@ -2198,8 +2192,6 @@ def _install_wizard(args: Any, console: Any) -> None:
 
 def _print_agent_instructions(agents: list[Any], console: Any) -> None:
     """Print client-specific usage instructions after install."""
-    from rich.panel import Panel
-
     _INSTRUCTIONS = {
         "claude-code": (
             "Claude Code ready.\n"
@@ -2230,9 +2222,7 @@ def _print_agent_instructions(agents: list[Any], console: Any) -> None:
         agent_id = agent.value if hasattr(agent, "value") else str(agent)
         msg = _INSTRUCTIONS.get(agent_id)
         if msg:
-            console.print(
-                Panel.fit(msg, title=f"[bold cyan]{agent_id}[/bold cyan]", border_style="cyan")
-            )
+            console.panel(msg, title=f"[bold]{agent_id}[/bold]", fit=True)
 
 
 def _build_agentic_cfg_from_args(args: argparse.Namespace) -> AgenticFlowConfig:
@@ -2449,8 +2439,6 @@ def _install_provision_engram(args: argparse.Namespace) -> None:
 
 def _install(args: argparse.Namespace) -> None:
     """Quick project setup wizard with auto-detection and step-by-step progress."""
-    from rich.status import Status
-
     from opencontext_core import prompts
     from opencontext_core.dx.console_styles import console
 
@@ -2571,7 +2559,7 @@ def _install(args: argparse.Namespace) -> None:
         workspace_only=(getattr(args, "scope", None) == "workspace"),
     )
     _msg = "Setting up project (config, index, SDD, agents, harness)..."
-    with Status(_msg, console=console, spinner="dots"):  # type: ignore[arg-type]
+    with console.status(_msg):
         try:
             ob = OnboardingService().run(options)
             summary.append(f"✓ Indexed {ob.indexed_files} files, {ob.indexed_symbols} symbols")
@@ -4347,15 +4335,11 @@ def _preset(command: str, name: str | None, root: str = ".", dry_run: bool = Fal
 
     if command == "list":
         presets = find_presets(root)
-        from rich.table import Table as RichTable
-
-        table = RichTable(title="Available Presets")
-        table.add_column("Name", style="cyan")
-        table.add_column("Description")
-        table.add_column("Strategy")
-        for preset in presets:
-            table.add_row(preset.name, preset.description, preset.strategy)
-        dx_console.print(table)
+        dx_console.table(
+            "Available Presets",
+            ["Name", "Description", "Strategy"],
+            [[p.name, p.description, p.strategy] for p in presets],
+        )
         dx_console.print(
             "[dim]These tune an existing config. Project scaffolding presets "
             "(context-first, full, enterprise, …) live under "

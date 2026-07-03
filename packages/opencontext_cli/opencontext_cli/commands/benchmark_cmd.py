@@ -333,7 +333,7 @@ def _handle_run(args: Any) -> None:
     if args.format == "json":
         report = bench.evaluate_suite(cases, refresh_index=refresh)
     else:
-        with console.status("[bold green]Running efficiency benchmark..."):
+        with console.status("Running efficiency benchmark..."):
             report = bench.evaluate_suite(cases, refresh_index=refresh)
 
     if args.format == "json":

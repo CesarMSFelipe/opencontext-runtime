@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
@@ -77,16 +76,15 @@ def _check_first_run() -> bool:
     prefs = store.load()
     if prefs.first_run:
         console.print()
-        console.print(
-            Panel.fit(
-                "[bold yellow]First Run Detected[/bold yellow]\n"
-                "It looks like you haven't run [bold]opencontext install[/bold] yet.\n"
-                "For a complete project setup in one step, run:\n\n"
-                "  [bold cyan]opencontext install[/bold cyan]\n\n"
-                "This will auto-detect your project, create your config, index your code,\n"
-                "and configure SDD/TDD, agent integrations, and the harness workflow.",
-                border_style="yellow",
-            )
+        console.panel(
+            "[bold yellow]First Run Detected[/bold yellow]\n"
+            "It looks like you haven't run [bold]opencontext install[/bold] yet.\n"
+            "For a complete project setup in one step, run:\n\n"
+            "  [bold cyan]opencontext install[/bold cyan]\n\n"
+            "This will auto-detect your project, create your config, index your code,\n"
+            "and configure SDD/TDD, agent integrations, and the harness workflow.",
+            style="warning",
+            fit=True,
         )
         return True
     return False
@@ -470,12 +468,11 @@ def _report_configured(report: dict[str, Any], unknown: list[str], json_output: 
         print(json.dumps(report, indent=2))
         return
     count = report.get("agents_configured", 0)
-    console.print(
-        Panel.fit(
-            f"[bold green]Configured {count} agent(s)[/bold green]   "
-            f"scope: [cyan]{report.get('scope')}[/]",
-            border_style="green",
-        )
+    console.panel(
+        f"[bold green]Configured {count} agent(s)[/bold green]   "
+        f"scope: [cyan]{report.get('scope')}[/]",
+        style="success",
+        fit=True,
     )
     for result in report.get("results", []):
         console.print(f"  [bold]{result['agent']}[/]")
@@ -580,12 +577,11 @@ def _run_interactive(
         artifact_mode,
     )
     console.print()
-    console.print(
-        Panel.fit(
-            "[bold green]✓ Setup Complete[/bold green]\n"
-            "OpenContext SDD/TDD, graph, memory, and selected agents are ready.",
-            border_style="green",
-        )
+    console.panel(
+        "[bold green]✓ Setup Complete[/bold green]\n"
+        "OpenContext SDD/TDD, graph, memory, and selected agents are ready.",
+        style="success",
+        fit=True,
     )
 
 
@@ -648,6 +644,8 @@ def _choose_preset() -> str:
     sorted_presets = sorted(presets, key=preset_sort_key)
 
     console.print("\n[bold]Available Presets:[/]")
+    # NOTE: deliberate exception — this table needs per-column styling that
+    # console_styles.table (single brand column style) cannot represent.
     table = Table(box=None)
     table.add_column("Option", style="cyan")
     table.add_column("Preset", style="bold")
@@ -777,6 +775,8 @@ def _show_plan(plan: Any) -> None:
     console.print(f"  Profile: [cyan]{plan.profile}[/]")
 
     if plan.actions:
+        # NOTE: deliberate exception — per-cell status colors (done/skipped/failed)
+        # are beyond console_styles.table's single brand column style.
         table = RichTable(title="Actions", box=None)
         table.add_column("Status")
         table.add_column("Component")
@@ -873,7 +873,7 @@ def _execute_plan(
     # ── Agent integrations ─────────────────────────────────────
     generated_files: list[Any] = []
     agent_warnings: list[str] = []
-    with console.status("[cyan]Configuring agent integrations...[/]", spinner="dots"):
+    with console.status("Configuring agent integrations..."):
         from opencontext_core.adapters.agent_manifest import _base_rules, _orchestrator_section
 
         def _instructions(client: str) -> str:
@@ -907,7 +907,7 @@ def _execute_plan(
     sdd_files: list[Any] = []
     skill_generated = False
     skill_target = root_path / ".opencontext" / "skills" / "opencontext-agent" / "SKILL.md"
-    with console.status("[cyan]Writing SDD/TDD context...[/]", spinner="dots"):
+    with console.status("Writing SDD/TDD context..."):
         sdd_context, sdd_files = write_sdd_context(
             root_path,
             token_budget_per_phase=max_tokens,
@@ -934,7 +934,7 @@ def _execute_plan(
 
     # ── Project index ───────────────────────────────────────────
     index_status: dict[str, Any] = {}
-    with console.status("[cyan]Indexing project...[/]", spinner="dots"):
+    with console.status("Indexing project..."):
         try:
             manifest = OpenContextRuntime().index_project(root_path)
             index_status = {"files": len(manifest.files), "symbols": len(manifest.symbols)}
@@ -960,10 +960,9 @@ def _execute_plan(
     if skill_generated:
         summary_rows.append(f"  [bold]Skill:[/]    {skill_target}")
 
-    console.print(
-        Panel.fit(
-            "\n".join(summary_rows),
-            title="[bold green]Setup applied[/bold green]",
-            border_style="green",
-        )
+    console.panel(
+        "\n".join(summary_rows),
+        title="[bold green]Setup applied[/bold green]",
+        style="success",
+        fit=True,
     )

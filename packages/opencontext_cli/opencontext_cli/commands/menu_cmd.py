@@ -152,8 +152,6 @@ def _offer_engram_install() -> None:
     import shutil
     import subprocess
 
-    from rich.status import Status
-
     # Prefer pipx so the `engram` CLI lands on PATH (detect_engram looks for it);
     # fall back to pip in the current interpreter.
     cmd = (
@@ -163,9 +161,7 @@ def _offer_engram_install() -> None:
     )
     console.print(f"[dim]$ {' '.join(cmd)}[/]")
     try:
-        with Status(
-            "Installing Engram...", console=getattr(console, "_console", None), spinner="dots"
-        ):
+        with console.status("Installing Engram..."):
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     except subprocess.TimeoutExpired:
         console.print("[red]Install timed out.[/] Try [cyan]pipx install engram[/] manually.")
@@ -206,7 +202,7 @@ def _run_doctor() -> None:
         from opencontext_core.doctor.checks import run_doctor
         from opencontext_core.runtime import OpenContextRuntime
 
-        with console.status("[cyan]Running health checks...[/]", spinner="dots"):
+        with console.status("Running health checks..."):
             config_path = Path("opencontext.yaml")
             runtime = OpenContextRuntime(
                 config_path=str(config_path) if config_path.exists() else None,
@@ -272,7 +268,7 @@ def _run_verified_context() -> None:
         runtime = OpenContextRuntime(
             config_path=str(config_path) if config_path.exists() else None,
         )
-        with console.status("[cyan]Building verified context...[/]", spinner="dots"):
+        with console.status("Building verified context..."):
             result = runtime.verify_context(VerifiedContextRequest(query=query))
     except Exception as exc:
         console.error(f"Verified context failed: {exc}")
@@ -389,7 +385,7 @@ def _run_uninstall() -> None:
 
     project_ok = False
     project_err = ""
-    with console.status("[cyan]Removing project files...[/]", spinner="dots"):
+    with console.status("Removing project files..."):
         try:
             from opencontext_cli.main import _clean
 
@@ -406,7 +402,7 @@ def _run_uninstall() -> None:
 
     global_ok = False
     global_items: list[Any] = []
-    with console.status("[cyan]Removing global installation state...[/]", spinner="dots"):
+    with console.status("Removing global installation state..."):
         try:
             from opencontext_core.configurator import KNOWN_AGENTS, Configurator
 
