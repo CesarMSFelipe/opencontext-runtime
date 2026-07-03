@@ -343,7 +343,7 @@ def _print_suggestion(command: str) -> None:
         err_console.dim("Run 'opencontext --help' for usage information.")
 
 
-def _check_first_run(command: str) -> None:
+def _check_first_run(command: str, args: argparse.Namespace | None = None) -> None:
     """Check if this is a first run and offer to launch the wizard."""
     try:
         root = Path.cwd()
@@ -355,6 +355,17 @@ def _check_first_run(command: str) -> None:
     # First run detected — show welcome banner to stderr only
     # to avoid breaking JSON output in CLI commands
     if not sys.stdout.isatty():
+        return
+
+    # Machine output and explicit no-prompt runs must never block on the offer:
+    # a pty-allocated CI/agent session still has a TTY on stdout, but --json
+    # stdout must stay pure and --yes/--non-interactive promise zero prompts.
+    if args is not None and (
+        getattr(args, "json", False)
+        or getattr(args, "json_out", False)
+        or getattr(args, "yes", False)
+        or getattr(args, "non_interactive", False)
+    ):
         return
 
     # Brand chrome on stderr (err_console) so JSON stdout stays clean.
@@ -1491,7 +1502,7 @@ def _dispatch(args: argparse.Namespace) -> None:
 
     # First-run detection for commands that can benefit from onboarding
     if command and command not in ("init", "install", "onboard", "--help", None):
-        _check_first_run(command)
+        _check_first_run(command, args)
 
     if command is None:
         # No command — launch the main TUI menu
