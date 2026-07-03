@@ -419,7 +419,15 @@ def collect_savings(storage_path: str | Path | None = None) -> dict[str, Any]:
         from opencontext_core.learning.learning_orchestrator import LearningOrchestrator
 
         if storage_path is None:
-            base = Path(UserConfigStore().load().custom_storage_path)
+            # Honor a genuinely customized (deprecated) pref; otherwise resolve
+            # through the active storage mode with a legacy in-repo fallback.
+            _pref = UserConfigStore().load().custom_storage_path
+            if _pref != ".storage/opencontext":
+                base = Path(_pref)
+            else:
+                from opencontext_core.config_resolver import resolve_active_storage_file
+
+                base = resolve_active_storage_file(Path.cwd(), "context_graph.db").parent
         else:
             base = Path(storage_path)
         learning_path = base / "learning"

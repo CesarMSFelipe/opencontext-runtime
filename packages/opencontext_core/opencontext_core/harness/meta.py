@@ -194,8 +194,8 @@ class MetaHarnessScanner:
 
         return (
             False,
-            "No KG artifact found (expected .storage/opencontext/context_graph.db "
-            "or .opencontext/knowledge_graph.json) — run 'opencontext index .' first",
+            f"No KG artifact found (expected {db} or {json_path}) "
+            "— run 'opencontext index .' first",
         )
 
     def _check_context_substrate(self) -> tuple[bool, str]:
