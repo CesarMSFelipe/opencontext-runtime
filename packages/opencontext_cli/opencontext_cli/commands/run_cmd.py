@@ -139,6 +139,17 @@ def add_run_exec_parser(subparsers: Any) -> None:
         "--profile", default="balanced", help="Execution profile (default: balanced)."
     )
     run_parser.add_argument("--resume", default=None, help="Resume a run: <session_id>/<run_id>.")
+    run_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip the interactive preflight and run immediately.",
+    )
+    run_parser.add_argument(
+        "--non-interactive",
+        dest="non_interactive",
+        action="store_true",
+        help="Never prompt (same as --yes; also implied by --json or a non-TTY).",
+    )
     run_parser.add_argument("--root", default=None, help="Project root (default: cwd).")
     run_parser.add_argument(
         "--config",
@@ -179,6 +190,21 @@ def handle_run_exec(args: Any) -> None:
     lane = getattr(args, "lane", "fast")
     profile = getattr(args, "profile", "balanced")
 
+    # Guided preflight (TTY only; --json/--yes/--non-interactive skip it): brief
+    # the user on the plan, artifacts, gates, cost, and subsystems, then ask.
+    # Non-TTY sessions never reach this branch — scripts keep today's behavior.
+    from opencontext_cli.flow_preflight import is_interactive, run_preflight
+
+    if is_interactive(args):
+        decision = run_preflight(
+            task=task, workflow=workflow, lane=lane, profile=profile, root=root
+        )
+        if not decision.proceed:
+            print("Run cancelled — nothing was executed.")
+            return
+        workflow = decision.workflow
+        lane = decision.lane
+
     # R2: pre-run cost estimate hint — one stderr line, never blocks, silent on failure.
     try:
         from opencontext_core.runtime_intelligence.cost import CostEngine
@@ -193,12 +219,8 @@ def handle_run_exec(args: Any) -> None:
         pass  # estimate failure is a silent skip per honesty rules
 
     api = RuntimeApi(root)
-    session = api.start_session(
-        StartSessionRequest(task=task, root=str(root), profile=profile)
-    )
-    result = api.run(
-        RunRequest(session_id=session.session_id, workflow_id=workflow, task=task)
-    )
+    session = api.start_session(StartSessionRequest(task=task, root=str(root), profile=profile))
+    result = api.run(RunRequest(session_id=session.session_id, workflow_id=workflow, task=task))
     # B1 / PROD-004: result.status is _legacy_status(legacy) which preserves
     # OC Flow terminal vocabulary ("completed", "needs_executor", etc.) and
     # translates harness GateStatus values.  Use it directly.
@@ -225,9 +247,16 @@ def handle_run_exec(args: Any) -> None:
     if artifacts_dir is not None:
         summary["artifacts_dir"] = str(artifacts_dir)
     for _field in (
-        "final_node", "visited", "total_tokens", "diagnosis_attempts",
-        "escalated", "graph_status", "completion_reason", "mutation_required",
-        "verified_by", "verification_outcome",
+        "final_node",
+        "visited",
+        "total_tokens",
+        "diagnosis_attempts",
+        "escalated",
+        "graph_status",
+        "completion_reason",
+        "mutation_required",
+        "verified_by",
+        "verification_outcome",
     ):
         _v = getattr(leg, _field, None)
         if _v is not None:
