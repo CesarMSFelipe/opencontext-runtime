@@ -52,12 +52,8 @@ def test_all_consumers_resolve_same_path(
     workspace_a = resolve_active_workspace_path(root)
     workspace_b = resolve_active_workspace_path(root)
 
-    assert storage_a == storage_b, (
-        f"Storage path not stable: {storage_a} != {storage_b}"
-    )
-    assert workspace_a == workspace_b, (
-        f"Workspace path not stable: {workspace_a} != {workspace_b}"
-    )
+    assert storage_a == storage_b, f"Storage path not stable: {storage_a} != {storage_b}"
+    assert workspace_a == workspace_b, f"Workspace path not stable: {workspace_a} != {workspace_b}"
     # Storage and workspace must be distinct (storage is for DB; workspace for JSON/harness)
     assert storage_a != workspace_a, (
         f"Storage and workspace must differ; both resolved to {storage_a}"
@@ -83,14 +79,10 @@ def test_all_consumers_resolve_same_path_local_mode(
     assert storage_a == root / ".storage" / "opencontext", (
         f"Local-mode storage path wrong: {storage_a}"
     )
-    assert workspace_a == root / ".opencontext", (
-        f"Local-mode workspace path wrong: {workspace_a}"
-    )
+    assert workspace_a == root / ".opencontext", f"Local-mode workspace path wrong: {workspace_a}"
 
 
-def test_health_kg_path_uses_resolver(
-    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_health_kg_path_uses_resolver(tmp_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """RuntimeHealth.report must route through resolve_active_storage_path (R1).
 
     Before the fix health.py used the hardcoded constant
@@ -119,6 +111,5 @@ def test_health_kg_path_uses_resolver(
     assert len(captured) == 1, "compute_graph_health was not called"
     expected = resolve_active_storage_path(tmp_project) / "context_graph.db"
     assert captured[0] == expected, (
-        f"health.py must use the config-driven resolver; "
-        f"got {captured[0]!r}, expected {expected!r}"
+        f"health.py must use the config-driven resolver; got {captured[0]!r}, expected {expected!r}"
     )

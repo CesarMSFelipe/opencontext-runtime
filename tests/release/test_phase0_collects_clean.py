@@ -70,9 +70,7 @@ def test_no_duplicate_test_module_names() -> None:
     for test_file in CORE_TESTS_ROOT.rglob("test_*.py"):
         if "__pycache__" in test_file.parts:
             continue
-        seen.setdefault(test_file.name, []).append(
-            str(test_file.relative_to(CORE_TESTS_ROOT))
-        )
+        seen.setdefault(test_file.name, []).append(str(test_file.relative_to(CORE_TESTS_ROOT)))
     duplicates = {name: paths for name, paths in seen.items() if len(paths) > 1}
     assert not duplicates, f"Duplicate test module basenames: {duplicates}"
 

@@ -122,9 +122,7 @@ def handle_tool_call(name: str, payload: dict[str, Any]) -> dict[str, Any]:
     flag before reaching here.
     """
     if not _is_migrated_flag("mcp-runtime"):
-        raise RuntimeError(
-            "mcp-runtime flag is off; the runtime.* dispatcher is disabled"
-        )
+        raise RuntimeError("mcp-runtime flag is off; the runtime.* dispatcher is disabled")
     if name not in _SESSION_TOOLS:
         raise KeyError(f"unknown MCP runtime tool: {name!r}")
     method_name, builder = _SESSION_TOOLS[name]

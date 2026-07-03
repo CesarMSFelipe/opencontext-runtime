@@ -405,9 +405,7 @@ def to_surgical_envelope(
         )
 
     omission_reasons = [o.reason for o in envelope.omissions]
-    ranking_hash = hashlib.sha1(
-        "|".join(i.ref for i in items).encode()
-    ).hexdigest()[:12]
+    ranking_hash = hashlib.sha1("|".join(i.ref for i in items).encode()).hexdigest()[:12]
 
     return SurgicalEnvelope(
         task=envelope.task,

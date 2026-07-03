@@ -47,6 +47,7 @@ def _resolve_effective_scope(args: argparse.Namespace) -> str:
 
 # -- primary scope flag tests --
 
+
 def test_full_defaults_to_all_scope() -> None:
     """--full without explicit --scope must resolve to scope='all'.
 
@@ -55,9 +56,7 @@ def test_full_defaults_to_all_scope() -> None:
     """
     args = _parse(["--full", "--yes"])
     scope = _resolve_effective_scope(args)
-    assert scope == "all", (
-        f"--full must default to scope='all', got '{scope}'"
-    )
+    assert scope == "all", f"--full must default to scope='all', got '{scope}'"
 
 
 def test_scope_workspace_leaves_global() -> None:
@@ -83,13 +82,12 @@ def test_scope_all_targets_both() -> None:
 
 # -- back-compat alias tests --
 
+
 def test_legacy_local_alias_maps_to_workspace() -> None:
     """Legacy --scope local must be accepted and map to 'workspace'."""
     args = _parse(["--scope", "local", "--yes"])
     scope = _resolve_effective_scope(args)
-    assert scope == "workspace", (
-        f"Legacy --scope local must alias to 'workspace', got '{scope}'"
-    )
+    assert scope == "workspace", f"Legacy --scope local must alias to 'workspace', got '{scope}'"
 
 
 def test_parser_accepts_new_scope_choices() -> None:

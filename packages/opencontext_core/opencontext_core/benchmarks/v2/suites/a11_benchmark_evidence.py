@@ -34,9 +34,7 @@ def run() -> BenchmarkResult:
         )
 
     stub_callables = [
-        sid
-        for sid, fn in suites.items()
-        if "_stub" in getattr(fn, "__qualname__", "")
+        sid for sid, fn in suites.items() if "_stub" in getattr(fn, "__qualname__", "")
     ]
     if stub_callables:
         return BenchmarkResult(

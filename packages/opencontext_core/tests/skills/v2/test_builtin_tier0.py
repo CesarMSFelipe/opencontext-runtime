@@ -6,9 +6,7 @@ from pathlib import Path
 
 import yaml
 
-BUILTINS_ROOT = (
-    Path(__file__).parents[3] / "opencontext_core" / "skills" / "builtins" / "core"
-)
+BUILTINS_ROOT = Path(__file__).parents[3] / "opencontext_core" / "skills" / "builtins" / "core"
 
 
 def test_first_run_skill_benchmark_executes() -> None:

@@ -118,8 +118,7 @@ class RuntimeBrain:
             raise ValueError(
                 f"{decision_kind.value!r} is a runner-level DecisionKind emitted "
                 "by oc_flow/runner.py directly — it is not a brain strategy. "
-                "Brain strategies cover: "
-                + ", ".join(k.value for k in self._STRATEGIES)
+                "Brain strategies cover: " + ", ".join(k.value for k in self._STRATEGIES)
             )
         strategy = self._STRATEGIES[decision_kind]
         chosen, alternatives, reason, confidence, inputs = strategy(self, ctx)

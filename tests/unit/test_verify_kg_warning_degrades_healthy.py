@@ -20,6 +20,7 @@ def _make_report(*results: CheckResult) -> VerificationReport:
 
 # -- Scenarios that MUST degrade healthy --
 
+
 def test_kg_warning_yields_healthy_false() -> None:
     """A Knowledge Graph warning must make is_healthy=False.
 
@@ -44,15 +45,14 @@ def test_kg_failure_yields_healthy_false() -> None:
 
 # -- Scenarios that must NOT degrade healthy --
 
+
 def test_python_version_warning_does_not_degrade_healthy() -> None:
     """Advisory warnings (Python version, no config) must keep is_healthy=True."""
     report = _make_report(
         CheckResult("Python Version", "warning", "Python 3.11 < 3.12 recommended"),
         CheckResult("User Config", "passed", "Config at /some/path"),
     )
-    assert report.is_healthy is True, (
-        "Python version warning must not degrade is_healthy"
-    )
+    assert report.is_healthy is True, "Python version warning must not degrade is_healthy"
 
 
 def test_no_config_warning_does_not_degrade_healthy() -> None:

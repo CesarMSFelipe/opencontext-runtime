@@ -31,9 +31,5 @@ class TestNoAiCoauthor:
         for i, msg in enumerate(result.stdout.split("\n---\n")):
             matches = _TRAILER_RE.findall(msg)
             if matches:
-                offenders = [
-                    ln for ln in msg.splitlines() if _TRAILER_RE.search(ln)
-                ]
-                raise AssertionError(
-                    f"Commit {i + 1} has Co-Authored-By trailer(s): {offenders}"
-                )
+                offenders = [ln for ln in msg.splitlines() if _TRAILER_RE.search(ln)]
+                raise AssertionError(f"Commit {i + 1} has Co-Authored-By trailer(s): {offenders}")

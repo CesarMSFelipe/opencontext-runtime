@@ -29,17 +29,13 @@ from opencontext_core.paths.resolve_paths import (
 
 def test_path_accepted_storage() -> None:
     """A `Path` argument is accepted and returns the resolved storage directory."""
-    result = resolve_storage_path_strict(
-        Path("/tmp/opencontext/test")
-    )
+    result = resolve_storage_path_strict(Path("/tmp/opencontext/test"))
     assert isinstance(result, Path)
 
 
 def test_path_accepted_workspace() -> None:
     """A `Path` argument is accepted and returns the resolved workspace directory."""
-    result = resolve_workspace_path_strict(
-        Path("/tmp/opencontext/test")
-    )
+    result = resolve_workspace_path_strict(Path("/tmp/opencontext/test"))
     assert isinstance(result, Path)
 
 

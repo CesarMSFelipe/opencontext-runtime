@@ -98,6 +98,5 @@ def test_publish_path_blocks_publish_for_skill_with_leaked_secret() -> None:
         (root / "leaky.yaml").write_text(bad, encoding="utf-8")
         report = SkillAudit().run(root)
     assert any(
-        f.severity == "ERROR" and "secret" in (f.message + f.code).lower()
-        for f in report.findings
+        f.severity == "ERROR" and "secret" in (f.message + f.code).lower() for f in report.findings
     )

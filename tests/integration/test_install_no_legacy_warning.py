@@ -31,9 +31,7 @@ def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return home
 
 
-def test_fresh_install_no_legacy_warning(
-    isolated_home: Path, tmp_path: Path
-) -> None:
+def test_fresh_install_no_legacy_warning(isolated_home: Path, tmp_path: Path) -> None:
     """AgentInstaller.__init__ must not create .opencontext in the project root.
 
     Strict TDD: this test FAILS until agent_installer.py stops the eager mkdir
@@ -61,17 +59,14 @@ def test_fresh_install_no_legacy_warning(
 
     # Secondary gate: no legacy-state warning was emitted.
     legacy_msgs = [
-        str(w.message) for w in caught
+        str(w.message)
+        for w in caught
         if "legacy" in str(w.message).lower() and "local state" in str(w.message).lower()
     ]
-    assert not legacy_msgs, (
-        f"Spurious legacy-state warning(s) on fresh install: {legacy_msgs}"
-    )
+    assert not legacy_msgs, f"Spurious legacy-state warning(s) on fresh install: {legacy_msgs}"
 
 
-def test_install_creates_storage_dir_lazily(
-    isolated_home: Path, tmp_path: Path
-) -> None:
+def test_install_creates_storage_dir_lazily(isolated_home: Path, tmp_path: Path) -> None:
     """agent-configs dir is created inside install(), not in __init__.
 
     After C3, AgentInstaller.__init__ does NOT touch the filesystem at all

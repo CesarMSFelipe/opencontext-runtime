@@ -90,9 +90,7 @@ def add_decisions_parser(subparsers: Any) -> None:
     show_p.add_argument("--root", default=None, help="Project root to scope the search.")
     show_p.add_argument("--json", action="store_true", help="JSON output.")
 
-    explain_p = decisions_subs.add_parser(
-        "explain", help="Explain per-decision details for a run."
-    )
+    explain_p = decisions_subs.add_parser("explain", help="Explain per-decision details for a run.")
     explain_p.add_argument("run_id", help="Run ID.")
     explain_p.add_argument("--root", default=None, help="Project root to scope the search.")
     explain_p.add_argument("--json", action="store_true", help="JSON output.")
@@ -161,9 +159,7 @@ def handle_decisions(args: Any) -> None:
             return
         console.header(f"Explain: {args.run_id}")
         if not decision_rows:
-            console.info(
-                f"Run {args.run_id}: no decisions recorded."
-            )
+            console.info(f"Run {args.run_id}: no decisions recorded.")
             return
         for drow in decision_rows:
             kind = drow.get("kind", "?")

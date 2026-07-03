@@ -87,9 +87,7 @@ def test_skill_catalog_generate_check_exits_zero_when_synced(tmp_path: Path) -> 
     import json
 
     # Empty tree + empty committed catalog → no drift
-    (tmp_path / "catalog.json").write_text(
-        json.dumps({"skills": []}), encoding="utf-8"
-    )
+    (tmp_path / "catalog.json").write_text(json.dumps({"skills": []}), encoding="utf-8")
     code = _run_skill(["skill", "catalog", "generate", "--check", "--root", str(tmp_path)])
     assert code == 0
 

@@ -25,12 +25,7 @@ _SIG_SUFFIXES: tuple[str, ...] = (".sig", ".asc", ".sigstore", ".bundle")
 
 # The marketplace signing machinery (HMAC + publisher keys).
 _SIGNING_MODULE = (
-    _REPO_ROOT
-    / "packages"
-    / "opencontext_core"
-    / "opencontext_core"
-    / "marketplace"
-    / "signing.py"
+    _REPO_ROOT / "packages" / "opencontext_core" / "opencontext_core" / "marketplace" / "signing.py"
 )
 
 

@@ -33,8 +33,8 @@ from opencontext_core.benchmarks.v2.runner import BenchmarkResult
 SUITE_ID = "A2"
 _REPO_ROOT = Path(__file__).resolve().parents[6]
 _CLI = str(_REPO_ROOT / ".venv" / "bin" / "opencontext")
-_TIMEOUT_RUN = 120   # opencontext run
-_TIMEOUT_TEST = 60   # pytest verify
+_TIMEOUT_RUN = 120  # opencontext run
+_TIMEOUT_TEST = 60  # pytest verify
 
 _BUGGY_CALC = """\
 def add(a, b):
@@ -51,17 +51,19 @@ def test_add_returns_sum():
 """
 
 # ApplyEdit set that replaces the buggy operator on line 2.
-_EDITS_JSON = json.dumps([
-    {
-        "path": "calc.py",
-        "operation": "replace_range",
-        "start_line": 2,
-        "end_line": 2,
-        "content": "    return a + b\n",
-        "reason": "fix subtraction operator to addition",
-        "requirement_refs": ["add returns the sum of a and b"],
-    }
-])
+_EDITS_JSON = json.dumps(
+    [
+        {
+            "path": "calc.py",
+            "operation": "replace_range",
+            "start_line": 2,
+            "end_line": 2,
+            "content": "    return a + b\n",
+            "reason": "fix subtraction operator to addition",
+            "requirement_refs": ["add returns the sum of a and b"],
+        }
+    ]
+)
 
 _OC_YAML = "provider: test_stub\nedits_file: edits.json\n"
 
@@ -145,8 +147,7 @@ def run() -> BenchmarkResult:
             if not success:
                 last = test_out.splitlines()[-1] if test_out else ""
                 detail = (
-                    f"pytest exit {test_proc.returncode}: {last} "
-                    f"(opencontext run exit {run_exit})"
+                    f"pytest exit {test_proc.returncode}: {last} (opencontext run exit {run_exit})"
                 )
 
             return BenchmarkResult(

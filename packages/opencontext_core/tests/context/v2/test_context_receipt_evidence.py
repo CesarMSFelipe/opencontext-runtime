@@ -133,7 +133,5 @@ def test_full_file_read_justification_validates() -> None:
     """FullFileReadJustification requires path/reason/byte_count/requested_by."""
     with pytest.raises(ValidationError):
         FullFileReadJustification()  # type: ignore[call-arg]
-    ffr = FullFileReadJustification(
-        path="/a", reason="r", byte_count=1, requested_by="node.x"
-    )
+    ffr = FullFileReadJustification(path="/a", reason="r", byte_count=1, requested_by="node.x")
     assert ffr.byte_count == 1

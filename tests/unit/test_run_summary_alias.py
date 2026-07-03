@@ -43,8 +43,7 @@ def test_run_summary_md_present_at_stable_path(tmp_path: Path) -> None:
 
     alias_path = ctx.artifacts_dir / "run-summary.md"
     assert alias_path.exists(), (
-        f"run-summary.md must exist at {alias_path}. "
-        "Only consolidation/summary.md was written."
+        f"run-summary.md must exist at {alias_path}. Only consolidation/summary.md was written."
     )
 
 

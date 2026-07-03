@@ -45,7 +45,7 @@ def _run_pytest_collect() -> list[str]:
         stripped = line.strip()
         if "<Function " in stripped and stripped.endswith(">"):
             # Format: <Function test_name>
-            name = stripped[len("<Function "):-1]
+            name = stripped[len("<Function ") : -1]
             ids.append(name)
     return ids
 

@@ -22,12 +22,7 @@ def test_decisions_json_has_multiple_kinds(tmp_path: Path) -> None:
 
     # Locate the run directory from session/run ids
     session_dir = (
-        Path(tmp_path)
-        / ".opencontext"
-        / "sessions"
-        / result.session_id
-        / "runs"
-        / result.run_id
+        Path(tmp_path) / ".opencontext" / "sessions" / result.session_id / "runs" / result.run_id
     )
     decisions_path = session_dir / "decisions.json"
     assert decisions_path.exists(), f"decisions.json not found at {decisions_path}"
@@ -50,12 +45,7 @@ def test_workflow_decision_has_required_fields(tmp_path: Path) -> None:
     result = runner.run("Fix a bug in utils.py", lane=Lane.FAST)
 
     session_dir = (
-        Path(tmp_path)
-        / ".opencontext"
-        / "sessions"
-        / result.session_id
-        / "runs"
-        / result.run_id
+        Path(tmp_path) / ".opencontext" / "sessions" / result.session_id / "runs" / result.run_id
     )
     data = json.loads((session_dir / "decisions.json").read_text(encoding="utf-8"))
     workflow_decisions = [d for d in data["decisions"] if d["kind"] == "workflow"]
@@ -73,12 +63,7 @@ def test_memory_promotion_decision_present(tmp_path: Path) -> None:
     result = runner.run("Summarize repo", lane=Lane.FAST)
 
     session_dir = (
-        Path(tmp_path)
-        / ".opencontext"
-        / "sessions"
-        / result.session_id
-        / "runs"
-        / result.run_id
+        Path(tmp_path) / ".opencontext" / "sessions" / result.session_id / "runs" / result.run_id
     )
     data = json.loads((session_dir / "decisions.json").read_text(encoding="utf-8"))
     promo = [d for d in data["decisions"] if d["kind"] == "memory_promotion"]

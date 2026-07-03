@@ -31,10 +31,7 @@ from pathlib import Path
 # Productive source root (packages/opencontext_core/opencontext_core/)
 # parents[0]=tests/architecture, parents[1]=tests, parents[2]=repo root
 _PROD_ROOT = (
-    Path(__file__).resolve().parents[2]
-    / "packages"
-    / "opencontext_core"
-    / "opencontext_core"
+    Path(__file__).resolve().parents[2] / "packages" / "opencontext_core" / "opencontext_core"
 )
 
 # Files that must NOT pin StorageMode.local for KG/storage-path resolution.

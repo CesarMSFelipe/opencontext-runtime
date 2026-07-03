@@ -18,8 +18,7 @@ from opencontext_core.benchmarks.v2.suites import all_suites
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SUITES_INIT = (
-    _REPO_ROOT
-    / "packages/opencontext_core/opencontext_core/benchmarks/v2/suites/__init__.py"
+    _REPO_ROOT / "packages/opencontext_core/opencontext_core/benchmarks/v2/suites/__init__.py"
 )
 
 
@@ -31,9 +30,7 @@ _SUITES_INIT = (
 def test_all_suites_returns_twelve() -> None:
     """``all_suites()`` must return exactly 12 §A suite callables."""
     suites = all_suites()
-    assert len(suites) == 12, (
-        f"Expected 12 §A suites, got {len(suites)}: {sorted(suites)}"
-    )
+    assert len(suites) == 12, f"Expected 12 §A suites, got {len(suites)}: {sorted(suites)}"
 
 
 # ---------------------------------------------------------------------------
@@ -86,10 +83,6 @@ def test_all_twelve_suites_are_real() -> None:
     """
     suites = all_suites()
     still_pending = [
-        sid
-        for sid, fn in suites.items()
-        if "_pending" in getattr(fn, "__qualname__", "")
+        sid for sid, fn in suites.items() if "_pending" in getattr(fn, "__qualname__", "")
     ]
-    assert not still_pending, (
-        f"Suites still using _pending_suite factory: {still_pending}"
-    )
+    assert not still_pending, f"Suites still using _pending_suite factory: {still_pending}"

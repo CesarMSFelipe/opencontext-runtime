@@ -203,8 +203,6 @@ class TestGraphScreenLoadFunctions:
 
         mod = _get_graph_screen()
         with tempfile.TemporaryDirectory() as tmp:
-            focus, neighbors = mod.load_node_neighbors(
-                "nonexistent-run-id", root=Path(tmp)
-            )
+            focus, neighbors = mod.load_node_neighbors("nonexistent-run-id", root=Path(tmp))
             assert focus is None
             assert neighbors == []

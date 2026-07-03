@@ -86,9 +86,7 @@ def _run_inner() -> BenchmarkResult:
         oc_dir = tmpdir / ".opencontext"
         oc_dir.mkdir()
         kg = _build_kg_payload(node_count=80)
-        (oc_dir / "knowledge_graph.json").write_text(
-            json.dumps(kg, indent=2), encoding="utf-8"
-        )
+        (oc_dir / "knowledge_graph.json").write_text(json.dumps(kg, indent=2), encoding="utf-8")
 
         try:
             builder = ContextSubstrateBuilder(root=tmpdir)
@@ -113,8 +111,7 @@ def _run_inner() -> BenchmarkResult:
                 success=False,
                 methodology_version=current_methodology_version(),
                 detail=(
-                    f"compression_enabled=False — CH-2 wiring not active; "
-                    f"warnings: {warnings_text}"
+                    f"compression_enabled=False — CH-2 wiring not active; warnings: {warnings_text}"
                 ),
             )
 

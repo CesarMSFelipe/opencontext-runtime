@@ -45,9 +45,7 @@ def test_runner_emits_machine_readable_json() -> None:
     assert isinstance(payload["probes"], list)
     assert len(payload["probes"]) == 17
     assert (
-        payload["summary"]["passed"]
-        + payload["summary"]["failed"]
-        + payload["summary"]["blocked"]
+        payload["summary"]["passed"] + payload["summary"]["failed"] + payload["summary"]["blocked"]
         == 17
     )
 

@@ -51,6 +51,4 @@ def test_publish_matrix_covers_deps_of_published_packages() -> None:
         for dep in _first_party_deps(pyproject):
             if dep not in published:
                 missing.append(f"{pkg_name} depends on {dep}, absent from publish.yml")
-    assert not missing, "published packages depend on unpublished siblings:\n" + "\n".join(
-        missing
-    )
+    assert not missing, "published packages depend on unpublished siblings:\n" + "\n".join(missing)

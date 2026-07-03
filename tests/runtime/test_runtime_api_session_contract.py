@@ -53,9 +53,7 @@ def test_runtime_api_exposes_session_contract(tmp_path: Path) -> None:
     """
     api = RuntimeApi(tmp_path)
     public = {
-        name
-        for name in dir(api)
-        if not name.startswith("_") and callable(getattr(api, name))
+        name for name in dir(api) if not name.startswith("_") and callable(getattr(api, name))
     }
 
     missing = set(SESSION_METHOD_PARAMS) - public
@@ -81,14 +79,9 @@ def test_runtime_api_session_method_signature(
     method = getattr(RuntimeApi(tmp_path), method_name)
     sig = inspect.signature(method)
     # Drop ``self`` and var-args/var-kwargs to compare clean.
-    actual = tuple(
-        p
-        for p in sig.parameters
-        if p != "self"
-    )
+    actual = tuple(p for p in sig.parameters if p != "self")
     assert actual == expected_params, (
-        f"RuntimeApi.{method_name} signature drift: "
-        f"expected {expected_params}, got {actual}"
+        f"RuntimeApi.{method_name} signature drift: expected {expected_params}, got {actual}"
     )
 
 

@@ -238,8 +238,12 @@ class TestDispatchWiring:
         from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
 
         args = argparse.Namespace(
-            title="t", content="", type="manual", scope="project",
-            topic_key=None, no_capture_prompt=True,
+            title="t",
+            content="",
+            type="manual",
+            scope="project",
+            topic_key=None,
+            no_capture_prompt=True,
         )
         with pytest.raises(SystemExit) as excinfo:
             _dispatch_tool("save", tmp_path, args)

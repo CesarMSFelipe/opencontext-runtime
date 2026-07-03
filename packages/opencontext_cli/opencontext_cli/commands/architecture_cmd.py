@@ -41,8 +41,8 @@ _FULL_ROW_RE = re.compile(
     r"`?([^`|]*)`?\s+\|\s+"  # source doc
     r"`?([^`|]*)`?\s+\|\s+"  # pr
     r"`?([^`|]*)`?\s+\|\s+"  # module
-    r"([^|]*)\s+\|\s+"       # test
-    r"([^|]*)\s+\|\s+"       # benchmark
+    r"([^|]*)\s+\|\s+"  # test
+    r"([^|]*)\s+\|\s+"  # benchmark
     r"(MET|DEFERRED|REJECTED)\s+\|"  # status
 )
 

@@ -42,7 +42,9 @@ def test_storage_migrate_subcommand_exists(tmp_path: Path) -> None:
     assert result.returncode == 0
 
 
-def test_storage_migrate_moves_legacy_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_storage_migrate_moves_legacy_storage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Legacy .storage/opencontext is moved to the user XDG path after migrate."""
     legacy = tmp_path / ".storage" / "opencontext"
     legacy.mkdir(parents=True)
@@ -90,7 +92,7 @@ def test_storage_migrate_no_legacy_is_noop(tmp_path: Path) -> None:
     """When there is no legacy state, migrate exits 0 and reports nothing to do."""
     result = _run_storage_migrate(tmp_path)
     assert result.returncode == 0, f"migrate with no legacy failed: {result.stderr}"
-    combined = result.stdout + result.stderr
-    assert "nothing" in combined.lower() or "no legacy" in combined.lower() or "already" in combined.lower(), (
-        f"expected 'nothing to do' message; got: {combined!r}"
+    lowered = (result.stdout + result.stderr).lower()
+    assert "nothing" in lowered or "no legacy" in lowered or "already" in lowered, (
+        f"expected 'nothing to do' message; got: {lowered!r}"
     )

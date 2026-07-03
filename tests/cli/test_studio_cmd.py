@@ -31,9 +31,7 @@ def test_serve_open_browser_degrades_when_unavailable(tmp_path: Path, monkeypatc
     assert url == studio_url(8801)
 
 
-def test_run_studio_delegates_to_serve(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_studio_delegates_to_serve(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """When server_v2 is unavailable, run_studio delegates to the stdlib stub."""
     calls: dict[str, object] = {}
 

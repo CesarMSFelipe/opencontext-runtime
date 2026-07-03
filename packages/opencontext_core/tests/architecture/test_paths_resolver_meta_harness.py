@@ -69,11 +69,7 @@ def test_harness_runtime_sdk_route_through_paths(module_path: str) -> None:
     tests enforce that the Phase-1 migration set stays clean so commit
     016's full-tree acceptance gate is reachable.
     """
-    findings = [
-        (p, ln, snip)
-        for (p, ln, snip) in scan_hardcoded_paths()
-        if p == module_path
-    ]
+    findings = [(p, ln, snip) for (p, ln, snip) in scan_hardcoded_paths() if p == module_path]
     assert findings == [], (
         f"hardcoded paths detected in {module_path}: "
         f"{[(ln, snip[:60]) for _, ln, snip in findings]}"

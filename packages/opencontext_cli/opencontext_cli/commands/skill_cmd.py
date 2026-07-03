@@ -62,12 +62,8 @@ def add_skill_parser(subparsers: Any) -> None:
 
     catalog_parser = skill_sub.add_parser("catalog", help="Manage the skill catalog.")
     catalog_subs = catalog_parser.add_subparsers(dest="catalog_command", required=True)
-    cat_gen = catalog_subs.add_parser(
-        "generate", help="Generate or check the skill catalog."
-    )
-    cat_gen.add_argument(
-        "--root", default=".", help="Root directory containing skill YAML files."
-    )
+    cat_gen = catalog_subs.add_parser("generate", help="Generate or check the skill catalog.")
+    cat_gen.add_argument("--root", default=".", help="Root directory containing skill YAML files.")
     cat_gen.add_argument(
         "--check",
         action="store_true",

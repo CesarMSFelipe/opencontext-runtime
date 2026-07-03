@@ -194,9 +194,7 @@ def test_b4_not_measured_count_below_pre_b4_baseline() -> None:
         "check that SUITE_TO_FUNCTIONAL mapping and _pyz_artifact_gate are wired"
     )
     # Verify honest accounting: verdict must still be not-ready (no forced ready=True).
-    assert verdict.ready is False, (
-        "verdict must remain not-ready until every gate is genuinely MET"
-    )
+    assert verdict.ready is False, "verdict must remain not-ready until every gate is genuinely MET"
 
 
 def test_b4_suite_derived_functional_gates_are_met() -> None:

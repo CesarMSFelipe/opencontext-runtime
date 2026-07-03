@@ -47,9 +47,7 @@ def test_studio_serves_v2_health_endpoint() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_run_studio_calls_create_v2_app(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_studio_calls_create_v2_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """run_studio calls create_v2_app() + uvicorn when server_v2 is importable."""
     calls: list[str] = []
 
@@ -130,9 +128,7 @@ def test_run_studio_fallback_prints_stderr_warning(
     run_studio(root=tmp_path, port=8765, no_browser=True)
 
     err = capsys.readouterr().err
-    assert "FastAPI/uvicorn unavailable" in err, (
-        f"Expected fallback stderr warning, got: {err!r}"
-    )
+    assert "FastAPI/uvicorn unavailable" in err, f"Expected fallback stderr warning, got: {err!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -143,9 +139,7 @@ def test_run_studio_fallback_prints_stderr_warning(
 def test_studio_no_v2_flag_in_help() -> None:
     """--v2 flag must NOT be present in the studio argument parser."""
     studio_parser = _get_studio_parser()
-    option_strings = [
-        opt for action in studio_parser._actions for opt in action.option_strings
-    ]
+    option_strings = [opt for action in studio_parser._actions for opt in action.option_strings]
     assert "--v2" not in option_strings, f"Unexpected --v2 in studio parser: {option_strings}"
 
 

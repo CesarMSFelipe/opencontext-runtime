@@ -35,8 +35,7 @@ def validate_output_format(contract: OutputContract) -> None:
     """Reject contracts whose ``format`` is not in :data:`ALLOWED_FORMATS`."""
     if contract.format not in ALLOWED_FORMATS:
         raise ValueError(
-            f"output format {contract.format!r} rejected; "
-            f"allowed: {sorted(ALLOWED_FORMATS)}"
+            f"output format {contract.format!r} rejected; allowed: {sorted(ALLOWED_FORMATS)}"
         )
 
 

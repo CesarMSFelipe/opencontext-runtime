@@ -208,9 +208,7 @@ class TreeSitterParser:
 
             self._fallback_parser = SymbolExtractor()
 
-    def _load_language(
-        self, name: str, module_name: str, fn_name: str = "language"
-    ) -> bool:
+    def _load_language(self, name: str, module_name: str, fn_name: str = "language") -> bool:
         """Attempt to load a tree-sitter language grammar.
 
         ``fn_name`` is the callable on the grammar package that returns the

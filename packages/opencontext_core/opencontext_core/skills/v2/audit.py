@@ -90,9 +90,7 @@ class SkillAudit:
         self._check_confusables(skills, report)
         return report
 
-    def _check_one(
-        self, path: Path, data: dict[str, object], report: AuditReport
-    ) -> None:
+    def _check_one(self, path: Path, data: dict[str, object], report: AuditReport) -> None:
         # required fields
         for field_name in ("tier", "required_capabilities", "persona_compat", "contract"):
             if field_name not in data:

@@ -205,9 +205,7 @@ def test_sdd_bogus_flag_says_unrecognized_not_removed() -> None:
     )
     assert result.returncode != 0, "Expected non-zero exit for bogus flag"
     combined = result.stdout + result.stderr
-    assert "has been removed" not in combined, (
-        f"Got the wrong error message. Output: {combined!r}"
-    )
+    assert "has been removed" not in combined, f"Got the wrong error message. Output: {combined!r}"
     assert "unrecognized" in combined.lower() or "error" in combined.lower(), (
         f"Expected argparse error message, got: {combined!r}"
     )

@@ -67,9 +67,7 @@ def test_other_adapters_return_not_configured() -> None:
         assert result.get("status") == "not_configured", (
             f"Adapter {name!r} returned {result!r} instead of not_configured"
         )
-        assert result.get("adapter") == name, (
-            f"Adapter {name!r} sync_state missing 'adapter' key"
-        )
+        assert result.get("adapter") == name, f"Adapter {name!r} sync_state missing 'adapter' key"
 
 
 def test_sync_state_carries_substrate_hash(

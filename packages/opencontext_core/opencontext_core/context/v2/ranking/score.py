@@ -45,11 +45,7 @@ def usefulness(
     rel = _clamp01(float(relevance))
     fresh = _clamp01(float(freshness))
     conf = _clamp01(float(confidence))
-    score = (
-        weights.relevance * rel
-        + weights.freshness * fresh
-        + weights.confidence * conf
-    )
+    score = weights.relevance * rel + weights.freshness * fresh + weights.confidence * conf
     return _clamp01(score)
 
 

@@ -85,9 +85,7 @@ class TestK1JsTsGrammarsShip:
         """Parsing a .ts file with intra-file calls returns at least one edge."""
         parser = TreeSitterParser()
         _, edges = parser.parse_file("src/greeter.ts", _TS_SOURCE)
-        assert len(edges) > 0, (
-            "Expected at least one call edge from greeter.ts, got none"
-        )
+        assert len(edges) > 0, "Expected at least one call edge from greeter.ts, got none"
 
     def test_kg_indexes_ts_js_symbols_and_edges(self) -> None:
         """Full KG index of a TS+JS project yields nodes and at least one edge."""
@@ -221,9 +219,7 @@ class TestK3MtimeCheckpoint:
         # First index
         manifest1 = indexer.build_manifest(project_root)
         kg_meta1 = manifest1.metadata["knowledge_graph"]
-        assert kg_meta1.get("skipped_unchanged", 0) == 0, (
-            "First index should skip nothing"
-        )
+        assert kg_meta1.get("skipped_unchanged", 0) == 0, "First index should skip nothing"
 
         # Second index without changes — file should be skipped
         manifest2 = indexer.build_manifest(project_root)
@@ -234,6 +230,7 @@ class TestK3MtimeCheckpoint:
 
         # Modify the file and re-index — should be reindexed
         import time
+
         time.sleep(0.05)  # ensure mtime differs
         py_file.write_text("def hello(): return 42\ndef new_fn(): pass\n")
         # Force mtime update (some filesystems have low mtime resolution)

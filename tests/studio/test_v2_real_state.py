@@ -32,11 +32,7 @@ def _add_decision(root: Path, sid: str, decision_id: str, rationale: str) -> Non
     from opencontext_core.paths import StorageMode, resolve_workspace_path
 
     run_dir = (
-        resolve_workspace_path(root, StorageMode.local)
-        / "sessions"
-        / sid
-        / "runs"
-        / "run-001"
+        resolve_workspace_path(root, StorageMode.local) / "sessions" / sid / "runs" / "run-001"
     )
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "run.json").write_text(
@@ -214,6 +210,7 @@ def test_create_app_and_create_v2_app_are_same_factory_or_shim_warns() -> None:
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         from opencontext_core.studio.app import create_app
+
         create_app()
 
     is_same_factory = create_app is create_v2_app

@@ -55,9 +55,7 @@ def test_build_for_phase_compression_savings_nonnegative(
     )
 
 
-def test_build_for_phase_report_persisted(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_build_for_phase_report_persisted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """build_for_phase persists substrate_report.json for sync_state to read."""
     monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
 

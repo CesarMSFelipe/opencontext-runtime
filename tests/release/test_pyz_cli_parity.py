@@ -117,9 +117,7 @@ def test_pyz_subcommand_set_matches_editable(built_pyz: Path) -> None:
     assert editable_result.returncode == 0, (
         f"editable --help failed: {editable_result.stderr.decode(errors='replace')}"
     )
-    editable_subs = _extract_subcommands_from_help(
-        editable_result.stdout.decode(errors="replace")
-    )
+    editable_subs = _extract_subcommands_from_help(editable_result.stdout.decode(errors="replace"))
 
     # Collect subcommands from the pyz by parsing --help output.
     pyz_result = subprocess.run(

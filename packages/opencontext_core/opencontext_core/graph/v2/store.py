@@ -69,7 +69,8 @@ class KgStore:
                 "superseded_at,source_commit,source_author) "
                 "VALUES (?,?,?,?,?,?,?,?)"
             )
-            conn.execute(_sql,
+            conn.execute(
+                _sql,
                 (
                     node.id,
                     node.type.value,
@@ -93,7 +94,8 @@ class KgStore:
                 "superseded_at,source_commit,source_author) "
                 "VALUES (?,?,?,?,?,?,?,?,?)"
             )
-            conn.execute(_sql,
+            conn.execute(
+                _sql,
                 (
                     edge.id,
                     edge.type.value,

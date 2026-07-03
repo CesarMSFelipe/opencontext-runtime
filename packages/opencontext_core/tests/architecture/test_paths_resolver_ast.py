@@ -94,6 +94,5 @@ def test_ast_finds_zero_hardcoded_paths() -> None:
     assert len(findings) <= _MIGRATION_CAP, (
         f"AST hardcoded-path findings grew to {len(findings)} (cap "
         f"{_MIGRATION_CAP}); commits 004/005 must reduce it. "
-        "First 20:\n"
-        + "\n".join(f"{p}:{ln}" for p, ln, _ in findings[:20])
+        "First 20:\n" + "\n".join(f"{p}:{ln}" for p, ln, _ in findings[:20])
     )

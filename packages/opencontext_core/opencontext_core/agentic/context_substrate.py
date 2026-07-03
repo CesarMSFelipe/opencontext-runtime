@@ -137,8 +137,7 @@ class ContextSubstrateBuilder:
             else:
                 try:
                     raw_kg_content = (
-                        resolve_active_workspace_path(self.root)
-                        / "knowledge_graph.json"
+                        resolve_active_workspace_path(self.root) / "knowledge_graph.json"
                     ).read_text(encoding="utf-8")
                     selected_tokens = int(len(raw_kg_content.split()) * 1.3)
                 except Exception:
@@ -170,9 +169,7 @@ class ContextSubstrateBuilder:
                     ContextPriority,
                 )
 
-                cfg = load_config_or_defaults(
-                    resolve_config_path(self.root), auto_detect=False
-                )
+                cfg = load_config_or_defaults(resolve_config_path(self.root), auto_detect=False)
                 engine = CompressionEngine(cfg.context.compression)
 
                 # Build a single ContextItem representing the KG text payload.
@@ -193,9 +190,7 @@ class ContextSubstrateBuilder:
                 compression_savings = max(0, baseline_tokens - compressed_tokens)
                 compression_enabled = True
             except Exception as exc:
-                substrate_warnings.append(
-                    f"CompressionEngine wiring skipped: {exc}"
-                )
+                substrate_warnings.append(f"CompressionEngine wiring skipped: {exc}")
 
         used_tokens = compressed_tokens
 
@@ -220,9 +215,7 @@ class ContextSubstrateBuilder:
             storage_dir = resolve_active_storage_path(self.root)
             storage_dir.mkdir(parents=True, exist_ok=True)
             report_path = storage_dir / "substrate_report.json"
-            report_path.write_text(
-                json.dumps(report.model_dump(), indent=2), encoding="utf-8"
-            )
+            report_path.write_text(json.dumps(report.model_dump(), indent=2), encoding="utf-8")
         except Exception:
             pass  # Persist is best-effort; never fail build_for_phase.
 

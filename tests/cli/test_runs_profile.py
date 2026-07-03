@@ -85,9 +85,7 @@ def test_profile_flag_no_trace_honest_message(tmp_path: Path, capsys) -> None:
     )
 
     out = capsys.readouterr().out
-    assert "no trace" in out.lower(), (
-        f"Expected 'no trace' honest message in output.\nGot:\n{out}"
-    )
+    assert "no trace" in out.lower(), f"Expected 'no trace' honest message in output.\nGot:\n{out}"
 
 
 def test_show_without_profile_unaffected(tmp_path: Path, capsys) -> None:

@@ -120,7 +120,7 @@ def _scan_artifacts(
 
     proposal = change_root / "proposal.md"
     if proposal.exists():
-        paths["proposal"] = str(proposal.relative_to(cwd))
+        paths["proposal"] = proposal.relative_to(cwd).as_posix()
         states["proposal"] = "done"
     else:
         states["proposal"] = "missing"
@@ -129,7 +129,7 @@ def _scan_artifacts(
     specs_dir = change_root / "specs"
     spec_files = sorted(specs_dir.glob("*/spec.md")) if specs_dir.exists() else []
     if spec_files:
-        paths["specs"] = str(specs_dir.relative_to(cwd))
+        paths["specs"] = specs_dir.relative_to(cwd).as_posix()
         states["specs"] = "done"
     else:
         states["specs"] = "missing"
@@ -137,7 +137,7 @@ def _scan_artifacts(
 
     design = change_root / "design.md"
     if design.exists():
-        paths["design"] = str(design.relative_to(cwd))
+        paths["design"] = design.relative_to(cwd).as_posix()
         states["design"] = "done"
     else:
         states["design"] = "missing"
@@ -145,7 +145,7 @@ def _scan_artifacts(
 
     tasks = change_root / "tasks.md"
     if tasks.exists():
-        paths["tasks"] = str(tasks.relative_to(cwd))
+        paths["tasks"] = tasks.relative_to(cwd).as_posix()
         text = tasks.read_text(encoding="utf-8")
         has_unchecked = bool(re.search(r"^\s*-\s\[\s\]", text, re.MULTILINE))
         states["tasks"] = "partial" if has_unchecked else "done"
@@ -157,7 +157,7 @@ def _scan_artifacts(
 
     verify = change_root / "verify-report.md"
     if verify.exists():
-        paths["verify-report"] = str(verify.relative_to(cwd))
+        paths["verify-report"] = verify.relative_to(cwd).as_posix()
         verdict, reasons = parse_verify_report(verify)
         if verdict == "missing":
             blocked.append("verify_report:missing_verdict_field")
@@ -232,7 +232,7 @@ def Resolve(change: str | None, *, cwd: str) -> Status:
     return Status(
         changeName=change,
         artifactStore=artifact_store,
-        changeRoot=str(change_root.relative_to(cwd_path)),
+        changeRoot=change_root.relative_to(cwd_path).as_posix(),
         artifactPaths=paths,
         artifacts=artifacts,
         applyState=apply_state,

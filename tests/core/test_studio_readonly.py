@@ -61,11 +61,7 @@ def _seed_session_with_decision(root: Path, decision_id: str, rationale: str) ->
     SessionStore(root).create_session(session)
 
     run_dir = (
-        resolve_workspace_path(root, StorageMode.local)
-        / "sessions"
-        / sid
-        / "runs"
-        / "run-001"
+        resolve_workspace_path(root, StorageMode.local) / "sessions" / sid / "runs" / "run-001"
     )
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "run.json").write_text(
@@ -123,9 +119,7 @@ def test_secret_redacted_before_display(tmp_path: Path) -> None:
 
     secret = "AKIAIOSFODNN7EXAMPLE"
     decision_id = "d-secret-redact"
-    _seed_session_with_decision(
-        tmp_path, decision_id, rationale=f"deploy with {secret}"
-    )
+    _seed_session_with_decision(tmp_path, decision_id, rationale=f"deploy with {secret}")
     client = TestClient(create_v2_app(root=tmp_path))
     resp = client.get(f"/api/v2/decision_log/{decision_id}")
     assert resp.status_code == 200, resp.text

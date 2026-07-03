@@ -67,11 +67,7 @@ def test_context_modules_route_through_paths(module_path: str) -> None:
     per-module pin ensures the representative Phase-1 migration set stays
     clean so commit 016's full-tree acceptance gate is reachable.
     """
-    findings = [
-        (p, ln, snip)
-        for (p, ln, snip) in scan_hardcoded_paths()
-        if p == module_path
-    ]
+    findings = [(p, ln, snip) for (p, ln, snip) in scan_hardcoded_paths() if p == module_path]
     assert findings == [], (
         f"hardcoded paths detected in {module_path}: "
         f"{[(ln, snip[:60]) for _, ln, snip in findings]}"

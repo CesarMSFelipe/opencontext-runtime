@@ -41,9 +41,7 @@ class GateReport:
 
 def evaluate_gates(gates: list[tuple[str, GateOutcome]]) -> GateReport:
     """Evaluate a flat list of ``(name, outcome)`` gates AND-combined."""
-    return GateReport(
-        results=tuple(GateResult(name=n, outcome=o) for n, o in gates)
-    )
+    return GateReport(results=tuple(GateResult(name=n, outcome=o) for n, o in gates))
 
 
 __all__ = ["GateOutcome", "GateReport", "GateResult", "evaluate_gates"]

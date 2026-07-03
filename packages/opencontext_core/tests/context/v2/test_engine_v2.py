@@ -9,12 +9,27 @@ from opencontext_core.context.v2.receipt import ContextReceipt
 
 def _sample_items() -> list[dict]:
     return [
-        {"id": "a", "content": "auth login flow",
-         "recency": 0.9, "relevance": 0.9, "confidence": 0.8},
-        {"id": "b", "content": "weather forecast api",
-         "recency": 0.3, "relevance": 0.1, "confidence": 0.4},
-        {"id": "c", "content": "auth token validation",
-         "recency": 0.7, "relevance": 0.7, "confidence": 0.9},
+        {
+            "id": "a",
+            "content": "auth login flow",
+            "recency": 0.9,
+            "relevance": 0.9,
+            "confidence": 0.8,
+        },
+        {
+            "id": "b",
+            "content": "weather forecast api",
+            "recency": 0.3,
+            "relevance": 0.1,
+            "confidence": 0.4,
+        },
+        {
+            "id": "c",
+            "content": "auth token validation",
+            "recency": 0.7,
+            "relevance": 0.7,
+            "confidence": 0.9,
+        },
     ]
 
 

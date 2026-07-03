@@ -46,9 +46,7 @@ def test_provenance_names_layer_for_yaml_override(
 
     out = capsys.readouterr().out
     # The provenance section must name 'project' as the layer for these keys
-    assert "project" in out, (
-        f"Expected the layer name 'project' in provenance output.\nGot:\n{out}"
-    )
+    assert "project" in out, f"Expected the layer name 'project' in provenance output.\nGot:\n{out}"
 
 
 def test_provenance_shows_memory_provider_key(

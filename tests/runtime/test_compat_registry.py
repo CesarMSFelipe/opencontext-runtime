@@ -56,9 +56,7 @@ def test_all_v2_flags_are_registered_in_ledger(flag: str) -> None:
     the internal flag catalog stays consistent.
     """
     dotted = f"runtime.{flag}"
-    matches = [
-        m for m in MIGRATION_LEDGER.modules if m.flag in {flag, dotted}
-    ]
+    matches = [m for m in MIGRATION_LEDGER.modules if m.flag in {flag, dotted}]
     assert matches, f"no MIGRATION_LEDGER entry with flag={flag!r}"
     entry = matches[0]
     assert entry.state is MigrationState.legacy, (

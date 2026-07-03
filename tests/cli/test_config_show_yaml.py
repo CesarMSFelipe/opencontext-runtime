@@ -51,14 +51,10 @@ def test_config_show_renders_project_yaml_section(
     assert "storage.mode" in out or "mode" in out, (
         f"Expected storage.mode to appear in output.\nGot:\n{out}"
     )
-    assert "flow_mode" in out, (
-        f"Expected sdd.flow_mode to appear in output.\nGot:\n{out}"
-    )
+    assert "flow_mode" in out, f"Expected sdd.flow_mode to appear in output.\nGot:\n{out}"
 
 
-def test_config_show_no_yaml_graceful(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
+def test_config_show_no_yaml_graceful(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     """config show with no opencontext.yaml must emit a graceful 'no project config' line."""
     # tmp_path has no opencontext.yaml
     show_config(root=tmp_path)
@@ -70,9 +66,7 @@ def test_config_show_no_yaml_graceful(
     )
 
 
-def test_config_show_renders_models_roles(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
+def test_config_show_renders_models_roles(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     """config show must render models.roles when present in opencontext.yaml."""
     _write_project_yaml(tmp_path)
 

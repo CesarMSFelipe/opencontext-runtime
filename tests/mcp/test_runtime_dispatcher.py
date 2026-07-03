@@ -121,9 +121,7 @@ def test_start_session_delegates_to_runtime_api(tmp_path: Path) -> None:
 
     rd = _import_dispatcher()
 
-    fake_session = SessionRef(
-        session_id="sess-mcp", status="created", session_path=str(tmp_path)
-    )
+    fake_session = SessionRef(session_id="sess-mcp", status="created", session_path=str(tmp_path))
     captured: dict[str, object] = {}
 
     class FakeApi:

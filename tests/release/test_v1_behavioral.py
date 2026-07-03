@@ -241,8 +241,7 @@ def test_simulate_returns_cost_confidence_risk() -> None:
     plan = {"steps": [{"node": "explore"}, {"node": "propose"}]}
     report = scheduler.simulate(plan)
     assert report is not None
-    assert hasattr(report, "schema_version"), \
-        "SimulationReport must carry a schema_version field"
+    assert hasattr(report, "schema_version"), "SimulationReport must carry a schema_version field"
 
 
 def test_recommendation_does_not_auto_apply() -> None:

@@ -35,17 +35,13 @@ def _make_pre_apply_state(
         for p in OC_NEW_FLOW
     ]
     identity = ChangeIdentity.from_task("sdd-strict-test")
-    state = OcNewRunState(
-        identity=identity, task="sdd-strict-test", phases=phases, config=config
-    )
+    state = OcNewRunState(identity=identity, task="sdd-strict-test", phases=phases, config=config)
 
     # Seed required artifacts for 'apply' so _missing_artifacts passes.
     run_dir = tmp_path / ".opencontext" / "runs" / identity.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     for artifact in ["approval.json", "tasks.md"]:
-        (run_dir / artifact).write_text(
-            json.dumps({"status": "approved"}), encoding="utf-8"
-        )
+        (run_dir / artifact).write_text(json.dumps({"status": "approved"}), encoding="utf-8")
 
     return conductor, state, identity.run_id
 

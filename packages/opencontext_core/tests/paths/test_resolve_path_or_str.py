@@ -37,9 +37,7 @@ def test_path_argument_accepted_without_warning() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
         storage = resolve_storage_path(Path("/tmp/opencontext-public-1"), StorageMode.local)
-        workspace = resolve_workspace_path(
-            Path("/tmp/opencontext-public-1"), StorageMode.local
-        )
+        workspace = resolve_workspace_path(Path("/tmp/opencontext-public-1"), StorageMode.local)
     assert isinstance(storage, Path)
     assert isinstance(workspace, Path)
 
@@ -68,9 +66,9 @@ def test_str_argument_accepted_with_deprecation_warning() -> None:
 
     deprecation_warnings = [w for w in caught if issubclass(w.category, DeprecationWarning)]
     assert deprecation_warnings, "expected a DeprecationWarning on str input"
-    assert any(
-        "pathlib.Path" in str(w.message) for w in deprecation_warnings
-    ), "warning text must hint at pathlib.Path"
+    assert any("pathlib.Path" in str(w.message) for w in deprecation_warnings), (
+        "warning text must hint at pathlib.Path"
+    )
     assert isinstance(storage, Path)
     assert isinstance(workspace, Path)
 

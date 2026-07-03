@@ -326,9 +326,7 @@ class OpenContextRuntime:
                 # (written by write_manifest above), it was self-created by the
                 # current OC install — not alien legacy state from a previous
                 # tool. Only emit the warning for paths we did not create.
-                _owned = (
-                    _legacy.storage_path is not None and is_owned(_legacy.storage_path)
-                ) or (
+                _owned = (_legacy.storage_path is not None and is_owned(_legacy.storage_path)) or (
                     _legacy.workspace_path is not None and is_owned(_legacy.workspace_path)
                 )
                 if not _owned:

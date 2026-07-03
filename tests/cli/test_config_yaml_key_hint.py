@@ -1,4 +1,4 @@
-"""F3: config set/get unknown yaml-section keys must emit an opencontext.yaml hint and exit non-zero.
+"""F3: config set/get on unknown yaml-section keys must hint at opencontext.yaml.
 
 Keys that start with known yaml section prefixes (runtime., memory., storage., sdd.,
 context., models., security.) but are not in the 22-key CONFIG_PATHS whitelist live in
@@ -50,9 +50,7 @@ def test_config_get_yaml_section_key_exits_nonzero(
     )
 
 
-def test_config_set_models_key_exits_nonzero(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
+def test_config_set_models_key_exits_nonzero(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     """config set models.phases.apply must show yaml hint and exit non-zero."""
     with pytest.raises(SystemExit) as exc_info:
         config_cmd._config_set("models.phases.apply", "opus")

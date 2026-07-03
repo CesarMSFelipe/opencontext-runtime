@@ -65,11 +65,14 @@ def _budget_hash(budget: int) -> str:
 def _confidence(items: list[dict[str, Any]]) -> float:
     if not items:
         return 0.0
-    total = sum(usefulness(
-        relevance=float(it.get("relevance", 0.0)),
-        freshness=float(it.get("recency", 0.0)),
-        confidence=float(it.get("confidence", 0.0)),
-    ) for it in items)
+    total = sum(
+        usefulness(
+            relevance=float(it.get("relevance", 0.0)),
+            freshness=float(it.get("recency", 0.0)),
+            confidence=float(it.get("confidence", 0.0)),
+        )
+        for it in items
+    )
     return round(min(1.0, total / max(1, len(items))), 6)
 
 

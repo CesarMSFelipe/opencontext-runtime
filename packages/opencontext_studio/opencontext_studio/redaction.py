@@ -32,10 +32,7 @@ def mask(value: Any) -> Any:
     from opencontext_core.studio.redaction import redact_value as _core_redact
 
     if isinstance(value, dict):
-        return {
-            k: ("***REDACTED***" if k in _MASK_KEYS else mask(v))
-            for k, v in value.items()
-        }
+        return {k: ("***REDACTED***" if k in _MASK_KEYS else mask(v)) for k, v in value.items()}
     if isinstance(value, list):
         return [mask(item) for item in value]
     if isinstance(value, str):

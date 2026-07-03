@@ -520,9 +520,7 @@ class AcceptanceEvaluator:
         )
 
     # -- A: the ten mandatory benchmark gates ---------------------------------
-    def _gate_a_from_reports(
-        self, suite_reports: list[Any]
-    ) -> list[GateResult]:
+    def _gate_a_from_reports(self, suite_reports: list[Any]) -> list[GateResult]:
         """Translate pre-run suite reports into §A gate results."""
         out: list[GateResult] = []
         for report in suite_reports:
@@ -537,9 +535,7 @@ class AcceptanceEvaluator:
         return out
 
     # B4 helper — derive §B functional evidence from §A suite outcomes.
-    def _derive_functional_from_suites(
-        self, suite_reports: list[Any]
-    ) -> dict[str, _StatusInput]:
+    def _derive_functional_from_suites(self, suite_reports: list[Any]) -> dict[str, _StatusInput]:
         """Map §A suite results to §B functional behaviour gate evidence.
 
         Only suites listed in ``SUITE_TO_FUNCTIONAL`` contribute evidence.

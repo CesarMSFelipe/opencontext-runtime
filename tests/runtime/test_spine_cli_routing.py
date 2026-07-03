@@ -46,9 +46,7 @@ def test_flag_is_migrated_after_c15(tmp_path: Path) -> None:
     assert is_migrated_flag("rt-spine") is True
 
 
-def test_flag_on_uses_spine(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_flag_on_uses_spine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``is_migrated_flag('rt-spine') is True`` -> spine branch runs.
 
     We patch ``compat.is_migrated_flag`` to return True, then stub
@@ -84,9 +82,7 @@ def test_flag_on_uses_spine(
     assert sequence == ["__init__", "start_session", "run"], sequence
 
 
-def test_spine_is_the_only_path_after_c15(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_spine_is_the_only_path_after_c15(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """C15: the spine (RuntimeApi) is the ONLY execution path; no legacy branch remains.
 
     After the C15 flip, handle_run_exec no longer has a legacy OC Flow branch.
@@ -94,9 +90,7 @@ def test_spine_is_the_only_path_after_c15(
     """
     from opencontext_core.runtime.api import RunResult, SessionRef
 
-    fake_session = SessionRef(
-        session_id="sess-c15", status="created", session_path=str(tmp_path)
-    )
+    fake_session = SessionRef(session_id="sess-c15", status="created", session_path=str(tmp_path))
     fake_result = RunResult(run_id="run-c15", status="completed", legacy=None)
 
     class SpineOnlyApi:
@@ -125,9 +119,7 @@ def test_spine_routes_via_start_session_then_run(
     """
     from opencontext_core.runtime.api import RunResult, SessionRef
 
-    fake_session = SessionRef(
-        session_id="sess-x", status="created", session_path=str(tmp_path)
-    )
+    fake_session = SessionRef(session_id="sess-x", status="created", session_path=str(tmp_path))
     fake_result = RunResult(run_id="run-x", status="completed", legacy=None)
 
     sequence: list[str] = []

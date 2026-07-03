@@ -73,6 +73,5 @@ def test_studio_imports_only_public_contracts() -> None:
             for path, module, line, names in offending
         )
         raise AssertionError(
-            "opencontext_studio must only import from the public contract allowlist:\n"
-            + formatted
+            "opencontext_studio must only import from the public contract allowlist:\n" + formatted
         )

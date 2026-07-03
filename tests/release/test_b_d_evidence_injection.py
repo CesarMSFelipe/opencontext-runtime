@@ -33,11 +33,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _SELF_MEASURABLE_BEHAVIOURS: frozenset[str] = frozenset(
     {
         # Suite-derived (SUITE_TO_FUNCTIONAL mapping):
-        *(
-            behaviour
-            for behaviours in SUITE_TO_FUNCTIONAL.values()
-            for behaviour in behaviours
-        ),
+        *(behaviour for behaviours in SUITE_TO_FUNCTIONAL.values() for behaviour in behaviours),
         # Self-checkable (file probe, no suite needed):
         "pyz-artifact-smoke",
     }
@@ -78,9 +74,7 @@ def test_partial_evidence_only_moves_evidenced_gates(tmp_path: Path) -> None:
         assert statuses[name] is GateStatus.MET, f"{name} not MET after explicit injection"
     # Gates NOT self-measurable AND NOT in the injected five remain NOT_MEASURED.
     non_derivable_non_injected = [
-        n
-        for n in FUNCTIONAL_BEHAVIOURS
-        if n not in _SELF_MEASURABLE_BEHAVIOURS and n not in five
+        n for n in FUNCTIONAL_BEHAVIOURS if n not in _SELF_MEASURABLE_BEHAVIOURS and n not in five
     ]
     for name in non_derivable_non_injected:
         assert statuses[name] is GateStatus.NOT_MEASURED, (

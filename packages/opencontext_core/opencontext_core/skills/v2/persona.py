@@ -20,9 +20,7 @@ class Persona:
 
     def check_tool(self, tool: str) -> None:
         if tool not in self._allowed:
-            raise ToolNotAllowedError(
-                f"persona {self.name!r} cannot use tool {tool!r}"
-            )
+            raise ToolNotAllowedError(f"persona {self.name!r} cannot use tool {tool!r}")
 
     @property
     def allowed_tools(self) -> tuple[str, ...]:

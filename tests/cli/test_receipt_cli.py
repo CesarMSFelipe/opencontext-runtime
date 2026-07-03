@@ -17,9 +17,7 @@ import pytest
 from opencontext_cli.commands.receipt_cmd import handle_receipt
 
 
-def _write_phase_receipt(
-    root: Path, run_id: str, receipt_id: str, phase: str = "apply"
-) -> Path:
+def _write_phase_receipt(root: Path, run_id: str, receipt_id: str, phase: str = "apply") -> Path:
     """Write a minimal PhaseReceipt fixture under .opencontext/runs/<run_id>/receipts/."""
     receipts_dir = root / ".opencontext" / "runs" / run_id / "receipts"
     receipts_dir.mkdir(parents=True, exist_ok=True)
@@ -126,9 +124,7 @@ def _write_phase_receipt_sessions_layout(
     phase: str = "apply",
 ) -> Path:
     """Write a PhaseReceipt under sessions/<session_id>/runs/<run_id>/receipts/."""
-    receipts_dir = (
-        root / ".opencontext" / "sessions" / session_id / "runs" / run_id / "receipts"
-    )
+    receipts_dir = root / ".opencontext" / "sessions" / session_id / "runs" / run_id / "receipts"
     receipts_dir.mkdir(parents=True, exist_ok=True)
     jsonl_path = receipts_dir / "receipts.jsonl"
     receipt = {
@@ -159,9 +155,7 @@ def test_receipt_list_finds_oc_flow_sessions_layout(
     This is the layout oc_flow (OCFlowRunner) and RuntimeApi._durable_apply use.
     The previous implementation only scanned .opencontext/runs/* and missed this path.
     """
-    _write_phase_receipt_sessions_layout(
-        tmp_path, "sess-oc-001", "run-oc-001", "rcpt-oc-001"
-    )
+    _write_phase_receipt_sessions_layout(tmp_path, "sess-oc-001", "run-oc-001", "rcpt-oc-001")
 
     handle_receipt(SimpleNamespace(receipt_action="list", root=tmp_path, json=True))
 
@@ -183,9 +177,7 @@ def test_receipt_show_finds_oc_flow_sessions_layout(
     )
 
     handle_receipt(
-        SimpleNamespace(
-            receipt_action="show", run_id="rcpt-oc-002", root=tmp_path, json=True
-        )
+        SimpleNamespace(receipt_action="show", run_id="rcpt-oc-002", root=tmp_path, json=True)
     )
 
     out = capsys.readouterr().out.strip()
@@ -202,9 +194,7 @@ def test_receipt_list_finds_both_legacy_and_sessions_layout(
     # Legacy harness layout
     _write_phase_receipt(tmp_path, "run-legacy-001", "rcpt-legacy-001")
     # OC Flow sessions layout
-    _write_phase_receipt_sessions_layout(
-        tmp_path, "sess-oc-003", "run-oc-003", "rcpt-oc-003"
-    )
+    _write_phase_receipt_sessions_layout(tmp_path, "sess-oc-003", "run-oc-003", "rcpt-oc-003")
 
     handle_receipt(SimpleNamespace(receipt_action="list", root=tmp_path, json=True))
 

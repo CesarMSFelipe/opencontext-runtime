@@ -39,9 +39,7 @@ ENDPOINTS: tuple[tuple[str, dict[str, Any]], ...] = (
 
 
 @pytest.mark.parametrize(("path", "expected_keys"), ENDPOINTS)
-def test_all_six_return_expected_schema(
-    client: Any, path: str, expected_keys: set[str]
-) -> None:
+def test_all_six_return_expected_schema(client: Any, path: str, expected_keys: set[str]) -> None:
     resp = client.get(path)
     assert resp.status_code == 200, resp.text
     body = resp.json()

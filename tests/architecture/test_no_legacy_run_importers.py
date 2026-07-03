@@ -71,6 +71,5 @@ def test_no_direct_run_oc_flow_cli_importers_outside_shim() -> None:
     violators = _collect_importers(_PRODUCTION_ROOTS)
     assert violators == [], (
         "The following production files import run_oc_flow_cli outside the shim "
-        f"(allowlist: {sorted(_ALLOWLIST)}):\n"
-        + "\n".join(f"  {v}" for v in violators)
+        f"(allowlist: {sorted(_ALLOWLIST)}):\n" + "\n".join(f"  {v}" for v in violators)
     )

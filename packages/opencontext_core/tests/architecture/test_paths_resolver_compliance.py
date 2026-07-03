@@ -121,12 +121,8 @@ def test_grep_finds_zero_bypassers_after_migration(tmp_path) -> None:
 
 def test_rewriter_importable() -> None:
     """The rewriter module is importable as documented."""
-    mod = importlib.import_module(
-        "opencontext_core.paths._paths_cookie_cutter"
-    )
-    assert hasattr(mod, "rewrite_source"), (
-        "_paths_cookie_cutter must expose rewrite_source"
-    )
+    mod = importlib.import_module("opencontext_core.paths._paths_cookie_cutter")
+    assert hasattr(mod, "rewrite_source"), "_paths_cookie_cutter must expose rewrite_source"
     assert hasattr(mod, "plan_rewrites"), (
         "_paths_cookie_cutter must expose plan_rewrites (A6 dry-run)"
     )

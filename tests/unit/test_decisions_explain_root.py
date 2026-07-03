@@ -17,9 +17,7 @@ def _make_run_dir(base: Path, run_id: str, decisions: list[dict]) -> Path:
     """Write a minimal decisions.json for a run and return the run directory."""
     run_dir = base / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "decisions.json").write_text(
-        json.dumps({"decisions": decisions}), encoding="utf-8"
-    )
+    (run_dir / "decisions.json").write_text(json.dumps({"decisions": decisions}), encoding="utf-8")
     (run_dir / "state.json").write_text("{}", encoding="utf-8")
     return run_dir
 
@@ -78,9 +76,7 @@ def test_decisions_explain_returns_output(
 
 def test_decisions_explain_unknown_id_exits_nonzero(tmp_path: Path) -> None:
     """decisions explain <nonexistent_id> exits non-zero with readable message."""
-    code = _run_decisions(
-        ["decisions", "explain", "nonexistent-run", "--root", str(tmp_path)]
-    )
+    code = _run_decisions(["decisions", "explain", "nonexistent-run", "--root", str(tmp_path)])
     assert code != 0
 
 
@@ -98,25 +94,45 @@ def test_decisions_explain_no_traceback_on_unknown(
 # ---------------------------------------------------------------------------
 
 
-def test_decisions_list_with_root(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_decisions_list_with_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """decisions list --root works and limits scope to the given root."""
-    _make_session(tmp_path, "s1", "run_a", [{"kind": "skill", "selected": "x",
-                                              "governed_by": "", "rationale": "",
-                                              "alternatives": [], "confidence": 1.0,
-                                              "inputs": {}}])
+    _make_session(
+        tmp_path,
+        "s1",
+        "run_a",
+        [
+            {
+                "kind": "skill",
+                "selected": "x",
+                "governed_by": "",
+                "rationale": "",
+                "alternatives": [],
+                "confidence": 1.0,
+                "inputs": {},
+            }
+        ],
+    )
     code = _run_decisions(["decisions", "list", "--root", str(tmp_path)])
     assert code == 0
 
 
-def test_decisions_show_with_root(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_decisions_show_with_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """decisions show <run_id> --root works without error."""
-    _make_session(tmp_path, "s1", "run_b", [{"kind": "context", "selected": "y",
-                                              "governed_by": "", "rationale": "",
-                                              "alternatives": [], "confidence": 1.0,
-                                              "inputs": {}}])
+    _make_session(
+        tmp_path,
+        "s1",
+        "run_b",
+        [
+            {
+                "kind": "context",
+                "selected": "y",
+                "governed_by": "",
+                "rationale": "",
+                "alternatives": [],
+                "confidence": 1.0,
+                "inputs": {},
+            }
+        ],
+    )
     code = _run_decisions(["decisions", "show", "run_b", "--root", str(tmp_path)])
     assert code == 0
