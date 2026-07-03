@@ -67,3 +67,15 @@ follow_imports = "skip"
 [[tool.mypy.overrides]]
 module = "uvicorn.*"
 ignore_missing_imports = true
+
+# opencontext_studio is an optional package not installed in the mypy check
+# targets (core/api/cli/profiles). Guards are try/except ImportError at runtime.
+[[tool.mypy.overrides]]
+module = "opencontext_studio.*"
+ignore_missing_imports = true
+follow_imports = "skip"
+
+# fcntl is POSIX-only; write_queue.py guards with try/except ImportError for Windows.
+[[tool.mypy.overrides]]
+module = "fcntl"
+ignore_missing_imports = true
