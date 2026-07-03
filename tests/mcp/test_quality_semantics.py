@@ -21,10 +21,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from opencontext_core.quality.report import QualityReport
 
 import opencontext_core.quality.languages as languages_mod
 from opencontext_core.mcp_stdio import MCPServer
+from opencontext_core.quality.report import QualityReport
 
 _TOOL = "opencontext_quality"
 

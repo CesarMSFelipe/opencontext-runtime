@@ -31,6 +31,8 @@ jobs:
           python -m pip install -r requirements-ci.txt
           python -m pip install -e packages/opencontext_core
           python -m pip install -e packages/opencontext_profiles
+          python -m pip install -e packages/opencontext_memory
+          python -m pip install -e packages/opencontext_sdd
           python -m pip install -e packages/opencontext_cli
           python -m pip install -e packages/opencontext_api
       - name: Layering guard (doc-58)
@@ -55,6 +57,8 @@ jobs:
           python -m pip install -r requirements-ci.txt
           python -m pip install -e packages/opencontext_core
           python -m pip install -e packages/opencontext_profiles
+          python -m pip install -e packages/opencontext_memory
+          python -m pip install -e packages/opencontext_sdd
           python -m pip install -e packages/opencontext_cli
           python -m pip install -e packages/opencontext_api
       - name: Full benchmark suite (run_all)
