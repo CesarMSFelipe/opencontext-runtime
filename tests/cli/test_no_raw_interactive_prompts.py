@@ -4,8 +4,8 @@ Two crashes and one hang shipped because TTY-only code used ``Prompt.ask`` /
 ``Confirm.ask`` / ``input()`` directly and the test suite never exercised those
 paths. This scans the live source for those raw calls so a regression fails in
 CI instead of in a user's terminal. The single allowed home for the raw calls is
-``prompts.py`` itself (the wrapper). Numeric value entry via ``IntPrompt.ask`` is
-allowed — it is a value, not a menu.
+``prompts.py`` itself (the wrapper). Numeric value entry goes through
+``prompts.int_input`` — raw ``IntPrompt.ask`` is banned too.
 """
 
 from __future__ import annotations
@@ -13,14 +13,15 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-# Word-boundaried so IntPrompt.ask / RichConfirm.ask don't match; input() only
-# when it's a bare builtin call, not a ``something.input(`` method.
+# ``(?<!Int)Prompt.ask`` would double-count IntPrompt.ask (it has its own
+# pattern); input() only matches a bare builtin call, not ``something.input(``.
 _PATTERNS = [
-    re.compile(r"\bPrompt\.ask\b"),
+    re.compile(r"(?<!Int)\bPrompt\.ask\b"),
+    re.compile(r"\bIntPrompt\.ask\b"),
     re.compile(r"\bConfirm\.ask\b"),
     # The dx BrandConsole has no .ask(); calling it crashes at runtime. Interactive
-    # input must go through prompts.* — not the console. (runtime.ask / IntPrompt.ask
-    # are fine: an LLM query and a numeric value, neither a user menu.)
+    # input must go through prompts.* — not the console. (runtime.ask is fine: an
+    # LLM query, not a user menu.)
     re.compile(r"\bconsole\.ask\s*\("),
     re.compile(r"(?<![\w.])input\s*\("),
 ]

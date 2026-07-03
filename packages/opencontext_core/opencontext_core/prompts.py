@@ -26,6 +26,7 @@ __all__ = [
     "SEPARATOR",
     "checkbox",
     "confirm",
+    "int_input",
     "pause",
     "secret",
     "select",
@@ -208,6 +209,47 @@ def text(message: str, *, default: str = "", instruction: str | None = None) -> 
     from rich.prompt import Prompt
 
     return Prompt.ask(message, default=default)
+
+
+def int_input(
+    message: str,
+    *,
+    default: int,
+    min_value: int | None = None,
+    max_value: int | None = None,
+    instruction: str | None = None,
+) -> int:
+    """Integer input with range clamping and the standard degradation path.
+
+    Values outside ``[min_value, max_value]`` are clamped to the nearest bound
+    instead of raising, so a mistyped number never aborts a wizard run.
+    """
+
+    def _clamp(value: int) -> int:
+        if min_value is not None and value < min_value:
+            return min_value
+        if max_value is not None and value > max_value:
+            return max_value
+        return value
+
+    iq = _inquirer()
+    if iq is not None and _is_tty():
+        try:
+            kwargs: dict[str, Any] = {"message": message, "default": default}
+            if min_value is not None:
+                kwargs["min_allowed"] = min_value
+            if max_value is not None:
+                kwargs["max_allowed"] = max_value
+            if instruction:
+                kwargs["long_instruction"] = instruction
+            return _clamp(int(iq.number(**kwargs).execute()))
+        except Exception:
+            pass
+    if not _is_tty():
+        return _clamp(int(default))
+    from rich.prompt import IntPrompt
+
+    return _clamp(int(IntPrompt.ask(message, default=default)))
 
 
 def secret(message: str) -> str:

@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from rich.console import Console
-from rich.prompt import IntPrompt
 from rich.table import Table
 
 from opencontext_core import prompts
@@ -46,19 +45,9 @@ def _ask_choice(question: str, choices: list[str], default: int = 0) -> str:
 
 
 def _ask_int(question: str, default: int, min_val: int = 1, max_val: int = 1000000) -> int:
-    """Ask for an integer value."""
+    """Ask for an integer value via the shared prompt primitives."""
 
-    result = IntPrompt.ask(
-        f"\n[bold]{question}[/]",
-        default=default,
-    )
-    if result < min_val:
-        console.print(f"[yellow]Value too low. Using minimum: {min_val}[/]")
-        return min_val
-    if result > max_val:
-        console.print(f"[yellow]Value too high. Using maximum: {max_val}[/]")
-        return max_val
-    return result
+    return prompts.int_input(question, default=default, min_value=min_val, max_value=max_val)
 
 
 def _print_section(title: str) -> None:

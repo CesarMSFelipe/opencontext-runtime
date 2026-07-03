@@ -60,6 +60,32 @@ def test_checkbox_non_tty_empty_when_no_defaults(no_tty: None) -> None:
     assert prompts.checkbox("m", [("a", "A"), ("b", "B")]) == []
 
 
+# ── int_input ────────────────────────────────────────────────────────────
+
+
+def test_int_input_non_tty_returns_default(no_tty: None) -> None:
+    assert prompts.int_input("budget", default=3000) == 3000
+
+
+def test_int_input_non_tty_clamps_default_to_bounds(no_tty: None) -> None:
+    assert prompts.int_input("n", default=0, min_value=10) == 10
+    assert prompts.int_input("n", default=99, max_value=50) == 50
+    assert prompts.int_input("n", default=25, min_value=10, max_value=50) == 25
+
+
+def test_int_input_tty_fallback_clamps_out_of_range(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A TTY without InquirerPy degrades to the rich integer prompt; answers
+    # outside the [min, max] window are clamped instead of crashing the wizard.
+    import rich.prompt
+
+    monkeypatch.setattr(prompts, "_is_tty", lambda: True)
+    monkeypatch.setattr(prompts, "_inquirer", lambda: None)
+    monkeypatch.setattr(rich.prompt.IntPrompt, "ask", lambda *a, **k: 5)
+    assert prompts.int_input("n", default=20, min_value=10, max_value=100) == 10
+    monkeypatch.setattr(rich.prompt.IntPrompt, "ask", lambda *a, **k: 500)
+    assert prompts.int_input("n", default=20, min_value=10, max_value=100) == 100
+
+
 # ── confirm / text / secret / pause ──────────────────────────────────────
 
 
