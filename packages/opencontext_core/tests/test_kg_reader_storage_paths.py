@@ -182,3 +182,34 @@ class TestGraphScreenDataSource:
         mod = _load_graph_screen()
         _make_kg_db(_legacy_db(user_mode_root))
         assert mod.pick_focus(user_mode_root) in {"n1", "n2"}
+
+
+# ---------------------------------------------------------------------------
+# Indexer checkpoint co-location
+# ---------------------------------------------------------------------------
+
+
+class TestIndexerCheckpointLocation:
+    def test_checkpoint_written_beside_kg_db(self, user_mode_root: Path) -> None:
+        """The resume checkpoint must live beside the KG db it checkpoints.
+
+        In user mode the KG db is under XDG; writing the checkpoint into the
+        legacy in-repo layout pollutes the repo with a stray ``.storage/``
+        directory — the exact thing user mode exists to prevent.
+        """
+        from opencontext_core.config import ProjectIndexConfig
+        from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+        from opencontext_core.indexing.project_indexer import ProjectIndexer
+
+        (user_mode_root / "mod.py").write_text("def alpha():\n    return 1\n", encoding="utf-8")
+        kg_db = _user_db(user_mode_root)
+        kg_db.parent.mkdir(parents=True, exist_ok=True)
+        kg = KnowledgeGraph(db_path=kg_db)
+        indexer = ProjectIndexer(
+            ProjectIndexConfig(root=str(user_mode_root)),
+            "proj",
+            knowledge_graph=kg,
+        )
+        indexer.build_manifest()
+        assert (kg_db.parent / "index_checkpoint.json").exists()
+        assert not (user_mode_root / ".storage").exists()

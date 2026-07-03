@@ -17,7 +17,6 @@ from opencontext_core.indexing.scanner import ProjectScanner, ScannedFile
 from opencontext_core.indexing.symbol_extractor import ExtractableFile, SymbolExtractor
 from opencontext_core.indexing.tree_sitter_parser import LANGUAGE_EXTENSIONS
 from opencontext_core.models.project import ProjectManifest, Symbol
-from opencontext_core.paths import StorageMode, resolve_storage_path
 from opencontext_core.project.profiles import (
     GENERIC_PROFILE,
     GenericTechnologyProfile,
@@ -73,9 +72,11 @@ class ProjectIndexer:
         # Checkpoint persists which files have been indexed so interrupted runs resume.
         kg_stats: dict[str, Any] = {"files_indexed": 0, "nodes": 0, "edges": 0}
         if self.knowledge_graph is not None:
-            checkpoint_path = (
-                resolve_storage_path(project_root, StorageMode.local) / "index_checkpoint.json"
-            )
+            # The checkpoint lives BESIDE the KG db it checkpoints, wherever the
+            # active storage mode put that db — writing it into the legacy
+            # in-repo layout would pollute user-mode repos with a stray
+            # .storage/ directory.
+            checkpoint_path = Path(self.knowledge_graph.db.db_path).parent / "index_checkpoint.json"
             # K3: checkpoint is now dict[str, float] (path → mtime); legacy list
             # format is transparently upgraded to empty dict → one-time full reindex.
             done_mtimes: dict[str, float] = _load_checkpoint(checkpoint_path)
