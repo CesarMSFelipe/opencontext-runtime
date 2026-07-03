@@ -177,16 +177,65 @@ class BrandConsole:
             console=self._console,
         )
 
-    def panel(self, content: str, title: str | None = None) -> None:
-        """Print content in a panel."""
+    def status(self, message: str, *, spinner: str = "dots") -> Any:
+        """Brand-styled spinner context manager.
+
+        Single chrome for every long-running CLI step: brand-primary message and
+        spinner. Falls back to a plain print + no-op context manager when rich
+        is unavailable, so ``with console.status(...)`` never crashes.
+        """
+        if not self._console:
+            print(message)
+            return _NoOpStatus()
+        return self._console.status(
+            f"[bold {BRAND_PRIMARY}]{message}[/]",
+            spinner=spinner,
+            spinner_style=BRAND_PRIMARY,
+        )
+
+    def panel(
+        self,
+        content: str,
+        title: str | None = None,
+        *,
+        style: str = "info",
+        fit: bool = False,
+    ) -> None:
+        """Print content in a brand-bordered panel.
+
+        ``style`` picks the border color from the brand palette: ``info``
+        (default), ``success``, ``warning``, or ``error``. ``fit=True`` sizes
+        the panel to its content (compact result banners) instead of full width.
+        """
+        border = {
+            "info": BRAND_SECONDARY,
+            "success": BRAND_SUCCESS,
+            "warning": BRAND_WARNING,
+            "error": BRAND_ERROR,
+        }.get(style, BRAND_SECONDARY)
         if self._console:
-            self._console.print(
-                Panel(content, title=title, border_style=BRAND_SECONDARY, padding=(1, 2))
-            )
+            if fit:
+                rendered = Panel.fit(content, title=title, border_style=border, padding=(0, 2))
+            else:
+                rendered = Panel(content, title=title, border_style=border, padding=(1, 2))
+            self._console.print(rendered)
         else:
             if title:
                 print(f"\n{title}:")
             print(content)
+
+
+class _NoOpStatus:
+    """No-op status context manager for when rich is not available."""
+
+    def __enter__(self) -> _NoOpStatus:
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        pass
+
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        pass
 
 
 class _NoOpProgress:
