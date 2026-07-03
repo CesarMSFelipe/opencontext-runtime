@@ -58,7 +58,7 @@ class WriteQueue:
 
             fh = open(self._lock_path, "w", encoding="utf-8")
             try:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)  # type: ignore[attr-defined]
             except Exception:
                 fh.close()
                 raise
@@ -87,7 +87,7 @@ class WriteQueue:
                 import fcntl  # POSIX-only — Windows hits ImportError below.
 
                 if getattr(self, "_cross_handle", None) is not None:
-                    fcntl.flock(self._cross_fd or -1, fcntl.LOCK_UN)
+                    fcntl.flock(self._cross_fd or -1, fcntl.LOCK_UN)  # type: ignore[attr-defined]
                     self._cross_handle.close()
             except ImportError:
                 if self._cross_fd is not None:
