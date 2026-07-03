@@ -140,10 +140,10 @@ def add_uninstall_parser(subparsers: Any) -> None:
     parser.add_argument(
         "--scope",
         choices=["workspace", "global", "all", "local"],  # local = legacy alias for workspace
-        default="workspace",
+        default=None,  # None = not given; a TTY offers a selector, otherwise 'workspace'
         help=(
             "Purge scope: 'workspace' (project state), 'global' (HOME OC state), "
-            "'all' (both). Legacy alias 'local' maps to 'workspace'."
+            "'all' (both). Legacy alias 'local' maps to 'workspace'. Default: workspace."
         ),
     )
     parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation.")
@@ -492,15 +492,52 @@ def verify_no_global_traces(agents: list[str]) -> list[str]:
     return list(dict.fromkeys(residue))
 
 
+def _select_scope_interactive(args: Any) -> None:
+    """Offer the scope choice the flags encode (``--scope`` / ``--full``).
+
+    Mutates ``args`` in place: 'full' flips ``args.full`` so the normal --full
+    path (scope=all) runs; otherwise the chosen scope is recorded on
+    ``args.scope`` exactly as if the flag had been passed.
+    """
+    choice = prompts.select(
+        "What should be uninstalled?",
+        [
+            ("workspace", "Workspace — this project's agent config and state"),
+            ("global", "Global — HOME-level OpenContext state"),
+            ("full", "Full — remove all traces (workspace + global)"),
+        ],
+        default="workspace",
+    )
+    if choice == "full":
+        args.full = True
+    else:
+        args.scope = choice
+
+
 def handle_uninstall(args: Any) -> None:
     """Remove OpenContext's managed config from the requested agents."""
     from opencontext_cli.main import _resolve_flag
 
-    scope = getattr(args, "scope", "local")
     dry_run = _resolve_flag(getattr(args, "dry_run", False), "OPENCONTEXT_DRY_RUN")
     json_output = _resolve_flag(getattr(args, "json", False), "OPENCONTEXT_JSON")
     yes = _resolve_flag(getattr(args, "yes", False), "OPENCONTEXT_YES")
     root = getattr(args, "root", ".")
+
+    # Bare interactive run (no scope flags, no automation flags) → offer the
+    # same choice the flags encode instead of silently assuming workspace.
+    # Non-TTY runs never prompt (they fall through to the existing guards).
+    if (
+        getattr(args, "scope", None) is None
+        and not getattr(args, "full", False)
+        and not getattr(args, "verify", False)
+        and not dry_run
+        and not json_output
+        and not yes
+        and sys.stdin.isatty()
+    ):
+        _select_scope_interactive(args)
+
+    scope = getattr(args, "scope", None) or "workspace"
 
     # --verify: read-only trace scan scoped to the resolved scope.
     if getattr(args, "verify", False):
@@ -556,9 +593,7 @@ def handle_uninstall(args: Any) -> None:
             sys.exit(1)
         if not yes:
             console.warning("--full will delete all OpenContext traces under the project root.")
-            if not __import__("opencontext_core.prompts", fromlist=["confirm"]).confirm(
-                "Proceed?", default=False
-            ):
+            if not prompts.confirm("Proceed?", default=False):
                 console.warning("Full uninstall cancelled.")
                 return
         effective_scope = resolve_uninstall_scope(args)
@@ -613,11 +648,12 @@ def handle_uninstall(args: Any) -> None:
         return
 
     # Destructive: require explicit confirmation unless --yes (or non-interactive
-    # JSON). Never proceed silently on a non-TTY without --yes.
+    # JSON). Never proceed silently on a non-TTY without --yes — exit 2 with a
+    # message (same convention as `config wizard --non-interactive`).
     if not yes and not json_output:
         if not sys.stdin.isatty():
-            console.warning("Refusing non-interactive uninstall; pass --yes.")
-            return
+            eprint("Refusing non-interactive uninstall; pass --yes (or --dry-run to preview).")
+            sys.exit(2)
         console.print(f"About to remove OpenContext from: [bold]{', '.join(valid)}[/]")
         if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE"):
             console.warning(
