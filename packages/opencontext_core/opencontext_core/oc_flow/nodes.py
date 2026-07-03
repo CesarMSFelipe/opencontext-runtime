@@ -95,6 +95,15 @@ class OCFlowContext:
     # inspection scope gate (no-op on a mutation task is blocking) and the post-graph
     # completion gate (a no-op mutation may never report `completed`).
     mutation_required: bool = False
+    # Memory parity (SDD ExplorePhase/ArchivePhase): when ``memory_enabled`` and a
+    # store is resolvable, gather_context folds prior memory recall into the envelope
+    # and consolidation persists the memory delta through the harvester/harness path.
+    # A missing store degrades to a recorded omission / no-op reason, never an error.
+    memory_enabled: bool = False
+    memory_store: Any | None = None  # AgentMemoryStore (duck-typed port)
+    memory_harvest_enabled: bool = False  # memory.harvest_after_run
+    memory_v2_enabled: bool = False  # runtime.memory_v2_enabled → MemoryHarness routing
+    run_id: str = ""  # run provenance carried into harvested memory records
 
     # live state produced by nodes
     init_done: bool = False
@@ -601,6 +610,10 @@ def node_gather_context(ctx: OCFlowContext) -> NodeResult:
                         token_estimate=sum(i.tokens for i in _opp_items),
                     )
     envelope = envelope.model_copy(update={"cache_hit": cache_hit})
+    # Memory recall parity (SDD ExplorePhase): fold prior memory into the envelope.
+    # A cached envelope was already folded on its original build, so skip re-folding.
+    if not cache_hit:
+        envelope = _fold_memory_recall(ctx, envelope)
     # C17 (product-closure-r13): enrich envelope with receipt provenance fields so
     # context-envelope.json carries full auditability.  All fields are optional; this
     # is additive — callers that already set these values keep them unchanged.
@@ -751,6 +764,76 @@ def _kg_v2_seed_items(ctx: OCFlowContext) -> list[ContextEnvelopeItem] | None:
         )
         for n in subgraph.nodes
     ]
+
+
+# Omission notes recorded when memory recall cannot run (silent degrade, book §8).
+_MEMORY_STORE_MISSING_NOTE = "memory enabled but no store resolvable; memory recall skipped"
+_MEMORY_RECALL_FAILED_NOTE = "memory recall failed; envelope built without memory"
+
+# How many memory records gather_context recalls (SDD ExplorePhase parity: limit=5).
+_MEMORY_RECALL_LIMIT = 5
+
+# Longest per-item summary carried into the envelope for a recalled memory record.
+_MEMORY_SUMMARY_MAX_CHARS = 240
+
+
+def _fold_memory_recall(ctx: OCFlowContext, envelope: ContextEnvelope) -> ContextEnvelope:
+    """Fold prior memory recall into the envelope (SDD ExplorePhase parity).
+
+    When memory is enabled and a store is resolvable, the task statement is
+    searched and the top-scoring, non-episodic records join the envelope as
+    ``source="memory"`` items — only while they fit the gather_context budget
+    cap. A missing store or a failing search degrades to a recorded omission,
+    never an error (memory is optional, it must not block a run).
+    """
+    if not ctx.memory_enabled:
+        return envelope
+    if ctx.memory_store is None:
+        return envelope.model_copy(
+            update={"omissions": [*envelope.omissions, _MEMORY_STORE_MISSING_NOTE]}
+        )
+    try:
+        records = ctx.memory_store.search(ctx.task, limit=_MEMORY_RECALL_LIMIT)
+    except Exception:
+        return envelope.model_copy(
+            update={"omissions": [*envelope.omissions, _MEMORY_RECALL_FAILED_NOTE]}
+        )
+    from opencontext_core.context.budgeting import estimate_tokens
+
+    budget_cap = OC_FLOW_BUDGETS["gather_context"][1]
+    candidates = sorted(
+        (r for r in records or [] if str(getattr(r, "content", "") or "").strip()),
+        key=lambda r: float(getattr(r, "confidence", 0.0) or 0.0),
+        reverse=True,
+    )
+    items = list(envelope.items)
+    total = envelope.token_estimate
+    added = False
+    for record in candidates:
+        layer = getattr(record, "layer", None)
+        if str(getattr(layer, "value", layer or "")) == "episodic":
+            # Per-run breadcrumbs carry no actionable signal (ExplorePhase filter).
+            continue
+        content = str(record.content)
+        tokens = estimate_tokens(content)
+        if total + tokens > budget_cap:
+            continue  # respect the existing envelope budget: never blow the cap
+        confidence = min(max(float(getattr(record, "confidence", 0.0) or 0.0), 0.0), 1.0)
+        items.append(
+            ContextEnvelopeItem(
+                source="memory",
+                ref=str(getattr(record, "key", "") or getattr(record, "id", "memory")),
+                summary=content[:_MEMORY_SUMMARY_MAX_CHARS],
+                tokens=tokens,
+                why_included=f"memory:score={confidence:.2f}",
+                confidence=confidence,
+            )
+        )
+        total += tokens
+        added = True
+    if not added:
+        return envelope
+    return envelope.model_copy(update={"items": items, "token_estimate": total})
 
 
 def node_plan(ctx: OCFlowContext) -> NodeResult:
@@ -984,6 +1067,112 @@ def node_escalation(ctx: OCFlowContext) -> NodeResult:
     )
 
 
+def _persist_memory_delta(ctx: OCFlowContext, memory_delta: dict[str, Any]) -> dict[str, Any]:
+    """Persist the run's memory delta via the harvester/harness (ArchivePhase parity).
+
+    Durable memory writes MUST route through ``MemoryHarvester`` — and through the
+    ``MemoryHarness`` sole writer when ``memory_v2_enabled`` — exactly like the SDD
+    ArchivePhase; this function never calls ``store.write`` directly (AVH-002).
+    Returns a harvest outcome dict recorded inside memory-delta.json: either
+    ``persisted: True`` with run provenance (``run_id``, ``origin="agent"``) or an
+    honest no-op with a reason. Best-effort: a failing harvest never blocks the run.
+    """
+    if not ctx.memory_enabled:
+        return {"persisted": False, "reason": "memory disabled (memory.enabled=false)"}
+    if ctx.memory_store is None:
+        return {"persisted": False, "reason": "no memory store resolvable for project root"}
+    if not ctx.memory_harvest_enabled:
+        return {"persisted": False, "reason": "harvest disabled (memory.harvest_after_run=false)"}
+    try:
+        from types import SimpleNamespace
+
+        from opencontext_core.memory.harvester import MemoryHarvester
+
+        harness = None
+        if ctx.memory_v2_enabled:
+            from opencontext_core.memory.harness import MemoryHarness
+
+            harness = MemoryHarness(ctx.memory_store)
+        run_id = ctx.run_id or "unknown"
+        # Duck-typed run result matching what the SDD ArchivePhase feeds the
+        # harvester (task/run_id/status + empty gate/ledger evidence for OC Flow).
+        run_result = SimpleNamespace(
+            run_id=run_id,
+            task=ctx.task,
+            status=ctx.inspection.outcome if ctx.inspection else "not_run",
+            gates=[],
+            ledgers=[],
+            artifacts=[],
+            context_omitted_paths=[],
+        )
+        harvester = MemoryHarvester(ctx.memory_store, harness=harness)
+        records = harvester.harvest(run_result)
+        outcome: dict[str, Any] = {
+            "persisted": True,
+            "run_id": run_id,
+            "origin": "agent",
+            "harvested_records": len(records),
+            "via": "harness" if harness is not None else "harvester-legacy",
+        }
+        durable_notes = memory_delta.get("durable_notes") or []
+        if durable_notes:
+            if harness is not None:
+                outcome["promoted_notes"] = _promote_durable_notes(harness, durable_notes, run_id)
+            else:
+                # Honest skip: without the harness sole writer there is no
+                # sanctioned promotion path for free-form notes from here.
+                outcome["durable_notes_skipped_reason"] = (
+                    "memory_v2 disabled; durable notes remain in memory-delta.json only"
+                )
+        return outcome
+    except Exception as exc:  # memory is optional — never block consolidation
+        return {"persisted": False, "reason": f"harvest failed: {type(exc).__name__}"}
+
+
+def _promote_durable_notes(harness: Any, durable_notes: list[str], run_id: str) -> int:
+    """Promote consolidation durable notes through the sole-writer harness.
+
+    Each note becomes a :class:`MemoryCandidate` with run provenance
+    (``run:{run_id}`` evidence + ``origin="agent"`` metadata) and runs the full
+    8-step promotion lifecycle; rejected candidates are counted out honestly.
+    """
+    from opencontext_core.memory_usability.memory_candidates import (
+        MemoryCandidate,
+        MemoryKind,
+    )
+    from opencontext_core.models.context import DataClassification
+    from opencontext_core.models.evidence import EvidenceRef
+
+    promoted = 0
+    for note in durable_notes:
+        candidate = MemoryCandidate(
+            content=str(note),
+            source=f"run:{run_id}",
+            kind=MemoryKind.FACT,  # harness re-classifies from content
+            novelty_score=0.6,
+            reuse_likelihood=0.7,
+            classification=DataClassification.INTERNAL,
+            token_cost=max(1, len(str(note)) // 4),
+            source_trust=0.7,
+            proposed_by="oc-flow-consolidation",
+            evidence_refs=[
+                EvidenceRef(
+                    source=f"run:{run_id}",
+                    source_type="run",
+                    confidence=0.7,
+                    run_id=run_id,
+                )
+            ],
+            expected_reuse="bias future oc-flow runs of similar tasks",
+            confidence=0.7,
+            metadata={"origin": "agent", "run_id": run_id},
+        )
+        receipt = harness.promote(candidate)
+        if getattr(receipt, "action", "reject") != "reject":
+            promoted += 1
+    return promoted
+
+
 def node_consolidation(ctx: OCFlowContext) -> NodeResult:
     """Finalize: deltas, summary, reindex, cost report (book §14, FLOW-14)."""
     # C11 (product-closure-r13): gate durable_notes behind PromotionPolicyV2.
@@ -1021,6 +1210,11 @@ def node_consolidation(ctx: OCFlowContext) -> NodeResult:
         "cache_hits": ctx.cache_hits,
         "changed_files": len(ctx.changed_files),
     }
+    # Persist the memory delta through the harvester/harness sole-writer path
+    # (SDD ArchivePhase parity). The outcome — persisted or an honest no-op with
+    # a reason — is recorded inside memory-delta.json (the run's evidence).
+    harvest_outcome = _persist_memory_delta(ctx, memory_delta)
+    memory_delta["harvest"] = harvest_outcome
     mem_name = _write_json(ctx.artifacts_dir / "consolidation" / "memory-delta.json", memory_delta)
     graph_name = _write_json(ctx.artifacts_dir / "consolidation" / "graph-delta.json", graph_delta)
     summary = (
@@ -1046,6 +1240,7 @@ def node_consolidation(ctx: OCFlowContext) -> NodeResult:
             "reindexed": list(ctx.changed_files),
             "cost": cost_report,
             "promotion_verdict": verdict.value,
+            "memory_persisted": bool(harvest_outcome.get("persisted", False)),
         },
         llm_tokens=_budget_for("consolidation"),
         artifacts=[mem_name, graph_name, "consolidation/summary.md"],
