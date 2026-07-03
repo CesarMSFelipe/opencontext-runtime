@@ -76,6 +76,9 @@ ignore_missing_imports = true
 follow_imports = "skip"
 
 # fcntl is POSIX-only; write_queue.py guards with try/except ImportError for Windows.
+# follow_imports=skip prevents attr-defined errors on Windows where typeshed stubs
+# exist for fcntl but omit flock/LOCK_EX/LOCK_UN.
 [[tool.mypy.overrides]]
 module = "fcntl"
 ignore_missing_imports = true
+follow_imports = "skip"
