@@ -467,9 +467,7 @@ def test_dod_journey_proves_and_meets_e2e_gate(
     # pyz-artifact-smoke is self-checked by AcceptanceEvaluator._pyz_artifact_gate()
     # when dist/opencontext.pyz is absent (built after tests in CI) — exclude it here.
     _journey_behaviours = set(FUNCTIONAL_BEHAVIOURS) - {"pyz-artifact-smoke"}
-    assert set(functional) >= _journey_behaviours, sorted(
-        _journey_behaviours - set(functional)
-    )
+    assert set(functional) >= _journey_behaviours, sorted(_journey_behaviours - set(functional))
     assert set(governance) == set(GOVERNANCE_GATES), sorted(set(GOVERNANCE_GATES) - set(governance))
 
     injected = AcceptanceEvaluator(repo_root=work).evaluate(
