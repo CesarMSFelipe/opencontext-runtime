@@ -470,6 +470,10 @@ class MCPServer:
         # Raw stdin line buffer (see _next_line): we manage line splitting ourselves
         # so select() can't strand a buffered line on a batched write.
         self._inbuf: str = ""
+        # Whether the connected client declared the MCP ``sampling`` capability at
+        # initialize. Until initialize arrives, assume it cannot sample (safe: no
+        # sampler is registered either way before initialize).
+        self.client_supports_sampling: bool = False
 
         # Tool definitions
         self.tools: dict[str, dict[str, Any]] = {
@@ -711,10 +715,24 @@ class MCPServer:
                 },
             },
             "opencontext_session_apply": {
-                "description": "Record a mutation intent on a session (governed).",
+                "description": (
+                    "Record a mutation on a session (governed). With kind='agent_edits' "
+                    "it is the agent-execute follow-up: pass payload.changed_files "
+                    "(files the agent edited itself) and OpenContext verifies them, "
+                    "records receipts, and completes the linked run."
+                ),
                 "parameters": {
                     "session_id": {"type": "string"},
                     "kind": {"type": "string", "default": "edit"},
+                    "payload": {
+                        "type": "object",
+                        "description": (
+                            "Mutation payload. For kind='agent_edits': "
+                            "{changed_files: [paths], oc_flow?: {session_id, run_id}, "
+                            "test_command?: [argv]}"
+                        ),
+                    },
+                    "root": {"type": "string", "description": "Project root (optional)"},
                 },
             },
             "opencontext_session_inspect": {
@@ -850,15 +868,23 @@ class MCPServer:
             return
 
         if method == "initialize":
+            from opencontext_core.llm.sampling_gateway import register_host_sampler
+
             server_caps: dict[str, Any] = {"tools": {}}
             client_caps = params.get("capabilities", {})
-            # If the client can sample, route the agentic loop's gateway through
-            # its selected model (MCP sampling) — zero provider config needed.
-            if isinstance(client_caps, dict) and "sampling" in client_caps:
-                from opencontext_core.llm.sampling_gateway import register_host_sampler
-
+            # Record the client's declared sampling capability. If the client can
+            # sample, route the agentic loop's gateway through its selected model
+            # (MCP sampling) — zero provider config needed. If it can NOT, clear
+            # any stale sampler: sending sampling/createMessage to a client that
+            # never answers would stall runs for the full sampling timeout.
+            self.client_supports_sampling = (
+                isinstance(client_caps, dict) and "sampling" in client_caps
+            )
+            if self.client_supports_sampling:
                 register_host_sampler(self._request_sampling)
                 server_caps["sampling"] = {}
+            else:
+                register_host_sampler(None)
             self._send_response(
                 request_id,
                 {
@@ -1135,6 +1161,31 @@ class MCPServer:
             for gate in (getattr(result.legacy, "gates", []) or [])
         ):
             out["status"] = "blocked"
+
+        # No sampler (client cannot sample) + no configured provider: the harness
+        # just ran WITHOUT an executor, so a failed/blocked verdict is a dead end
+        # the caller can never fix by retrying. Upgrade it to the agent-execute
+        # handoff: the client agent does the work itself and completes this same
+        # session via opencontext_session_apply (kind="agent_edits").
+        from opencontext_core.mcp.agent_handoff import (
+            build_workflow_agent_handoff,
+            provider_is_mock,
+        )
+
+        if (
+            out.get("status") in ("failed", "blocked", "scaffolded")
+            and get_host_sampler() is None
+            and provider_is_mock(resolved.config)
+        ):
+            out.update(
+                build_workflow_agent_handoff(
+                    root=root,
+                    task=task,
+                    workflow=workflow,
+                    session_id=ref.session_id,
+                    prior_status=str(out.get("status")),
+                )
+            )
         return out
 
     # ------------------------------------------------------------------ #

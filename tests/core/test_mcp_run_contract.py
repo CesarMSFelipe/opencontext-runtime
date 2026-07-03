@@ -73,9 +73,14 @@ def test_oc_flow_run_without_executor_cannot_complete(server: MCPServer, tmp_pat
     )
     assert _CONTRACT_KEYS <= set(out)
     assert out["workflow"] == "oc-flow"
-    assert out["status"] == "needs_executor"
+    # No provider + a client that cannot sample: never a false "completed" and no
+    # longer a bare needs_executor dead-end — the MCP layer hands the work to the
+    # client agent while the underlying flow verdict stays visible.
+    assert out["status"] == "agent_execute"
     assert out["status"] != "completed"
+    assert out["oc_flow"]["status"] == "needs_executor"
     assert out["oc_flow"]["mutation_required"] is True
+    assert out["follow_up"]["tool"] == "opencontext_session_apply"
 
 
 def test_mcp_run_dispatcher_imports_without_server_side_effects() -> None:
@@ -89,7 +94,10 @@ def test_auto_run_uses_oc_flow_selector_result(server: MCPServer, tmp_path: Path
         {"task": "Fix lint error in one file", "workflow": "auto", "root": str(tmp_path)}
     )
     assert out["selected_workflow"] == "oc-flow"
-    assert out["status"] == "needs_executor"
+    # The selector still lands on OC Flow; with no executor available the MCP
+    # layer upgrades the needs_executor verdict to the agent-execute handoff.
+    assert out["status"] == "agent_execute"
+    assert out["oc_flow"]["status"] == "needs_executor"
 
 
 def test_sdd_run_includes_phase_metadata(server: MCPServer, tmp_path: Path, monkeypatch) -> None:

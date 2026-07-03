@@ -32,7 +32,7 @@ import importlib.util
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -221,9 +221,10 @@ class _OCFlowHarness:
             return True  # config is advisory; default to enabled
 
     def run(self, workflow: str, task: str, **_kw: Any) -> Any:
-        from opencontext_core.oc_flow.cli import _resolve_executor
-        from opencontext_core.oc_flow.runner import OCFlowRunResult, OCFlowRunner
         from uuid import uuid4
+
+        from opencontext_core.oc_flow.cli import _resolve_executor
+        from opencontext_core.oc_flow.runner import OCFlowRunner, OCFlowRunResult
 
         if not self._oc_flow_enabled():
             return OCFlowRunResult(
@@ -454,6 +455,11 @@ class RuntimeApi:
                 metadata={"kind": mutation.kind},
             )
         )
+        if mutation.kind == "agent_edits":
+            # Agent-execute follow-up: the HOST AGENT already made the edits itself
+            # (MCP client without sampling + no provider). Verify + record them and
+            # complete the linked run — never a "recorded"-only skeleton answer.
+            return self._agent_edits_apply(session, mutation, bus)
         if not self._durable_artifacts:
             # Legacy skeleton path: record intent only (PR-001 behaviour).
             return ApplyResult(
@@ -464,6 +470,298 @@ class RuntimeApi:
         # B7/AVH-014: durable apply — checkpoint, apply the edits, write a patch
         # artifact + per-file ApplyReceipts + the run manifest.
         return self._durable_apply(session, mutation, bus)
+
+    # OC Flow run statuses an agent-edits follow-up is allowed to complete/retry.
+    _AGENT_COMPLETABLE_FLOW_STATUSES: ClassVar[tuple[str, ...]] = (
+        "needs_executor",
+        "needs_provider",
+        "needs_verification",
+        "blocked",
+    )
+
+    def _agent_edits_apply(
+        self, session: RuntimeSession, mutation: MutationRequest, bus: JsonlEventBus
+    ) -> ApplyResult:
+        """Verify + record edits the host agent made itself (agent-execute follow-up).
+
+        The agent-execute handoff (``opencontext_run`` with no provider and an MCP
+        client without the ``sampling`` capability) instructs the client agent to
+        edit files with its own tools and then call ``apply`` with
+        ``kind="agent_edits"`` and ``payload.changed_files``. This path:
+
+        * validates the claimed paths (root containment + existence),
+        * runs the zero-LLM local inspection over them (plus the optional
+          ``payload.test_command`` for real verification evidence),
+        * persists the inspection report + per-file receipts — into the linked OC
+          Flow run's artifact tree when ``payload.oc_flow`` names one (completing
+          that run's ``state.json``), else under the session's artifact tree,
+        * completes the session on success.
+
+        It never mutates files itself; a failed inspection leaves the run
+        retryable (call apply again after fixing).
+        """
+        import json as _json
+
+        from opencontext_core.agentic.receipt import sha256_file
+        from opencontext_core.oc_flow.completion import verification_required
+        from opencontext_core.oc_flow.inspection import run_local_inspection
+
+        root = Path(session.root)
+        payload = mutation.payload
+
+        changed = payload.get("changed_files")
+        if (
+            not isinstance(changed, list)
+            or not changed
+            or not all(isinstance(p, str) and p for p in changed)
+        ):
+            return ApplyResult(
+                applied=False,
+                status="rejected",
+                reason="payload.changed_files must be a non-empty list of file paths",
+            )
+        for rel in changed:
+            target = (root / rel).resolve()
+            try:
+                target.relative_to(root.resolve())
+            except ValueError:
+                return ApplyResult(
+                    applied=False,
+                    status="rejected",
+                    reason=f"path escapes the project root: {rel}",
+                )
+            if not target.is_file():
+                return ApplyResult(
+                    applied=False,
+                    status="rejected",
+                    reason=f"claimed changed file does not exist: {rel}",
+                )
+
+        test_command = payload.get("test_command")
+        if test_command is not None and (
+            not isinstance(test_command, list) or not all(isinstance(c, str) for c in test_command)
+        ):
+            return ApplyResult(
+                applied=False,
+                status="rejected",
+                reason="payload.test_command must be a list of argv strings",
+            )
+
+        # Resolve the linked OC Flow run (optional) BEFORE inspecting, so a stale
+        # or already-completed run is rejected without side effects.
+        oc_flow_ref = payload.get("oc_flow") or {}
+        flow_state: dict[str, Any] | None = None
+        flow_run_dir: Path | None = None
+        if isinstance(oc_flow_ref, dict) and oc_flow_ref.get("run_id"):
+            flow_run_dir = self._oc_flow_run_dir(
+                root, str(oc_flow_ref.get("session_id") or ""), str(oc_flow_ref["run_id"])
+            )
+            state_path = flow_run_dir / "state.json"
+            if not state_path.is_file():
+                return ApplyResult(
+                    applied=False,
+                    status="rejected",
+                    reason=(
+                        "no OC Flow run to complete: "
+                        f"{oc_flow_ref.get('session_id')}/{oc_flow_ref.get('run_id')}"
+                    ),
+                )
+            flow_state = _json.loads(state_path.read_text(encoding="utf-8"))
+            current = str(flow_state.get("status", ""))
+            if current not in self._AGENT_COMPLETABLE_FLOW_STATUSES:
+                return ApplyResult(
+                    applied=False,
+                    status="rejected",
+                    reason=f"OC Flow run is not awaiting an executor (status: {current})",
+                )
+
+        task_text = str((flow_state or {}).get("task") or session.task or "")
+        report = run_local_inspection(
+            root,
+            list(changed),
+            test_command=test_command,
+            run_external=bool(test_command),
+            mutation_required=True,
+        )
+        inspection_passed = report.outcome == "passed"
+        needs_verification = (
+            inspection_passed
+            and verification_required(task_text)
+            and report.verification_outcome != "passed"
+        )
+        completed = inspection_passed and not needs_verification
+        if completed:
+            status = "completed"
+            reason = "agent edits verified by local inspection" + (
+                " and targeted tests" if report.verification_outcome == "passed" else ""
+            )
+        elif needs_verification:
+            status = "needs_verification"
+            reason = (
+                "edits pass inspection but the task requires test evidence; "
+                "re-apply with payload.test_command"
+            )
+        else:
+            status = "inspection_failed"
+            reason = report.failure_summary or "local inspection failed"
+
+        receipts = [
+            {
+                "path": rel,
+                "operation": "agent_edit",
+                "changed": True,
+                "checksum_after": sha256_file((root / rel).resolve()),
+                "executed_by": "host-agent",
+                "reason": str(payload.get("note") or "agent-execute follow-up"),
+            }
+            for rel in changed
+        ]
+
+        # Persist the evidence spine (report + receipts) and, when linked, complete
+        # the OC Flow run's state.json with the honest verdict.
+        if flow_run_dir is not None and flow_state is not None:
+            if completed:
+                flow_status = "completed"
+            elif inspection_passed:
+                flow_status = "needs_verification"
+            else:
+                flow_status = "blocked"
+            self._write_oc_flow_completion(
+                flow_run_dir,
+                flow_state,
+                changed=list(changed),
+                report=report,
+                receipts=receipts,
+                status=flow_status,
+                reason=reason,
+            )
+        else:
+            self._persist_agent_apply_evidence(session.session_id, report, receipts)
+
+        bus.publish(
+            make_event(
+                session_id=session.session_id,
+                run_id=session.active_run_id,
+                type="mutation.applied" if completed else "mutation.blocked",
+                status="applied" if completed else status,
+                message=mutation.kind,
+                metadata={
+                    "changed_files": list(changed),
+                    "inspection_outcome": report.outcome,
+                    "verification_outcome": report.verification_outcome,
+                    **({"oc_flow": oc_flow_ref} if flow_run_dir is not None else {}),
+                },
+            )
+        )
+
+        flow_run_id = str(oc_flow_ref.get("run_id", "")) if flow_run_dir is not None else ""
+        if not completed:
+            return ApplyResult(
+                applied=False,
+                status=status,
+                reason=reason,
+                run_id=flow_run_id,
+                changed_files=list(changed),
+            )
+
+        run = self._ensure_active_run(session, workflow_id="agent-edits")
+        self._finalize(session, run, bus, status="completed", message=reason)
+        return ApplyResult(
+            applied=True,
+            status="completed",
+            reason=reason,
+            run_id=flow_run_id or run.run_id,
+            changed_files=list(changed),
+        )
+
+    @staticmethod
+    def _oc_flow_run_dir(root: Path, flow_session_id: str, flow_run_id: str) -> Path:
+        """The OC Flow run tree (mirrors ``OCFlowRunner._run_dir``)."""
+        from opencontext_core.paths import StorageMode, resolve_workspace_path
+
+        return (
+            resolve_workspace_path(root, StorageMode.local)
+            / "sessions"
+            / flow_session_id
+            / "runs"
+            / flow_run_id
+        )
+
+    @staticmethod
+    def _write_oc_flow_completion(
+        run_dir: Path,
+        state: dict[str, Any],
+        *,
+        changed: list[str],
+        report: Any,
+        receipts: list[dict[str, Any]],
+        status: str,
+        reason: str,
+    ) -> None:
+        """Complete (or honestly block) an awaiting OC Flow run with agent evidence.
+
+        Writes the same artifact names the runner's own nodes write
+        (``inspection-report.json`` / ``apply-receipts.json``) so ``resume`` and
+        the CLI read one evidence spine, then updates ``state.json`` in place
+        (schema ``opencontext.oc_flow.run_state.v1`` — additive ``executed_by``).
+        """
+        import json as _json
+
+        artifacts_dir = run_dir / "artifacts" / "oc-flow"
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        (artifacts_dir / "inspection-report.json").write_text(
+            _json.dumps(report.model_dump(), indent=2, default=str) + "\n", encoding="utf-8"
+        )
+        (artifacts_dir / "apply-receipts.json").write_text(
+            _json.dumps({"checkpoint_id": "agent-external", "receipts": receipts}, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        state.update(
+            {
+                "status": status,
+                "completion_reason": reason,
+                "changed_files": changed,
+                "verified_by": list(getattr(report, "verified_by", []) or []),
+                "verification_outcome": getattr(report, "verification_outcome", "not_run"),
+                "executed_by": "host-agent",
+            }
+        )
+        (run_dir / "state.json").write_text(
+            _json.dumps(state, indent=2, default=str) + "\n", encoding="utf-8"
+        )
+
+    def _persist_agent_apply_evidence(
+        self, session_id: str, report: Any, receipts: list[dict[str, Any]]
+    ) -> None:
+        """Persist agent-apply evidence for a session with no linked OC Flow run."""
+        import json as _json
+
+        evidence_dir = self._store.session_dir(session_id) / "artifacts" / "agent-apply"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        (evidence_dir / "inspection-report.json").write_text(
+            _json.dumps(report.model_dump(), indent=2, default=str) + "\n", encoding="utf-8"
+        )
+        (evidence_dir / "apply-receipts.json").write_text(
+            _json.dumps({"receipts": receipts}, indent=2) + "\n", encoding="utf-8"
+        )
+
+    def _ensure_active_run(self, session: RuntimeSession, *, workflow_id: str) -> RuntimeRun:
+        """Load the session's active run, minting one when none exists yet."""
+        if session.active_run_id:
+            try:
+                return self._store.load_run(session.session_id, session.active_run_id)
+            except FileNotFoundError:
+                pass
+        run = RuntimeRun(
+            run_id=f"agent-{uuid4().hex[:12]}",
+            session_id=session.session_id,
+            workflow_id=workflow_id,
+            status="running",
+        )
+        self._store.create_run(run)
+        session.active_run_id = run.run_id
+        self._store.save_session(session)
+        return run
 
     def _durable_apply(
         self, session: RuntimeSession, mutation: MutationRequest, bus: JsonlEventBus

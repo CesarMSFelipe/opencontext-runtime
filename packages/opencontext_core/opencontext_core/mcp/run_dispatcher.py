@@ -18,8 +18,6 @@ Rollback for C15: revert ``state=MigrationState.migrated`` to
 
 from __future__ import annotations
 
-import contextlib
-import io
 from pathlib import Path
 from typing import Any
 
@@ -49,16 +47,20 @@ def dispatch_mcp_run(
     if workflow not in {"oc-flow", "auto"}:
         return None
 
-    with contextlib.redirect_stdout(io.StringIO()):
-        summary = run_oc_flow_cli(
-            task,
-            root=root,
-            workflow=workflow,
-            lane=lane,
-            profile=profile,
-            enabled=True,
-            as_json=False,
-        )
+    # ``quiet=True`` (NOT redirect_stdout): stdout is the MCP wire here, and a
+    # blanket redirect would also swallow mid-run server->client
+    # ``sampling/createMessage`` requests, stalling every sampling call to its
+    # timeout on a real host.
+    summary = run_oc_flow_cli(
+        task,
+        root=root,
+        workflow=workflow,
+        lane=lane,
+        profile=profile,
+        enabled=True,
+        as_json=False,
+        quiet=True,
+    )
     contract = build_run_contract(
         session_id=str(summary.get("session_id") or ""),
         run_id=str(summary.get("run_id") or ""),
@@ -75,4 +77,11 @@ def dispatch_mcp_run(
             "oc_flow": summary,
         }
     )
+    if summary.get("status") == "needs_executor" and get_host_sampler() is None:
+        # No provider AND a client that cannot sample: upgrade the honest
+        # dead-end into an actionable agent-execute handoff (the run's evidence
+        # spine is already persisted and stays resumable).
+        from opencontext_core.mcp.agent_handoff import build_oc_flow_agent_handoff
+
+        contract.update(build_oc_flow_agent_handoff(root=root, task=task, summary=summary))
     return contract

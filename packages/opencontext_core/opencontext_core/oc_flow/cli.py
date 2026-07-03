@@ -37,9 +37,16 @@ def run_oc_flow_cli(
     resume: str | None = None,
     enabled: bool = True,
     as_json: bool = False,
+    quiet: bool = False,
     executor: NodeExecutor | None = None,
 ) -> dict[str, Any]:
     """Execute or resume OC Flow from the CLI; returns a JSON-serialisable summary.
+
+    ``quiet`` suppresses the human/JSON summary print entirely. Embedders that
+    share stdout with a wire protocol (the MCP stdio server) MUST use it instead
+    of redirecting stdout: a blanket ``redirect_stdout`` would also swallow
+    server->client ``sampling/createMessage`` requests emitted mid-run, so the
+    host never sees them and every sampling call stalls to its timeout.
 
     ``executor`` is injectable: a productive ``ProviderBackedNodeExecutor`` /
     ``McpSamplingNodeExecutor`` can be supplied when a provider is configured;
@@ -58,7 +65,8 @@ def run_oc_flow_cli(
             "status": "disabled",
             "message": "OC Flow is off; enable it with runtime.oc_flow_enabled: true",
         }
-        _maybe_print(summary, as_json)
+        if not quiet:
+            _maybe_print(summary, as_json)
         return summary
 
     # An explicitly injected executor (tests / embedders) always wins; otherwise
@@ -83,12 +91,14 @@ def run_oc_flow_cli(
             "diagnosis_attempts": len(resumed.diagnosis_attempts),
             "inspection": resumed.inspection.outcome if resumed.inspection else None,
         }
-        _maybe_print(summary, as_json)
+        if not quiet:
+            _maybe_print(summary, as_json)
         return summary
 
     if task is None:
         summary = {"status": "error", "message": "a task is required for 'run'"}
-        _maybe_print(summary, as_json)
+        if not quiet:
+            _maybe_print(summary, as_json)
         return summary
 
     selected = workflow
@@ -111,7 +121,8 @@ def run_oc_flow_cli(
             "recommended_command": recommended_command,
             "task": task,
         }
-        _maybe_print(summary, as_json)
+        if not quiet:
+            _maybe_print(summary, as_json)
         return summary
 
     result = runner.run(task, lane=Lane(lane), profile=profile)
@@ -135,7 +146,8 @@ def run_oc_flow_cli(
     }
     if result.status != "completed":
         summary["message"] = f"{result.status}: {result.completion_reason}"
-    _maybe_print(summary, as_json)
+    if not quiet:
+        _maybe_print(summary, as_json)
     return summary
 
 
