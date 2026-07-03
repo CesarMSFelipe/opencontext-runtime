@@ -100,7 +100,7 @@ def frame_lines(step_index: int, total: int, step: WizardStep, status_line: str 
     width = max(len(line) for line in logo)
     cell = [line.ljust(width) for line in logo]
     lines = [
-        f"[bold {BRAND_PRIMARY}]{cell[0]}[/]  [bold]OpenContext[/]",
+        f"[bold {BRAND_PRIMARY}]{cell[0]}[/]  [bold]OpenContext Runtime[/]",
         f"[{BRAND_DIM}]{cell[1]}[/]  [{BRAND_DIM}]{status_line}[/]",
         f"[bold {BRAND_SECONDARY}]{cell[2]}[/]",
         "",
