@@ -29,7 +29,7 @@ _SDD_PHASES = frozenset(
 
 
 @router.get("/status")
-def sdd_status(change: str = "", cwd: str = ".") -> dict:
+def sdd_status(change: str = "", cwd: str = ".") -> dict[str, object]:
     """Resolve and return the SDD status."""
     try:
         from opencontext_sdd.status import Resolve
@@ -47,12 +47,9 @@ def sdd_status(change: str = "", cwd: str = ".") -> dict:
 
 
 @router.post("/continue")
-def sdd_continue(body: SDDContinueRequest) -> dict:
+def sdd_continue(body: SDDContinueRequest) -> dict[str, object]:
     """Continue with the next recommended phase."""
-    prompt = (
-        f"# SDD Continue\n\nChange: {body.change}\n"
-        f"Cwd: {body.cwd}\n(PR4 wires real runner)"
-    )
+    prompt = f"# SDD Continue\n\nChange: {body.change}\nCwd: {body.cwd}\n(PR4 wires real runner)"
     return {
         "status": "ok",
         "prompt": prompt,
@@ -60,7 +57,7 @@ def sdd_continue(body: SDDContinueRequest) -> dict:
 
 
 @router.post("/{phase}")
-def sdd_phase(phase: str, body: SDDPhaseRequest) -> dict:
+def sdd_phase(phase: str, body: SDDPhaseRequest) -> dict[str, object]:
     """Run an SDD phase."""
     if phase not in _SDD_PHASES:
         from fastapi import HTTPException

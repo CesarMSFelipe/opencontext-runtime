@@ -44,7 +44,7 @@ _VALID_RELATIONS = frozenset(
 
 
 @router.post("/save")
-def memory_save(body: MemorySaveRequest) -> dict:
+def memory_save(body: MemorySaveRequest) -> dict[str, object]:
     """Save an observation to persistent memory."""
     return {"status": "ok", "endpoint": "/v1/memory/save", "title": body.title}
 
@@ -55,7 +55,7 @@ def memory_save(body: MemorySaveRequest) -> dict:
 
 
 @router.get("/search")
-def memory_search(query: str = Query(..., description="Search query")) -> dict:
+def memory_search(query: str = Query(..., description="Search query")) -> dict[str, object]:
     """Full-text BM25 search across observations."""
     return {"status": "ok", "endpoint": "/v1/memory/search", "query": query}
 
@@ -66,7 +66,7 @@ def memory_search(query: str = Query(..., description="Search query")) -> dict:
 
 
 @router.get("/get/{memory_id}")
-def memory_get(memory_id: str) -> dict:
+def memory_get(memory_id: str) -> dict[str, object]:
     """Get full observation content by ID."""
     return {
         "status": "ok",
@@ -81,7 +81,7 @@ def memory_get(memory_id: str) -> dict:
 
 
 @router.get("/context")
-def memory_context() -> dict:
+def memory_context() -> dict[str, object]:
     """Get recent session context."""
     return {"status": "ok", "endpoint": "/v1/memory/context"}
 
@@ -92,7 +92,7 @@ def memory_context() -> dict:
 
 
 @router.post("/save-prompt")
-def memory_save_prompt() -> dict:
+def memory_save_prompt() -> dict[str, object]:
     """Save a user prompt for context tracking."""
     return {"status": "ok", "endpoint": "/v1/memory/save-prompt"}
 
@@ -103,7 +103,7 @@ def memory_save_prompt() -> dict:
 
 
 @router.get("/review")
-def memory_review() -> dict:
+def memory_review() -> dict[str, object]:
     """Review observation lifecycle (list stale)."""
     return {"status": "ok", "endpoint": "/v1/memory/review"}
 
@@ -114,7 +114,7 @@ def memory_review() -> dict:
 
 
 @router.post("/judge")
-def memory_judge(body: MemoryJudgeRequest) -> dict:
+def memory_judge(body: MemoryJudgeRequest) -> dict[str, object]:
     """Record a verdict on a pending memory conflict."""
     if body.relation not in _VALID_RELATIONS:
         raise HTTPException(
@@ -135,7 +135,7 @@ def memory_judge(body: MemoryJudgeRequest) -> dict:
 
 
 @router.post("/compare")
-def memory_compare(body: MemoryCompareRequest) -> dict:
+def memory_compare(body: MemoryCompareRequest) -> dict[str, object]:
     """Persist a semantic verdict into the relation store."""
     if body.relation not in _VALID_RELATIONS - {"orphaned"}:
         raise HTTPException(
@@ -157,7 +157,7 @@ def memory_compare(body: MemoryCompareRequest) -> dict:
 
 
 @router.post("/session/start")
-def memory_session_start(body: MemorySessionRequest) -> dict:
+def memory_session_start(body: MemorySessionRequest) -> dict[str, object]:
     """Register the start of a new coding session."""
     return {
         "status": "ok",
@@ -167,7 +167,7 @@ def memory_session_start(body: MemorySessionRequest) -> dict:
 
 
 @router.post("/session/end")
-def memory_session_end(body: MemorySessionRequest) -> dict:
+def memory_session_end(body: MemorySessionRequest) -> dict[str, object]:
     """Mark a coding session as completed."""
     return {
         "status": "ok",
@@ -177,7 +177,7 @@ def memory_session_end(body: MemorySessionRequest) -> dict:
 
 
 @router.post("/session/summary")
-def memory_session_summary(body: MemorySessionSummaryRequest) -> dict:
+def memory_session_summary(body: MemorySessionSummaryRequest) -> dict[str, object]:
     """Save a comprehensive end-of-session summary."""
     return {"status": "ok", "endpoint": "/v1/memory/session/summary"}
 
@@ -188,13 +188,13 @@ def memory_session_summary(body: MemorySessionSummaryRequest) -> dict:
 
 
 @router.post("/pin")
-def memory_pin(body: MemoryPinRequest) -> dict:
+def memory_pin(body: MemoryPinRequest) -> dict[str, object]:
     """Pin a memory so it is never auto-pruned."""
     return {"status": "ok", "endpoint": "/v1/memory/pin", "id": body.id}
 
 
 @router.post("/unpin")
-def memory_unpin(body: MemoryPinRequest) -> dict:
+def memory_unpin(body: MemoryPinRequest) -> dict[str, object]:
     """Remove a pin from a memory."""
     return {"status": "ok", "endpoint": "/v1/memory/unpin", "id": body.id}
 
@@ -205,7 +205,7 @@ def memory_unpin(body: MemoryPinRequest) -> dict:
 
 
 @router.post("/delete")
-def memory_delete(body: MemoryDeleteRequest) -> dict:
+def memory_delete(body: MemoryDeleteRequest) -> dict[str, object]:
     """Delete an observation (soft delete by default)."""
     return {
         "status": "ok",
@@ -221,7 +221,7 @@ def memory_delete(body: MemoryDeleteRequest) -> dict:
 
 
 @router.post("/doctor")
-def memory_doctor() -> dict:
+def memory_doctor() -> dict[str, object]:
     """Run operational diagnostics on the memory store."""
     return {"status": "ok", "endpoint": "/v1/memory/doctor"}
 
@@ -232,7 +232,7 @@ def memory_doctor() -> dict:
 
 
 @router.post("/stats")
-def memory_stats() -> dict:
+def memory_stats() -> dict[str, object]:
     """Show memory statistics."""
     return {"status": "ok", "endpoint": "/v1/memory/stats"}
 
@@ -243,7 +243,7 @@ def memory_stats() -> dict:
 
 
 @router.post("/timeline")
-def memory_timeline(body: MemoryTimelineRequest) -> dict:
+def memory_timeline(body: MemoryTimelineRequest) -> dict[str, object]:
     """Show observations over time."""
     return {
         "status": "ok",
@@ -258,7 +258,7 @@ def memory_timeline(body: MemoryTimelineRequest) -> dict:
 
 
 @router.post("/current-project")
-def memory_current_project() -> dict:
+def memory_current_project() -> dict[str, object]:
     """Detect the current project from working directory."""
     return {"status": "ok", "endpoint": "/v1/memory/current-project"}
 
@@ -269,7 +269,7 @@ def memory_current_project() -> dict:
 
 
 @router.post("/merge-projects")
-def memory_merge_projects(body: MemoryMergeProjectsRequest) -> dict:
+def memory_merge_projects(body: MemoryMergeProjectsRequest) -> dict[str, object]:
     """Merge observations from source projects into target."""
     return {
         "status": "ok",

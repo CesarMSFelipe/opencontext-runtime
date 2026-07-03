@@ -316,7 +316,7 @@ class MemoryDoctorResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: str = Field(description="Health status.")
-    checks: list[dict] = Field(default_factory=list, description="Individual checks.")
+    checks: list[dict[str, Any]] = Field(default_factory=list, description="Individual checks.")
 
 
 class MemoryStatsResponse(BaseModel):
@@ -342,7 +342,7 @@ class MemoryReviewResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    observations: list[dict] = Field(default_factory=list, description="Review items.")
+    observations: list[dict[str, Any]] = Field(default_factory=list, description="Review items.")
     total: int = Field(default=0, description="Total items needing review.")
 
 
