@@ -4853,8 +4853,17 @@ def _pack(
         # Show the win on every pack. stderr keeps stdout clean for --copy / JSON / pipes.
         # Cap the displayed percent below 100 — "100% fewer" reads as fake even when
         # the rounding is honest; the absolute counts carry the real story.
-        if reduction_pct > 0 and naive_tokens > optimized_tokens:
-            import sys as _sys
+        # NEVER claim a saving when the pack is empty: under budget pressure an
+        # over-budget span is omitted (used_tokens=0), and `used_tokens or 1` would
+        # otherwise fabricate a 99.9% win over ZERO content. Require real content.
+        import sys as _sys
+
+        if pack.used_tokens <= 0 or not pack.included:
+            print(
+                "  ! no content fit the token budget — raise --max-tokens or narrow the query",
+                file=_sys.stderr,
+            )
+        elif reduction_pct > 0 and naive_tokens > optimized_tokens:
 
             shown_pct = min(reduction_pct, 99.9)
             mem_indicator = ""
