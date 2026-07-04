@@ -41,6 +41,12 @@ class GateStatus(StrEnum):
     WARNING = "warning"
     FAILED = "failed"
     SKIPPED = "skipped"
+    # Set on the HarnessRunResult when the apply phase ran with no edits AND
+    # no productive executor was configured. Distinct from WARNING (which is
+    # reserved for genuine advisories on runs that did real work) and from
+    # PASSED (which would imply edits were written). Mirrors OC Flow's
+    # ``needs_executor`` vocabulary so the two surfaces stay consistent.
+    NOT_APPLIED = "not_applied"
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}.{self.name}>"

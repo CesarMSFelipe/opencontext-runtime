@@ -923,6 +923,41 @@ class HarnessRunner:
             elif result.status == GateStatus.WARNING and not hard_failed:
                 final_status = GateStatus.WARNING
 
+        # Provider-free apply detection: when the apply phase ran but produced no
+        # edits because no executor was wired, the run would otherwise appear as
+        # PASSED or WARNING — both ambiguous (PASSED falsely implies edits were
+        # written; WARNING is indistinguishable from a genuine advisory on a run
+        # that did real work). Override to NOT_APPLIED so consumers know exactly:
+        # "no executor, nothing was written".
+        #
+        # Two concrete signals combine: (1) the phase result metadata records
+        # apply_status=="planned" when ApplyPhase.run() skipped all writes, and
+        # (2) the task's LEADING verb is a mutation verb (not a read-only one).
+        # Checking only the leading word avoids false positives like
+        # "describe the add function" (where "add" is a symbol, not a directive).
+        # Scoped to PASSED/WARNING only — FAILED must not be softened to NOT_APPLIED.
+        _apply_was_planned = any(
+            r.phase == "apply"
+            and r.metadata.get("apply_status") == "planned"
+            for r in results
+        )
+        if _apply_was_planned and getattr(state, "delegate", None) is None:
+            try:
+                from opencontext_core.oc_flow.completion import (
+                    _MUTATION_VERBS,
+                    _READONLY_VERBS,
+                )
+                _leading = (state.task or "").strip().lower().split()[0] if state.task else ""
+                _task_is_mutation = _leading in _MUTATION_VERBS or (
+                    _leading not in _READONLY_VERBS
+                    and any(v in (state.task or "").lower() for v in _MUTATION_VERBS)
+                    and not any(v in (state.task or "").lower() for v in _READONLY_VERBS)
+                )
+            except Exception:
+                _task_is_mutation = True
+            if _task_is_mutation and final_status in (GateStatus.PASSED, GateStatus.WARNING):
+                final_status = GateStatus.NOT_APPLIED
+
         # Bounded apply->gate->fix loop: feed failing verify findings back to the
         # Builder for a re-attempt (revives quality rules' max_fix_loops). No-op
         # without a delegate / block policy / verify failure, so mock runs are
