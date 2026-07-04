@@ -1547,12 +1547,24 @@ class HarnessRunner:
         skip = {"approval_required_for_writes", "failing_test_exists"}
 
         dispatched: list[PhaseGate] = []
+        unbound: list[str] = []
         for gate_id in declared:
             if gate_id in already or gate_id in skip:
                 continue
             gate = self._dispatch_one_gate(gate_id, phase_id, state, result)
             if gate is not None:
                 dispatched.append(gate)
+            else:
+                # Declared in config but no dispatch binding: it is NOT evaluated.
+                # Do not fabricate a result — but do not drop it silently either,
+                # or a user believes a gate is enforcing when it is inert.
+                unbound.append(gate_id)
+        if unbound:
+            _log.warning(
+                "phase %s: declared gates with no dispatch binding (NOT evaluated): %s",
+                phase_id,
+                sorted(unbound),
+            )
         return dispatched
 
     def _dispatch_one_gate(
