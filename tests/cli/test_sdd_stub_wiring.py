@@ -59,7 +59,7 @@ class TestRunPhaseWiring:
         )
 
         with patch(
-            "opencontext_cli.commands.sdd_cmd.run_phase", return_value=fake_envelope
+            "opencontext_sdd.runner.run_phase", return_value=fake_envelope
         ) as mock_run:
             _run_phase("apply", tmp_path, "my-change")
 
@@ -92,7 +92,7 @@ class TestRunPhaseWiring:
             trace_id="",
         )
 
-        with patch("opencontext_cli.commands.sdd_cmd.run_phase", return_value=fake_envelope):
+        with patch("opencontext_sdd.runner.run_phase", return_value=fake_envelope):
             _run_phase("apply", tmp_path, "my-change")
 
         captured = capsys.readouterr()
@@ -122,7 +122,7 @@ class TestRunPhaseWiring:
             trace_id="",
         )
 
-        with patch("opencontext_cli.commands.sdd_cmd.run_phase", return_value=fake_envelope):
+        with patch("opencontext_sdd.runner.run_phase", return_value=fake_envelope):
             _run_phase("spec", tmp_path, "test-change")
 
         captured = capsys.readouterr()
@@ -156,7 +156,7 @@ class TestHandleFf:
             trace_id="",
         )
 
-        with patch("opencontext_cli.commands.sdd_cmd.run_phase", return_value=fake):
+        with patch("opencontext_sdd.runner.run_phase", return_value=fake):
             _handle_ff("my-change", tmp_path, False)
 
         captured = capsys.readouterr()
@@ -182,7 +182,7 @@ class TestHandleFf:
             trace_id="",
         )
 
-        with patch("opencontext_cli.commands.sdd_cmd.run_phase", return_value=fake) as mock_run:
+        with patch("opencontext_sdd.runner.run_phase", return_value=fake) as mock_run:
             _handle_ff("my-change", tmp_path, False)
 
         # ff = propose + spec + design + tasks (4 phases)

@@ -16,9 +16,14 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from opencontext_sdd.runner import PhaseResultEnvelope, run_phase
+if TYPE_CHECKING:
+    # opencontext_sdd is an optional package not installed in all environments
+    # (e.g. the bare CLI pyz on a clean machine may lack it until sdd verbs are
+    # invoked). This guard keeps the type annotation available to mypy without
+    # triggering a top-level ImportError at CLI startup.
+    from opencontext_sdd.runner import PhaseResultEnvelope
 
 SUBCOMMANDS = [
     "init",
@@ -117,7 +122,7 @@ def handle_sdd(args: Any) -> None:
     task = getattr(args, "task", None)
     verbose = getattr(args, "verbose", False)
 
-    # Phase verbs delegate to run_phase (stub until PR4.a ships runner.py)
+    # Phase verbs delegate to the SDD runner via run_phase.
     if verb in _PHASE_VERBS:
         _run_phase(verb, cwd, change, topic=topic, task=task, verbose=verbose)
         return
@@ -214,6 +219,8 @@ def _run_phase(
     verbose: bool = False,
 ) -> PhaseResultEnvelope:
     """Run an SDD phase via the orchestrator runner and return the envelope."""
+    from opencontext_sdd.runner import run_phase
+
     envelope = run_phase(
         verb,
         change=change,

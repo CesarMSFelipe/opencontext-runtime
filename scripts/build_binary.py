@@ -24,6 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 _PACKAGES = {
     "opencontext_core": ROOT / "packages" / "opencontext_core" / "opencontext_core",
     "opencontext_cli": ROOT / "packages" / "opencontext_cli" / "opencontext_cli",
+    # opencontext_sdd provides the SDD runner used by sdd_cmd.py verbs.
+    # Without it the pyz crashes with ModuleNotFoundError on a clean machine.
+    "opencontext_sdd": ROOT / "packages" / "opencontext_sdd" / "opencontext_sdd",
 }
 _MAIN = "from opencontext_cli.main import main\n\nif __name__ == '__main__':\n    main()\n"
 

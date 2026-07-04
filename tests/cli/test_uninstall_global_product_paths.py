@@ -18,7 +18,6 @@ All tests use a tmp fake-HOME; real HOME is never touched.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from types import SimpleNamespace
 

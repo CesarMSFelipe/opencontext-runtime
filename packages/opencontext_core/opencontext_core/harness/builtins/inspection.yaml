@@ -14,6 +14,7 @@ gates:
   - lint_passed_or_recorded
   - typecheck_passed_or_recorded
   - tests_passed_or_recorded
+  - tests_pass
   - srp_guard
   - dip_guard
 metrics: [tests_run, lint_findings]
