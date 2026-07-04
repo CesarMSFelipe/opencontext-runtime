@@ -1736,7 +1736,9 @@ def _dispatch(args: argparse.Namespace) -> None:
         handle_receipt(args)
         return
     if command == "run":
-        handle_run_exec(args)
+        _rc = handle_run_exec(args)
+        if _rc:
+            raise SystemExit(_rc)
         return
     if command == "runs":
         handle_run_inspect(args)

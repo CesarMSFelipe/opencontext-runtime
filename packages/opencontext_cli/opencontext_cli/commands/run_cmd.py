@@ -162,7 +162,7 @@ def add_run_exec_parser(subparsers: Any) -> None:
     run_parser.add_argument("--json", action="store_true", help="JSON output.")
 
 
-def handle_run_exec(args: Any) -> None:
+def handle_run_exec(args: Any) -> int:
     """Dispatch the ``run`` execution command via RuntimeApi (C15 spine flip).
 
     Routes through :class:`~opencontext_core.runtime.api.RuntimeApi`:
@@ -212,7 +212,7 @@ def handle_run_exec(args: Any) -> None:
         )
         if not decision.proceed:
             print("Run cancelled — nothing was executed.")
-            return
+            return 0
         workflow = decision.workflow
         lane = decision.lane
 
@@ -260,7 +260,7 @@ def handle_run_exec(args: Any) -> None:
             print(
                 f"Resumed {out['session_id']}/{out['run_id']} ({len(out['changed_files'])} edits)"
             )
-        return
+        return 0
 
     session = api.start_session(StartSessionRequest(task=task, root=str(root), profile=profile))
     result = api.run(RunRequest(session_id=session.session_id, workflow_id=workflow, task=task))
@@ -327,6 +327,12 @@ def handle_run_exec(args: Any) -> None:
             "`opencontext doctor`.",
             file=sys.stderr,
         )
+    # Exit code: a genuine FAILURE (a failed run or a gate-blocked run) is nonzero so
+    # CI/scripts can detect it. Honest degraded outcomes (needs_executor/needs_provider,
+    # not_applied) stay 0 — the command did its job; the status is in --json. Returned
+    # (not sys.exit'd) so the ~6 in-process test callers never raise SystemExit; the
+    # dispatcher raises on the returned code.
+    return 1 if oc_status in {"failed", "blocked"} else 0
 
 
 def add_simulate_parser(subparsers: Any) -> None:
