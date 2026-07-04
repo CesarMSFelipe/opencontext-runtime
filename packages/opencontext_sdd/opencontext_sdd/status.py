@@ -190,6 +190,11 @@ def _decide_next(
     verdict_block = [r for r in blocked if r.startswith("verify_report:")]
     if verdict_block:
         return "verify", "blocked"
+    # Archive only after a passing verify-report exists. Tasks-done with no (or
+    # non-passing) verify report routes to verify — a change is never archived
+    # unverified (matches the proposal->...->verify->archive DAG).
+    if artifacts.get("verify-report") != "done":
+        return "verify", "done"
     return "archive", "done"
 
 

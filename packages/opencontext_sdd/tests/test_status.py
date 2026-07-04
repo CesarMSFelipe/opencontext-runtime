@@ -127,6 +127,81 @@ def test_REQ_OSS_002_resolve_ambiguous_when_multiple_changes_and_none(
 
 
 # ---------------------------------------------------------------------------
+# Resolve routing truth table — intermediate planning states (parity with
+# gentle-ai's sddstatus dispatcher). Each seeds a partial change dir on disk and
+# asserts the exact nextRecommended, so a regression in the decision tree fails
+# here instead of misrouting a real SDD run.
+# ---------------------------------------------------------------------------
+
+
+def _seed(cwd: Path, *rel_files: str) -> None:
+    """Create ``openspec/changes/demo/`` with the given relative files."""
+    root = cwd / "openspec" / "changes" / "demo"
+    root.mkdir(parents=True, exist_ok=True)
+    for rel in rel_files:
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("- [x] done\n" if rel == "tasks.md" else "# x\n", encoding="utf-8")
+
+
+def test_resolve_proposal_only_routes_to_spec(tmp_path: Path) -> None:
+    _seed(tmp_path, "proposal.md")
+    assert Resolve("demo", cwd=str(tmp_path)).nextRecommended == "spec"
+
+
+def test_resolve_specs_without_design_routes_to_design(tmp_path: Path) -> None:
+    _seed(tmp_path, "proposal.md", "specs/cap/spec.md")
+    assert Resolve("demo", cwd=str(tmp_path)).nextRecommended == "design"
+
+
+def test_resolve_design_without_tasks_routes_to_apply(tmp_path: Path) -> None:
+    # OC routes a missing tasks.md straight to apply (its decision tree has no
+    # standalone 'tasks' planning state — documents OC's real behavior).
+    _seed(tmp_path, "proposal.md", "specs/cap/spec.md", "design.md")
+    status = Resolve("demo", cwd=str(tmp_path))
+    assert status.nextRecommended == "apply"
+    assert status.applyState == "running"
+
+
+def test_resolve_pending_tasks_routes_to_apply(tmp_path: Path) -> None:
+    _seed(tmp_path, "proposal.md", "specs/cap/spec.md", "design.md")
+    (tmp_path / "openspec" / "changes" / "demo" / "tasks.md").write_text(
+        "- [x] one\n- [ ] two\n", encoding="utf-8"
+    )
+    assert Resolve("demo", cwd=str(tmp_path)).nextRecommended == "apply"
+
+
+def test_resolve_all_tasks_done_no_verify_report_routes_to_verify(tmp_path: Path) -> None:
+    """All tasks complete but never verified must route to verify, NOT archive.
+
+    Regression: the decision tree returned 'archive' with no blocked reasons when
+    tasks were done and no verify-report existed — recommending closing a change
+    that was never verified, contradicting the proposal->...->verify->archive DAG.
+    """
+    _seed(tmp_path, "proposal.md", "specs/cap/spec.md", "design.md", "tasks.md")
+    status = Resolve("demo", cwd=str(tmp_path))
+    assert status.nextRecommended == "verify"
+    assert status.nextRecommended != "archive"
+
+
+def test_resolve_failing_verify_report_blocks_archive(tmp_path: Path) -> None:
+    _seed(tmp_path, "proposal.md", "specs/cap/spec.md", "design.md", "tasks.md")
+    (tmp_path / "openspec" / "changes" / "demo" / "verify-report.md").write_text(
+        "verdict: FAIL\n", encoding="utf-8"
+    )
+    status = Resolve("demo", cwd=str(tmp_path))
+    assert status.nextRecommended == "verify"
+
+
+def test_resolve_passing_verify_report_routes_to_archive(tmp_path: Path) -> None:
+    _seed(tmp_path, "proposal.md", "specs/cap/spec.md", "design.md", "tasks.md")
+    (tmp_path / "openspec" / "changes" / "demo" / "verify-report.md").write_text(
+        "verdict: PASS\n", encoding="utf-8"
+    )
+    assert Resolve("demo", cwd=str(tmp_path)).nextRecommended == "archive"
+
+
+# ---------------------------------------------------------------------------
 # REQ-OSS-003 — parse_verify_report verdict + unicode handling (T1.7)
 # ---------------------------------------------------------------------------
 
