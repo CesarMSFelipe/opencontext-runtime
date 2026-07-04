@@ -85,9 +85,9 @@ def run_config_menu() -> None:
         pass
 
     console.print(
-        "[yellow]The configuration menu needs a terminal.[/] Use "
-        "[cyan]opencontext config wizard --non-interactive[/], or a direct subcommand: "
-        "[cyan]config reconfigure <section>[/] · [cyan]config set[/] · [cyan]config get[/]."
+        "[yellow]The configuration menu needs a terminal.[/] Configure non-interactively with a "
+        "direct subcommand: [cyan]config reconfigure <section>[/] · [cyan]config set[/] · "
+        "[cyan]config get[/] (or [cyan]opencontext init --non-interactive[/] for first-time setup)."
     )
 
 

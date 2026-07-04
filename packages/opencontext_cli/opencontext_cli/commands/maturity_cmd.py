@@ -28,7 +28,13 @@ def add_maturity_parser(subparsers: Any) -> None:
         "maturity",
         help="Assess project adoption maturity and recommend a next step.",
     )
-    sub = parser.add_subparsers(dest="maturity_command", required=True)
+    # `assess` is the only action; a bare `opencontext maturity` (or `--json`)
+    # runs it rather than exiting 2 with an argparse usage error. Flags live on
+    # both the parent and the `assess` subparser so either form parses.
+    parser.add_argument("--root", default=".", help="Project root.")
+    parser.add_argument("--json", action="store_true", help="JSON output.")
+    add_output_flag(parser)
+    sub = parser.add_subparsers(dest="maturity_command", required=False)
     assess = sub.add_parser("assess", help="Score config/KG/memory/harness/benchmark readiness.")
     assess.add_argument("--root", default=".", help="Project root.")
     assess.add_argument("--json", action="store_true", help="JSON output.")
@@ -111,8 +117,10 @@ def _assess(root: Path) -> dict[str, Any]:
 def handle_maturity(args: Any) -> None:
     import sys
 
-    if getattr(args, "maturity_command", None) != "assess":
-        eprint("Usage: opencontext maturity assess")
+    # Bare `maturity` (maturity_command is None) defaults to assess; only an
+    # unexpected non-assess subcommand is a usage error.
+    if getattr(args, "maturity_command", None) not in (None, "assess"):
+        eprint("Usage: opencontext maturity [assess]")
         sys.exit(2)
 
     data = _assess(_root(args))

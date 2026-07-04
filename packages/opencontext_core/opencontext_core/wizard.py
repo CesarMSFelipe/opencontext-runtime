@@ -413,7 +413,14 @@ def show_config(root: Path | None = None) -> None:
     # Canonical brand header (logo + brand panel) — replaces the ad-hoc cyan rule.
     console.header("Current Configuration")
     console.print(f"\n  Config file: {store.CONFIG_FILE}")
-    console.print(f"  First run: {'Yes' if prefs.first_run else 'No'}")
+    # "First run" must agree with reality: once a project opencontext.yaml exists
+    # (or an install date is recorded), it is no longer a first run — otherwise
+    # `config show` says "First run: Yes" on an initialized, ready project.
+    _yaml_present = (
+        (Path(root) if root is not None else Path.cwd()) / "opencontext.yaml"
+    ).is_file()
+    _is_first_run = prefs.first_run and not _yaml_present and not prefs.install_date
+    console.print(f"  First run: {'Yes' if _is_first_run else 'No'}")
     if prefs.install_date:
         console.print(f"  Installed: {prefs.install_date}")
 
@@ -482,7 +489,16 @@ def show_config(root: Path | None = None) -> None:
             # models.roles
             models_cfg = raw.get("models", {}) or {}
             roles = models_cfg.get("roles")
-            if roles:
+            if roles and isinstance(roles, dict):
+                console.print("    models.roles:")
+                for _role, _rc in roles.items():
+                    if isinstance(_rc, dict):
+                        _prov = _rc.get("provider", "?")
+                        _model = _rc.get("model", "?")
+                        console.print(f"      {_role}: {_prov} / {_model}")
+                    else:
+                        console.print(f"      {_role}: {_rc}")
+            elif roles:
                 console.print(f"    models.roles: {roles}")
             else:
                 console.print("    models.roles: (not set)")

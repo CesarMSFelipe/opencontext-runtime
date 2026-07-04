@@ -1346,6 +1346,23 @@ class ContextStorageConfig(BaseModel):
     port: int = Field(default=6333, ge=1, le=65535, description="Vector storage port.")
 
 
+class VerifyConfig(BaseModel):
+    """Verify-phase options.
+
+    Read by the harness verify phase (``harness/phases.py``) via attribute access
+    (``verify.compliance_matrix``); it must be a typed sub-model, not an open
+    mapping, and must exist here or the top-level ``extra='forbid'`` rejects a
+    ``verify:`` block in opencontext.yaml — which previously made the flag
+    unsettable and the ComplianceMatrix feature unreachable.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    compliance_matrix: bool = Field(
+        default=False, description="Enable the verify-phase ComplianceMatrix artifact."
+    )
+
+
 class SkillsConfig(BaseModel):
     """Skill registry configuration."""
 
@@ -1612,6 +1629,9 @@ class OpenContextConfig(BaseModel):
     )
     testing: TestingConfig = Field(
         default_factory=TestingConfig, description="Testing configuration."
+    )
+    verify: VerifyConfig = Field(
+        default_factory=VerifyConfig, description="Verify-phase options (e.g. compliance_matrix)."
     )
     storage: StorageConfig = Field(
         default_factory=StorageConfig,
