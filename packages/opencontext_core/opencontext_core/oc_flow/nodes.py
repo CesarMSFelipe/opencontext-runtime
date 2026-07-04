@@ -968,6 +968,57 @@ def _fold_memory_recall(ctx: OCFlowContext, envelope: ContextEnvelope) -> Contex
         )
         total += tokens
         added = True
+
+    # Also fold in the user's CLI/MCP observations (memory_v2.db) so an
+    # `opencontext memory v2 save` is visible to runs — the observations store and
+    # the in-loop agent store (memory.db) were otherwise disjoint. Best-effort and
+    # read-only: a missing/failing store is a silent no-op (memory never blocks a run).
+    try:
+        from pathlib import Path
+
+        from opencontext_core.paths import StorageMode, resolve_storage_path
+
+        obs_db = resolve_storage_path(Path(ctx.root), StorageMode.local) / "memory_v2.db"
+        if obs_db.is_file():
+            from opencontext_memory import MemoryStore, mem_search
+
+            # Recall is associative, not exact: the store's FTS combines tokens
+            # with implicit AND, so the full task rarely matches. Search per
+            # salient token (len >= 4) and union the observations by id — any
+            # token hit surfaces the observation.
+            store = MemoryStore.open(obs_db)
+            project = Path(ctx.root).name
+            seen_obs: dict[str, dict[str, Any]] = {}
+            tokens = {t.lower() for t in re.findall(r"[A-Za-z]{4,}", ctx.task)}
+            for token in list(tokens)[:12]:
+                for row in mem_search(
+                    store, query=token, limit=_MEMORY_RECALL_LIMIT, project=project
+                ):
+                    rid = str(row.get("id") or row.get("topic_key") or row.get("title") or "")
+                    if rid and rid not in seen_obs:
+                        seen_obs[rid] = row
+            for row in seen_obs.values():
+                content = str(row.get("content") or row.get("title") or "").strip()
+                if not content:
+                    continue
+                tokens = estimate_tokens(content)
+                if total + tokens > budget_cap:
+                    continue
+                items.append(
+                    ContextEnvelopeItem(
+                        source="memory",
+                        ref=str(row.get("id") or row.get("topic_key") or "observation"),
+                        summary=content[:_MEMORY_SUMMARY_MAX_CHARS],
+                        tokens=tokens,
+                        why_included="memory:observation",
+                        confidence=0.5,
+                    )
+                )
+                total += tokens
+                added = True
+    except Exception:
+        pass
+
     if not added:
         return envelope
     return envelope.model_copy(update={"items": items, "token_estimate": total})
