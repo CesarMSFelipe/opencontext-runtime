@@ -7,7 +7,9 @@ OpenContext user preferences.
 
 from __future__ import annotations
 
+import json
 import sys
+from pathlib import Path
 from typing import Any
 
 from opencontext_core.dx.console_styles import BrandConsole, console
@@ -51,6 +53,7 @@ def add_config_parser(subparsers: Any) -> None:
         default=None,
         help="Project root for resolving opencontext.yaml (default: cwd).",
     )
+    show_p.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
 
     config_sub.add_parser("reset", help="Reset to factory defaults.")
 
@@ -133,7 +136,10 @@ def handle_config(args: Any) -> None:
     elif command == "show":
         from pathlib import Path
 
-        show_config(root=Path(getattr(args, "root", None) or ".").resolve())
+        if getattr(args, "json", False):
+            _config_show_json(root=Path(getattr(args, "root", None) or ".").resolve())
+        else:
+            show_config(root=Path(getattr(args, "root", None) or ".").resolve())
     elif command == "reset":
         reset_config()
     elif command == "reconfigure":
@@ -152,6 +158,75 @@ def handle_config(args: Any) -> None:
         _config_cleanup(args.keep_days)
     elif command == "doctor":
         _config_doctor(args)
+
+
+def _config_show_json(root: Path | None = None) -> None:
+    """Emit a machine-readable snapshot of current configuration.
+
+    Schema: ``{schema, security_mode, data_classification, features,
+    token_budgets, agents, plugins, project}``.
+    Human-readable text goes to stderr/console only; stdout is the JSON object.
+    """
+    store = UserConfigStore()
+    prefs = store.load()
+
+    # Plugins
+    plugins_list: list[dict[str, Any]] = []
+    try:
+        from opencontext_core.plugins.registry import PluginRegistry
+
+        for p in PluginRegistry().discover():
+            plugins_list.append(
+                {
+                    "name": p.name,
+                    "version": p.version,
+                    "enabled": p.enabled,
+                    "source": p.install_source,
+                }
+            )
+    except Exception:
+        pass
+
+    # Project (opencontext.yaml) section
+    project_root = Path(root) if root is not None else Path.cwd()
+    yaml_path = project_root / "opencontext.yaml"
+    project_info: dict[str, Any] = {"path": str(yaml_path), "exists": yaml_path.is_file()}
+    if yaml_path.is_file():
+        try:
+            import yaml as _yaml
+
+            _loaded = _yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+            raw: dict[str, Any] = _loaded or {}
+            memory_cfg = raw.get("memory", {}) or {}
+            storage_cfg = raw.get("storage", {}) or {}
+            sdd_cfg = raw.get("sdd", {}) or {}
+            models_cfg = raw.get("models", {}) or {}
+            project_info.update(
+                {
+                    "memory_provider": memory_cfg.get("provider"),
+                    "storage_mode": storage_cfg.get("mode"),
+                    "sdd_flow_mode": sdd_cfg.get("flow_mode"),
+                    "models_roles": models_cfg.get("roles"),
+                }
+            )
+        except Exception as exc:
+            project_info["error"] = str(exc)
+
+    payload: dict[str, Any] = {
+        "schema": "opencontext/config-show/v1",
+        "security_mode": prefs.security_mode,
+        "data_classification": prefs.data_classification,
+        "features": dict(vars(prefs.features)),
+        "token_budgets": {
+            "default": prefs.default_token_budget,
+            "max_input": prefs.max_input_tokens,
+        },
+        "agents": prefs.agent_integrations,
+        "plugins": plugins_list,
+        "project": project_info,
+        "error": None,
+    }
+    print(json.dumps(payload, indent=2, default=str))
 
 
 def _config_doctor(args: Any) -> None:

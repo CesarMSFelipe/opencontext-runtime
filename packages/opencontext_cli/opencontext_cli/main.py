@@ -615,6 +615,7 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="openspec_mode",
         help="OpenSpec artifact persistence mode.",
     )
+    install_parser.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
     install_parser.add_argument(
         "--budget",
         default=None,
@@ -1332,8 +1333,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     memory_sub = memory_parser.add_subparsers(dest="memory_command", required=True)
     add_memory_v2_parser(memory_sub)
-    memory_sub.add_parser("init", help="Create context repository layout.")
-    memory_sub.add_parser("list", help="List local memory.")
+    _mem_init = memory_sub.add_parser("init", help="Create context repository layout.")
+    _mem_init.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
+    _mem_list = memory_sub.add_parser("list", help="List local memory.")
+    _mem_list.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
     memory_search = memory_sub.add_parser("search", help="Search local memory.")
     memory_search.add_argument("query")
     memory_expand = memory_sub.add_parser("expand", help="Expand a memory item by id.")
@@ -1410,6 +1413,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     status_parser = subparsers.add_parser("status", help="Show project status.")
     status_parser.add_argument("root", nargs="?", default=".", help="Project root.")
+    status_parser.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
 
     add_git_parser(subparsers)
     add_ci_check_parser(subparsers)
@@ -1703,7 +1707,7 @@ def _dispatch(args: argparse.Namespace) -> None:
         handle_health(args)
         return
     if command == "status":
-        _status(getattr(args, "root", "."))
+        _status(getattr(args, "root", "."), json_output=getattr(args, "json", False))
         return
     if command == "config":
         handle_config(args)
@@ -2525,6 +2529,72 @@ def _install_provision_engram(args: argparse.Namespace) -> None:
         err_console.warning(f"Engram provisioning: {exc}")
 
 
+def _install_json(args: argparse.Namespace) -> None:
+    """Emit a machine-readable install result without polluting stdout.
+
+    Runs the non-interactive onboarding engine with all console/rich output
+    redirected to stderr, then emits a single JSON object to stdout.
+
+    Schema: ``{schema, status, project, detected, error}``.
+    """
+    import io
+
+    root = Path(getattr(args, "root", "."))
+    has_config = (root / "opencontext.yaml").exists()
+    has_git = (root / ".git").exists()
+    has_pytest = (
+        (root / "pyproject.toml").exists()
+        or (root / "pytest.ini").exists()
+        or (root / "setup.cfg").exists()
+    )
+    has_package_json = (root / "package.json").exists()
+    stack: list[str] = []
+    if has_pytest:
+        stack.append("python")
+    if has_package_json:
+        stack.append("nodejs")
+    tdd = getattr(args, "tdd", None) or ("strict" if has_pytest else "ask")
+
+    # Redirect stdout to a sink while running the install so rich chrome stays
+    # off the JSON stream. All informational output goes to stderr via the
+    # already-configured err_console / stderr console.
+    _sink = io.StringIO()
+    _real_stdout = sys.stdout
+    sys.stdout = _sink  # type: ignore[assignment]
+    try:
+        import argparse as _ap
+
+        _non_interactive = _ap.Namespace(**vars(args))
+        _non_interactive.yes = True
+        _non_interactive.json = False  # prevent recursion
+        _install(_non_interactive)
+        status = "ok"
+        error = None
+    except SystemExit:
+        status = "ok"
+        error = None
+    except Exception as exc:
+        status = "error"
+        error = str(exc)
+    finally:
+        sys.stdout = _real_stdout
+
+    payload: dict[str, Any] = {
+        "schema": "opencontext/install/v1",
+        "status": status,
+        "project": str(root.resolve()),
+        "detected": {
+            "config_existed": has_config,
+            "git": has_git,
+            "stack": stack,
+            "tdd": tdd,
+        },
+        "error": error,
+    }
+    json.dump(payload, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+
+
 def _install(args: argparse.Namespace) -> None:
     """Quick project setup wizard with auto-detection and step-by-step progress."""
     from opencontext_core import prompts
@@ -2533,6 +2603,12 @@ def _install(args: argparse.Namespace) -> None:
     # NOTE: Handle --dry-run before any side effects.
     if getattr(args, "dry_run", False):
         _install_dry_run(args)
+        return
+
+    # NOTE: --json requests a machine-readable summary; pair it with --yes for
+    # non-interactive operation and emit the JSON report only (no human chrome).
+    if getattr(args, "json", False):
+        _install_json(args)
         return
 
     # NOTE: Handle --install-engram provisioning before the main flow.
@@ -3177,7 +3253,7 @@ def _workflow_pack_metadata(name: str | None) -> dict[str, Any]:
     }
 
 
-def _status(root: str = ".") -> None:
+def _status(root: str = ".", *, json_output: bool = False) -> None:
     """Show project status at a glance."""
     from opencontext_core.config import load_config_or_defaults
     from opencontext_core.dx.console_styles import console
@@ -3195,61 +3271,95 @@ def _status(root: str = ".") -> None:
     hints_path = project_root / ".opencontexthints"
     checks_dir = project_root / ".opencontext" / "checks"
 
+    # Collect data for both human and JSON rendering
+    has_config = config_path.exists()
+    index_info: dict[str, Any] = {"indexed": False, "files": 0, "symbols": 0}
+    if manifest_path.exists():
+        try:
+            with open(manifest_path) as _f:
+                _manifest = json.load(_f)
+            index_info = {
+                "indexed": True,
+                "files": len(_manifest.get("files", [])),
+                "symbols": len(_manifest.get("symbols", [])),
+            }
+        except Exception:
+            index_info = {"indexed": True, "files": 0, "symbols": 0, "error": "unreadable"}
+
+    git = GitContextProvider(project_root)
+    git_info: dict[str, Any] = {"available": git.available}
+    if git.available:
+        stats = git.get_repo_stats()
+        git_info["commits"] = stats.get("total_commits", 0)
+        git_info["contributors"] = stats.get("contributors", 0)
+
+    has_hints = hints_path.exists()
+    checks_count = len(list(checks_dir.glob("*.md"))) if checks_dir.exists() else 0
+    has_workspace = opencontext_dir.exists()
+
+    if json_output:
+        payload: dict[str, Any] = {
+            "schema": "opencontext/status/v1",
+            "project": str(project_root),
+            "status": "ready" if (has_config and index_info["indexed"]) else "partial",
+            "config": {"exists": has_config, "path": str(config_path)},
+            "index": index_info,
+            "git": git_info,
+            "hints": {"exists": has_hints},
+            "ci_checks": {"count": checks_count},
+            "workspace": {"exists": has_workspace},
+            "error": None,
+        }
+        json.dump(payload, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        return
+
     console.header("OpenContext Status")
     console.print(f"[bold]Project:[/] {project_root}")
     console.print("")
 
     # Config status
     console.section("Configuration")
-    if config_path.exists():
+    if has_config:
         console.success(f"Config: {config_path}")
     else:
         console.error("Config: not found (run 'opencontext install')")
 
     # Index status
     console.section("Index")
-    if manifest_path.exists():
-        try:
-            import json
-
-            with open(manifest_path) as f:
-                manifest = json.load(f)
-            files = len(manifest.get("files", []))
-            symbols = len(manifest.get("symbols", []))
-            console.success(f"Indexed: {files} files, {symbols} symbols")
-        except Exception:
+    if index_info["indexed"]:
+        if index_info.get("error"):
             console.warning("Index: manifest exists but could not be read")
+        else:
+            console.success(f"Indexed: {index_info['files']} files, {index_info['symbols']} symbols")
     else:
         console.warning("Index: not indexed (run 'opencontext index .')")
 
     # Git status
     console.section("Git")
-    git = GitContextProvider(project_root)
     if git.available:
-        stats = git.get_repo_stats()
-        console.success(f"Commits: {stats.get('total_commits', 0)}")
-        console.success(f"Contributors: {stats.get('contributors', 0)}")
+        console.success(f"Commits: {git_info.get('commits', 0)}")
+        console.success(f"Contributors: {git_info.get('contributors', 0)}")
     else:
         console.warning("Git: not a repository")
 
     # Hints
     console.section("Agent Hints")
-    if hints_path.exists():
+    if has_hints:
         console.success(f"Hints: {hints_path}")
     else:
         console.warning("Hints: not found (run 'opencontext hints init')")
 
     # CI Checks
     console.section("CI Checks")
-    if checks_dir.exists():
-        checks = list(checks_dir.glob("*.md"))
-        console.success(f"Checks: {len(checks)} check(s) configured")
+    if checks_count:
+        console.success(f"Checks: {checks_count} check(s) configured")
     else:
         console.warning("Checks: not found (run 'opencontext ci-check init')")
 
     # Working directory
     console.section("Workspace")
-    if opencontext_dir.exists():
+    if has_workspace:
         console.success(f"Workspace: {opencontext_dir}")
     else:
         console.warning("Workspace: not initialized")
@@ -5065,10 +5175,22 @@ def _memory(args: argparse.Namespace) -> None:
         return
     # Every remaining subcommand renders under the shared branded header, so the
     # whole memory family carries the same brand chrome as `config`, `index`, etc.
-    console.header("Memory")
+    # Under --json the header is suppressed so stdout stays a pure JSON object.
+    if not getattr(args, "json", False):
+        console.header("Memory")
     repo = ContextRepository(Path("."))
     if command == "init":
         created = repo.init_layout()
+        if getattr(args, "json", False):
+            payload: dict[str, Any] = {
+                "schema": "opencontext/memory-init/v1",
+                "status": "ok",
+                "created": [str(p) for p in created],
+                "error": None,
+            }
+            json.dump(payload, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+            return
         console.success("Initialized context repository.")
         for path in created:
             print(f"  - {path}")
@@ -5076,6 +5198,39 @@ def _memory(args: argparse.Namespace) -> None:
     if command == "list":
         # Canonical SQLite store first (what the agent recalls), markdown second.
         shown = False
+        if getattr(args, "json", False):
+            records: list[dict[str, Any]] = []
+            store = _agent_memory_store(args)
+            if store is not None and hasattr(store, "list_records"):
+                for rec in store.list_records(limit=200):
+                    records.append(
+                        {
+                            "id": rec.id,
+                            "layer": rec.layer.value,
+                            "key": rec.key,
+                            "size": len(rec.content),
+                            "source": "sqlite",
+                        }
+                    )
+            for item in repo.list_items():
+                records.append(
+                    {
+                        "id": item.id,
+                        "kind": item.kind,
+                        "classification": item.classification.value,
+                        "tokens": item.tokens,
+                        "source": "markdown",
+                    }
+                )
+            list_payload: dict[str, Any] = {
+                "schema": "opencontext/memory-list/v1",
+                "records": records,
+                "count": len(records),
+                "error": None,
+            }
+            json.dump(list_payload, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+            return
         store = _agent_memory_store(args)
         if store is not None and hasattr(store, "list_records"):
             for rec in store.list_records(limit=200):

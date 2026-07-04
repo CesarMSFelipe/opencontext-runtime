@@ -7,6 +7,8 @@ the agent's context is auditable instead of a black box.
 
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +41,7 @@ def add_explain_parser(subparsers: Any) -> None:
         default=None,
         help="Explain why a single FILE is (or isn't) in the context.",
     )
+    parser.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
 
 
 def _why(item: Any) -> str:
@@ -101,6 +104,34 @@ def handle_explain(runtime: Any, args: Any) -> int:
     included = list(pack.included)
     omitted = list(pack.omitted)
     reasons = {o.item_id: o.reason for o in pack.omissions}
+
+    if getattr(args, "json", False):
+        payload: dict[str, Any] = {
+            "schema": "opencontext/explain/v1",
+            "query": args.query,
+            "used_tokens": pack.used_tokens,
+            "included": [
+                {
+                    "source": it.source,
+                    "score": float(it.score),
+                    "tokens": it.tokens,
+                    "why": _why(it),
+                }
+                for it in included
+            ],
+            "omitted": [
+                {
+                    "source": it.source,
+                    "tokens": it.tokens,
+                    "reason": reasons.get(it.id, "below the budget/diversity cut"),
+                }
+                for it in omitted
+            ],
+            "error": None,
+        }
+        json.dump(payload, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        return 0
 
     # --why FILE: a focused single-file rationale, not the full table.
     why_file = getattr(args, "why", None)
