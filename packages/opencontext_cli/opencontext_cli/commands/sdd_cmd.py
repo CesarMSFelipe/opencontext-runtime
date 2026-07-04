@@ -43,9 +43,10 @@ SUBCOMMANDS = [
     "list",
 ]
 
+# Execution/planning phase verbs that delegate to the SDD runner (a status/dispatch
+# resolver). ``new`` and ``init`` are NOT here: they do real, bounded filesystem
+# work (create the openspec scaffold) via dedicated handlers, not the resolver.
 _PHASE_VERBS = {
-    "init",
-    "new",
     "explore",
     "propose",
     "spec",
@@ -121,6 +122,14 @@ def handle_sdd(args: Any) -> None:
     topic = getattr(args, "topic", None)
     task = getattr(args, "task", None)
     verbose = getattr(args, "verbose", False)
+
+    # new/init do real, bounded filesystem work (create the openspec scaffold).
+    if verb == "new":
+        _handle_new(change, cwd, verbose)
+        return
+    if verb == "init":
+        _handle_init(cwd, verbose)
+        return
 
     # Phase verbs delegate to the SDD runner via run_phase.
     if verb in _PHASE_VERBS:
@@ -209,6 +218,62 @@ def _handle_list(cwd: Path, verbose: bool) -> None:
         print("  (no active changes)")
 
 
+def _handle_new(change: str | None, cwd: Path, verbose: bool) -> None:
+    """Create a new SDD change scaffold under ``openspec/changes/<change>/``.
+
+    Previously ``sdd new`` routed through the status resolver and created nothing
+    while reporting ``blocked`` — it now does the bounded, deterministic work the
+    verb promises: make the change directory and a ``proposal.md`` stub.
+    """
+    if not change:
+        print("Usage: opencontext sdd new <change-name>", file=sys.stderr)
+        sys.exit(2)
+    change_dir = cwd / "openspec" / "changes" / change
+    if change_dir.exists():
+        _print_json({"status": "exists", "change": change, "path": str(change_dir)}, verbose)
+        return
+    change_dir.mkdir(parents=True, exist_ok=True)
+    (change_dir / "proposal.md").write_text(
+        f"# Proposal: {change}\n\n- **Status:** draft\n\n"
+        "## Intent\n\n<why this change>\n\n## Scope\n\n<what changes>\n",
+        encoding="utf-8",
+    )
+    _print_json(
+        {
+            "status": "created",
+            "change": change,
+            "path": str(change_dir),
+            "artifacts": ["proposal.md"],
+            "next_recommended": "spec",
+        },
+        verbose,
+    )
+
+
+def _handle_init(cwd: Path, verbose: bool) -> None:
+    """Bootstrap the ``openspec/`` file-artifact scaffold for SDD."""
+    openspec = cwd / "openspec"
+    (openspec / "changes").mkdir(parents=True, exist_ok=True)
+    (openspec / "specs").mkdir(parents=True, exist_ok=True)
+    project_md = openspec / "project.md"
+    created = not project_md.exists()
+    if created:
+        project_md.write_text(
+            "# OpenSpec Project\n\nSDD file-artifact store. Changes live under "
+            "`openspec/changes/<name>/`. Start one with `opencontext sdd new <name>`.\n",
+            encoding="utf-8",
+        )
+    _print_json(
+        {
+            "status": "initialized",
+            "openspec": str(openspec),
+            "created_project_md": created,
+            "next_recommended": "new",
+        },
+        verbose,
+    )
+
+
 def _run_phase(
     verb: str,
     cwd: Path,
@@ -230,6 +295,18 @@ def _run_phase(
         verbose=verbose,
     )
     _print_json(envelope.model_dump(mode="json", exclude_none=True), verbose)
+    # Honesty: these verbs RESOLVE and DISPATCH SDD phases over openspec files;
+    # they do not themselves execute edits/gates. A "Ready for phase X" status
+    # means "cleared to run", NOT "applied". Point the user at the real executor
+    # so `sdd apply` is never mistaken for a completed mutation. stderr keeps
+    # stdout JSON clean for machine consumers.
+    if verb in {"apply", "verify"}:
+        print(
+            f"note: `opencontext sdd {verb}` resolves/dispatches the SDD phase; it does not "
+            "execute edits or gates itself. To EXECUTE with the harness (real edits, TDD, "
+            "gates) run `opencontext run --workflow sdd` (or `opencontext oc-new`).",
+            file=sys.stderr,
+        )
     return envelope
 
 
