@@ -205,6 +205,99 @@ def _global_state_targets() -> list[Path]:
     ]
 
 
+def _global_product_install_targets() -> list[Path]:
+    """Return the fixed paths that install.sh creates for the product install.
+
+    # NOTE: known fixed-path removal — upgrade to manifest-driven if install
+    # methods diversify (e.g. brew/npm managed paths are added to install.sh).
+    # Paths intentionally excluded (not created by install.sh):
+    #   - ~/.local/bin/oc        (not in install.sh)
+    #   - ~/.cache/opencontext   (not in install.sh)
+    #   - ~/.local/state/opencontext (not in install.sh)
+    """
+    home = Path.home()
+    return [
+        home / ".opencontext" / "venv",
+    ]
+
+
+def _oc_symlink_in_local_bin() -> Path | None:
+    """Return ~/.local/bin/opencontext if it is a symlink pointing into ~/.opencontext.
+
+    Guards:
+    - Only removes if the path is under the user's home.
+    - Only removes if it is a symlink (not a regular file from pipx/brew).
+    - Only removes if the symlink target resolves into ~/.opencontext.
+    Returns None when the path does not exist or does not meet the guards.
+    """
+    home = Path.home()
+    candidate = home / ".local" / "bin" / "opencontext"
+    if not candidate.is_symlink():
+        return None
+    try:
+        # resolve() follows the symlink chain; we check whether the result lives
+        # under ~/.opencontext so we never remove an unrelated tool's entry.
+        resolved = candidate.resolve()
+        oc_root = (home / ".opencontext").resolve()
+        resolved.relative_to(oc_root)  # raises ValueError when not under oc_root
+    except (OSError, ValueError):
+        return None
+    return candidate
+
+
+# RC files that _add_venv_to_path in install.sh may modify.
+_RC_FILES = (".bashrc", ".zshrc", ".profile")
+
+# Exact comment line that install.sh writes before the PATH export.
+_RC_OC_COMMENT = "# OpenContext Runtime"
+
+
+def _strip_rc_path_lines(home: Path) -> list[str]:
+    """Remove the '# OpenContext Runtime' + export PATH block from shell rc files.
+
+    install.sh writes exactly two lines:
+        # OpenContext Runtime
+        export PATH="<venv_bin>:$PATH"
+
+    Only those two consecutive lines are removed. All other rc content is
+    preserved. Returns list of rc file paths that were modified.
+    """
+    modified: list[str] = []
+    for rc_name in _RC_FILES:
+        rc_path = home / rc_name
+        if not rc_path.exists():
+            continue
+        try:
+            lines = rc_path.read_text(encoding="utf-8").splitlines(keepends=True)
+        except OSError:
+            continue
+        new_lines: list[str] = []
+        i = 0
+        changed = False
+        while i < len(lines):
+            stripped = lines[i].rstrip("\n").rstrip()
+            if stripped == _RC_OC_COMMENT:
+                # Consume the comment line and the immediately following export line.
+                i += 1
+                if i < len(lines) and lines[i].lstrip().startswith("export PATH="):
+                    i += 1
+                changed = True
+                # Also consume a blank line that install.sh prepends before the comment.
+                # The blank line was already emitted — trim trailing blank from output.
+                if new_lines and new_lines[-1].strip() == "":
+                    new_lines.pop()
+                continue
+            new_lines.append(lines[i])
+            i += 1
+        if changed:
+            try:
+                rc_path.write_text("".join(new_lines), encoding="utf-8")
+                modified.append(str(rc_path))
+            except OSError:
+                pass
+    return modified
+
+
 def resolve_uninstall_scope(args: Any) -> str:
     """Return the effective purge scope from parsed args.
 
@@ -228,6 +321,12 @@ def resolve_uninstall_scope(args: Any) -> str:
 def _purge_global_state() -> list[str]:
     """Delete OpenContext HOME state. Best-effort and scoped to known OC dirs.
 
+    Removes (in order):
+      1. Paths from _global_state_targets() — config profiles + home backups.
+      2. Product-install paths from install.sh: ~/.opencontext/venv.
+      3. ~/.local/bin/opencontext symlink — only when it points into ~/.opencontext.
+      4. Shell rc PATH lines: the '# OpenContext Runtime' + export PATH block.
+
     NOTE: a system-level Engram provisioned by ``install --install-engram`` (pipx/npm)
     is intentionally NOT reversed here — that is a separate system install the user
     owns, so uninstall never touches it. Only OpenContext's own HOME state is removed.
@@ -235,6 +334,9 @@ def _purge_global_state() -> list[str]:
     import shutil
 
     removed: list[str] = []
+    home = Path.home()
+
+    # 1. Config profiles + home backups (original targets)
     for target in _global_state_targets():
         if not target.exists():
             continue
@@ -247,7 +349,33 @@ def _purge_global_state() -> list[str]:
         except Exception:
             pass
 
-    for parent in (Path.home() / ".config", Path.home() / ".opencontext"):
+    # 2. Product-install paths (venv created by install.sh)
+    for target in _global_product_install_targets():
+        if not target.exists():
+            continue
+        try:
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+            removed.append(str(target))
+        except Exception:
+            pass
+
+    # 3. ~/.local/bin/opencontext symlink — guard: only if it points into ~/.opencontext
+    oc_symlink = _oc_symlink_in_local_bin()
+    if oc_symlink is not None:
+        try:
+            oc_symlink.unlink()
+            removed.append(str(oc_symlink))
+        except Exception:
+            pass
+
+    # 4. Strip the '# OpenContext Runtime' PATH block from shell rc files
+    removed.extend(_strip_rc_path_lines(home))
+
+    # 5. Prune empty parent dirs (best-effort; silently skips non-empty)
+    for parent in (home / ".config", home / ".opencontext"):
         try:
             parent.rmdir()
         except OSError:
@@ -509,6 +637,16 @@ def verify_no_global_traces(agents: list[str]) -> list[str]:
         if state_path.exists():
             residue.append(str(state_path))
 
+    # Product-install paths created by install.sh.
+    for install_path in _global_product_install_targets():
+        if install_path.exists():
+            residue.append(str(install_path))
+
+    # ~/.local/bin/opencontext symlink pointing into ~/.opencontext.
+    oc_symlink = _oc_symlink_in_local_bin()
+    if oc_symlink is not None:
+        residue.append(str(oc_symlink))
+
     return list(dict.fromkeys(residue))
 
 
@@ -602,6 +740,19 @@ def handle_uninstall(args: Any) -> None:
             ]
             if getattr(args, "global_state", False):
                 targets.extend(str(p) for p in _global_state_targets())
+                targets.extend(str(p) for p in _global_product_install_targets())
+                oc_sym = _oc_symlink_in_local_bin()
+                if oc_sym is not None:
+                    targets.append(str(oc_sym))
+                home = Path.home()
+                for rc_name in _RC_FILES:
+                    rc_path = home / rc_name
+                    if rc_path.exists():
+                        try:
+                            if _RC_OC_COMMENT in rc_path.read_text(encoding="utf-8"):
+                                targets.append(f"{rc_path} (rc PATH block)")
+                        except OSError:
+                            pass
             if json_output:
                 print(json.dumps({"dry_run": True, "would_remove": targets}, indent=2))
             else:
