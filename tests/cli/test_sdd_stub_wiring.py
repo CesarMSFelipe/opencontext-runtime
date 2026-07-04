@@ -58,9 +58,7 @@ class TestRunPhaseWiring:
             trace_id="",
         )
 
-        with patch(
-            "opencontext_sdd.runner.run_phase", return_value=fake_envelope
-        ) as mock_run:
+        with patch("opencontext_sdd.runner.run_phase", return_value=fake_envelope) as mock_run:
             _run_phase("apply", tmp_path, "my-change")
 
         mock_run.assert_called_once()

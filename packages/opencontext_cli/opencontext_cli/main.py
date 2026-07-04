@@ -4866,7 +4866,6 @@ def _pack(
                 file=_sys.stderr,
             )
         elif reduction_pct > 0 and naive_tokens > optimized_tokens:
-
             shown_pct = min(reduction_pct, 99.9)
             mem_indicator = ""
             try:

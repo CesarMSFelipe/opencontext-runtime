@@ -35,8 +35,10 @@ class TestRunPhaseRoutesByRequestedPhase:
         # At minimum: requesting different phases must not produce identical
         # `next_recommended` values when the phases are at different positions
         # in the lifecycle.
-        assert env_propose.phase != env_design.phase or \
-            env_propose.next_recommended != env_design.next_recommended, (
+        assert (
+            env_propose.phase != env_design.phase
+            or env_propose.next_recommended != env_design.next_recommended
+        ), (
             "run_phase returned identical envelopes for 'propose' and 'design'; "
             "the phase argument is being silently discarded."
         )
@@ -53,8 +55,7 @@ class TestRunPhaseRoutesByRequestedPhase:
             env = run_phase(verb, change="my-change", cwd=str(tmp_path))
             # The envelope must carry the requested phase, not auto-detected.
             assert env.phase == verb, (
-                f"run_phase('{verb}') returned phase='{env.phase}'; "
-                "requested phase is discarded."
+                f"run_phase('{verb}') returned phase='{env.phase}'; requested phase is discarded."
             )
 
 
@@ -85,9 +86,7 @@ class TestHandleFfAbortsOnBlocked:
                 _handle_ff(change="x", cwd=tmp_path, verbose=False)
 
         # Only 'propose' must have been attempted — loop must not continue.
-        assert call_log == ["propose"], (
-            f"ff continued past a blocked phase; called {call_log}"
-        )
+        assert call_log == ["propose"], f"ff continued past a blocked phase; called {call_log}"
 
     def test_ff_reports_blocked_phase_name(self, tmp_path: Path, capsys) -> None:
         """When ff aborts, the output must mention which phase blocked."""
@@ -221,9 +220,7 @@ class TestGateStatusNotAppliedSemantic:
             verdicts=(),
             health=health,
         )
-        assert report.exit_code == 0, (
-            "NOT_APPLIED should exit with code 0 (non-blocking), got 1."
-        )
+        assert report.exit_code == 0, "NOT_APPLIED should exit with code 0 (non-blocking), got 1."
 
     def test_failed_is_not_ok(self) -> None:
         """Sanity: GateStatus.FAILED.is_ok must still be False."""
@@ -278,9 +275,7 @@ class TestTestsPassGateWiredInVerify:
             "_dispatch_one_gate returned None for 'tests_pass'; gate is not wired."
         )
 
-    def test_tests_pass_gate_in_strict_fails_on_failing_suite(
-        self, tmp_path: Path
-    ) -> None:
+    def test_tests_pass_gate_in_strict_fails_on_failing_suite(self, tmp_path: Path) -> None:
         """In strict mode, TestsPassGate.evaluate() with exit!=0 → FAILED."""
         from opencontext_core.harness.gates import TestsPassGate
         from opencontext_core.harness.models import GateStatus
@@ -332,6 +327,7 @@ class TestInstallJsonSystemExitStatus:
         captured = io.StringIO()
         with patch("opencontext_cli.main._install", side_effect=side_effect):
             import sys
+
             real_stdout = sys.stdout
             sys.stdout = captured  # type: ignore[assignment]
             try:
@@ -378,6 +374,7 @@ class TestMutationVerbsHoistedImport:
             _MUTATION_VERBS,
             _READONLY_VERBS,
         )
+
         assert isinstance(_MUTATION_VERBS, (list, tuple, frozenset, set))
         assert isinstance(_READONLY_VERBS, (list, tuple, frozenset, set))
 

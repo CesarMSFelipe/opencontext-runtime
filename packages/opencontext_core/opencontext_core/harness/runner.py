@@ -970,9 +970,7 @@ class HarnessRunner:
         # "describe the add function" (where "add" is a symbol, not a directive).
         # Scoped to PASSED/WARNING only — FAILED must not be softened to NOT_APPLIED.
         _apply_was_planned = any(
-            r.phase == "apply"
-            and r.metadata.get("apply_status") == "planned"
-            for r in results
+            r.phase == "apply" and r.metadata.get("apply_status") == "planned" for r in results
         )
         if _apply_was_planned and getattr(state, "delegate", None) is None:
             # Use the module-level verb lists (imported once at startup).

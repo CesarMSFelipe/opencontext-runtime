@@ -178,9 +178,7 @@ class TestMemoryLifecycleMarkReviewed:
 
     def test_mark_reviewed_resets_review_after_to_future(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
-        obs_id = self._save_with_past_review_after(
-            store, project="proj", session_id="e2e-sess-1"
-        )
+        obs_id = self._save_with_past_review_after(store, project="proj", session_id="e2e-sess-1")
         # Before mark_reviewed, the row is needs_review.
         with store._connect() as conn:
             row = conn.execute(
@@ -321,9 +319,7 @@ class TestMemoryLifecycleFullPipeline:
         assert obs_id >= 1
 
         # Stage 2 — Reuse: record is searchable immediately (no approval gate).
-        hits = mem_search(
-            store=store, query="token rotation", project="pipeline-project"
-        )
+        hits = mem_search(store=store, query="token rotation", project="pipeline-project")
         assert any(h["id"] == obs_id for h in hits), "Record must be searchable after save"
 
         # Simulate lifecycle decay: stamp review_after in the past.
@@ -347,9 +343,7 @@ class TestMemoryLifecycleFullPipeline:
         # Stage 4 — Purge: soft-delete the record.
         mem_delete(store, observation_id=obs_id)
         # Confirm it is gone from search and retrieval.
-        hits_after = mem_search(
-            store=store, query="token rotation", project="pipeline-project"
-        )
+        hits_after = mem_search(store=store, query="token rotation", project="pipeline-project")
         assert not any(h["id"] == obs_id for h in hits_after), (
             "Soft-deleted record must not appear in search results"
         )

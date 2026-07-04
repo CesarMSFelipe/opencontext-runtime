@@ -181,9 +181,7 @@ def test_purge_global_state_removes_path_export_from_zshrc(tmp_path, monkeypatch
     venv_bin = str(home / ".opencontext" / "venv" / "bin")
     zshrc = home / ".zshrc"
     zshrc.write_text(
-        "# my zsh config\n\n# OpenContext Runtime\nexport PATH=\""
-        + venv_bin
-        + ':$PATH"\n# end\n',
+        '# my zsh config\n\n# OpenContext Runtime\nexport PATH="' + venv_bin + ':$PATH"\n# end\n',
         encoding="utf-8",
     )
 

@@ -126,9 +126,7 @@ class Orchestrator:
                     ),
                     artifacts={},
                     next_recommended=expected_next,
-                    risks=[
-                        f"Requested phase '{requested_phase}' skips '{expected_next}'."
-                    ],
+                    risks=[f"Requested phase '{requested_phase}' skips '{expected_next}'."],
                     skill_resolution="paths-injected",
                     phase=requested_phase,
                     trace_id="",

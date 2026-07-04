@@ -35,6 +35,7 @@ class TestBuildBinaryPackages:
     def test_opencontext_sdd_in_packages(self) -> None:
         """opencontext_sdd must be listed in _PACKAGES so the pyz is self-contained."""
         import scripts.build_binary as bb
+
         assert "opencontext_sdd" in bb._PACKAGES, (
             "opencontext_sdd is missing from scripts/build_binary.py _PACKAGES. "
             "The pyz will crash with ModuleNotFoundError on a clean machine."
@@ -43,6 +44,7 @@ class TestBuildBinaryPackages:
     def test_opencontext_sdd_source_path_exists(self) -> None:
         """The source path recorded for opencontext_sdd must actually exist."""
         import scripts.build_binary as bb
+
         if "opencontext_sdd" not in bb._PACKAGES:
             pytest.skip("opencontext_sdd not in _PACKAGES yet (CRIT-1a fix pending)")
         src = bb._PACKAGES["opencontext_sdd"]
@@ -109,12 +111,7 @@ class TestSddCmdLazyImport:
         CLI command on a clean machine where sdd is absent.
         """
         sdd_cmd_path = (
-            ROOT
-            / "packages"
-            / "opencontext_cli"
-            / "opencontext_cli"
-            / "commands"
-            / "sdd_cmd.py"
+            ROOT / "packages" / "opencontext_cli" / "opencontext_cli" / "commands" / "sdd_cmd.py"
         )
         source = sdd_cmd_path.read_text(encoding="utf-8")
         lines = source.splitlines()
@@ -190,9 +187,7 @@ class TestTestsPassGateInBuiltinYaml:
         assert result.status == GateStatus.PASSED
         assert "inactive" in result.message.lower()
 
-    def test_tests_pass_gate_activates_in_strict_mode_on_failure(
-        self, tmp_path: Path
-    ) -> None:
+    def test_tests_pass_gate_activates_in_strict_mode_on_failure(self, tmp_path: Path) -> None:
         """tests_pass gate returns FAILED in strict mode when tests fail."""
         from opencontext_core.harness.gates import TestsPassGate
         from opencontext_core.harness.models import GateStatus
@@ -256,11 +251,7 @@ class TestMypyNoUnusedIgnoreInMainPy:
             data.get("tool", {}).get("mypy", {}).get("overrides", [])
         )
         main_override = next(
-            (
-                o
-                for o in overrides
-                if o.get("module") == "opencontext_cli.main"
-            ),
+            (o for o in overrides if o.get("module") == "opencontext_cli.main"),
             None,
         )
         assert main_override is not None, (
@@ -283,12 +274,7 @@ class TestSddCmdStaleComment:
     def test_no_stub_comment_in_sdd_cmd(self) -> None:
         """sdd_cmd.py must not contain the stale 'stub until PR4.a ships' comment."""
         sdd_cmd_path = (
-            ROOT
-            / "packages"
-            / "opencontext_cli"
-            / "opencontext_cli"
-            / "commands"
-            / "sdd_cmd.py"
+            ROOT / "packages" / "opencontext_cli" / "opencontext_cli" / "commands" / "sdd_cmd.py"
         )
         source = sdd_cmd_path.read_text(encoding="utf-8")
         assert "stub until PR4.a ships" not in source, (

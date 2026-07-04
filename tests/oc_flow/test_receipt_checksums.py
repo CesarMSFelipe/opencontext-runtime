@@ -27,9 +27,7 @@ def test_apply_receipt_records_checksums(tmp_path: Path) -> None:
         requirement_refs=["add returns the sum"],
     )
 
-    result = OCFlowRunner(root=tmp_path).run(
-        "fix add", lane=Lane.FAST, requested_edits=[edit]
-    )
+    result = OCFlowRunner(root=tmp_path).run("fix add", lane=Lane.FAST, requested_edits=[edit])
 
     receipts_files = list((tmp_path / ".opencontext").rglob("apply-receipts.json"))
     assert receipts_files, "no apply-receipts.json written"
