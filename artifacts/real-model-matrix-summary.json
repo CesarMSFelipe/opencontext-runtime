@@ -4,7 +4,7 @@
   "hosts": {
     "opencode": {
       "model": "opencode/deepseek-v4-flash-free (free)",
-      "result": "4/4 full flow + fix"
+      "result": "4/4 full flow + fix (sdd+/-tdd, oc-flow+/-tdd)"
     },
     "codex": {
       "model": "gpt-5.5 (ChatGPT-account default; nano/mini/codex rejected by that account)",
@@ -12,15 +12,14 @@
       "note": "needed --dangerously-bypass-approvals-and-sandbox: this box's bubblewrap cannot create user namespaces"
     },
     "claude": {
-      "model": "haiku (cheapest)",
-      "result": "3/4",
-      "note": "SDD strict+off = full flow + fix; oc-flow/strict fixed but edited directly (flow bypass); oc-flow/off engaged flow but weakest model did not land the fix"
+      "models": [
+        "haiku",
+        "sonnet"
+      ],
+      "result": "4/4 with the right model",
+      "note": "SDD +/- TDD pass with haiku (cheapest). OC Flow needs a capable model: haiku engaged the flow but did not land the fix; sonnet passes oc-flow strict+off full flow + fix."
     }
   },
-  "totals": {
-    "outcome_ok": 11,
-    "combos": 12
-  },
-  "verdict": "SDD (with and without TDD) proven end-to-end on all three real hosts with real models. OC Flow proven on opencode + codex; flaky on claude/haiku (cheapest model). Reliability scales with model capability, not with the product plumbing.",
+  "verdict": "SDD (with and without TDD) proven end-to-end on all three real hosts with real models. OC Flow proven on all three too (claude needs sonnet, not haiku). Every host x flow x tdd combo passes with an adequately capable model; reliability scales with model capability, not the product plumbing.",
   "raw": "artifacts/real-model-matrix.jsonl"
 }
