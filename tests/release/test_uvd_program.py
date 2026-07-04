@@ -136,6 +136,39 @@ class TestUVDProgramMatrixConsistency:
         assert not missing, f"UVD catalog does not mention these IDs anywhere: {missing}."
 
 
+class TestHostIntegrationDoD:
+    """The Host-Integration DoD (HID) must be backed by real, on-disk tests.
+
+    This is the anti-overclaim guard for change ``real-host-dod-convergence``:
+    the catalog may not name a ``Test`` path that does not exist, and it may not
+    resurrect the old fabricated ``tests/e2e/test_uvd_NNN.py`` claim.
+    """
+
+    def test_catalog_has_hid_section_for_three_hosts(self) -> None:
+        text = _read(_CATALOG)
+        assert "## Host-Integration DoD" in text, "HID section missing from UVD catalog"
+        for hid in ("HID-1", "HID-2", "HID-3", "HID-4"):
+            assert re.search(rf"^##\s+{hid}\b", text, re.MULTILINE), f"{hid} section missing"
+        for host in ("codex", "opencode", "claude"):
+            assert host in text, f"HID section does not name host '{host}'"
+
+    def test_hid_test_references_exist_on_disk(self) -> None:
+        text = _read(_CATALOG)
+        # Pull the HID block and every `- **Test**: path::node` reference in it.
+        hid_block = text.split("## Host-Integration DoD", 1)[1].split("## Summary Index", 1)[0]
+        refs = re.findall(r"-\s+\*\*Test\*\*:\s*`?([^\s`:]+\.py)", hid_block)
+        assert refs, "HID section declares no Test references"
+        for rel in refs:
+            assert (_REPO_ROOT / rel).is_file(), f"HID references non-existent test file: {rel}"
+
+    def test_catalog_does_not_claim_fabricated_per_id_tests(self) -> None:
+        text = _read(_CATALOG)
+        assert "test_uvd_NNN.py" not in text, (
+            "UVD catalog still claims fabricated per-id tests/e2e/test_uvd_NNN.py files; "
+            "point UVDs at the real e2e suites instead."
+        )
+
+
 class TestUVDProgramSpecsCrossReference:
     """Each per-capability spec must reference applicable UVDs (≥1)."""
 
