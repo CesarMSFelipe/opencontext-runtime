@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from opencontext_cli.output import eprint
@@ -47,12 +48,34 @@ def _list_harness_receipts(root: Path) -> list[Any]:
     ws = resolve_workspace_path(root, StorageMode.local)
     receipts: list[Any] = []
 
+    def _scan(run_dir: Path) -> None:
+        receipts.extend(ReceiptStore(run_dir).list_all())
+        # OC Flow writes artifacts/oc-flow/apply-receipts.json (not receipts.jsonl),
+        # so it was invisible to `receipt list`/`show`; surface it as a lightweight
+        # receipt keyed by the run id.
+        oc = run_dir / "artifacts" / "oc-flow" / "apply-receipts.json"
+        if oc.is_file():
+            try:
+                data = json.loads(oc.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return
+            receipts.append(
+                SimpleNamespace(
+                    run_id=run_dir.name,
+                    receipt_id=run_dir.name,
+                    kind="oc-flow-apply",
+                    checkpoint_id=data.get("checkpoint_id"),
+                    receipts=data.get("receipts", []),
+                    path=str(oc),
+                )
+            )
+
     # Legacy layout: .opencontext/runs/<run_id>/
     runs_dir = ws / "runs"
     if runs_dir.is_dir():
         for run_dir in sorted(runs_dir.iterdir()):
             if run_dir.is_dir():
-                receipts.extend(ReceiptStore(run_dir).list_all())
+                _scan(run_dir)
 
     # Sessions layout: .opencontext/sessions/<session_id>/runs/<run_id>/
     sessions_dir = ws / "sessions"
@@ -64,7 +87,7 @@ def _list_harness_receipts(root: Path) -> list[Any]:
             if runs_subdir.is_dir():
                 for run_dir in sorted(runs_subdir.iterdir()):
                     if run_dir.is_dir():
-                        receipts.extend(ReceiptStore(run_dir).list_all())
+                        _scan(run_dir)
 
     return receipts
 
