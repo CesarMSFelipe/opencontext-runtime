@@ -2494,6 +2494,29 @@ class HarnessRunner:
             "decisions.json": {"decisions": _serialize(result.decisions)},
             "events.json": {"events": _serialize(result.events)},
         }
+
+        # harness-report.json: a single consolidated run summary. Declared as a
+        # verify required_output but previously had no writer, so it never
+        # appeared on disk. Emit a compact status + gate tally + phase list.
+        _gate_tally: dict[str, int] = {}
+        _phases: list[str] = []
+        for _g in result.gates:
+            _gs = _g.status.value if hasattr(_g.status, "value") else str(_g.status)
+            _gate_tally[_gs] = _gate_tally.get(_gs, 0) + 1
+            _gp = getattr(_g, "phase", None)
+            if _gp and _gp not in _phases:
+                _phases.append(_gp)
+        files["harness-report.json"] = {
+            "run_id": result.run_id,
+            "workflow": result.workflow,
+            "status": (
+                result.status.value if hasattr(result.status, "value") else str(result.status)
+            ),
+            "phases": _phases,
+            "gates": {"total": len(result.gates), "by_status": _gate_tally},
+            "artifacts": len(result.artifacts),
+            "created_at": result.created_at,
+        }
         for filename, data in files.items():
             (run_dir / filename).write_text(
                 json.dumps(data, indent=2, default=str), encoding="utf-8"
@@ -2520,6 +2543,13 @@ class HarnessRunner:
 
                 if _cm_data is not None:
                     _matrix = ComplianceMatrix.model_validate(_cm_data)
+                    # Write the declared artifact name too: sdd.yaml/oc_new/archive_gate
+                    # reference `compliance-matrix.json` (the matrix), which previously
+                    # never appeared — only the verdict `verify-report-compliance.json`
+                    # was written.
+                    (run_dir / "compliance-matrix.json").write_text(
+                        json.dumps(_matrix.model_dump(mode="json"), indent=2), encoding="utf-8"
+                    )
                     _vreport = VerifyReport.compute_verdict(_matrix)
                     _vreport_path = run_dir / "verify-report-compliance.json"
                     _vreport_path.write_text(
