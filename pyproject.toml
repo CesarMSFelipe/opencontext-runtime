@@ -30,6 +30,9 @@ indent-style = "space"
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+markers = [
+  "real_host: end-to-end tests that drive the real codex/opencode/claude binaries (skip when absent)",
+]
 pythonpath = [
   ".",
   "packages/opencontext_api",
@@ -86,4 +89,12 @@ follow_imports = "skip"
 # Windows error; warn_unused_ignores=false prevents Linux from rejecting them as unused.
 [[tool.mypy.overrides]]
 module = "opencontext_memory.store.write_queue"
+warn_unused_ignores = false
+
+# main.py temporarily redirects sys.stdout to a StringIO sink. The assignment
+# is type-correct at runtime but mypy infers TextIO vs StringIO mismatch on some
+# versions; the inline # type: ignore[assignment] suppresses it. On Linux the
+# ignore may be flagged as unused depending on mypy version — suppress the noise.
+[[tool.mypy.overrides]]
+module = "opencontext_cli.main"
 warn_unused_ignores = false
