@@ -39,6 +39,13 @@ def add_maturity_parser(subparsers: Any) -> None:
     assess.add_argument("--root", default=".", help="Project root.")
     assess.add_argument("--json", action="store_true", help="JSON output.")
     add_output_flag(assess)
+    # `commands` reports the API-stability contract per CLI command (stable /
+    # preview / internal) — a different axis than the project-adoption assess.
+    commands = sub.add_parser(
+        "commands", help="List per-command API maturity (stable/preview/internal)."
+    )
+    commands.add_argument("--json", action="store_true", help="JSON output.")
+    add_output_flag(commands)
 
 
 def _dim(name: str, ready: bool, basic: bool, recommendation: str) -> dict[str, Any]:
@@ -114,14 +121,42 @@ def _assess(root: Path) -> dict[str, Any]:
     }
 
 
+def _commands_report() -> dict[str, Any]:
+    from opencontext_cli.command_maturity import COMMAND_MATURITY
+
+    by_level: dict[str, list[str]] = {"stable": [], "preview": [], "internal": []}
+    for cmd, level in sorted(COMMAND_MATURITY.items()):
+        by_level[level].append(cmd)
+    return {
+        "commands": dict(sorted(COMMAND_MATURITY.items())),
+        "by_level": by_level,
+        "counts": {level: len(names) for level, names in by_level.items()},
+    }
+
+
 def handle_maturity(args: Any) -> None:
     import sys
 
-    # Bare `maturity` (maturity_command is None) defaults to assess; only an
-    # unexpected non-assess subcommand is a usage error.
-    if getattr(args, "maturity_command", None) not in (None, "assess"):
-        eprint("Usage: opencontext maturity [assess]")
+    # Bare `maturity` (maturity_command is None) defaults to assess; `commands`
+    # reports the API-stability contract; any other subcommand is a usage error.
+    sub = getattr(args, "maturity_command", None)
+    if sub not in (None, "assess", "commands"):
+        eprint("Usage: opencontext maturity [assess|commands]")
         sys.exit(2)
+
+    if sub == "commands":
+        data = _commands_report()
+
+        def _human_cmds(d: dict[str, Any]) -> None:
+            console.header("Command maturity")
+            for level in ("stable", "preview", "internal"):
+                names = d["by_level"][level]
+                print(f"{level} ({len(names)}):")
+                for name in names:
+                    print(f"  {name}")
+
+        emit(data, resolve_output_mode(args), _human_cmds)
+        return
 
     data = _assess(_root(args))
 
