@@ -126,8 +126,11 @@ def add_run_exec_parser(subparsers: Any) -> None:
     run_parser.add_argument(
         "--workflow",
         default="oc-flow",
-        choices=["oc-flow", "auto"],
-        help="Workflow to run (default: oc-flow; 'auto' selects oc-flow/sdd by task).",
+        choices=["oc-flow", "auto", "sdd"],
+        help=(
+            "Workflow to run (default: oc-flow; 'sdd' runs the full SDD phase harness "
+            "explore→archive; 'auto' selects oc-flow/sdd by task)."
+        ),
     )
     run_parser.add_argument(
         "--lane",
