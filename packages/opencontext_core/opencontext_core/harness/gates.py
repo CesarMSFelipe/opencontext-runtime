@@ -806,6 +806,20 @@ class TestsPassGate:
                 message="TestsPassGate: inactive (tdd_mode is not strict).",
             )
 
+        # Sanitize the subprocess env so the nested test run is deterministic when
+        # this gate itself runs inside a parent pytest (drop PYTEST_*/COV_* that would
+        # leak the parent's config/coverage), and add the project root to PYTHONPATH so
+        # a bare `pytest` can import the project's own modules (else exit 2 on import).
+        import os
+
+        _env = {
+            k: v
+            for k, v in os.environ.items()
+            if not (k.startswith("PYTEST_") or k.startswith("COV_"))
+        }
+        _pp = _env.get("PYTHONPATH", "")
+        _env["PYTHONPATH"] = str(cwd) + (os.pathsep + _pp if _pp else "")
+
         try:
             proc = subprocess.run(
                 cmd,
@@ -814,6 +828,7 @@ class TestsPassGate:
                 text=True,
                 timeout=self._EXEC_TIMEOUT,
                 shell=False,
+                env=_env,
             )
         except subprocess.TimeoutExpired:
             return PhaseGate(

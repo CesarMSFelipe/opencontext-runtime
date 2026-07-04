@@ -1644,10 +1644,14 @@ class HarnessRunner:
             # so strict TDD set via opencontext.yaml's harness section — not only
             # harness.yaml workflow_defaults — activates the GREEN gate too.
             tdd_mode, _ = self._harness_governance()
-            # Resolve a deterministic test command. ``["pytest"]`` is the
-            # project-level default; consumers can extend via HarnessConfig
-            # in a future iteration.
-            cmd: list[str] = ["pytest"]
+            # Discover the project's real test command instead of a bare ``pytest``,
+            # which fails to import project modules (exit 2) when the project has no
+            # pythonpath/rootdir config. Fall back to the interpreter's pytest module.
+            import sys as _sys
+
+            from opencontext_core.oc_flow.runner import _discover_test_command
+
+            cmd = _discover_test_command(state.root) or [_sys.executable, "-m", "pytest"]
             return TestsPassGate().evaluate(cmd=cmd, cwd=state.root, tdd_mode=tdd_mode)
         # Unknown / unbound declared gate: do not fabricate a result.
         return None
