@@ -71,8 +71,10 @@ check sdd_new    oc sdd new "add-multiply"
 check sdd_status oc sdd status
 check uninstall  oc uninstall claude-code --purge --full --verify --yes --root "$PROJ"
 
-# The strong uninstall must leave zero OpenContext traces.
-LEFT="$(cd "$PROJ" && ls -a | grep -Ev '^\.$|^\.\.$|^calc.py$|^test_calc.py$|^\.git$' | tr '\n' ' ')"
+# The strong uninstall must leave zero OpenContext *config* traces. It must NOT
+# delete user content: source files, .git, and the openspec/ SDD artifact store
+# (proposals/specs the user authored via `sdd new`) are the user's, not OC's.
+LEFT="$(cd "$PROJ" && ls -a | grep -Ev '^\.$|^\.\.$|^calc.py$|^test_calc.py$|^\.git$|^openspec$' | tr '\n' ' ')"
 if [ -n "$LEFT" ]; then
   printf '  \033[31mFAIL\033[0m uninstall left traces: %s\n' "$LEFT"; FAILS=$((FAILS+1))
 else
