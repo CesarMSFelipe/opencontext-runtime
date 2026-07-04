@@ -10,7 +10,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from opencontext_cli.output import add_output_flag, emit, eprint, resolve_output_mode
+from opencontext_cli.output import (
+    add_output_flag,
+    emit,
+    envelope,
+    eprint,
+    resolve_output_mode,
+)
 from opencontext_core.dx.console_styles import console
 
 # dimension -> (level, score 0..1, recommendation)
@@ -127,11 +133,14 @@ def _commands_report() -> dict[str, Any]:
     by_level: dict[str, list[str]] = {"stable": [], "preview": [], "internal": []}
     for cmd, level in sorted(COMMAND_MATURITY.items()):
         by_level[level].append(cmd)
-    return {
-        "commands": dict(sorted(COMMAND_MATURITY.items())),
-        "by_level": by_level,
-        "counts": {level: len(names) for level, names in by_level.items()},
-    }
+    return envelope(
+        "maturity.commands.v1",
+        {
+            "commands": dict(sorted(COMMAND_MATURITY.items())),
+            "by_level": by_level,
+            "counts": {level: len(names) for level, names in by_level.items()},
+        },
+    )
 
 
 def handle_maturity(args: Any) -> None:

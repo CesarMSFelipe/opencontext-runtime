@@ -38,3 +38,25 @@ def test_no_stale_maturity_entries() -> None:
 def test_all_maturity_values_are_valid() -> None:
     invalid = {c: lvl for c, lvl in COMMAND_MATURITY.items() if lvl not in MATURITIES}
     assert not invalid, f"invalid maturity levels: {invalid}"
+
+
+def test_envelope_prepends_schema_discriminator() -> None:
+    from opencontext_cli.output import envelope
+
+    out = envelope("x.v1", {"a": 1})
+    assert out == {"schema": "x.v1", "a": 1}
+    # schema wins on collision — the discriminator is authoritative.
+    assert envelope("x.v1", {"schema": "spoofed"})["schema"] == "x.v1"
+
+
+def test_maturity_commands_json_carries_schema(capsys) -> None:
+    """`maturity commands --json` joins the schema-keyed machine-facing family."""
+    import json
+    from types import SimpleNamespace
+
+    from opencontext_cli.commands.maturity_cmd import handle_maturity
+
+    handle_maturity(SimpleNamespace(maturity_command="commands", json=True, output=None))
+    data = json.loads(capsys.readouterr().out.strip())
+    assert data["schema"] == "maturity.commands.v1"
+    assert set(data["by_level"]) == {"stable", "preview", "internal"}
