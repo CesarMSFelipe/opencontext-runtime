@@ -989,8 +989,8 @@ def _fold_memory_recall(ctx: OCFlowContext, envelope: ContextEnvelope) -> Contex
             store = MemoryStore.open(obs_db)
             project = Path(ctx.root).name
             seen_obs: dict[str, dict[str, Any]] = {}
-            tokens = {t.lower() for t in re.findall(r"[A-Za-z]{4,}", ctx.task)}
-            for token in list(tokens)[:12]:
+            task_tokens = {t.lower() for t in re.findall(r"[A-Za-z]{4,}", ctx.task)}
+            for token in list(task_tokens)[:12]:
                 for row in mem_search(
                     store, query=token, limit=_MEMORY_RECALL_LIMIT, project=project
                 ):
