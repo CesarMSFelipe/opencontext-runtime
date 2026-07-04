@@ -1440,7 +1440,7 @@ class HarnessRunner:
 
         # TDD failing-test pre-gate (red before green). Only blocks in strict mode.
         if "failing_test_exists" in declared or tdd_mode == "strict":
-            gate = FailingTestExistsGate().evaluate(state.task, state.root)
+            gate = FailingTestExistsGate().evaluate(state.task, state.root, tdd_mode=tdd_mode)
             # Only strict mode enforces blocking; otherwise downgrade to WARNING.
             if tdd_mode == "strict":
                 gates.append(gate)

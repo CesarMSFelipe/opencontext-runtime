@@ -3331,7 +3331,9 @@ def _status(root: str = ".", *, json_output: bool = False) -> None:
         if index_info.get("error"):
             console.warning("Index: manifest exists but could not be read")
         else:
-            console.success(f"Indexed: {index_info['files']} files, {index_info['symbols']} symbols")
+            files = index_info["files"]
+            syms = index_info["symbols"]
+            console.success(f"Indexed: {files} files, {syms} symbols")
     else:
         console.warning("Index: not indexed (run 'opencontext index .')")
 

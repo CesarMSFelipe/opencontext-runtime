@@ -388,6 +388,7 @@ class OnboardingService:
             "workflow_defaults": {
                 "budget_mode": "warn",
                 "artifact_root": ".opencontext/runs",
+                "tdd_mode": options.tdd_mode,
             },
             "phases": {
                 "explore": {
