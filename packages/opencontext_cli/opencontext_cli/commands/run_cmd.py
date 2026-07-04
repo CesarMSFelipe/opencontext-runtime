@@ -230,6 +230,38 @@ def handle_run_exec(args: Any) -> None:
         pass  # estimate failure is a silent skip per honesty rules
 
     api = RuntimeApi(root)
+
+    # --resume <session_id>/<run_id>: restore and report the prior run instead of
+    # silently starting a new one.
+    resume = getattr(args, "resume", None)
+    if resume:
+        sess_id, sep, run_id = resume.partition("/")
+        if not sep or not sess_id or not run_id:
+            print("--resume expects <session_id>/<run_id>", file=sys.stderr)
+            sys.exit(2)
+        try:
+            from opencontext_core.oc_flow.runner import OCFlowRunner
+
+            resumed = OCFlowRunner(root=root).resume(sess_id, run_id)
+        except Exception as exc:
+            print(f"resume failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        receipts = getattr(resumed, "apply_receipts", {}) or {}
+        changed = [r.get("path") for r in receipts.get("receipts", [])]
+        out = {
+            "status": "resumed",
+            "session_id": getattr(resumed, "session_id", sess_id),
+            "run_id": getattr(resumed, "run_id", run_id),
+            "changed_files": changed,
+        }
+        if getattr(args, "json", False):
+            print(json.dumps(out))
+        else:
+            print(
+                f"Resumed {out['session_id']}/{out['run_id']} ({len(out['changed_files'])} edits)"
+            )
+        return
+
     session = api.start_session(StartSessionRequest(task=task, root=str(root), profile=profile))
     result = api.run(RunRequest(session_id=session.session_id, workflow_id=workflow, task=task))
     # B1 / PROD-004: result.status is _legacy_status(legacy) which preserves
