@@ -518,8 +518,15 @@ def handle_run_inspect(args: Any) -> None:
         if run_json is None:
             print(f"Run not found: {args.run_id}", file=sys.stderr)
             sys.exit(1)
-        gates = _read_json(run_dir / "gates.json") or {}
+        # Harness runs keep gates.json/artifacts.json at the run root; OC Flow keeps
+        # them under artifacts/oc-flow/. Count both so `runs show` is not blind to
+        # oc-flow runs (which previously reported gates:0, artifacts:0).
+        oc_art_dir = run_dir / "artifacts" / "oc-flow"
+        gates = _read_json(run_dir / "gates.json") or _read_json(oc_art_dir / "gates.json") or {}
         artifacts = _read_json(run_dir / "artifacts.json") or {}
+        artifact_count = len(artifacts.get("artifacts", []) if isinstance(artifacts, dict) else [])
+        if not artifact_count and (run_dir / "artifacts").is_dir():
+            artifact_count = sum(1 for p in (run_dir / "artifacts").rglob("*") if p.is_file())
         summary = {
             "run_id": run_json.get("run_id", args.run_id),
             "workflow": run_json.get("workflow"),
@@ -527,7 +534,7 @@ def handle_run_inspect(args: Any) -> None:
             "status": run_json.get("status"),
             "created_at": run_json.get("created_at"),
             "gates": len(gates.get("gates", []) if isinstance(gates, dict) else []),
-            "artifacts": len(artifacts.get("artifacts", []) if isinstance(artifacts, dict) else []),
+            "artifacts": artifact_count,
         }
         print(json.dumps(summary, indent=2))
 
@@ -542,7 +549,12 @@ def handle_run_inspect(args: Any) -> None:
         if not run_dir.is_dir():
             print(f"Run not found: {args.run_id}", file=sys.stderr)
             sys.exit(1)
-        names = sorted(p.name for p in run_dir.iterdir() if p.is_file())
+        # Include the nested OC Flow artifact tree (artifacts/oc-flow/…), not just
+        # top-level files — otherwise oc-flow runs looked empty. Paths are relative
+        # to the run dir so the harness (flat) and oc-flow (nested) layouts read alike.
+        names = sorted(
+            str(p.relative_to(run_dir)) for p in run_dir.rglob("*") if p.is_file()
+        )
         if getattr(args, "json", False):
             print(json.dumps(names, indent=2))
         else:
