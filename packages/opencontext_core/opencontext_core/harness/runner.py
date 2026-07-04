@@ -440,6 +440,20 @@ class HarnessRunner:
             effective_provider = provider if provider != "mock" else "injected"
             return self._llm_gateway, effective_provider, model
 
+        # Test-only deterministic executor: a top-level `provider: test_stub` plus a
+        # resolvable `edits_file` under the run root builds a TestStubGateway so the
+        # SDD harness can mutate OFFLINE (parity with the oc-flow path). Never a
+        # production fallback — any other state falls through to the normal resolution.
+        _stub_provider = getattr(cfg, "provider", None)
+        _edits_file = getattr(cfg, "edits_file", None)
+        if _stub_provider == "test_stub" and isinstance(_edits_file, str) and _edits_file:
+            root_resolved = self.root.resolve()
+            edits_path = (root_resolved / _edits_file).resolve()
+            if edits_path.is_file() and edits_path.is_relative_to(root_resolved):
+                from opencontext_core.providers.test_stub import TestStubGateway
+
+                return TestStubGateway(edits_path), "test_stub", model
+
         # Prefer the host agent's selected model (MCP sampling) when available —
         # this is the zero-config path, so it overrides even a mock provider.
         from opencontext_core.config import SecurityMode
@@ -1626,7 +1640,10 @@ class HarnessRunner:
         if gate_id == "code_economy":
             return self._eval_code_economy_gate(state, result)
         if gate_id == "tests_pass":
-            tdd_mode = getattr(self.config, "tdd_mode", "ask")
+            # Use the SAME resolved tdd_mode as the RED (failing_test_exists) pre-gate
+            # so strict TDD set via opencontext.yaml's harness section — not only
+            # harness.yaml workflow_defaults — activates the GREEN gate too.
+            tdd_mode, _ = self._harness_governance()
             # Resolve a deterministic test command. ``["pytest"]`` is the
             # project-level default; consumers can extend via HarnessConfig
             # in a future iteration.
