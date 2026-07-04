@@ -187,6 +187,29 @@ class OCFlowRunner:
         self._compression_enabled = False
         self._compression_config: Any | None = None
         self._resolve_memory_and_compression()
+        self._tdd_mode = self._resolve_tdd_mode()
+
+    def _resolve_tdd_mode(self) -> str:
+        """Resolve the strict-TDD posture for this run root.
+
+        Mirrors the harness resolution: OPENCONTEXT_TDD_MODE env wins, else the
+        opencontext.yaml ``harness.tdd_mode``. Defaults to ``ask`` so the RED-first
+        pre-check stays off unless explicitly opted into strict TDD.
+        """
+        import os
+
+        env = os.environ.get("OPENCONTEXT_TDD_MODE")
+        if env in ("strict", "ask", "off"):
+            return env
+        try:
+            from opencontext_core.config import load_config_or_defaults
+
+            cfg = load_config_or_defaults(self.root / "opencontext.yaml", auto_detect=False)
+            harness_cfg = getattr(cfg, "harness", None)
+            mode = getattr(harness_cfg, "tdd_mode", "ask") if harness_cfg is not None else "ask"
+            return str(mode) if mode in ("strict", "ask", "off") else "ask"
+        except Exception:
+            return "ask"
 
     # -- config / kg resolution ----------------------------------------------
     def _load_runtime_config(self) -> Any:
@@ -343,6 +366,7 @@ class OCFlowRunner:
             memory_store=self._memory_store,
             memory_harvest_enabled=self._memory_harvest_enabled,
             memory_v2_enabled=self._memory_v2_enabled,
+            tdd_mode=self._tdd_mode,
             run_id=run_id,
             compression_enabled=self._compression_enabled,
             compression_config=self._compression_config,

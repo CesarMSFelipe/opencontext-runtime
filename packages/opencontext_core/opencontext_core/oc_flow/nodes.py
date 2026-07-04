@@ -102,6 +102,10 @@ class OCFlowContext:
     memory_enabled: bool = False
     memory_store: Any | None = None  # AgentMemoryStore (duck-typed port)
     memory_harvest_enabled: bool = False  # memory.harvest_after_run
+    # Strict-TDD posture threaded from the runner (config.harness.tdd_mode /
+    # OPENCONTEXT_TDD_MODE). "strict" enables the RED-first pre-check in node_mutate;
+    # "ask"/"off" (the default) leave the flow's behaviour byte-for-byte unchanged.
+    tdd_mode: str = "ask"
     memory_v2_enabled: bool = False  # runtime.memory_v2_enabled → MemoryHarness routing
     run_id: str = ""  # run provenance carried into harvested memory records
     # Compression parity (context substrate): when enabled, gather_context runs the
@@ -1061,6 +1065,38 @@ def node_mutate(ctx: OCFlowContext) -> NodeResult:
             raise OCFlowError(f"edit for {edit.path} is missing a reason")
         if not (edit.requirement_refs or edit.task_refs):
             raise OCFlowError(f"edit for {edit.path} references no acceptance criterion")
+
+    # RED-first (strict TDD ONLY): under a strict-TDD posture, the test must be
+    # FAILING before we mutate — a "fix" applied to an already-green test would
+    # otherwise report completed without having fixed anything. Gated on strict so
+    # default ("ask"/"off") flows are byte-for-byte unchanged. Best-effort: a
+    # test-runner error never blocks.
+    if edits and ctx.tdd_mode == "strict" and ctx.test_command:
+        import os
+
+        # Never write bytecode: the pre-check compiles the PRE-mutation (buggy)
+        # source, and a same-second mutation would leave stale __pycache__ that the
+        # post-mutation verify then reuses. Also add the root to PYTHONPATH so the
+        # test imports the project's own modules.
+        _red_env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
+        _red_env["PYTHONDONTWRITEBYTECODE"] = "1"
+        _red_env["PYTHONPATH"] = str(ctx.root) + (
+            os.pathsep + _red_env["PYTHONPATH"] if _red_env.get("PYTHONPATH") else ""
+        )
+        try:
+            _pre = subprocess.run(
+                ctx.test_command,
+                cwd=ctx.root,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                env=_red_env,
+            )
+        except (subprocess.SubprocessError, OSError):
+            _pre = None
+        if _pre is not None and _pre.returncode == 0:
+            ctx.block_reason = "RED-first: the test already passes — no failing test to fix"
+            edits = []
 
     changed_paths = [(ctx.root / e.path).resolve() for e in edits]
     store = CheckpointStore(ctx.root)
