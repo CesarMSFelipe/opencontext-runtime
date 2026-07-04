@@ -68,7 +68,8 @@ def add_kg_parser(subparsers: Any) -> None:
     kg_node.add_argument("--root", default=".", help="Project root (default: cwd).")
     kg_node.add_argument("--json", action="store_true")
 
-    kg_sub.add_parser("status", help="Check index status.")
+    kg_status = kg_sub.add_parser("status", help="Check index status.")
+    kg_status.add_argument("--json", action="store_true")
 
     from opencontext_cli.commands.migration_cmd import add_migrate_subparser
 

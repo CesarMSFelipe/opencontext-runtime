@@ -274,7 +274,10 @@ def _config_doctor(args: Any) -> None:
                 console.dim(f"      → {d.recommendation}")
         console.print(f"\n  {len(diags)} check(s), {failed} failed.")
 
-    if getattr(args, "strict", False) and failed:
+    # A failing check means the config is unhealthy: exit non-zero so `config
+    # doctor` gates the same way `verify`/`status` do (previously it exited 0 even
+    # with ok:false, so scripts/CI could not detect a bad config).
+    if failed:
         sys.exit(1)
 
 
