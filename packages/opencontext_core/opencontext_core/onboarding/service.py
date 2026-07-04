@@ -424,11 +424,12 @@ class OnboardingService:
                 },
                 "archive": {
                     "budget_tokens": max(token_budget // 2, 500),
-                    "gates": [
-                        "trace_persisted",
-                        "memory_delta_created",
-                        "graph_delta_created",
-                    ],
+                    # No gates declared: the archive phase persists trace/memory/graph
+                    # deltas via its executor, but no dispatch-bound gate evaluates
+                    # them — declaring trace_persisted/memory_delta_created/
+                    # graph_delta_created here only produced inert, never-evaluated
+                    # gates (an honesty gap). Leave empty until real gates exist.
+                    "gates": [],
                 },
             },
             "agents": {
