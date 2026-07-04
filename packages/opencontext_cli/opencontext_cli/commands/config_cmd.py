@@ -173,7 +173,7 @@ def _config_show_json(root: Path | None = None) -> None:
     # Plugins
     plugins_list: list[dict[str, Any]] = []
     try:
-        from opencontext_core.plugins.registry import PluginRegistry
+        from opencontext_core.plugin_system import PluginRegistry
 
         for p in PluginRegistry().discover():
             plugins_list.append(

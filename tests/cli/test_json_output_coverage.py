@@ -17,7 +17,6 @@ from typing import Any
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -193,3 +192,29 @@ def test_config_show_json_emits_valid_object(
     assert "schema" in data
     assert "security_mode" in data
     assert "features" in data
+
+
+def test_config_show_json_lists_discovered_plugins(
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: config show must import PluginRegistry from the real module.
+
+    The plugin-discovery branch imports ``opencontext_core.plugin_system`` inside a
+    bare ``except Exception``; a wrong import path (the old
+    ``opencontext_core.plugins.registry``) silently swallowed the ImportError and
+    ``plugins`` was always empty. Prove the import resolves by returning a plugin.
+    """
+    from types import SimpleNamespace as NS
+
+    from opencontext_cli.commands.config_cmd import handle_config
+    from opencontext_core import plugin_system
+
+    fake = NS(name="demo-plugin", version="1.2.3", enabled=True, install_source="local")
+    monkeypatch.setattr(plugin_system.PluginRegistry, "discover", lambda self: [fake])
+
+    monkeypatch.chdir(tmp_path)
+    handle_config(SimpleNamespace(config_command="show", root=str(tmp_path), json=True))
+    data = json.loads(capsys.readouterr().out.strip())
+    assert {"name": "demo-plugin", "version": "1.2.3", "enabled": True, "source": "local"} in data[
+        "plugins"
+    ]
