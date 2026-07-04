@@ -1068,11 +1068,32 @@ def node_mutate(ctx: OCFlowContext) -> NodeResult:
     ctx.checkpoint_id = checkpoint.id if checkpoint is not None else "empty"
     ctx.checkpoint = checkpoint
 
+    import hashlib
+
+    # Pre-edit checksums per changed path (from the checkpoint's before-bytes) so
+    # the receipt is a tamper-evident before→after record, not just a path list.
+    _pre_ck: dict[Path, str] = {}
+    if checkpoint is not None:
+        for cf in checkpoint.files:
+            if cf.existed and cf.blob:
+                try:
+                    _pre_ck[cf.path] = hashlib.sha256(
+                        (checkpoint.dir / "files" / cf.blob).read_bytes()
+                    ).hexdigest()
+                except OSError:
+                    pass
+
     receipts: list[dict[str, Any]] = []
     try:
         for edit in edits:
             applied = apply_edit(ctx.root, edit)
-            receipts.append(applied.model_dump())
+            rec = applied.model_dump()
+            abs_path = (ctx.root / edit.path).resolve()
+            rec["checksum_before"] = _pre_ck.get(abs_path)
+            rec["checksum_after"] = (
+                hashlib.sha256(abs_path.read_bytes()).hexdigest() if abs_path.is_file() else None
+            )
+            receipts.append(rec)
             if edit.path not in ctx.changed_files:
                 ctx.changed_files.append(edit.path)
     except Exception as exc:
