@@ -289,6 +289,14 @@ class OCFlowRunner:
         if not self.enabled:
             raise OCFlowError("OC Flow is disabled (set runtime.oc_flow_enabled=true)")
 
+        # Defense in depth: redact secrets in the task at the flow boundary so any
+        # caller (MCP, API, direct) that did not pre-redact still never persists a
+        # raw token into run artifacts or the provider-bound context envelope.
+        if task:
+            from opencontext_core.safety.secrets import SecretScanner
+
+            task = SecretScanner().redact(task)
+
         lane_enum = Lane(str(lane))
         session_id = session_id or new_session_id()
         run_id = run_id or new_run_id()

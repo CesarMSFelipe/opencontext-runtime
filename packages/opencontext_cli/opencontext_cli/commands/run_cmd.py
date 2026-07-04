@@ -186,6 +186,14 @@ def handle_run_exec(args: Any) -> None:
 
     # Spine path (commit-007 / C15): start_session -> run. NO run_workflow.
     task = getattr(args, "task", None) or ""
+    # Redact secrets in the task BEFORE it enters the session/run. A token pasted
+    # into the task string was otherwise persisted raw into session/run artifacts
+    # and the provider-bound context envelope — "Context redaction is applied
+    # automatically" must hold for the task itself, not only provider errors.
+    if task:
+        from opencontext_core.safety.secrets import SecretScanner
+
+        task = SecretScanner().redact(task)
     workflow = getattr(args, "workflow", "oc-flow")
     lane = getattr(args, "lane", "fast")
     profile = getattr(args, "profile", "balanced")

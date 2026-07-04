@@ -281,10 +281,17 @@ class RuntimeApi:
         session_id = f"sess-{uuid4().hex[:12]}"
         root = request.root or str(self._root)
         capabilities = _detect_capabilities()
+        # Redact secrets in the session task so a token is never persisted raw into
+        # session.json / events.jsonl (defense in depth for MCP/API callers).
+        _task = request.task
+        if _task:
+            from opencontext_core.safety.secrets import SecretScanner
+
+            _task = SecretScanner().redact(_task)
         session = RuntimeSession(
             session_id=session_id,
             root=root,
-            task=request.task,
+            task=_task,
             profile=request.profile,
             capabilities=capabilities,
             capability_snapshot=capabilities,
