@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from opencontext_sdd.runner import run_phase
+from opencontext_sdd.runner import PhaseResultEnvelope, run_phase
 
 SUBCOMMANDS = [
     "init",
@@ -164,9 +164,25 @@ def _handle_continue(change: str | None, cwd: Path, verbose: bool) -> None:
 
 
 def _handle_ff(change: str | None, cwd: Path, verbose: bool) -> None:
-    """Fast-forward: proposal → spec → design → tasks."""
+    """Fast-forward: proposal → spec → design → tasks.
+
+    Aborts the loop immediately when a phase returns a non-ok status,
+    printing which phase blocked and why.
+    """
     for phase in ("propose", "spec", "design", "tasks"):
-        _run_phase(phase, cwd, change, verbose=verbose)
+        envelope = _run_phase(phase, cwd, change, verbose=verbose)
+        if envelope.status not in ("ok", "partial"):
+            _print_json(
+                {
+                    "ff_aborted": True,
+                    "blocked_phase": phase,
+                    "status": envelope.status,
+                    "reason": envelope.executive_summary,
+                    "risks": envelope.risks,
+                },
+                verbose,
+            )
+            return
 
 
 def _handle_onboard(cwd: Path, verbose: bool) -> None:
@@ -196,8 +212,8 @@ def _run_phase(
     topic: str | None = None,
     task: str | None = None,
     verbose: bool = False,
-) -> None:
-    """Run an SDD phase via the orchestrator runner."""
+) -> PhaseResultEnvelope:
+    """Run an SDD phase via the orchestrator runner and return the envelope."""
     envelope = run_phase(
         verb,
         change=change,
@@ -207,6 +223,7 @@ def _run_phase(
         verbose=verbose,
     )
     _print_json(envelope.model_dump(mode="json", exclude_none=True), verbose)
+    return envelope
 
 
 # ---------------------------------------------------------------------------

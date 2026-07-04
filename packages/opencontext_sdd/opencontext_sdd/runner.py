@@ -81,14 +81,24 @@ class Orchestrator:
         )
     )
 
-    def advance(self) -> PhaseResultEnvelope:
+    def advance(self, requested_phase: str | None = None) -> PhaseResultEnvelope:
         """Determine the next phase and prepare to run it.
+
+        When ``requested_phase`` is supplied, the envelope's ``phase`` field is
+        always set to the requested phase and the routing validates that the
+        request is coherent with current disk state (e.g. requesting 'design'
+        before 'spec' is complete returns a ``blocked`` envelope whose ``phase``
+        still reflects the request so callers can distinguish responses).
 
         Returns an envelope with the next phase and a status indicator.
         In strict TDD mode, verify that a failing test exists before
         advancing to 'apply'.
         """
         current = self._detect_current_phase()
+        effective_phase = requested_phase or (
+            self._next_after(current) if current is not None else "init"
+        )
+
         if current is None:
             return PhaseResultEnvelope(
                 status="blocked",
@@ -97,9 +107,32 @@ class Orchestrator:
                 next_recommended="init",
                 risks=[f"Change '{self.change}' has no artifacts"],
                 skill_resolution="paths-injected",
-                phase="init",
+                phase=effective_phase,
                 trace_id="",
             )
+
+        # Validate that the requested phase is reachable given current state.
+        if requested_phase is not None and requested_phase in self._phases:
+            requested_idx = self._phases.index(requested_phase)
+            current_idx = self._phases.index(current)
+            # Allow the immediately next phase or any phase already completed.
+            if requested_idx > current_idx + 1:
+                expected_next = self._next_after(current)
+                return PhaseResultEnvelope(
+                    status="blocked",
+                    executive_summary=(
+                        f"Phase '{requested_phase}' cannot run: '{expected_next}' "
+                        f"must complete first (current: '{current}')."
+                    ),
+                    artifacts={},
+                    next_recommended=expected_next,
+                    risks=[
+                        f"Requested phase '{requested_phase}' skips '{expected_next}'."
+                    ],
+                    skill_resolution="paths-injected",
+                    phase=requested_phase,
+                    trace_id="",
+                )
 
         # In strict TDD mode, check for a failing test before apply
         if self.tdd_mode == "strict" and current == "tasks" and "apply" in self._phases:
@@ -115,7 +148,7 @@ class Orchestrator:
                     next_recommended="design",
                     risks=["Strict TDD: no test files detected"],
                     skill_resolution="paths-injected",
-                    phase=current,
+                    phase=effective_phase,
                     trace_id="",
                 )
 
@@ -127,7 +160,7 @@ class Orchestrator:
             next_recommended=next_phase,
             risks=[],
             skill_resolution="paths-injected",
-            phase=current,
+            phase=effective_phase,
             trace_id="",
         )
 
@@ -167,10 +200,16 @@ def run_phase(
     Phase verbs map to the spec's 8-phase lifecycle. The ``runner``
     module in ``opencontext_core.harness`` owns the actual execution
     logic — this function wraps it with the canonical envelope.
+
+    The ``phase`` argument drives behavior: it is passed to
+    ``Orchestrator.advance()`` so the returned envelope's ``phase`` field
+    reflects the *requested* phase and routing validates the request against
+    current disk state.  Two calls with different ``phase`` values on the
+    same state therefore return distinguishable envelopes.
     """
     _cwd = Path(cwd or ".").resolve()
     orch = Orchestrator(cwd=_cwd, change=change or "")
-    return orch.advance()
+    return orch.advance(requested_phase=phase)
 
 
 def build_phase_prompt(

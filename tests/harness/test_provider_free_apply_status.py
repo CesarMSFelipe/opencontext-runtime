@@ -22,9 +22,16 @@ class TestNotAppliedStatus:
         """GateStatus must expose a NOT_APPLIED member with value 'not_applied'."""
         assert GateStatus.NOT_APPLIED == "not_applied"
 
-    def test_not_applied_is_not_ok(self) -> None:
-        """NOT_APPLIED is not considered an 'ok' status (no real work was done)."""
-        assert not GateStatus.NOT_APPLIED.is_ok
+    def test_not_applied_is_ok(self) -> None:
+        """NOT_APPLIED is non-blocking (is_ok=True).
+
+        NOT_APPLIED means no executor was configured and nothing was written —
+        it is NOT a failure.  boundary.py already maps it to success=True;
+        is_ok must agree so QualityReport.exit_code returns 0 and consumers
+        (CI checks, quality gate) do not treat a provider-free run as an error.
+        Compare: WARNING (is_ok=False) is an advisory on a run that did real work.
+        """
+        assert GateStatus.NOT_APPLIED.is_ok
 
     def test_provider_free_apply_yields_not_applied(self, tmp_path: Path) -> None:
         """A full SDD run with no delegate and no apply_edits yields NOT_APPLIED.

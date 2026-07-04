@@ -33,6 +33,7 @@ from opencontext_core.harness.gates import (
     ProviderPolicyPassedGate,
     ReviewArtifactCreatedGate,
     SecurityScanPassedGate,
+    TestsPassGate,
     TraceIdCreatedGate,
 )
 from opencontext_core.harness.models import (
@@ -70,6 +71,24 @@ from opencontext_core.workflow.delegation_validator import (
 
 _log = logging.getLogger(__name__)
 _delegation_validator = DelegationValidator()
+
+# Verb lists for the NOT_APPLIED mutation-detection heuristic.
+# Imported once at module load; the fallback (None) is handled inline.
+# Declared as Optional so the None-fallback branch is reachable to mypy.
+_MUTATION_VERBS: tuple[str, ...] | None
+_READONLY_VERBS: tuple[str, ...] | None
+try:
+    from opencontext_core.oc_flow.completion import (
+        _MUTATION_VERBS,
+        _READONLY_VERBS,
+    )
+except ImportError:  # pragma: no cover — oc_flow is an optional extension
+    _log.warning(
+        "opencontext_core.oc_flow.completion not importable; "
+        "NOT_APPLIED heuristic will default to treating all tasks as mutations."
+    )
+    _MUTATION_VERBS = None
+    _READONLY_VERBS = None
 
 
 class HarnessState:
@@ -942,18 +961,19 @@ class HarnessRunner:
             for r in results
         )
         if _apply_was_planned and getattr(state, "delegate", None) is None:
-            try:
-                from opencontext_core.oc_flow.completion import (
-                    _MUTATION_VERBS,
-                    _READONLY_VERBS,
-                )
+            # Use the module-level verb lists (imported once at startup).
+            # When the oc_flow extension was unavailable at import time,
+            # both are None and we fall back to treating the task as a mutation
+            # (conservative — prefer a false NOT_APPLIED over a false PASSED).
+            if _MUTATION_VERBS is not None and _READONLY_VERBS is not None:
                 _leading = (state.task or "").strip().lower().split()[0] if state.task else ""
                 _task_is_mutation = _leading in _MUTATION_VERBS or (
                     _leading not in _READONLY_VERBS
                     and any(v in (state.task or "").lower() for v in _MUTATION_VERBS)
                     and not any(v in (state.task or "").lower() for v in _READONLY_VERBS)
                 )
-            except Exception:
+            else:
+                # oc_flow unavailable — default conservative: treat as mutation.
                 _task_is_mutation = True
             if _task_is_mutation and final_status in (GateStatus.PASSED, GateStatus.WARNING):
                 final_status = GateStatus.NOT_APPLIED
@@ -1593,6 +1613,13 @@ class HarnessRunner:
             return self._eval_test_gaps_gate(state, result)
         if gate_id == "code_economy":
             return self._eval_code_economy_gate(state, result)
+        if gate_id == "tests_pass":
+            tdd_mode = getattr(self.config, "tdd_mode", "ask")
+            # Resolve a deterministic test command. ``["pytest"]`` is the
+            # project-level default; consumers can extend via HarnessConfig
+            # in a future iteration.
+            cmd: list[str] = ["pytest"]
+            return TestsPassGate().evaluate(cmd=cmd, cwd=state.root, tdd_mode=tdd_mode)
         # Unknown / unbound declared gate: do not fabricate a result.
         return None
 

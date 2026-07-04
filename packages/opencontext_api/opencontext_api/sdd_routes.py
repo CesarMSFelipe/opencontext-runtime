@@ -65,16 +65,22 @@ def sdd_continue(body: SDDContinueRequest) -> dict[str, object]:
 @router.post("/{phase}")
 def sdd_phase(phase: str, body: SDDPhaseRequest) -> dict[str, object]:
     """Run an SDD phase."""
-    if phase not in _SDD_PHASES:
-        from fastapi import HTTPException
+    from fastapi import HTTPException
 
+    if phase not in _SDD_PHASES:
         raise HTTPException(
             status_code=404,
             detail=f"Unknown SDD phase '{phase}'. Valid: {sorted(_SDD_PHASES)}",
         )
-    envelope = run_phase(
-        phase,
-        change=body.change,
-        cwd=body.cwd or ".",
-    )
+    try:
+        envelope = run_phase(
+            phase,
+            change=body.change,
+            cwd=body.cwd or ".",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"SDD phase '{phase}' failed due to an internal error.",
+        ) from exc
     return envelope.model_dump(mode="json", exclude_none=True)

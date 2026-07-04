@@ -2570,9 +2570,10 @@ def _install_json(args: argparse.Namespace) -> None:
         _install(_non_interactive)
         status = "ok"
         error = None
-    except SystemExit:
-        status = "ok"
-        error = None
+    except SystemExit as exc:
+        # Exit code None or 0 = graceful completion; anything else = error.
+        status = "ok" if exc.code in (None, 0) else "error"
+        error = None if exc.code in (None, 0) else f"install exited with code {exc.code}"
     except Exception as exc:
         status = "error"
         error = str(exc)
