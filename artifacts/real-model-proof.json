@@ -1,0 +1,12 @@
+{
+  "proof": "real-model MCP round-trip",
+  "host": "opencode 1.17.12",
+  "model": "opencode/deepseek-v4-flash-free",
+  "transport": "stdio MCP (opencontext mcp --workflow-tools)",
+  "tool_invoked": "opencontext_status",
+  "namespaced_as": "opencontext_opencontext_status",
+  "result_faithful": true,
+  "assistant_summary": "**opencontext_status** result:\n\n| Field | Value |\n|-------|-------|\n| Status | `passed` |\n| Indexed | `false` |\n| Nodes | 0 |\n| Edges | 0 |\n| Files | 0 |\n| Memory available | `true` (backend: `local`) |\n\nThe project is not yet indexed \u2014 zero files, nodes, and edges in the knowledge graph. Memory is available on the local backend.",
+  "credentials_required": false,
+  "note": "codex/claude live-model turns require operator credentials; deterministic config+connection+mutation contract is proven for all three hosts in tests/e2e/"
+}
