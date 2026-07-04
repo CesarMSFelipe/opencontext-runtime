@@ -16,6 +16,7 @@ a packaging regression fails here instead of in the user's terminal.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -41,7 +42,17 @@ _REQUIRED_IN_WHEEL: dict[str, list[str]] = {
 
 
 def _build_wheel(pkg: str, out_dir: Path) -> Path:
-    pkg_dir = _REPO_ROOT / "packages" / pkg
+    # Build from a clean staging copy, never the live source tree: setuptools
+    # sweeps any adjacent __pycache__ / stale build/ into the wheel, so building
+    # from the pytest-warmed tree would ship bytecode. A release must start clean;
+    # copying with these ignores reproduces that contract without mutating the repo.
+    pkg_src = _REPO_ROOT / "packages" / pkg
+    pkg_dir = out_dir / "src"
+    shutil.copytree(
+        pkg_src,
+        pkg_dir,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", "build", "*.egg-info"),
+    )
     proc = subprocess.run(
         [
             sys.executable,
@@ -78,3 +89,34 @@ def test_wheel_contains_runtime_data_files(pkg: str, tmp_path: Path) -> None:
             f"Add it to [tool.setuptools.package-data] in packages/{pkg}/pyproject.toml. "
             f"A real install would ship an incomplete product."
         )
+
+
+# Development junk that must never ship inside a release wheel. Each entry is a
+# path fragment; a match anywhere in a wheel member name fails the gate.
+# Path fragments that only ever belong to dev junk. NB: 'openspec/' is a real
+# shipped subpackage (opencontext_core.openspec), so it is NOT forbidden — the
+# gitignored artifact dir is 'openspec/changes/', never inside a package.
+_FORBIDDEN_IN_WHEEL: tuple[str, ...] = (
+    "__pycache__/",
+    ".pyc",
+    ".pyo",
+    "/tests/",
+    "openspec/changes/",
+    ".pytest_cache/",
+    ".mypy_cache/",
+    ".ruff_cache/",
+    ".DS_Store",
+)
+
+
+@pytest.mark.parametrize("pkg", sorted(_REQUIRED_IN_WHEEL))
+def test_wheel_ships_no_development_junk(pkg: str, tmp_path: Path) -> None:
+    """Release cleanliness: a built wheel carries only the product, no dev junk."""
+    wheel = _build_wheel(pkg, tmp_path)
+    with zipfile.ZipFile(wheel) as zf:
+        names = zf.namelist()
+    offenders = [n for n in names if any(bad in n for bad in _FORBIDDEN_IN_WHEEL)]
+    assert not offenders, (
+        f"{pkg} wheel ships development junk that must not reach users: {offenders[:10]}. "
+        f"Tighten the package-data globs / MANIFEST so only product files are included."
+    )

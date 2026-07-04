@@ -221,6 +221,58 @@ def _global_product_install_targets() -> list[Path]:
     ]
 
 
+def _detect_install_methods() -> list[dict[str, str]]:
+    """Report how the OpenContext package itself is installed — REPORT ONLY.
+
+    Config/state residue is handled by ``verify_no_global_traces``; this is the
+    orthogonal question "is the distribution still installed, and by what?". The
+    uninstall command manages agent config, never the package: removing a
+    pipx/pip/zipapp install is the package manager's job, so we surface the exact
+    command instead of deleting anything. Never counted as residue — a machine
+    that can run this code necessarily has OpenContext installed.
+    """
+    import shutil
+
+    methods: list[dict[str, str]] = []
+    home = Path.home()
+
+    # pipx — a dedicated venv under the pipx home.
+    pipx_venv = home / ".local" / "share" / "pipx" / "venvs" / "opencontext-cli"
+    if pipx_venv.is_dir():
+        methods.append(
+            {"method": "pipx", "location": str(pipx_venv), "hint": "pipx uninstall opencontext-cli"}
+        )
+
+    # zipapp — the CLI shim on PATH resolves to a .pyz.
+    which = shutil.which("opencontext")
+    if which and which.endswith(".pyz"):
+        methods.append({"method": "zipapp", "location": which, "hint": f"delete {which}"})
+
+    # pip / editable — packaging metadata resolves, and it is not the pipx venv.
+    if not any(m["method"] == "pipx" for m in methods):
+        try:
+            import importlib.metadata as im
+
+            dist = im.distribution("opencontext-cli")
+            editable = False
+            raw = dist.read_text("direct_url.json")
+            if raw:
+                editable = bool(json.loads(raw).get("dir_info", {}).get("editable"))
+            loc = str(dist.locate_file(""))
+            if editable:
+                methods.append(
+                    {"method": "editable", "location": loc, "hint": "pip uninstall opencontext-cli"}
+                )
+            else:
+                methods.append(
+                    {"method": "pip", "location": loc, "hint": "pip uninstall opencontext-cli"}
+                )
+        except Exception:
+            pass
+
+    return methods
+
+
 def _oc_symlink_in_local_bin() -> Path | None:
     """Return ~/.local/bin/opencontext if it is a symlink pointing into ~/.opencontext.
 
@@ -717,11 +769,19 @@ def handle_uninstall(args: Any) -> None:
         effective_scope = resolve_uninstall_scope(args)
         residue = verify_no_traces(root) if effective_scope in ("workspace", "all") else []
         global_residue = verify_no_global_traces([]) if effective_scope in ("global", "all") else []
+        # Report-only: how the package itself is installed. Advisory, NOT residue —
+        # it never affects `passed` (the machine running this IS installed).
+        install_methods = _detect_install_methods()
         passed = len(residue) == 0 and len(global_residue) == 0
         if json_output:
             print(
                 json.dumps(
-                    {"passed": passed, "residue": residue, "global_residue": global_residue},
+                    {
+                        "passed": passed,
+                        "residue": residue,
+                        "global_residue": global_residue,
+                        "install_methods": install_methods,
+                    },
                     indent=2,
                 )
             )
@@ -739,6 +799,13 @@ def handle_uninstall(args: Any) -> None:
                     for p in global_residue:
                         console.dim(f"  {p}")
                 console.dim("Run 'opencontext uninstall --full --global-state --yes' to clean up.")
+            if install_methods:
+                console.dim(
+                    "The OpenContext package is still installed (config removal does not "
+                    "uninstall the package):"
+                )
+                for m in install_methods:
+                    console.dim(f"  {m['method']}: {m['hint']}")
         sys.exit(0 if passed else 1)
 
     # --full: complete trace removal
