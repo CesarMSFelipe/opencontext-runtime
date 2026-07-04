@@ -819,6 +819,12 @@ class TestsPassGate:
         }
         _pp = _env.get("PYTHONPATH", "")
         _env["PYTHONPATH"] = str(cwd) + (os.pathsep + _pp if _pp else "")
+        # The GREEN gate re-imports source that a mutation just rewrote, often within
+        # the same filesystem-timestamp second. CPython's .pyc invalidation is
+        # mtime-granular, so a stale pre-mutation .pyc could be reused and the suite
+        # would test the OLD code (a real correctness bug, and a flake in tests).
+        # Never write/read cached bytecode for this nested run.
+        _env["PYTHONDONTWRITEBYTECODE"] = "1"
 
         try:
             proc = subprocess.run(
