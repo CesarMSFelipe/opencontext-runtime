@@ -354,6 +354,13 @@ class RuntimeApi:
         ``resume_from`` so the harness skips already-completed phases and carries
         over the prior run's artifacts instead of overwriting them).
         """
+        # Resolve ``auto`` to the CONCRETE engine here so the run id, the harness
+        # dispatch and the reported workflow all agree — a broad task was otherwise
+        # labeled ``sdd`` but still executed the OC Flow graph.
+        if workflow_id == "auto":
+            from opencontext_core.oc_flow.runner import select_workflow
+
+            workflow_id = select_workflow(task)
         run_id = f"{workflow_id}-{uuid4().hex[:12]}"
         run = RuntimeRun(
             run_id=run_id,

@@ -269,10 +269,13 @@ def handle_run_exec(args: Any) -> None:
     # translates harness GateStatus values.  Use it directly.
     oc_status = result.status
     leg = result.legacy
-    # Resolve the workflow actually executed (e.g. "auto" → "oc-flow").  For
-    # OCFlowRunResult the workflow_selection receipt carries the resolved name.
+    # Resolve the workflow actually executed (e.g. "auto" → "oc-flow"/"sdd").  For
+    # OCFlowRunResult the workflow_selection receipt carries the resolved name; for
+    # the SDD harness path the legacy result's own ``workflow`` field is the resolved
+    # engine (the RuntimeApi resolves ``auto`` before dispatch), so the reported label
+    # matches the engine that actually ran rather than the raw "auto" arg.
     sel = getattr(leg, "workflow_selection", None) or {}
-    resolved_workflow = sel.get("workflow") or workflow
+    resolved_workflow = sel.get("workflow") or getattr(leg, "workflow", None) or workflow
     # B1 / shape-parity: expose the full OCFlowRunResult vocabulary so --json
     # consumers (tests, automation) that relied on run_oc_flow_cli fields
     # (artifacts_dir, selection_reason, final_node, session_id, run_id) keep
