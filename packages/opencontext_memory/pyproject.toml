@@ -36,3 +36,9 @@ Source = "https://github.com/CesarMSFelipe/OpenContext-Runtime"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["opencontext_memory*"]
+
+# The SQLite schema ships as a data file loaded at runtime by the store; without
+# this it is dropped from the wheel and every memory op fails on a real install
+# with "schema.sql not found".
+[tool.setuptools.package-data]
+opencontext_memory = ["store/*.sql", "**/*.sql"]

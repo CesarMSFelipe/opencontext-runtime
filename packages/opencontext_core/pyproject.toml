@@ -48,12 +48,17 @@ include = ["opencontext_core*"]
 exclude = []
 
 [tool.setuptools.package-data]
+# Runtime data files loaded from within the package: builtin workflow/harness/
+# persona/skill YAML, host-instruction profiles (configurator/profiles/*.md),
+# and all SDD skill templates + builtin skill markdown. These are read at runtime
+# via the package path, so they MUST ship in the wheel — a partial list silently
+# drops the host profiles and skill templates on a real install. Recursive globs
+# so a new builtin never needs a packaging edit.
 opencontext_core = [
   "studio/static/*",
-  "workflows/builtins/*.yaml",
-  "harness/builtins/*.yaml",
-  "personas/builtins/*.yaml",
-  "skills/builtins/*.yaml",
+  "**/*.yaml",
+  "**/*.yml",
+  "**/*.md",
 ]
 
 [project.optional-dependencies]

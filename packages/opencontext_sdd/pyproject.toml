@@ -32,3 +32,9 @@ Source = "https://github.com/CesarMSFelipe/OpenContext-Runtime"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["opencontext_sdd*"]
+
+# Bundled skill markdown (work-unit-commits, chained-pr, comment-writer, …) is
+# read at runtime from the package path; ship it in the wheel or a real install
+# resolves empty skills.
+[tool.setuptools.package-data]
+opencontext_sdd = ["**/*.md"]
