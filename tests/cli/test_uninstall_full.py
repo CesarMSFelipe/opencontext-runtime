@@ -187,6 +187,49 @@ def test_purge_default_workspace_scope_actually_purges(tmp_path, monkeypatch, ca
     assert not (proj / ".opencontext").exists()
 
 
+def test_json_without_yes_refuses_and_preserves_data(tmp_path, monkeypatch, capsys):
+    """Safety: --json must NOT imply consent. Without --yes (non-TTY) it refuses.
+
+    Regression: `uninstall <agent> --purge --json` (no --yes) used to silently
+    delete user data (opencontext.yaml, .opencontext/) and exit 0 — a fail-closed
+    hole for scripts/agents that pass --json for machine-readable output.
+    """
+    import opencontext_cli.main as main_mod
+
+    monkeypatch.setattr(main_mod, "_resolve_flag", lambda v, _: v)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    home = tmp_path / "home"
+    home.mkdir()
+    _isolate_home(monkeypatch, home)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    _seed_project_artifacts(proj)
+
+    from opencontext_cli.commands.uninstall_cmd import handle_uninstall
+
+    args = SimpleNamespace(
+        full=False,
+        verify=False,
+        purge=True,
+        yes=False,  # NO consent
+        dry_run=False,
+        json=True,  # machine-readable output — must NOT imply consent
+        scope=None,
+        root=str(proj),
+        all_agents=False,
+        agents=["claude-code"],
+        global_state=False,
+    )
+    with pytest.raises(SystemExit) as exc:
+        handle_uninstall(args)
+    assert exc.value.code == 2
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "refused"
+    # User data untouched.
+    assert (proj / "opencontext.yaml").exists()
+    assert (proj / ".opencontext").exists()
+
+
 # ---------------------------------------------------------------------------
 # --verify exits 0 when clean, 1 when traces remain
 # ---------------------------------------------------------------------------

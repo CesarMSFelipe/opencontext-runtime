@@ -835,12 +835,20 @@ def handle_uninstall(args: Any) -> None:
                 console.dim(f"  would purge: {', '.join(_PURGE_TARGETS)}")
         return
 
-    # Destructive: require explicit confirmation unless --yes (or non-interactive
-    # JSON). Never proceed silently on a non-TTY without --yes — exit 2 with a
-    # message (same convention as `config wizard --non-interactive`).
-    if not yes and not json_output:
-        if not sys.stdin.isatty():
-            eprint("Refusing non-interactive uninstall; pass --yes (or --dry-run to preview).")
+    # Destructive: require explicit confirmation. --json selects machine-readable
+    # OUTPUT; it does NOT imply consent to delete. Any non-interactive caller
+    # (no TTY, or --json) MUST pass --yes — otherwise refuse with exit 2, so a
+    # script/agent that runs `uninstall --json` can never silently wipe data.
+    if not yes:
+        if json_output or not sys.stdin.isatty():
+            msg = (
+                "Refusing uninstall without --yes in non-interactive/JSON mode "
+                "(pass --yes to confirm, or --dry-run to preview)."
+            )
+            if json_output:
+                print(json.dumps({"status": "refused", "reason": msg}))
+            else:
+                eprint(msg)
             sys.exit(2)
         if framed_wizard:
             render_frame(2, 2, _UNINSTALL_WIZARD_STEPS["confirm"].with_current(", ".join(valid)))
