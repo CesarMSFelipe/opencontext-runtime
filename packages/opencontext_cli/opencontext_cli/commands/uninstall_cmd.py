@@ -700,8 +700,20 @@ def handle_uninstall(args: Any) -> None:
 
     scope = getattr(args, "scope", None) or "workspace"
 
-    # --verify: read-only trace scan scoped to the resolved scope.
-    if getattr(args, "verify", False):
+    # Is a removal action requested alongside --verify? When the user runs the
+    # natural "remove and confirm clean" form (e.g. ``--purge --full --verify
+    # --yes``), --verify must NOT short-circuit into a read-only scan — the
+    # removal must run first and then verify. --verify is verify-only ONLY when
+    # it is the sole action.
+    _removal_requested = (
+        getattr(args, "full", False)
+        or _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE")
+        or getattr(args, "all_agents", False)
+        or bool(_parse_agents(getattr(args, "agents", None)))
+    )
+
+    # --verify (alone): read-only trace scan scoped to the resolved scope.
+    if getattr(args, "verify", False) and not _removal_requested:
         effective_scope = resolve_uninstall_scope(args)
         residue = verify_no_traces(root) if effective_scope in ("workspace", "all") else []
         global_residue = verify_no_global_traces([]) if effective_scope in ("global", "all") else []
@@ -858,11 +870,26 @@ def handle_uninstall(args: Any) -> None:
         except Exception:
             pass
 
-    if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE") and scope == "local":
+    # --purge deletes project artifacts for any workspace-scoped run. The default
+    # scope is "workspace" ("local" is its legacy alias); "all" covers it too.
+    # Only a global-only scope skips the project purge.
+    if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE") and scope in (
+        "workspace",
+        "local",
+        "all",
+    ):
         report["purged"] = _purge_project_artifacts(getattr(args, "root", "."))
+
+    # --verify combined with a removal action: verify AFTER removal, and let the
+    # exit code reflect whether traces remain (the natural "remove and confirm" form).
+    if getattr(args, "verify", False):
+        residue = verify_no_traces(getattr(args, "root", "."))
+        report["verify"] = {"passed": len(residue) == 0, "residue": residue}
 
     if json_output:
         print(json.dumps(report, indent=2))
+        if "verify" in report and not report["verify"]["passed"]:
+            sys.exit(1)
         return
     removed_n = report["agents_removed"]
     console.header("Uninstall OpenContext")
@@ -881,6 +908,18 @@ def handle_uninstall(args: Any) -> None:
         console.dim("  global install state cleared (reinstall will re-run setup)")
     if report.get("purged"):
         console.dim(f"  purged: {', '.join(report['purged'])}")
+    if "verify" in report:
+        if report["verify"]["passed"]:
+            console.success("verify passed: no traces remain.")
+        else:
+            console.warning("verify failed: project traces remain:")
+            for p in report["verify"]["residue"]:
+                console.dim(f"  {p}")
+            console.dim(
+                "These are agent instruction files (kept because they may hold your own "
+                "content). Run 'opencontext uninstall --full --yes' to remove all traces."
+            )
+            sys.exit(1)
 
 
 def _parse_agents(values: list[str] | None) -> list[str]:

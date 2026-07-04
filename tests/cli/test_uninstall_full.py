@@ -99,6 +99,95 @@ def test_full_without_yes_non_tty_exits(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Regression: --verify combined with removal flags must REMOVE then verify,
+# not short-circuit into a read-only scan (the natural "remove and confirm" form).
+# ---------------------------------------------------------------------------
+
+
+def _seed_project_artifacts(root: Path) -> None:
+    (root / ".opencontext").mkdir()
+    (root / "opencontext.yaml").write_text("schema: v1\n", encoding="utf-8")
+    (root / ".mcp.json").write_text(
+        '{"mcpServers": {"opencontext": {"command": "opencontext"}}}', encoding="utf-8"
+    )
+
+
+def test_full_verify_combined_removes_then_verifies_clean(tmp_path, monkeypatch):
+    import opencontext_cli.main as main_mod
+
+    monkeypatch.setattr(main_mod, "_resolve_flag", lambda v, _: v)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    home = tmp_path / "home"
+    home.mkdir()
+    _isolate_home(monkeypatch, home)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    _seed_project_artifacts(proj)
+
+    from opencontext_cli.commands.uninstall_cmd import handle_uninstall
+
+    args = SimpleNamespace(
+        full=True,
+        verify=True,  # combined with --full: must remove first, THEN verify
+        purge=True,
+        yes=True,
+        dry_run=False,
+        json=False,
+        scope=None,
+        root=str(proj),
+        all_agents=False,
+        agents=[],
+        global_state=False,
+    )
+    handle_uninstall(args)  # --full path removes + verifies, returns (no exit)
+
+    from opencontext_cli.commands.uninstall_cmd import verify_no_traces
+
+    assert verify_no_traces(proj) == [], "combined --full --verify left traces behind"
+    assert not (proj / ".opencontext").exists()
+    assert not (proj / "opencontext.yaml").exists()
+
+
+def test_purge_default_workspace_scope_actually_purges(tmp_path, monkeypatch, capsys):
+    """--purge with the default (workspace) scope must delete project artifacts.
+
+    Regression: the purge was gated on ``scope == 'local'`` while the default
+    scope resolves to ``'workspace'``, so ``uninstall <agent> --purge --yes``
+    silently skipped the purge.
+    """
+    import opencontext_cli.main as main_mod
+
+    monkeypatch.setattr(main_mod, "_resolve_flag", lambda v, _: v)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    home = tmp_path / "home"
+    home.mkdir()
+    _isolate_home(monkeypatch, home)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    _seed_project_artifacts(proj)
+
+    from opencontext_cli.commands.uninstall_cmd import handle_uninstall
+
+    args = SimpleNamespace(
+        full=False,
+        verify=False,
+        purge=True,
+        yes=True,
+        dry_run=False,
+        json=True,
+        scope=None,  # -> default "workspace"
+        root=str(proj),
+        all_agents=False,
+        agents=["claude-code"],
+        global_state=False,
+    )
+    handle_uninstall(args)
+    report = json.loads(capsys.readouterr().out)
+    assert report.get("purged"), "purge skipped under default workspace scope"
+    assert not (proj / ".opencontext").exists()
+
+
+# ---------------------------------------------------------------------------
 # --verify exits 0 when clean, 1 when traces remain
 # ---------------------------------------------------------------------------
 
