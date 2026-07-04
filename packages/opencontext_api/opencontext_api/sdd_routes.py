@@ -9,6 +9,7 @@ LB 2026 — SDD API routes.
 from __future__ import annotations
 
 from fastapi import APIRouter
+from opencontext_sdd.runner import run_phase
 
 from opencontext_api.schemas import SDDContinueRequest, SDDPhaseRequest
 
@@ -49,7 +50,12 @@ def sdd_status(change: str = "", cwd: str = ".") -> dict[str, object]:
 @router.post("/continue")
 def sdd_continue(body: SDDContinueRequest) -> dict[str, object]:
     """Continue with the next recommended phase."""
-    prompt = f"# SDD Continue\n\nChange: {body.change}\nCwd: {body.cwd}\n(PR4 wires real runner)"
+    try:
+        from opencontext_sdd.dispatcher import RenderNativePhasePrompt
+
+        prompt = RenderNativePhasePrompt("continue", change=body.change)
+    except Exception:
+        prompt = f"# SDD Continue\n\nChange: {body.change}\nCwd: {body.cwd}"
     return {
         "status": "ok",
         "prompt": prompt,
@@ -66,10 +72,9 @@ def sdd_phase(phase: str, body: SDDPhaseRequest) -> dict[str, object]:
             status_code=404,
             detail=f"Unknown SDD phase '{phase}'. Valid: {sorted(_SDD_PHASES)}",
         )
-    return {
-        "status": "ok",
-        "phase": phase,
-        "change": body.change,
-        "cwd": body.cwd,
-        "note": "PR4 wires real runner",
-    }
+    envelope = run_phase(
+        phase,
+        change=body.change,
+        cwd=body.cwd or ".",
+    )
+    return envelope.model_dump(mode="json", exclude_none=True)

@@ -18,6 +18,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from opencontext_sdd.runner import run_phase
+
 SUBCOMMANDS = [
     "init",
     "new",
@@ -163,14 +165,16 @@ def _handle_continue(change: str | None, cwd: Path, verbose: bool) -> None:
 
 def _handle_ff(change: str | None, cwd: Path, verbose: bool) -> None:
     """Fast-forward: proposal → spec → design → tasks."""
-    print(f"Fast-forward planning for change '{change}' at {cwd}.")
-    print("(run_phase wiring ships in PR4 — placeholder)")
+    for phase in ("propose", "spec", "design", "tasks"):
+        _run_phase(phase, cwd, change, verbose=verbose)
 
 
 def _handle_onboard(cwd: Path, verbose: bool) -> None:
     """Walk user through the SDD cycle."""
     print(f"SDD onboarding at {cwd}.")
-    print("(onboard handler ships in PR4 — placeholder)")
+    print("Run `opencontext sdd init` to bootstrap SDD context, then use the phase")
+    print("verbs (new, explore, propose, spec, design, tasks, apply, verify, archive)")
+    print("to advance through the full lifecycle.")
 
 
 def _handle_list(cwd: Path, verbose: bool) -> None:
@@ -194,16 +198,15 @@ def _run_phase(
     verbose: bool = False,
 ) -> None:
     """Run an SDD phase via the orchestrator runner."""
-    # PR4.a replaces this with runner.run_phase()
-    parts = [f"Running phase '{verb}'"]
-    if change:
-        parts.append(f"change={change}")
-    if topic:
-        parts.append(f"topic={topic}")
-    if task:
-        parts.append(f"task={task}")
-    parts.append(f"cwd={cwd}")
-    print(" ".join(parts))
+    envelope = run_phase(
+        verb,
+        change=change,
+        cwd=str(cwd),
+        topic=topic,
+        task=task,
+        verbose=verbose,
+    )
+    _print_json(envelope.model_dump(mode="json", exclude_none=True), verbose)
 
 
 # ---------------------------------------------------------------------------
