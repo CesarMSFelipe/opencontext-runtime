@@ -231,6 +231,39 @@ def _render_memory_records(records: Any) -> str:
     return "\n".join(lines)
 
 
+def _recall_observations(root: Any, task: str, *, limit: int = 5) -> str:
+    """Render CLI/MCP observations (memory_v2.db) matching *task* as a memory block.
+
+    Parity with the OC Flow recall bridge: the `opencontext memory v2` store was
+    disjoint from the SDD harness recall, so a user's `memory v2 save` never
+    informed SDD planning. Best-effort and read-only. Recall is associative — the
+    store's FTS combines tokens with implicit AND, so search per salient token and
+    union the hits.
+    """
+    try:
+        obs_db = resolve_storage_path(Path(root), StorageMode.local) / "memory_v2.db"
+        if not obs_db.is_file():
+            return ""
+        from opencontext_memory import MemoryStore, mem_search
+
+        store = MemoryStore.open(obs_db)
+        project = Path(root).name
+        seen: dict[str, dict[str, Any]] = {}
+        for token in {t.lower() for t in re.findall(r"[A-Za-z]{4,}", task)}:
+            for row in mem_search(store, query=token, limit=limit, project=project):
+                rid = str(row.get("id") or row.get("topic_key") or row.get("title") or "")
+                if rid and rid not in seen:
+                    seen[rid] = row
+        lines = []
+        for row in list(seen.values())[:limit]:
+            content = str(row.get("content") or row.get("title") or "").strip()
+            if content:
+                lines.append(f"- [observation] {content[:240]}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 def _compact_artifact(text: str, state: Any, target_tokens: int = _HANDOFF_TARGET_TOKENS) -> str:
     """Compact a forwarded prior-phase artifact toward ``target_tokens`` (B2).
 
@@ -372,6 +405,11 @@ class ExplorePhase(HarnessPhase):
                 )
             except Exception:
                 memory_block = ""  # memory is optional, never block explore
+        # Also fold CLI/MCP observations (memory_v2.db) so a user's `memory v2 save`
+        # informs SDD planning — parity with the OC Flow recall bridge.
+        _obs_block = _recall_observations(state.root, state.task)
+        if _obs_block:
+            memory_block = (memory_block + "\n" + _obs_block) if memory_block else _obs_block
 
         # Make the verified context available to later work phases' executor prompts
         # (spec/design/tasks) so the model works from retrieved evidence, not the bare
@@ -708,6 +746,38 @@ class ArchivePhase(HarnessPhase):
                 harvester.harvest(run_result)
             except Exception:
                 pass  # harvesting is optional, never block archive
+
+            # Dual-write a compact run observation to the CLI/MCP store (memory_v2.db)
+            # so `opencontext memory v2 search` surfaces harvested runs — the harvest
+            # above only populates the agent memory.db. topic_key dedups re-runs.
+            try:
+                obs_db = resolve_storage_path(Path(state.root), StorageMode.local) / "memory_v2.db"
+                obs_db.parent.mkdir(parents=True, exist_ok=True)
+                from opencontext_memory import MemoryStore, mem_save
+
+                from opencontext_core.safety.secrets import SecretScanner
+
+                _changed = list(getattr(state, "changed_files", []) or [])
+                _content = (
+                    f"SDD run {state.run_id} ({getattr(state, 'workflow', 'sdd')}): "
+                    f"{state.task}. status={status}."
+                    + (f" changed: {', '.join(_changed)}" if _changed else "")
+                )
+                # memory_v2.db is a NEW sink with no auto-redaction (unlike the agent
+                # store's SinkGuard) — redact before persisting a secret in the task.
+                _content = SecretScanner().redact(_content)
+                mem_save(
+                    MemoryStore.open(obs_db),
+                    session_id=f"run-{state.run_id}",
+                    project=Path(state.root).name,
+                    title=SecretScanner().redact(f"run: {str(state.task)[:60]}"),
+                    content=_content,
+                    type="run",
+                    topic_key=f"run/{state.run_id}",
+                    capture_prompt=False,
+                )
+            except Exception:
+                pass  # dual-write is best-effort; never block archive
 
         return PhaseResult(
             phase="archive",
