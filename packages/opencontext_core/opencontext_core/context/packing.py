@@ -45,7 +45,25 @@ class ContextPackBuilder:
         compression_items_count = 0
         for item in ordered_items:
             # If item itself exceeds total available budget, it can never fit
+            # as-is. Try to COMPRESS it to fit before omitting — otherwise a
+            # single over-budget span yields ZERO content instead of a compressed
+            # version (the packer would drop a 2,360-token function under a
+            # 500-token budget rather than compress it). Engine-gated: with no
+            # compression engine the behaviour is unchanged (omit).
             if item.tokens > available_tokens:
+                remaining = available_tokens - used_tokens
+                if compression_engine and remaining > 10:
+                    original_tokens = item.tokens
+                    candidate = compression_engine.compress_item(item).item
+                    if used_tokens + candidate.tokens <= available_tokens:
+                        included.append(
+                            _with_pack_metadata(candidate, "included_with_dynamic_compression")
+                        )
+                        used_tokens += candidate.tokens
+                        compression_tokens_before += original_tokens
+                        compression_tokens_after += candidate.tokens
+                        compression_items_count += 1
+                        continue
                 omitted_item = _with_pack_metadata(item, "item_exceeds_available_budget")
                 omitted.append(omitted_item)
                 omissions.append(_omission(omitted_item, "item_exceeds_available_budget"))

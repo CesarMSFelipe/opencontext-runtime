@@ -47,6 +47,12 @@ _PROTECTED_KEEP_KINDS: frozenset[str] = frozenset(
     {"acceptance_criteria", "signature", "diagnostic", "evidence", "warning", "constraint"}
 )
 
+# Span kinds that are NOT load-bearing: a bare number or import path fires on
+# virtually every real code/text item, so treating them as "protected" blocked
+# all compression. Everything else (code_block, json_schema, citation, warning,
+# and the semantic-KEEP kinds) still blocks lossy compression.
+_TRIVIAL_SPAN_KINDS: frozenset[str] = frozenset({"numeric_value", "file_path"})
+
 
 def compression_priority(kind: str) -> str:
     """Classify a span/content ``kind`` as ``keep`` | ``compress`` | ``discard``.
@@ -126,9 +132,16 @@ class CompressionEngine:
             if self.config.protected_spans
             else []
         )
-        if spans:
+        # Only LOAD-BEARING spans block compression. `numeric_value` and `file_path`
+        # fire on virtually every real code/text item (any digit, any import path),
+        # so bailing on *any* span meant compression NEVER ran on real content —
+        # savings came only from selection, not compression. Warnings, constraints,
+        # schemas, code blocks, citations and the semantic-KEEP kinds still refuse
+        # lossy compression so critical spans are preserved verbatim.
+        load_bearing = [s for s in spans if s.kind not in _TRIVIAL_SPAN_KINDS]
+        if load_bearing:
             metadata = dict(item.metadata)
-            metadata["protected_spans"] = [span.model_dump() for span in spans]
+            metadata["protected_spans"] = [span.model_dump() for span in load_bearing]
             metadata["compression"] = {
                 "original_token_estimate": item.tokens,
                 "compressed_token_estimate": item.tokens,
