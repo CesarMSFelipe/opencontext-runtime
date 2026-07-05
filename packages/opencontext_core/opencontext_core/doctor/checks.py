@@ -99,9 +99,19 @@ def _check_learning(config: OpenContextConfig) -> DoctorCheck:
             details="learning: disabled (config.learning.enabled = false).",
         )
     try:
+        from pathlib import Path
+
+        from opencontext_core.config_resolver import resolve_active_storage_file
         from opencontext_core.learning.learning_orchestrator import LearningOrchestrator
 
-        stats = LearningOrchestrator().get_statistics()
+        # Resolve learning state through the active storage mode (legacy
+        # in-repo fallback). Default-arg construction would mkdir the legacy
+        # .storage/opencontext/learning layout into the repo as a side effect.
+        _root = Path(config.project_index.root)
+        stats = LearningOrchestrator(
+            storage_path=resolve_active_storage_file(_root, "learning"),
+            kg_db_path=resolve_active_storage_file(_root, "context_graph.db"),
+        ).get_statistics()
         feedback = stats.get("feedback", {}) if isinstance(stats, dict) else {}
         ops = feedback.get("total_operations", feedback.get("operations", "?"))
         patterns = len(stats.get("patterns", {})) if isinstance(stats, dict) else 0

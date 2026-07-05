@@ -4,7 +4,7 @@
 - writes the MCP server entry in the agent's native shape,
 - injects a managed instructions block into the agent's rules file
   (AGENTS.md / CLAUDE.md / GEMINI.md / QWEN.md, project- or home-scoped),
-- writes any agent-specific extras (claude permissions, opencode profile),
+- writes any agent-specific extras (claude permissions, personas, ignores),
 
 all through the safe-merge primitives so user-owned content is never clobbered.
 """
@@ -16,6 +16,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from opencontext_core.agents.template_renderer import (
+    RENDER_SCOPE_LOCAL_REASON,
+    render_agent_instructions,
+)
 from opencontext_core.configurator import constants
 from opencontext_core.configurator.adapter import Adapter, get_adapter, iter_adapters
 from opencontext_core.configurator.backup import BackupStore, plan_actions
@@ -112,10 +116,12 @@ class Configurator:
         targets = [path for path, content in plan if content is not None]
 
         if dry_run:
+            planned = plan_actions(targets)
             return {
                 "agent": agent_id,
                 "status": "planned",
-                "plan": plan_actions(targets),
+                "plan": planned,
+                **self._classified_file_report([entry["path"] for entry in planned], scope),
             }
 
         # project_only: write nothing under $HOME — no home backup. Write every
@@ -128,6 +134,7 @@ class Configurator:
                 "agent": agent_id,
                 "status": "configured",
                 "files": files,
+                **self._classified_file_report(files, scope),
                 "backup_id": None,
             }
 
@@ -145,8 +152,36 @@ class Configurator:
             "agent": agent_id,
             "status": "configured",
             "files": files,
+            **self._classified_file_report(files, scope),
             "backup_id": backup.id if backup is not None else None,
         }
+
+    def _classified_file_report(self, files: list[str], scope: str) -> dict[str, Any]:
+        """Classify writes so `--scope local` cannot hide home/global changes."""
+        root = self.project_root.resolve()
+        local: list[str] = []
+        global_: list[str] = []
+        for file in files:
+            path = Path(file)
+            try:
+                resolved = path.resolve()
+            except OSError:
+                resolved = path
+            if root == resolved or root in resolved.parents:
+                local.append(file)
+            else:
+                global_.append(file)
+        report: dict[str, Any] = {
+            "local_files_written": local,
+            "global_files_written": global_,
+        }
+        if scope == "local" and global_:
+            # Spec 8.9: the --scope=local decision is Host-Constrained Local
+            # and the JSON envelope MUST explain every global write. The
+            # renderer owns the canonical wording so the docs and the JSON
+            # cannot drift apart.
+            report["global_write_reason"] = RENDER_SCOPE_LOCAL_REASON
+        return report
 
     def _write_project_local_only(self, adapter: Adapter) -> list[str]:
         """Write every planned file under the project root; touch nothing under $HOME."""
@@ -409,8 +444,6 @@ class Configurator:
         entries: list[PlanEntry] = []
         if adapter.agent_id == "claude-code":
             entries.append(self._plan_claude_permissions(adapter))
-        if adapter.agent_id == "opencode":
-            entries.append(self._plan_opencode_profile(adapter))
         if constants.global_agents_subdir(adapter.agent_id):
             entries.extend(self._plan_global_personas(adapter))
         if constants.ignore_filename(adapter.agent_id):
@@ -519,17 +552,6 @@ class Configurator:
             entries.append((path, _content_if_changed(path, content)))
         return entries
 
-    def _plan_opencode_profile(self, adapter: Adapter) -> PlanEntry:
-        profile = {
-            "name": "sdd-orchestrator",
-            "description": "OpenContext SDD orchestrator with knowledge graph",
-            "system_prompt": _orchestrator_prompt(),
-            "tools": ["mcp__opencontext__*"],
-        }
-        path = adapter.config_dir / "agents" / "sdd-orchestrator.json"
-        content = json.dumps(profile, indent=2) + "\n"
-        return path, _content_if_changed(path, content)
-
 
 def _mcp_config_is_empty(path: Path, shape: McpShape) -> bool:
     """True when an MCP config holds no remaining configuration of its declared shape.
@@ -608,143 +630,23 @@ def _render_persona(persona: Persona) -> str:
 # Default content
 # ----------------------------------------------------------------------
 
-# Kept deliberately short: the agent can run `opencontext --help` for the full
-# command set, so injecting a full CLI table into every session is wasted tokens.
-_CLI_REFERENCE = """### OpenContext CLI
-
-Run `opencontext --help` or `opencontext <command> --help` for the full command set.
-Most-used: `index .` and `pack . --query "<task>"` (context), `verify` (health),
-`install` (setup)."""
-
-_KG_SECTION = """## Knowledge Graph (MCP Tools)
-
-OpenContext indexes your project into a queryable knowledge graph with call analysis.
-
-| Tool | Use For |
-|------|---------|
-| `opencontext_search` | Find symbols by name |
-| `opencontext_context` | Build relevant code context for a task |
-| `opencontext_callers` | Trace call flow (who calls a function) |
-| `opencontext_callees` | Trace call flow (what a function calls) |
-| `opencontext_impact` | Check what's affected before editing |
-| `opencontext_node` | Get a single symbol's details |
-| `opencontext_files` | Get indexed file structure |
-| `opencontext_status` | Check index health |
-
-### Rules
-
-1. Use `opencontext_context` for exploration questions
-2. Do NOT re-read files that `opencontext_context` already returned
-3. Check `opencontext_impact` before making changes
-4. Run `opencontext verify` if something seems wrong
-"""
-
-_HEALTH_SECTION = """## Health & Maintenance
-
-- Run `opencontext verify` to check all components are working
-- Run `opencontext update` to check for OpenContext updates
-- Run `opencontext upgrade` to install the latest version
-- Run `opencontext plugin update` to update all plugins
-- Run `opencontext config backup` before risky configuration changes
-"""
-
-_SDD_SECTION = """## SDD Workflow
-
-This project supports Spec-Driven Development.
-
-- Run `opencontext init` to initialize SDD if not done
-- Use `/oc-new <change>` to start a new change
-- The orchestrator runs: explore -> propose -> spec -> design -> tasks -> apply -> verify -> archive
-"""
-
-_SECURITY_SECTION = """## Security
-
-- All tool executions require approval by default
-- External providers are disabled in secure mode
-- Context redaction is applied automatically
-"""
-
-_MEMORY_PROTOCOL_SECTION = """## Persistent Memory (proactive save)
-
-OpenContext gives you first-class access to its own memory store via four MCP
-tools. Use them WITHOUT being asked, the moment something is worth remembering.
-
-| Tool | Use for |
-|------|---------|
-| `opencontext_memory_save` | Save a decision, bug, convention, or discovery |
-| `opencontext_memory_search` | Recall past records matching a query |
-| `opencontext_memory_context` | Pull recent/relevant memory as task context |
-| `opencontext_memory_judge` | Reinforce or contradict an existing record |
-
-Save proactively — after any decision, bug fix, convention, or discovery, call
-`opencontext_memory_save` instead of waiting to be asked. Pick the layer:
-
-- **FAILURE** — for failures, bugs, and what went wrong.
-- **SEMANTIC** — for durable facts and stable knowledge.
-- **PROCEDURAL** — for repeatable patterns and how-to procedures.
-- **EPISODIC** — the default for everything else (omit `layer` to use it).
-"""
-
-_PREFIX = """# OpenContext Integration
-
-OpenContext provides a semantic knowledge graph, health checks, plugin ecosystem,
-and SDD orchestration for this project. Use the MCP tools directly.
-
-"""
+# The managed instructions body is now produced by the consolidated renderer
+# (``opencontext_core.agents.template_renderer``) so doc content can be
+# unit-tested, so per-host overrides have a single place to slot in, and so
+# the spec-required topics (opencontext_run, memory, quality, session,
+# workflow/profile explain, config doctor, trace/status, symbol edit, OC Flow
+# vs SDD, TDD mode, memory/Engram) cannot drift back into partial coverage.
+# ``_default_instructions`` is kept as the Configurator's entry point so
+# existing tests and ``instructions_builder`` overrides keep working.
 
 
 def _default_instructions(agent_id: str) -> str:
-    """Build the managed instructions body for an agent."""
+    """Build the managed instructions body for an agent.
 
-    return (
-        _PREFIX
-        + _KG_SECTION
-        + _CLI_REFERENCE
-        + "\n"
-        + _HEALTH_SECTION
-        + _SDD_SECTION
-        + _MEMORY_PROTOCOL_SECTION
-        + _SECURITY_SECTION
-    )
+    Delegates to ``opencontext_core.agents.template_renderer`` so the doc
+    body is the consolidated, spec-covered set of topics rather than the
+    older inline set. ``agent_id`` is kept in the signature for any future
+    per-host override; the renderer is pure.
+    """
 
-
-def _orchestrator_prompt() -> str:
-    return """You are the OpenContext SDD Orchestrator.
-
-Your role is to coordinate Spec-Driven Development workflows using
-the OpenContext knowledge graph and persistent memory.
-
-## Principles
-
-1. **Thin orchestrator thread**: Delegate all real work to sub-agents
-2. **Context-aware**: Use the knowledge graph to understand code before planning
-3. **Security-first**: All actions go through approval gates
-4. **Teaching-oriented**: Explain WHY, not just WHAT
-
-## SDD Workflow
-
-```
-explore -> propose -> spec -> design -> tasks -> apply -> verify -> archive
-```
-
-For each phase:
-1. Load relevant context from the knowledge graph
-2. Delegate to appropriate sub-agent
-3. Verify results before proceeding
-4. Save decisions to persistent memory
-
-## Delegation Rules
-
-- Reading 4+ files -> Delegate exploration
-- Touching 2+ files -> Use one writer + review
-- Commits/PRs -> Fresh review required
-- Security changes -> Additional approval gate
-
-## Memory
-
-Use persistent memory:
-- Save architectural decisions
-- Record bug fixes with root cause
-- Document patterns and conventions
-- Capture gotchas and edge cases
-"""
+    return render_agent_instructions(agent_id)

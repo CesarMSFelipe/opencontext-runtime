@@ -19,7 +19,7 @@ def _run_with_diagnosis(tmp_path: Path) -> tuple[OCFlowRunner, object]:
     )
     runner = OCFlowRunner(root=tmp_path)
     result = runner.run(
-        "Fix failing test", lane=Lane.CAREFUL, profile="balanced", requested_edits=[bad]
+        "Fix a null-pointer bug", lane=Lane.CAREFUL, profile="balanced", requested_edits=[bad]
     )
     return runner, result
 
@@ -28,7 +28,7 @@ def test_resume_restores_contract_and_attempts(tmp_path: Path) -> None:
     runner, result = _run_with_diagnosis(tmp_path)
     assert result.diagnosis_attempts >= 1
     resumed = runner.resume(result.session_id, result.run_id)
-    assert resumed.contract.scope == "Fix failing test"
+    assert resumed.contract.scope == "Fix a null-pointer bug"
     assert len(resumed.diagnosis_attempts) == result.diagnosis_attempts
     assert resumed.inspection is not None
     assert resumed.patch  # patch state restored
@@ -48,7 +48,7 @@ def test_run_to_completion_persists_artifacts(tmp_path: Path) -> None:
         "fix.py", content="ok = 1\n", reason="add", requirement_ref="task addressed"
     )
     result = OCFlowRunner(root=tmp_path).run(
-        "Fix failing test", lane=Lane.FAST, requested_edits=[edit]
+        "Fix a null-pointer bug", lane=Lane.FAST, requested_edits=[edit]
     )
     assert result.status == "completed"
     assert result.final_node == "completed"

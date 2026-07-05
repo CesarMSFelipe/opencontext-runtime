@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any, ClassVar
 
+from opencontext_core.config_resolver import resolve_active_storage_path
 from opencontext_core.harness.models import (
     AuditLevel,
     GateStatus,
@@ -20,7 +22,7 @@ class ProjectIndexExistsGate:
     id = "project_index_exists"
 
     def evaluate(self, root: Path) -> PhaseGate:
-        manifest = root / ".storage" / "opencontext" / "project_manifest.json"
+        manifest = resolve_active_storage_path(root) / "project_manifest.json"
         if manifest.exists():
             return PhaseGate(
                 id=self.id,
@@ -585,15 +587,27 @@ class FailingTestExistsGate:
 
     id = "failing_test_exists"
 
-    def evaluate(self, task: str, root: Path) -> PhaseGate:
+    # Timeout in seconds for the subprocess execution of a single test file.
+    _EXEC_TIMEOUT: int = 120
+
+    def evaluate(self, task: str, root: Path, *, tdd_mode: str = "ask") -> PhaseGate:
         """Find a test file matching the task name.
+
+        In strict TDD mode the matched test file is also *executed* via subprocess
+        and must EXIT with a non-zero code (RED confirmed).  An empty or already-
+        passing test is rejected with a clear message.
+
+        In non-strict modes (``ask`` / ``off``) the original filename-existence
+        check is preserved — no subprocess is spawned.
 
         Args:
             task: The task/change name (e.g., "add-privacy-gate").
             root: Project root directory.
+            tdd_mode: "strict" | "ask" | "off"  (default "ask").
 
         Returns:
-            PhaseGate with PASSED if found, FAILED if not found.
+            PhaseGate with PASSED if found (and RED-confirmed in strict mode),
+            FAILED otherwise.
         """
         tests_dir = root / "tests"
         if not tests_dir.exists():
@@ -618,7 +632,33 @@ class FailingTestExistsGate:
         for pattern in patterns:
             matching_files.extend(str(p) for p in root.glob(pattern) if p.is_file())
 
-        if matching_files:
+        if not matching_files:
+            # No exact match — try fuzzy matching to suggest alternatives
+            suggestion = self._fuzzy_suggest(task, root)
+            if suggestion:
+                return PhaseGate(
+                    id=self.id,
+                    phase="verify",
+                    status=GateStatus.FAILED,
+                    message=(
+                        f"No test found for task '{task}'. "
+                        f"Did you mean: {suggestion}? "
+                        f"Write a failing test first (Strict TDD)."
+                    ),
+                    metadata={"task": task, "suggestion": suggestion},
+                )
+            return PhaseGate(
+                id=self.id,
+                phase="verify",
+                status=GateStatus.FAILED,
+                message=(
+                    f"No test found for task '{task}' — write a failing test first (Strict TDD)."
+                ),
+                metadata={"task": task},
+            )
+
+        # File found — in non-strict modes, filename existence is sufficient.
+        if tdd_mode != "strict":
             return PhaseGate(
                 id=self.id,
                 phase="verify",
@@ -627,27 +667,63 @@ class FailingTestExistsGate:
                 metadata={"test_files": matching_files, "task": task},
             )
 
-        # No exact match — try fuzzy matching to suggest alternatives
-        suggestion = self._fuzzy_suggest(task, root)
-        if suggestion:
+        # --- Strict mode: execute the test and require it to FAIL (RED). ---
+        test_path = matching_files[0]
+        return self._verify_test_is_red(task, test_path, root, matching_files)
+
+    def _verify_test_is_red(
+        self, task: str, test_path: str, root: Path, all_matches: list[str]
+    ) -> PhaseGate:
+        """Execute ``test_path`` and return PASSED only when it exits non-zero.
+
+        Only the single matched file is run — never the full suite.
+        """
+        try:
+            proc = subprocess.run(
+                ["pytest", test_path, "-x", "-q", "--no-header", "--tb=no"],
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                timeout=self._EXEC_TIMEOUT,
+                shell=False,
+            )
+        except subprocess.TimeoutExpired:
             return PhaseGate(
                 id=self.id,
                 phase="verify",
                 status=GateStatus.FAILED,
                 message=(
-                    f"No test found for task '{task}'. "
-                    f"Did you mean: {suggestion}? "
-                    f"Write a failing test first (Strict TDD)."
+                    f"Strict TDD: test execution timed out after {self._EXEC_TIMEOUT}s "
+                    f"for '{test_path}'. Ensure the test file is runnable."
                 ),
-                metadata={"task": task, "suggestion": suggestion},
+                metadata={"task": task, "test_path": test_path},
             )
 
+        if proc.returncode != 0:
+            # Non-zero exit → test is RED, gate PASSES.
+            return PhaseGate(
+                id=self.id,
+                phase="verify",
+                status=GateStatus.PASSED,
+                message=(f"Strict TDD: RED confirmed — test '{test_path}' fails as required."),
+                metadata={
+                    "test_files": all_matches,
+                    "task": task,
+                    "exit_code": proc.returncode,
+                },
+            )
+
+        # Zero exit → test passes, no RED — gate FAILS.
         return PhaseGate(
             id=self.id,
             phase="verify",
             status=GateStatus.FAILED,
-            message=f"No test found for task '{task}' — write a failing test first (Strict TDD).",
-            metadata={"task": task},
+            message=(
+                f"Strict TDD: test '{test_path}' already passes (exit 0). "
+                "The test must be RED (failing) before apply. "
+                "Write a failing test that captures the missing behavior."
+            ),
+            metadata={"task": task, "test_path": test_path, "exit_code": 0},
         )
 
     def _fuzzy_suggest(self, task: str, root: Path) -> str | None:
@@ -682,3 +758,111 @@ class FailingTestExistsGate:
         if best_match:
             return best_match[0]
         return None
+
+
+class TestsPassGate:
+    """Run the project test command and verify all tests pass (GREEN).
+
+    This gate is intended as a post-apply / verify gate confirming that the
+    implementation is GREEN after a Strict TDD RED → GREEN cycle.
+
+    **Default behaviour (OFF)**: when ``tdd_mode`` is not ``"strict"``, the gate
+    returns PASSED immediately without executing any subprocess.  This preserves
+    existing verify-phase behaviour for projects that have not opted into strict
+    TDD.
+
+    When active (``tdd_mode="strict"``), the gate runs the supplied command,
+    maps exit-code 0 → PASSED and any non-zero exit → FAILED (never WARNING).
+    """
+
+    id = "tests_pass"
+
+    # Timeout in seconds for the test-suite subprocess.
+    _EXEC_TIMEOUT: int = 300
+
+    def evaluate(
+        self,
+        cmd: list[str],
+        *,
+        cwd: Path,
+        tdd_mode: str = "ask",
+    ) -> PhaseGate:
+        """Evaluate whether the project test suite passes.
+
+        Args:
+            cmd: The test command as an argv list (e.g. ``["pytest", "-q"]``).
+            cwd: Working directory for the subprocess (project root).
+            tdd_mode: "strict" | "ask" | "off".  Only "strict" activates
+                      execution; all other modes return PASSED immediately.
+
+        Returns:
+            PhaseGate with PASSED on success, FAILED on test failure or timeout.
+        """
+        if tdd_mode != "strict":
+            return PhaseGate(
+                id=self.id,
+                phase="verify",
+                status=GateStatus.PASSED,
+                message="TestsPassGate: inactive (tdd_mode is not strict).",
+            )
+
+        # Sanitize the subprocess env so the nested test run is deterministic when
+        # this gate itself runs inside a parent pytest (drop PYTEST_*/COV_* that would
+        # leak the parent's config/coverage), and add the project root to PYTHONPATH so
+        # a bare `pytest` can import the project's own modules (else exit 2 on import).
+        import os
+
+        _env = {
+            k: v
+            for k, v in os.environ.items()
+            if not (k.startswith("PYTEST_") or k.startswith("COV_"))
+        }
+        _pp = _env.get("PYTHONPATH", "")
+        _env["PYTHONPATH"] = str(cwd) + (os.pathsep + _pp if _pp else "")
+        # The GREEN gate re-imports source that a mutation just rewrote, often within
+        # the same filesystem-timestamp second. CPython's .pyc invalidation is
+        # mtime-granular, so a stale pre-mutation .pyc could be reused and the suite
+        # would test the OLD code (a real correctness bug, and a flake in tests).
+        # Never write/read cached bytecode for this nested run.
+        _env["PYTHONDONTWRITEBYTECODE"] = "1"
+
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=str(cwd),
+                capture_output=True,
+                text=True,
+                timeout=self._EXEC_TIMEOUT,
+                shell=False,
+                env=_env,
+            )
+        except subprocess.TimeoutExpired:
+            return PhaseGate(
+                id=self.id,
+                phase="verify",
+                status=GateStatus.FAILED,
+                message=(
+                    f"TestsPassGate: test suite timed out after {self._EXEC_TIMEOUT}s. "
+                    "Investigate slow tests or increase the timeout."
+                ),
+            )
+
+        if proc.returncode == 0:
+            return PhaseGate(
+                id=self.id,
+                phase="verify",
+                status=GateStatus.PASSED,
+                message="TestsPassGate: all tests pass (GREEN confirmed).",
+                metadata={"exit_code": 0},
+            )
+
+        return PhaseGate(
+            id=self.id,
+            phase="verify",
+            status=GateStatus.FAILED,
+            message=(
+                f"TestsPassGate: tests failed (exit {proc.returncode}). "
+                "Fix failing tests before completing the verify phase."
+            ),
+            metadata={"exit_code": proc.returncode},
+        )

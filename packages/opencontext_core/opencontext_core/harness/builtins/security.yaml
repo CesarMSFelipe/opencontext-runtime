@@ -12,7 +12,7 @@ gates:
   - no_secret_leakage
   - trust_boundary_reviewed
   - network_policy_passed
-  - no_high_risk_export
+  - no_high_risk_exports
   - security_findings_classified
 metrics: [security_findings]
 receipts: [security_receipt]

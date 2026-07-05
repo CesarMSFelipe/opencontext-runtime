@@ -108,6 +108,9 @@ class EmbeddingStats(BaseModel):
     embedded_count: int = Field(ge=0, description="Number of items successfully embedded.")
     pending_count: int = Field(ge=0, description="Items pending embedding.")
     failed_count: int = Field(ge=0, description="Items that failed embedding.")
+    dropped_count: int = Field(
+        default=0, ge=0, description="Items dropped because the queue was full (backpressure)."
+    )
     average_latency_ms: float = Field(description="Average embedding generation latency.")
     queue_depth: int = Field(ge=0, description="Current queue depth.")
     last_activity: datetime | None = Field(

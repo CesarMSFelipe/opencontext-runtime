@@ -25,21 +25,66 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/runtime-strip.svg" alt="offline-first · call-graph traced · deterministic · MCP ready · claims tested" width="720">
+  <img src="docs/assets/runtime-strip.svg" alt="offline-first · call-graph traced · deterministic · MCP ready · claims tested" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/release-candidate-status.svg" alt="OpenContext product status: stable, release candidate, host dependent, opt-in" width="720">
+  <img src="docs/assets/release-candidate-status.svg" alt="OpenContext product status: stable, release candidate, host dependent, opt-in" width="100%">
 </p>
+
+## Product surface
+
+The five canonical diagrams below show the user-facing surface of the 1.0 release. Every
+SVG has a matching `<title>` element and is referenced by an exact filename in this README.
+
+### TUI Cockpit
+
+![TUI Cockpit](docs/assets/tui-cockpit.svg)
+
+The interactive TUI cockpit — runtime state, run phase, and the next action the agent
+will take, with the keyboard hints (g Graph, h Harness, r Receipt, n New change, k Context,
+b Budget) that drive the four-key workflow.
+
+### Config Menu
+
+![Config Menu](docs/assets/config-menu.svg)
+
+The configuration menu that explains impact before it asks for input — project setup,
+runtime posture, workflow strictness, memory location, and maintenance. Each option shows
+its downstream effect on a real run, not a marketing blurb.
+
+### Graph Viewer
+
+![Graph Viewer](docs/assets/graph-viewer.svg)
+
+The local code-graph viewer — nodes for symbols, files, and run phases; edges for
+calls, imports, and evidence. Built from the index the runtime produces during
+`opencontext index`, queryable from the TUI and the CLI.
+
+### Release Candidate Status
+
+![Release Candidate Status](docs/assets/release-candidate-status.svg)
+
+What is stable, what is a release candidate, what is host-dependent, and what is opt-in
+in the 1.0 release. The status is enforced by the 12-gate release verdict
+(`opencontext benchmark release --profile balanced`).
+
+### User Flows
+
+![User Flows](docs/assets/user-flows.svg)
+
+The five primary user flows: **Explore → Propose → Apply → Verify → Archive**. The bottom
+panel shows the verification loop from commit 021: seed a failing test, run pytest,
+invoke OpenContext, re-run pytest, and pass or honestly block.
 
 ### Product status
 
 | Stable | Release candidate | Host dependent | Opt-in |
 |---|---|---|---|
-| index · KG · pack · verified-context · memory · uninstall | `oc-new` · TUI cockpit · graph · leases/signals | MCP sampling · generative phases | Engram · providers · semantic/vector |
+| index · KG · pack · verified-context · memory · uninstall | `oc-new` · TUI cockpit · graph viewer · learning signals | MCP sampling · generative phases | Engram · providers · semantic/vector |
 
 <p align="center">
-  <img src="docs/assets/hero-runtime.svg" alt="From agent request to verified context in one call: an AI coding agent asks; OpenContext Runtime traces the call graph, ranks symbols, locks a token budget and checks gates; a verified context pack is returned in one call" width="720">
+  <img src="docs/assets/hero-runtime.svg" alt="From agent request to verified context in one call: an AI coding agent asks; OpenContext Runtime traces the call graph, ranks symbols, locks a token budget and checks gates; a verified context pack is returned in one call" width="100%">
 </p>
 
 <p align="center">
@@ -53,96 +98,74 @@
   <a href="#installation">Install</a>
 </p>
 
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
-
 <!-- ─────────────── THE WHOLE SYSTEM, AT A GLANCE ─────────────── -->
 
-<div id="at-a-glance" align="center">
-
-<table>
-<tr>
-<td width="760">
-
-<h3>The whole system, at a glance</h3>
+### The whole system, at a glance
 
 OpenContext is the layer **between your coding agent and your codebase** — it prepares verified context, runs a controlled agentic workflow, and keeps both governed. Everything below is one of these six pillars.
 
 | Pillar | What it does |
 |--------|--------------|
 | **Context packs + code graph** | Call-graph-traced, token-budgeted context in one deterministic call — no grep loops, no full-file reads. |
-| **Controlled SDD loop** | `explore → … → archive`, seven personas, gates and strict TDD — bounded and human-in-the-loop, not "go do everything". |
+| **Controlled SDD loop** | `explore → … → archive`, a dedicated persona per phase, gates and TDD-as-mode/gate (strict / ask / off) — bounded and human-in-the-loop, not "go do everything". |
 | **Your model, per persona** | Pick the model for each SDD phase in `opencontext.yaml`; it is sent to your agent as an MCP sampling hint. |
-| **Persistent memory** | Local store by default (five layers); co-resident Engram coexistence is opt-in. Progressive, token-aware recall. |
+| **Persistent memory** | Local store by default (seven layers); co-resident Engram coexistence is opt-in. Progressive, token-aware recall. |
 | **Security by default** | Redaction, secret scanning, fail-closed posture, offline-first. |
-| **32 MCP tools** | Search, context, call graph, impact, symbol edits, memory, quality, session steps, workflow/profile explain, config doctor — inside Claude Code, OpenCode, Codex. |
-
-</td>
-</tr>
-</table>
-
-</div>
+| **Live MCP tool registry** | 32 tools: search, context, call graph, impact, symbol edits, memory, quality, session steps, workflow/profile explain, config doctor — inside Claude Code, OpenCode, Codex. Real-host integration is proven by `real_host` e2e tests; see [Host Support](docs/HOST-SUPPORT.md). |
 
 <p align="center">
-  <img src="docs/assets/all-systems.svg" alt="OpenContext, all systems at a glance: it sits between your coding agent and your codebase. The runtime holds six systems — context and code graph, controlled SDD loop, model per persona, persistent memory, security by default, and 32 MCP tools. The codebase is indexed once and queried offline." width="720">
+  <img src="docs/assets/all-systems.svg" alt="OpenContext, all systems at a glance: it sits between your coding agent and your codebase. The runtime holds six systems — context and code graph, controlled SDD loop, model per persona, persistent memory, security by default, and the live MCP tool registry. The codebase is indexed once and queried offline." width="100%">
 </p>
 
 <p align="center">
   <sub>All systems · the layer between your agent and your codebase · six systems, one runtime</sub>
 </p>
 
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
-
 <!-- ─────────────── PRODUCT UI ─────────────── -->
 
-<div id="product-ui" align="center">
-
-<table>
-<tr>
-<td width="760">
-
-<h3>The runtime UI shows state, not slogans</h3>
+### The runtime UI shows state, not slogans
 
 The TUI and CLI use the same node logo as this README, then show live project
 state: install/index status, KG health, memory backend, active run, current
 phase, gates, and next action.
 
-</td>
-</tr>
-</table>
-
-</div>
-
 <p align="center">
-  <img src="docs/assets/tui-cockpit.svg" alt="TUI cockpit with runtime state, active run, phase and next action" width="720">
+  <img src="docs/assets/demo-menu.gif" alt="Real recording of the OpenContext TUI: the navigable main menu across setup, configure, and tools with live project state" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/config-menu.svg" alt="Configuration menu with current value, effect, recommendation, risk and CLI equivalent" width="720">
+  <sub>Real recording · the mission cockpit — live project state, then new change · graph · memory · budget · harness · doctor</sub>
 </p>
 
 <p align="center">
-  <img src="docs/assets/graph-viewer.svg" alt="Graph viewer showing knowledge graph and run nodes" width="720">
+  <img src="docs/assets/demo-config.gif" alt="Real recording of the OpenContext configuration TUI: each option shows its current value, effect, recommendation, risk note, and CLI equivalent" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
+  <sub>Real recording · configuration that explains impact — current value · effect · recommendation · risk · CLI equivalent</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/demo-graph.gif" alt="Real recording of the in-terminal knowledge-graph explorer: a focused node shows what it calls and what calls it as a selectable list; Enter walks into a neighbor, Backspace goes back, with a breadcrumb of the path" width="100%">
+</p>
+
+<p align="center">
+  <sub>Real recording · walk the knowledge graph from the terminal — focus a node, see its calls (→) and callers (←), <code>Enter</code> to drill in, <code>Backspace</code> to go back (press <code>g</code> in the cockpit · no browser)</sub>
 </p>
 
 <!-- ─────────────── OFFLINE VS MODEL ─────────────── -->
 
-<div id="offline-vs-model" align="center">
+### What runs offline — and what needs a model
 
-<table>
-<tr>
-<td width="760">
+OpenContext separates **local context operations** (always offline, deterministic — no LLM in the retrieval path) from **generative work** (new code, specs, designs, patches, reviews). Generative work requires a **generative executor** — an LLM provider, local model, or MCP host model.
 
-<h3>What runs offline — and what needs a model</h3>
+<p align="center">
+  <img src="docs/assets/runtime-boundary.svg" alt="OpenContext engineering runtime split into offline deterministic operations and generative work that requires a generative executor such as MCP sampling, Claude/GPT, Ollama, or another provider" width="100%">
+</p>
 
-OpenContext separates **local context operations** (always offline, deterministic — no LLM in the retrieval path) from **generative phases** (which need a model).
+<p align="center">
+  <sub>Runtime boundary · OpenContext governs and verifies · generation needs a model-capable executor</sub>
+</p>
 
 | Capability | Needs a model? | How it runs |
 |---|---|---|
@@ -151,58 +174,24 @@ OpenContext separates **local context operations** (always offline, deterministi
 | MCP `opencontext_run` (in-process agentic run) | **Host agent's model** | Via MCP sampling — your agent runs it on its own model; zero provider or API-key config on the OpenContext side |
 | Standalone `opencontext loop` / `harness run` generative phases (spec, design, apply, …) | **Yes** | A configured provider or local model (e.g. ollama). Without one the harness stays **honest planned-only** — it emits a structured plan for your agent to complete; it never fakes a result |
 
-</td>
-</tr>
-</table>
-
-</div>
-
 <p align="center">
-  <img src="docs/assets/offline-model-matrix.svg" alt="What runs offline vs needs a model: local context ops and MCP read/quality/memory tools are offline and deterministic; opencontext_run uses the host agent's model via MCP sampling; standalone generative phases need a provider or run planned-only" width="720">
+  <img src="docs/assets/offline-model-matrix.svg" alt="What runs offline vs needs a model: local context ops and MCP read/quality/memory tools are offline and deterministic; opencontext_run uses the host agent's model via MCP sampling; standalone generative phases need a provider or run planned-only" width="100%">
 </p>
 
 <p align="center">
   <sub>Offline by default · only generative phases need a model · <code>opencontext_run</code> borrows the host agent's model via sampling</sub>
 </p>
 
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
-
-<p align="center">
-  <img src="docs/assets/demo-terminal.svg" alt="Real opencontext explain output on tiangolo/fastapi — task: add OAuth2 bearer token auth — a verified pack in one call instead of a grep/read loop" width="720">
-</p>
-
-<p align="center">
-  <sub>Real output · tiangolo/fastapi · one call replaces a multi-round grep+read loop</sub>
-</p>
-
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
-
 <!-- ─────────────── THE OPENCONTEXT DIFFERENCE ─────────────── -->
 
-<div id="the-opencontext-difference" align="center">
-
-<table>
-<tr>
-<td width="760">
-
-<h3>The OpenContext Difference</h3>
+### The OpenContext Difference
 
 AI coding agents usually discover context through repeated search and full-file reads. Each file read whole. Call direction invisible. Results vary between runs.
 
 **OpenContext builds the context before the agent starts.** Traces the call graph, ranks symbols, applies a token budget, delivers a verified pack in one deterministic call.
 
-</td>
-</tr>
-</table>
-
-</div>
-
 <p align="center">
-  <img src="docs/assets/difference-card.svg" alt="OpenContext flow: 01 Trace Graph → 02 Rank Symbols → 03 Apply Budget → 04 Verified Pack. Built before the agent starts. Same result every run." width="720">
+  <img src="docs/assets/difference-card.svg" alt="OpenContext flow: 01 Trace Graph → 02 Rank Symbols → 03 Apply Budget → 04 Verified Pack. Built before the agent starts. Same result every run." width="100%">
 </p>
 
 <p align="center">
@@ -210,178 +199,105 @@ AI coding agents usually discover context through repeated search and full-file 
 </p>
 
 <p align="center">
-  <img src="docs/assets/before-after.svg" alt="Without OpenContext: agent grep+read loop over many rounds, no call graph. With OpenContext: far fewer tokens, one call, call graph traced." width="720">
-</p>
-
-<p align="center">
-  <sub>Benchmark · tiangolo/fastapi · add OAuth2 auth · far fewer tokens, one call instead of a grep/read loop</sub>
-</p>
-
-<p align="center">
-  <img src="docs/assets/workflow-audience.svg" alt="Built for: agent users, large repositories, structured SDD workflows, security-first teams" width="720">
+  <img src="docs/assets/workflow-audience.svg" alt="Built for: agent users, large repositories, structured SDD workflows, security-first teams" width="100%">
 </p>
 
 <p align="center">
   <sub>Not a good fit: repos under ~50 files, or workflows that specifically require semantic embedding search.</sub>
 </p>
 
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
-
 <!-- ─────────────── START IN 30 SECONDS ─────────────── -->
 
-<div id="start-in-30-seconds" align="center">
-
-<table>
-<tr>
-<td width="760">
-
-<h3>Start in 30 Seconds</h3>
+### Start in 30 Seconds
 
 Run the demo on your actual repository, then wire OpenContext into your editor.
 
-</td>
-</tr>
-</table>
-
-</div>
-
 <p align="center">
-  <img src="docs/assets/quickstart-flow.svg" alt="01 install → 02 run demo → 03 configure editor → 04 editor ready" width="720">
+  <img src="docs/assets/quickstart-flow.svg" alt="01 install → 02 run demo → 03 configure editor → 04 editor ready" width="100%">
 </p>
 
 <p align="center">
-  <sub>Setup · pip install → demo on your repo → editor wizard → MCP wired</sub>
+  <sub>Setup · installer script or pipx → demo on your repo → editor wizard → MCP wired</sub>
 </p>
 
-<div align="center">
-
-<table>
-<tr>
-<td width="760">
+**Linux / Ubuntu / macOS**
 
 ```bash
-pipx install opencontext-cli   # recommended — isolated, on PATH
+curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh | bash
 cd your-project
 opencontext install            # stack detection · editor setup · index repo
 opencontext demo               # see the token + call reduction on your repo
 ```
 
-</td>
-</tr>
-</table>
+**Windows PowerShell**
 
-</div>
+```powershell
+irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 | iex
+cd your-project
+opencontext install
+opencontext demo
+```
+
+Prefer Python tooling? Use `pipx install opencontext-cli` instead.
 
 <p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
+  <img src="docs/assets/demo-install.gif" alt="Real recording of opencontext install: stack detection, editor setup, and repository indexing in one command" width="100%">
+</p>
+
+<p align="center">
+  <sub>Real recording · <code>opencontext install</code> — stack detection · editor setup · repo indexed</sub>
 </p>
 
 <!-- ─────────────── PROOF, NOT PROMISES ─────────────── -->
 
-<div id="proof-not-promises" align="center">
+### Proof, Not Promises
 
-<table>
-<tr>
-<td width="760">
+Every benchmark runs on a public repository. No hidden dataset. No hosted service. No benchmark-only path. Fully reproducible with `opencontext pack` (see [`docs/benchmarks/`](docs/benchmarks/) for the exact commands and pinned commits).
 
-<h3>Proof, Not Promises</h3>
-
-Every benchmark runs on a public repository. No hidden dataset. No hosted service. No benchmark-only path. Fully reproducible with `opencontext explain`.
-
-**Benchmark methodology:** "Agent loop" means reading full files discovered via grep-style search, without call-graph tracing. OpenContext returns one verified pack from `opencontext explain` on the same public repositories — far fewer tokens, one call instead of a grep/read loop. We make no fixed percentage claim: completeness and latency are measured directly by the honest efficiency benchmark (`opencontext benchmark`), and real agent behavior varies by model, editor, and tool strategy.
-
-</td>
-</tr>
-</table>
-
-</div>
+**Benchmark methodology:** each case clones a public repo at a pinned commit, runs `opencontext index`, then compares OpenContext's one-call pack against reading the relevant files whole — the same token counter on both sides. Measured reductions: **42–87% fewer tokens** (psf/requests, tiangolo/fastapi, django/django). This measures context tokens, not model quality or end-task success — real agent behavior varies by model, editor, and tool strategy. Full numbers, pinned commits, and a one-command reproduction live in [`docs/benchmarks/`](docs/benchmarks/).
 
 <p align="center">
-  <img src="docs/assets/stats-bar.svg" alt="far fewer tokens · many rounds to one call · call graph included · deterministic" width="720">
+  <img src="docs/assets/stats-bar.svg" alt="42–87% fewer tokens than reading the relevant files whole · one ranked call · call graph included · deterministic · measured on 3 public repos" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/benchmark-card-requests.svg" alt="psf/requests — fix retry bug: grep+read over several rounds vs opencontext one call — far fewer tokens" width="720">
+  <img src="docs/assets/benchmark-numbers.svg" alt="Benchmark numbers measured on 3 public repos: psf/requests retry 65% fewer tokens, requests SSL verify 69%, tiangolo/fastapi OAuth2 42%, django ORM-to-SQL 87% — OpenContext one-call pack vs reading the relevant files whole" width="100%">
 </p>
 
 <p align="center">
-  <sub>Benchmark · psf/requests · retry bug · <code>send → RetryError</code> surfaced by call graph, not query text</sub>
+  <sub>Numbers · 3 public repos · OpenContext pack vs reading the relevant files whole · reproducible — see <code>docs/benchmarks/</code></sub>
 </p>
-
-<p align="center">
-  <img src="docs/assets/benchmark-card-fastapi.svg" alt="tiangolo/fastapi — add OAuth2 auth: grep+read over many rounds vs opencontext one call — far fewer tokens" width="720">
-</p>
-
-<p align="center">
-  <sub>Benchmark · tiangolo/fastapi · OAuth2 auth · <code>routing.py</code> is 56,550 tokens — OpenContext returns only the symbols that matter</sub>
-</p>
-
-<p align="center">
-  <img src="docs/assets/benchmark-numbers.svg" alt="4 public-repo benchmarks: retry bug, SSL verify, OAuth2 auth, project overview — grep+read loop vs one OpenContext call, far fewer tokens" width="720">
-</p>
-
-<p align="center">
-  <sub>Numbers · 4 public repos · agent loop = full files via grep, no call graph · all reproducible</sub>
-</p>
-
-<div align="center">
-
-<table>
-<tr>
-<td width="760">
 
 When a file exceeds the per-item budget, OpenContext is explicit — it never silently drops content:
 
 ```
 Kept out (and why):
-  ✗ django/db/models/query.py   29,532 tok — item_exceeds_available_budget
+  ✗ django/db/models/query.py   29,767 tok — item_exceeds_available_budget
 ```
 
 Pass `--max-tokens 32000` (or raise `context.max_input_tokens` in `opencontext.yaml`) to include it.
 
-</td>
-</tr>
-</table>
-
-</div>
+<p align="center">
+  <img src="docs/assets/demo-kept-out.gif" alt="Real recording: OpenContext explicitly lists the files kept out of the pack and why, then includes them when the token budget is raised" width="100%">
+</p>
 
 <p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
+  <sub>Real recording · nothing is silently dropped — every omission is reported with its reason</sub>
 </p>
 
 <!-- ─────────────── THE CONTEXT RUNTIME ─────────────── -->
 
-<div id="the-context-runtime" align="center">
-
-<table>
-<tr>
-<td width="760">
-
-<h3>The Context Runtime</h3>
+### The Context Runtime
 
 Every query runs through a deterministic pipeline. A **ContextContract** locks in the token budget, required symbols, and verification gates _before_ retrieval starts.
 
-</td>
-</tr>
-</table>
-
-</div>
-
 <p align="center">
-  <img src="docs/assets/pipeline.svg" alt="OpenContext pipeline: query → classify → ContextContract → retrieve → score → pack → gates → deliver" width="720">
+  <img src="docs/assets/pipeline.svg" alt="OpenContext pipeline: query → classify → ContextContract → retrieve → score → pack → gates → deliver" width="100%">
 </p>
 
 <p align="center">
   <sub>Runtime · deterministic · no LLM in retrieval · offline</sub>
 </p>
-
-<div align="center">
-
-<table>
-<tr>
-<td width="760">
 
 **Command**
 ```bash
@@ -394,8 +310,17 @@ task: fix crash in auth middleware
 task_type: bugfix
 risk_tier: precise
 token_budget: 16000
-required_symbols: ['*crash*', '*auth*', '*middleware*']
-must_verify: [run-tests, lint, type-check]
+required_symbols:
+- '*crash*'
+- '*auth*'
+- '*middleware*'
+must_verify:
+- id: run-tests
+  required: true
+- id: lint
+  required: true
+- id: type-check
+  required: true
 ```
 
 **Risk Tiers**
@@ -413,64 +338,34 @@ Context packs are serialized as AICX bytecode — compact, verifiable, with a cr
 ```bash
 opencontext bytecode compile --query "fix auth bug"
 opencontext bytecode inspect
-opencontext bytecode decode <path.aicx>
+opencontext bytecode decode
 ```
-
-</td>
-</tr>
-</table>
-
-</div>
-
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
 
 <!-- ─────────────── LOCAL CODE GRAPH ─────────────── -->
 
-<div id="local-code-graph" align="center">
+### Local Code Graph
 
-<table>
-<tr>
-<td width="760">
-
-<h3>Local Code Graph</h3>
-
-SQLite + FTS5, fully offline. Indexes symbols, call chains, imports, and framework routes. Python works out of the box; TypeScript, JavaScript, Go, Rust, Java, and PHP add full symbol extraction once their tree-sitter grammar is installed (`pip install tree-sitter-typescript`, etc.). Files in any language are still indexed and searchable.
-
-</td>
-</tr>
-</table>
-
-</div>
+SQLite + FTS5, fully offline. Indexes symbols, call chains, imports, and framework routes. Python, JavaScript, and TypeScript work out of the box (bundled grammars); Go, Rust, Java, PHP, C, C++, Ruby, Swift, and Kotlin add full symbol extraction once their tree-sitter grammar is installed (`pip install tree-sitter-go`, etc.). Files in any language are still indexed and searchable.
 
 <p align="center">
-  <img src="docs/assets/local-code-graph.svg" alt="Graph layers: files → symbols → imports + call graph → routes → bridges. Index once, query offline." width="720">
+  <img src="docs/assets/local-code-graph.svg" alt="Graph layers: files → symbols → imports + call graph → routes → bridges. Index once, query offline." width="100%">
 </p>
 
 <p align="center">
   <sub>Code Graph · 6 layers · symbol-level · cross-language bridges · offline</sub>
 </p>
 
-<div align="center">
+<p align="center">
+  <img src="docs/assets/demo-explain.gif" alt="Real recording of opencontext explain answering 'how does authentication work' — a ranked, call-graph-traced context pack returned in one deterministic call" width="100%">
+</p>
 
-<table>
-<tr>
-<td width="760">
+<p align="center">
+  <sub>Real recording · <code>opencontext explain "how does authentication work"</code> — ranked symbols, call-graph traced, one deterministic call</sub>
+</p>
 
-**Real output on psf/requests**
-```
-Why this context — how does authentication work
-20 files · 9,900 tokens
+Symbols are surfaced from the **call graph**, not just the query text — a caller is pulled in because it *calls* a matched symbol (the way `prepare_auth` links in `HTTPBasicAuth`), so you get what the code actually depends on, not only string matches.
 
-src/requests/auth.py:116     0.86  125  graph · class HTTPProxyAuth  · matched query
-src/requests/auth.py:85      0.84  362  graph · class HTTPBasicAuth  · matched query
-src/requests/sessions.py     0.83  385  graph · method rebuild_auth  · matched query
-src/requests/models.py       0.73   81  graph · method prepare_auth  · calls:HTTPBasicAuth
-docs/user/authentication.rst 0.68 1464  manifest
-```
-
-`prepare_auth → HTTPBasicAuth` surfaced from the call graph — not from the query text.
+> **Call-graph scope**: call edges are extracted via tree-sitter for Python, JavaScript, TypeScript (bundled), and Go, Rust, Java, PHP, C, C++, Ruby, Swift, Kotlin (optional — `pip install tree-sitter-<lang>`). For languages without a loaded tree-sitter grammar the index falls back to regex symbol extraction (no call edges); context packs for those files are query-match ranked only, not call-graph traced.
 
 ```bash
 opencontext index .
@@ -481,43 +376,32 @@ opencontext routes scan . --framework fastapi
 opencontext bridges scan . --type HTTP --json
 ```
 
-</td>
-</tr>
-</table>
-
-</div>
-
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
-
 <!-- ─────────────── AGENT INTERFACE ─────────────── -->
 
-<div id="agent-interface" align="center">
+### Agent Interface
 
-<table>
-<tr>
-<td width="760">
+The MCP tool registry is generated from the live server. OpenContext ships adapters for 20+ agent clients (Claude Code, OpenCode, Cursor, Copilot, Windsurf, Codex, Gemini CLI, Zed, Aider, Cline, and more). Support level varies by client — some get MCP + instruction files, others get documented setup patterns.
 
-<h3>Agent Interface</h3>
+`opencontext install` writes the **three public OC personas** — Orchestrator, Professor, Reviewer — to your editor's agents directory as switchable subagents (in OpenCode press **Tab**; in Claude Code they appear as subagents), plus **twelve hidden delegation personas** the harness adopts automatically. Each SDD phase runs as the persona suited to it:
 
-32 MCP tools. OpenContext ships adapters for 20+ agent clients (Claude Code, OpenCode, Cursor, Copilot, Windsurf, Codex, Gemini CLI, Zed, Aider, Cline, and more). Support level varies by client — some get MCP + instruction files, others get documented setup patterns.
+| Phase | Persona | Role |
+|-------|---------|------|
+| `explore` | **OC Explorer** | Maps the territory via the knowledge graph before any change. |
+| `propose` | **OC Orchestrator** *(public)* | Thin coordinator: plans, delegates, and verifies through the gates. |
+| `spec` | **OC Requirements** | Turns intent into verifiable MUST/SHALL requirements with GIVEN/WHEN/THEN. |
+| `design` | **OC Architect** | Designs the technical approach: architecture, components, data flow. |
+| `tasks` | **OC Planner** | Decomposes the design into atomic, verifiable tasks. |
+| `apply` | **OC Builder** | Implements the design: code that matches existing patterns. |
+| `test` | **OC Tester** | Writes behavior tests that fail when the code breaks. |
+| `verify` | **OC Harness Verifier** | Runs the configured gates; records outcomes, never patches around them. |
+| `review` | **OC Reviewer** *(public)* | Rigorous review — one finding per line, quality gates, adversarial pass. |
+| `archive` | **OC Archivist** | Closes verified work: writes the receipt, harvests memory, proposes learning signals. |
 
-`opencontext install` writes seven OC personas to your editor's agents directory. In OpenCode, press **Tab** to switch to one. In Claude Code, they appear as subagents. Each SDD phase runs as the persona suited to it.
-
-| Persona | SDD phase | Role |
-|---------|-----------|------|
-| **OC Orchestrator** | propose · spec · tasks | Thin coordinator: plans, delegates, and verifies through the gates. Delegates reading 4+ files, writing 2+ files, and every commit to a focused sub-step. |
-| **OC Explorer** | explore | Investigates the codebase: maps the territory before any change via the knowledge graph. |
-| **OC Architect** | design | Designs the technical approach: architecture, components, data flow. |
-| **OC Builder** | apply | Implements the design: writes code that matches existing patterns. |
-| **OC Tester** | test | Senior QA: writes behavior tests that fail when the code breaks. |
-| **OC Reviewer** | verify · review | Rigorous reviewer: code review (one finding per line), quality gates, adversarial review. |
-| **OC Professor** | — | Teaching mentor: explains the why and the concept before the code, grounded in your real code. |
+**OC Professor** *(public)* is the standalone teaching persona — it explains the why before the code and is not tied to a phase. Specialist delegates (Security Reviewer, Diagnostician, Context Engineer, Evolution Steward) are invoked as needed.
 
 **Multi-agent execution:** the OC Orchestrator is a thin coordinator — it never does all the work itself. Reading, writing, and verifying are always delegated to specialized sub-agents. When you run the harness, each phase runs in its own context: explore → propose → spec → design → tasks → apply → verify → review → archive. Phases that can run in parallel do.
 
-<h3>Runs on top of your agent — you choose the model per persona</h3>
+### Runs on top of your agent — you choose the model per persona
 
 OpenContext is the agentic system **on top of** your coding agent, not another agent CLI. Your agent (Claude Code, Codex, OpenCode, …) **fixes the provider**: when OpenContext needs a generation it asks your agent to run it on the agent's own model via MCP sampling — **zero provider or API-key config** on the OpenContext side.
 
@@ -538,25 +422,13 @@ Two independent axes, both delivered as sampling hints: **phases** (≙ personas
 
 > **After `opencontext install`:** reload your shell (`source ~/.bashrc`) if PATH changed, then **restart your agent** so it loads the OpenContext MCP server.
 
-</td>
-</tr>
-</table>
-
-</div>
-
 <p align="center">
-  <img src="docs/assets/mcp-tools.svg" alt="32 MCP tools: 9 read tools (search, context, callers, callees, impact, node, files, status, trace), 4 symbol-level edit tools, an in-process agentic run tool, 4 memory tools (save, search, context, judge), 1 architecture-quality tool, 8 session step tools (start, next, observe, apply, inspect, status, resume, archive), 4 workflow/profile meta tools (workflow list/explain, profile list/explain), and 1 config-doctor tool" width="720">
+  <img src="docs/assets/mcp-tools.svg" alt="MCP tool registry: read tools, symbol-level edits, agentic run, memory, quality, session steps, workflow/profile metadata, and config doctor" width="100%">
 </p>
 
 <p align="center">
-  <sub>Agent Interface · 32 MCP tools · 9 read + 4 symbol-level edits + 1 agentic run + 4 memory + 1 quality + 8 session + 4 workflow/profile meta + 1 config doctor</sub>
+  <sub>Agent Interface · live MCP registry · read + edit + run + memory + quality + session + workflow/profile + doctor tools</sub>
 </p>
-
-<div align="center">
-
-<table>
-<tr>
-<td width="760">
 
 ```bash
 opencontext setup claude-code
@@ -564,29 +436,17 @@ opencontext setup cursor
 opencontext setup --all
 ```
 
-</td>
-</tr>
-</table>
-
-</div>
-
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
-
 <!-- ─────────────── AGENTIC HARNESS ─────────────── -->
 
-<div id="agentic-harness" align="center">
-
-<table>
-<tr>
-<td width="760">
-
-<h3>Agentic Harness</h3>
+### Agentic Harness
 
 The execution harness runs structured multi-agent workflows. Each phase is isolated: it reads what it needs, does its work, passes gates, then hands off. No phase can skip a gate.
 
-**Generative phases need a model.** Inside an MCP host, `opencontext_run` uses the host agent's model via sampling — no key needed. Standalone (`opencontext loop` / `harness run`) needs a configured provider or local model; without one the harness stays honest planned-only — it emits a structured plan, never fakes output.
+**OpenContext is not an LLM.** It is an engineering runtime: it finds context, plans the flow, applies policy, writes receipts, and verifies results. New code, specs, designs, or patches still need a **generative executor** — either the host agent via MCP sampling or a configured provider/local model.
+
+**SDD generative phases** work the same way at a larger scale. `spec`, `design`, `tasks`, and code-producing `apply` need text/code generation. Without an executor, standalone runs stay honest planned-only — they emit the plan and stop.
+
+Inside an MCP host, `opencontext_run` uses the host agent's model via sampling — no key needed. Standalone (`opencontext loop` / `harness run`) needs a configured provider or local model.
 
 ```bash
 opencontext clarify "add OAuth2 login"
@@ -607,14 +467,8 @@ opencontext loop --task "..." --flow quick --dry-run
 
 The base flow ends with `review` (the final quality gate) then `archive`. The `quality` track appends an extra `judgment` phase — adversarial structural review of apply artifacts (missing files, failed gates, missing verify) — and enforces GGA rules before it.
 
-</td>
-</tr>
-</table>
-
-</div>
-
 <p align="center">
-  <img src="docs/assets/sdd-phases.svg" alt="SDD 9-phase workflow: explore, propose, spec, design, tasks, apply, verify, review, archive. Quality track adds GGA rules and judgment phases." width="720">
+  <img src="docs/assets/sdd-phases.svg" alt="SDD 9-phase workflow: explore, propose, spec, design, tasks, apply, verify, review, archive. Quality track adds GGA rules and judgment phases." width="100%">
 </p>
 
 <p align="center">
@@ -622,48 +476,46 @@ The base flow ends with `review` (the final quality gate) then `archive`. The `q
 </p>
 
 <p align="center">
-  <img src="docs/assets/tdd-phases.svg" alt="TDD workflow: explore (offline), write test (red — failing), implement, verify (green — passing), refactor, verify (offline). Repeat write test → verify until green." width="720">
+  <img src="docs/assets/tdd-phases.svg" alt="TDD as mode/gate inside SDD and OC Flow — strict requires a failing test before mutation, ask fails closed non-interactive, off disables the gate. Not a standalone workflow." width="100%">
 </p>
 
 <p align="center">
-  <sub>TDD Workflow · test first · implement minimum · verify green · refactor · verify again</sub>
+  <sub>TDD as mode/gate (strict · ask · off) · failing test before mutation · not a standalone workflow</sub>
 </p>
 
 <p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
+  <img src="docs/assets/oc-flow.svg" alt="OC Flow for focused fixes: task, context, generative executor, ApplyEdit, policy, receipts, tests, and verified result" width="100%">
+</p>
+
+<p align="center">
+  <sub>OC Flow · focused fixes · only generation needs a model · policy + receipts + tests stay governed</sub>
+</p>
+
+**OC Flow** is the fast path behind `opencontext run` for localized work such as “fix this failing test”. It builds the context, chooses the small mutation path, asks a generative executor for a structured `ApplyEdit`, blocks unsafe edits, applies behind a checkpoint, then runs verification. If no executor exists, it returns `needs_executor`; it does not invent a patch or fake completion.
+
+Before anything executes, `opencontext run` briefs you: the execution plan, the node spine, the evidence artifacts it will produce, the gates that will judge the run, a cost estimate, and live subsystem status — then asks. Every option carries the same detail card the config TUI uses (current · effect · recommendation · risk · CLI equivalent).
+
+<p align="center">
+  <img src="docs/assets/demo-run-preflight.gif" alt="Real recording of the opencontext run preflight: a branded briefing shows the execution plan, node spine, evidence artifacts, gates, cost estimate, and subsystem status, then an options selector with detail cards; with no model configured the flow honestly returns needs_executor instead of inventing a patch" width="100%">
+</p>
+
+<p align="center">
+  <sub>Real recording · the run preflight — plan · spine · gates · cost · subsystems, then Proceed / change workflow / change lane / cancel. No model in the sandbox → the honest <code>needs_executor</code> answer, never a fake patch</sub>
 </p>
 
 <!-- ─────────────── OFFLINE BY DEFAULT ─────────────── -->
 
-<div id="offline-by-default" align="center">
-
-<table>
-<tr>
-<td width="760">
-
-<h3>Offline by Default</h3>
+### Offline by Default
 
 Knowledge graph, context packing, MCP tools, and benchmarks run without external services. Index your repo once; every query after that is local.
 
-</td>
-</tr>
-</table>
-
-</div>
-
 <p align="center">
-  <img src="docs/assets/security-defaults.svg" alt="Security defaults: external providers disabled, secrets auto-redacted, MCP tools blocked until allow-listed, missing policy fail closed" width="720">
+  <img src="docs/assets/security-defaults.svg" alt="Security defaults: external providers disabled, secrets auto-redacted, MCP tools blocked until allow-listed, missing policy fail closed" width="100%">
 </p>
 
 <p align="center">
   <sub>Security · 4 defaults active out of the box · no configuration required</sub>
 </p>
-
-<div align="center">
-
-<table>
-<tr>
-<td width="760">
 
 ```bash
 opencontext security scan .
@@ -671,33 +523,20 @@ opencontext doctor security
 opencontext preset apply privacy    # air-gapped · fail-closed · no egress
 ```
 
-</td>
-</tr>
-</table>
-
-</div>
-
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
-
 <!-- ─────────────── INSTALLATION ─────────────── -->
 
-<div id="installation" align="center">
-
-<table>
-<tr>
-<td width="760">
-
-<h3>Installation</h3>
+### Installation
 
 **Requirements:** Python 3.12+
 
-```bash
-pipx install opencontext-cli      # recommended — isolated, always on PATH
-```
+| Platform / preference | Command |
+|---|---|
+| Linux / Ubuntu / macOS | `curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh \| bash` |
+| Windows PowerShell | `irm https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.ps1 \| iex` |
+| Python tooling | `pipx install opencontext-cli` |
+| Plain pip | `pip install opencontext-cli` |
 
-Other options — `pip`, `uv`, the `curl` / PowerShell bootstrap scripts, and the portable `.pyz` binary — are in the [installation guide](docs/getting-started/installation.md).
+`pipx` is still the recommended Python-native install because it is isolated and always on PATH. More options (`uv`, source install, portable `.pyz`) are in the [installation guide](docs/getting-started/installation.md).
 
 After installing, run the setup wizard in your project:
 
@@ -708,29 +547,13 @@ opencontext verify      # confirm all checks pass
 opencontext doctor      # deep diagnostics if something looks wrong
 ```
 
-`opencontext install` auto-detects Claude Code, OpenCode, Cursor, Copilot, Windsurf, and more. It writes MCP config and the seven OC personas (Orchestrator, Explorer, Architect, Builder, Tester, Reviewer, Professor) to your editor's agents directory.
-
-</td>
-</tr>
-</table>
-
-</div>
-
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
+`opencontext install` auto-detects Claude Code, OpenCode, Cursor, Copilot, Windsurf, and more. It writes MCP config, the three public OC personas (Orchestrator, Professor, Reviewer), and twelve hidden delegation subagents to your editor's agents directory.
 
 <!-- ─────────────── LOCAL AGENT MEMORY ─────────────── -->
 
-<div align="center">
+### Local Agent Memory
 
-<table>
-<tr>
-<td width="760">
-
-<h3>Local Agent Memory</h3>
-
-Five layers, SQLite + FTS5, zero external services. Past failures automatically surface first in the next run.
+Seven layers, SQLite + FTS5, zero external services. Past failures automatically surface first in the next run.
 
 | Layer | Stores |
 |-------|--------|
@@ -739,6 +562,8 @@ Five layers, SQLite + FTS5, zero external services. Past failures automatically 
 | `PROCEDURAL` | Learned rules |
 | `WORKING` | Current task context |
 | `FAILURE` | Symbols that caused test failures |
+| `PROJECT` | Durable project-level facts and memory files |
+| `HARNESS_EXPERIENCE` | Outcomes carried forward from harness runs |
 
 ```bash
 opencontext memory search "auth middleware"
@@ -747,25 +572,9 @@ opencontext memory review
 opencontext memory gc --dry-run
 ```
 
-</td>
-</tr>
-</table>
-
-</div>
-
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
-
 <!-- ─────────────── WORKFLOW SKILLS ─────────────── -->
 
-<div align="center">
-
-<table>
-<tr>
-<td width="760">
-
-<h3>Workflow Skills</h3>
+### Workflow Skills
 
 Drop `.skill.md` files in `skills/`. OpenContext injects the right ones based on file extensions and task keywords.
 
@@ -780,25 +589,9 @@ Drop `.skill.md` files in `skills/`. OpenContext injects the right ones based on
 opencontext skill-registry refresh
 ```
 
-</td>
-</tr>
-</table>
-
-</div>
-
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
-
 <!-- ─────────────── RUNTIME COMMANDS ─────────────── -->
 
-<div align="center">
-
-<table>
-<tr>
-<td width="760">
-
-<h3>Core commands</h3>
+### Core commands
 
 The everyday commands, grouped by layer. The full surface (40+ commands) lives in the [CLI reference](docs/reference/cli.md).
 
@@ -813,27 +606,11 @@ The everyday commands, grouped by layer. The full surface (40+ commands) lives i
 | Memory | `memory` | Reuse project knowledge |
 | Optimization | `benchmark` · `tokens` · `bytecode` | Measure + reduce context cost |
 
-Run `opencontext` with no arguments for the navigable menu — settings and tools in one place, no flags.
-
-</td>
-</tr>
-</table>
-
-</div>
-
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
+Run `opencontext` with no arguments for the navigable menu — settings and tools in one place, no flags. Requires an interactive terminal; in non-interactive environments (CI, pipes) use `opencontext config show` instead.
 
 <!-- ─────────────── STATUS, LIMITS & CLAIMS ─────────────── -->
 
-<div id="maturity" align="center">
-
-<table>
-<tr>
-<td width="760">
-
-<h3>Maturity &amp; status</h3>
+### Maturity &amp; status
 
 Production-oriented local runtime. The context, code-graph, MCP, and memory paths are implemented and exercised by the test suite. Some capabilities are scaffolded or fail-closed by design and must be explicitly enabled by policy. Certification-grade enterprise posture is not claimed.
 
@@ -844,15 +621,23 @@ Production-oriented local runtime. The context, code-graph, MCP, and memory path
 | **Host-agent dependent** | `opencontext_run` and standalone generative phases — need the host model (MCP sampling) or a configured provider |
 | **Scaffolded / fail-closed** | Network egress, tool forwarding, raw-trace storage — denied unless policy enables them |
 
-<h3>Known limitations</h3>
+<p align="center">
+  <img src="docs/assets/demo-uninstall.gif" alt="Real recording of opencontext uninstall: a dry-run preview followed by a clean removal of the OpenContext integration from the editor" width="100%">
+</p>
+
+<p align="center">
+  <sub>Real recording · <code>opencontext uninstall</code> — dry-run preview, then a clean removal that leaves no residue</sub>
+</p>
+
+### Known limitations
 
 - Best on repos above ~50 files; tiny repos see little benefit.
-- Full symbol extraction needs the language's tree-sitter grammar (Python works out of the box; others after `pip install tree-sitter-<lang>`). Files in any language are still indexed and searchable.
+- Full symbol extraction: Python, JavaScript, and TypeScript work out of the box (bundled grammars). Go, Rust, Java, PHP, C, C++, Ruby, Swift, and Kotlin require `pip install tree-sitter-<lang>`. Files in any language are still indexed and searchable.
 - Standalone generative phases need a provider or local model; without one they run planned-only.
 - No semantic/embedding search by default — deterministic graph + FTS only. A deliberate choice, not an oversight.
 - Windows is exercised in CI but is not the primary development target.
 
-<h3>README claims are tested</h3>
+### README claims are tested
 
 The quantified claims here are guarded by end-to-end smoke tests that drive the real CLI/SDK — no mocks:
 
@@ -860,35 +645,19 @@ The quantified claims here are guarded by end-to-end smoke tests that drive the 
 pytest tests/smoke/test_readme_claims.py -v
 ```
 
-They check the contract risk tiers and token budgets, the AICX bytecode round-trip, the loop dry-run phases, the SDK contract, and that the README's MCP-tool count matches the running server. Benchmarks are reproducible with `opencontext benchmark run`; the README makes no fixed percentage claim.
-
-</td>
-</tr>
-</table>
-
-</div>
+They check the contract risk tiers and token budgets, the AICX bytecode round-trip, the loop dry-run phases, the SDK contract, and that the README's MCP-tool count matches the running server. The benchmark numbers are real — measured on public repos at pinned commits and reproducible per [`docs/benchmarks/`](docs/benchmarks/).
 
 <p align="center">
-  <img src="docs/assets/release-trust.svg" alt="Release 1.5.0 status: stable — code graph, context packs, MCP read tools, local memory; opt-in — Engram, external providers, symbol-edit tools, semantic search; host-agent dependent — opencontext_run and standalone generative phases; scaffolded and fail-closed — egress, tool forwarding, raw traces. Claims guarded by pytest tests/smoke/test_readme_claims.py" width="720">
+  <img src="docs/assets/release-trust.svg" alt="Release 1.6.0 status: stable — code graph, context packs, MCP read tools, local memory; opt-in — Engram, external providers, symbol-edit tools, semantic search; host-agent dependent — opencontext_run and standalone generative phases; scaffolded and fail-closed — egress, tool forwarding, raw traces. Claims guarded by pytest tests/smoke/test_readme_claims.py" width="100%">
 </p>
 
 <p align="center">
   <sub>Status · stable / opt-in / host-dependent / fail-closed · every quantified claim guarded by a smoke test</sub>
 </p>
 
-<p align="center">
-  <img src="docs/assets/divider.svg" alt="" width="720">
-</p>
-
 <!-- ─────────────── DOCS INDEX ─────────────── -->
 
-<div align="center">
-
-<table>
-<tr>
-<td width="760">
-
-<h3>Documentation</h3>
+### Documentation
 
 | Area | Links |
 |------|-------|
@@ -901,16 +670,10 @@ They check the contract risk tiers and token budgets, the AICX bytecode round-tr
 | Integrations | [Python SDK](docs/integrations/python-sdk.md) · [API](docs/integrations/api.md) · [GitHub Action](docs/integrations/github-action.md) · [Air-Gapped](docs/enterprise/air-gapped.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) · [Architecture deep-dive](docs/architecture/overview.md) |
 
-</td>
-</tr>
-</table>
-
-</div>
-
 <br>
 
 <p align="center">
-  <img src="docs/assets/footer-mark.svg" alt="OpenContext Runtime — Small context. Full trace. Verified execution." width="720">
+  <img src="docs/assets/footer-mark.svg" alt="OpenContext Runtime — Small context. Full trace. Verified execution." width="100%">
 </p>
 
 <p align="center">

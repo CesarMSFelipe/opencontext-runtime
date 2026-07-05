@@ -20,6 +20,7 @@ from opencontext_core.oc_new.models import (
     PhaseState,
 )
 from opencontext_core.oc_new.store import OcNewStore
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 from opencontext_core.workflow.phase_result import PhaseResultEnvelope
 
 if TYPE_CHECKING:
@@ -76,7 +77,7 @@ class OcNewConductor:
         if self.__coord_store is None:
             try:
                 self.__coord_store = AgentCoordinationStore(
-                    self.root / ".opencontext" / "coordination.db"
+                    resolve_workspace_path(self.root, StorageMode.local) / "coordination.db"
                 )
             except Exception:
                 # Return a no-op fallback object so callers can proceed.
@@ -86,9 +87,13 @@ class OcNewConductor:
     def start(self, task: str, config: AgenticFlowConfig | None = None) -> OcNewRunState:
         """Start a new oc-new run, optionally with an AgenticFlowConfig.
 
-        The config is persisted in OcNewRunState so that resume() is faithful
-        to the original preset and flow-mode settings.
+        When *config* is None the conductor reads ``sdd.flow_mode`` from the
+        project's ``opencontext.yaml`` (if present) so that a user-configured
+        flow_mode is honoured without needing an explicit ``--flow`` flag.
+        An explicit *config* always wins over the yaml value.
         """
+        if config is None:
+            config = self._config_from_yaml()
         identity = ChangeIdentity.from_task(task)
         phases = [PhaseState(name=phase.name) for phase in OC_NEW_FLOW]
         state = OcNewRunState(identity=identity, task=task, phases=phases, config=config)
@@ -392,7 +397,11 @@ class OcNewConductor:
 
             # NOTE: G4 — validate approval.json content before spawning apply subagent.
             if phase_def.name == "apply":
-                run_dir = self.root / ".opencontext" / "runs" / state.identity.run_id
+                run_dir = (
+                    resolve_workspace_path(self.root, StorageMode.local)
+                    / "runs"
+                    / state.identity.run_id
+                )
                 approval_error = self._validate_approval_content(run_dir)
                 if approval_error:
                     return state.model_copy(
@@ -404,6 +413,34 @@ class OcNewConductor:
                                 phase=phase_def.name,
                                 persona=phase_def.persona,
                                 instruction=approval_error,
+                            ),
+                            "updated_at": datetime.now(tz=UTC),
+                        }
+                    )
+
+            # NOTE: R5 — sdd_strict parity.  When tdd_mode is 'strict', the apply
+            # phase requires failing test evidence (failing_test.json in the run dir)
+            # before the subagent is spawned, mirroring HarnessRunner's sdd_strict gate.
+            if phase_def.name == "apply" and self._is_strict_tdd(state):
+                _run_dir = (
+                    resolve_workspace_path(self.root, StorageMode.local)
+                    / "runs"
+                    / state.identity.run_id
+                )
+                if not (_run_dir / "failing_test.json").exists():
+                    _block_reason = (
+                        "strict TDD (tdd_mode='strict') requires failing test evidence "
+                        "(failing_test.json) before apply"
+                    )
+                    return state.model_copy(
+                        update={
+                            "current_phase": phase_def.name,
+                            "blocked_reason": _block_reason,
+                            "next_action": NextAction(
+                                kind="blocked",
+                                phase=phase_def.name,
+                                persona=phase_def.persona,
+                                instruction=_block_reason,
                             ),
                             "updated_at": datetime.now(tz=UTC),
                         }
@@ -530,6 +567,12 @@ class OcNewConductor:
             }
         )
 
+    def _is_strict_tdd(self, state: OcNewRunState) -> bool:
+        """Return True when the run config requires strict TDD (R5)."""
+        if state.config is None:
+            return False
+        return getattr(state.config, "tdd_mode", "ask") == "strict"
+
     def _should_pause(self, state: OcNewRunState, phase_name: str) -> bool:
         """Return True when the configured flow_mode requires a pause before *phase_name*."""
         if state.config is None:
@@ -545,6 +588,27 @@ class OcNewConductor:
         from opencontext_core.agentic.modes import should_execute_code
 
         return should_execute_code(state.config.flow_mode)
+
+    def _config_from_yaml(self) -> AgenticFlowConfig | None:
+        """Build a minimal AgenticFlowConfig seeded from opencontext.yaml sdd.flow_mode.
+
+        Returns None when no yaml is found or the value cannot be parsed, so
+        the rest of the conductor can keep treating None as 'no config given'.
+        """
+        try:
+            from opencontext_core.agentic.config import AgenticFlowConfig as _AFC
+            from opencontext_core.agentic.config import FlowMode
+            from opencontext_core.config import find_config, load_config
+
+            config_path = find_config(self.root)
+            if config_path is None:
+                return None
+            oc_cfg = load_config(config_path)
+            raw_mode = str(oc_cfg.sdd.flow_mode.value)
+            flow_mode = FlowMode(raw_mode)
+            return _AFC(flow_mode=flow_mode)
+        except Exception:
+            return None
 
     def _write_handoff_artifact(
         self, state: OcNewRunState, phase_name: str, handoff: AgentHandoff
@@ -620,7 +684,9 @@ class OcNewConductor:
 
         from opencontext_core.agentic.receipt import AgenticReceipt, sha256_file, sha256_tree
 
-        run_dir = self.root / ".opencontext" / "runs" / state.identity.run_id
+        run_dir = (
+            resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
+        )
         run_dir.mkdir(parents=True, exist_ok=True)
 
         config = state.config
@@ -667,7 +733,9 @@ class OcNewConductor:
             tasks=tasks,
             mode=git_mode,
         )
-        run_dir = self.root / ".opencontext" / "runs" / state.identity.run_id
+        run_dir = (
+            resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
+        )
         run_dir.mkdir(parents=True, exist_ok=True)
         git_plan_path = run_dir / "git_plan.json"
         git_plan_path.write_text(json.dumps(plan.model_dump(), indent=2))
@@ -678,7 +746,10 @@ class OcNewConductor:
         from opencontext_core.agentic.budget_controller import BudgetController
 
         ledger_path = (
-            self.root / ".opencontext" / "runs" / state.identity.run_id / "budget_ledger.json"
+            resolve_workspace_path(self.root, StorageMode.local)
+            / "runs"
+            / state.identity.run_id
+            / "budget_ledger.json"
         )
         if ledger_path.exists():
             ledger = BudgetLedger.model_validate_json(ledger_path.read_text())
@@ -693,7 +764,10 @@ class OcNewConductor:
         phase_budget = int(getattr(state.config, "phase_budget", 0) or 0)
         used_before = 0
         ledger_path = (
-            self.root / ".opencontext" / "runs" / state.identity.run_id / "budget_ledger.json"
+            resolve_workspace_path(self.root, StorageMode.local)
+            / "runs"
+            / state.identity.run_id
+            / "budget_ledger.json"
         )
         if ledger_path.exists():
             try:
@@ -730,7 +804,12 @@ class OcNewConductor:
 
         from opencontext_core.agentic.budget import BudgetLedger, PhaseBudget
 
-        ledger_path = self.root / ".opencontext" / "runs" / run_id / "budget_ledger.json"
+        ledger_path = (
+            resolve_workspace_path(self.root, StorageMode.local)
+            / "runs"
+            / run_id
+            / "budget_ledger.json"
+        )
         if ledger_path.exists():
             ledger = BudgetLedger.model_validate_json(ledger_path.read_text())
         else:
@@ -826,7 +905,9 @@ class OcNewConductor:
         )
 
     def _missing_artifacts(self, state: OcNewRunState, phase_def: PhaseDefinition) -> list[str]:
-        run_dir = self.root / ".opencontext" / "runs" / state.identity.run_id
+        run_dir = (
+            resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
+        )
         spec_dir = self.root / "openspec" / "changes" / state.identity.change_id
         missing: list[str] = []
         for artifact in phase_def.required_artifacts:
@@ -869,7 +950,7 @@ class OcNewConductor:
             return None
         import json
 
-        run_dir = self.root / ".opencontext" / "runs" / run_id
+        run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         proposal_path = run_dir / "lessons.json"
         # NOTE: fail-closed — assert the resolved path never touches the user home.

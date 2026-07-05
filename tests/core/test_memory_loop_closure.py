@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from conftest import create_sample_project, write_config
 from opencontext_core.models.agent_memory import DecayPolicy, MemoryLayer, MemoryRecord
 from opencontext_core.retrieval.contracts import VerifiedContextRequest
 from opencontext_core.runtime import OpenContextRuntime
+from tests.core.conftest import create_sample_project, write_config
 
 
 def _runtime(tmp_path: Path) -> tuple[OpenContextRuntime, Path]:

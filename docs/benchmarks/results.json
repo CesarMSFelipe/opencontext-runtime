@@ -1,0 +1,241 @@
+{
+  "measured_on": "2026-06-30",
+  "tokenizer": "opencontext_core.context.tokenization.count_tokens (tiktoken cl100k_base when installed; deterministic character heuristic otherwise \u2014 pack and baseline use the same counter)",
+  "budget_tokens": 16000,
+  "methodology": "For each (repo, task): clone at the pinned commit, run `opencontext index .`, then `opencontext pack --query \"<task>\" --max-tokens 16000 --format json .`. pack_tokens = the pack's used_tokens. baseline_tokens = sum of whole-file token counts (same counter) for the source (.py) files the pack drew from \u2014 what it costs to read those same relevant files in full. reduction_pct = (baseline - pack) / baseline. This measures symbol-level, call-graph-ranked packing vs reading the relevant files whole; it is not a model-quality or end-task-success claim.",
+  "cases": [
+    {
+      "repo": "psf/requests",
+      "repo_url": "https://github.com/psf/requests",
+      "commit": "23953c0",
+      "py_files": 37,
+      "task": "fix retry logic when the connection drops",
+      "budget_tokens": 16000,
+      "pack_tokens": 15691,
+      "pack_files": 5,
+      "baseline_tokens": 44494,
+      "baseline_files": 5,
+      "reduction_pct": 65,
+      "pack_included_files": [
+        "src/requests/adapters.py",
+        "src/requests/exceptions.py",
+        "tests/test_requests.py",
+        "tests/test_testserver.py",
+        "tests/test_utils.py"
+      ],
+      "baseline_file_tokens": [
+        [
+          "src/requests/adapters.py",
+          6998
+        ],
+        [
+          "src/requests/exceptions.py",
+          1141
+        ],
+        [
+          "tests/test_requests.py",
+          27109
+        ],
+        [
+          "tests/test_testserver.py",
+          1387
+        ],
+        [
+          "tests/test_utils.py",
+          7859
+        ]
+      ]
+    },
+    {
+      "repo": "psf/requests",
+      "repo_url": "https://github.com/psf/requests",
+      "commit": "23953c0",
+      "py_files": 37,
+      "task": "verify SSL certificate validation in HTTPS requests",
+      "budget_tokens": 16000,
+      "pack_tokens": 12499,
+      "pack_files": 5,
+      "baseline_tokens": 40834,
+      "baseline_files": 5,
+      "reduction_pct": 69,
+      "pack_included_files": [
+        "src/requests/adapters.py",
+        "src/requests/cookies.py",
+        "src/requests/exceptions.py",
+        "tests/test_help.py",
+        "tests/test_requests.py"
+      ],
+      "baseline_file_tokens": [
+        [
+          "src/requests/adapters.py",
+          6998
+        ],
+        [
+          "src/requests/cookies.py",
+          5376
+        ],
+        [
+          "src/requests/exceptions.py",
+          1141
+        ],
+        [
+          "tests/test_help.py",
+          210
+        ],
+        [
+          "tests/test_requests.py",
+          27109
+        ]
+      ]
+    },
+    {
+      "repo": "tiangolo/fastapi",
+      "repo_url": "https://github.com/tiangolo/fastapi",
+      "commit": "702fea8",
+      "py_files": 1129,
+      "task": "add OAuth2 bearer token authentication to an endpoint",
+      "budget_tokens": 16000,
+      "pack_tokens": 12932,
+      "pack_files": 13,
+      "baseline_tokens": 22477,
+      "baseline_files": 13,
+      "reduction_pct": 42,
+      "pack_included_files": [
+        "docs_src/authentication_error_status_code/tutorial001_an_py310.py",
+        "docs_src/security/tutorial003_an_py310.py",
+        "docs_src/websockets_/tutorial002_py310.py",
+        "fastapi/openapi/models.py",
+        "fastapi/security/http.py",
+        "fastapi/security/oauth2.py",
+        "tests/test_pydantic_v1_error.py",
+        "tests/test_response_dependency.py",
+        "tests/test_security_oauth2.py",
+        "tests/test_security_oauth2_authorization_code_bearer_description.py",
+        "tests/test_security_oauth2_authorization_code_bearer_scopes_openapi.py",
+        "tests/test_security_oauth2_password_bearer_optional.py",
+        "tests/test_security_oauth2_password_bearer_optional_description.py"
+      ],
+      "baseline_file_tokens": [
+        [
+          "docs_src/authentication_error_status_code/tutorial001_an_py310.py",
+          155
+        ],
+        [
+          "docs_src/security/tutorial003_an_py310.py",
+          629
+        ],
+        [
+          "docs_src/websockets_/tutorial002_py310.py",
+          700
+        ],
+        [
+          "fastapi/openapi/models.py",
+          3652
+        ],
+        [
+          "fastapi/security/http.py",
+          3353
+        ],
+        [
+          "fastapi/security/oauth2.py",
+          6045
+        ],
+        [
+          "tests/test_pydantic_v1_error.py",
+          587
+        ],
+        [
+          "tests/test_response_dependency.py",
+          1327
+        ],
+        [
+          "tests/test_security_oauth2.py",
+          2511
+        ],
+        [
+          "tests/test_security_oauth2_authorization_code_bearer_description.py",
+          651
+        ],
+        [
+          "tests/test_security_oauth2_authorization_code_bearer_scopes_openapi.py",
+          1690
+        ],
+        [
+          "tests/test_security_oauth2_password_bearer_optional.py",
+          570
+        ],
+        [
+          "tests/test_security_oauth2_password_bearer_optional_description.py",
+          607
+        ]
+      ]
+    },
+    {
+      "repo": "django/django",
+      "repo_url": "https://github.com/django/django",
+      "commit": "7b09ce8",
+      "py_files": 2924,
+      "task": "how does the ORM compile a QuerySet into a SQL SELECT query",
+      "budget_tokens": 16000,
+      "pack_tokens": 14728,
+      "pack_files": 10,
+      "baseline_tokens": 117057,
+      "baseline_files": 10,
+      "reduction_pct": 87,
+      "pack_included_files": [
+        "django/db/models/query.py",
+        "django/db/models/sql/compiler.py",
+        "django/db/models/sql/query.py",
+        "tests/backends/tests.py",
+        "tests/expressions/test_queryset_values.py",
+        "tests/foreign_object/tests.py",
+        "tests/proxy_models/tests.py",
+        "tests/queryset_pickle/models.py",
+        "tests/queryset_pickle/tests.py",
+        "tests/raw_query/tests.py"
+      ],
+      "baseline_file_tokens": [
+        [
+          "django/db/models/query.py",
+          29767
+        ],
+        [
+          "django/db/models/sql/compiler.py",
+          24021
+        ],
+        [
+          "django/db/models/sql/query.py",
+          30985
+        ],
+        [
+          "tests/backends/tests.py",
+          9951
+        ],
+        [
+          "tests/expressions/test_queryset_values.py",
+          1170
+        ],
+        [
+          "tests/foreign_object/tests.py",
+          8154
+        ],
+        [
+          "tests/proxy_models/tests.py",
+          4253
+        ],
+        [
+          "tests/queryset_pickle/models.py",
+          549
+        ],
+        [
+          "tests/queryset_pickle/tests.py",
+          4019
+        ],
+        [
+          "tests/raw_query/tests.py",
+          4188
+        ]
+      ]
+    }
+  ]
+}

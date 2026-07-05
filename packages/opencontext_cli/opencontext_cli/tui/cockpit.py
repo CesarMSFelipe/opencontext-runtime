@@ -40,7 +40,7 @@ class CockpitScreen(Screen[None]):
         Binding("b", "budget", "Budget"),
         Binding("h", "harness", "Harness"),
         Binding("r", "receipt", "Receipt"),
-        Binding("d", "doctor", "Doctor"),
+        Binding("l", "learning", "Learning"),
         Binding("s", "settings", "Settings"),
         Binding("q", "quit", "Quit"),
     ]
@@ -157,8 +157,11 @@ class CockpitScreen(Screen[None]):
 
         self.app.push_screen(ReceiptViewer(run_dir=_latest_run_dir()))
 
-    def action_doctor(self) -> None:
-        """Placeholder — future: open doctor screen."""
+    def action_learning(self) -> None:
+        """Open the learning inbox (pending evolution proposals)."""
+        from opencontext_cli.tui.screens.learning_inbox import LearningInbox
+
+        self.app.push_screen(LearningInbox())
 
 
 def start_new_change(app: object, *, refresh: Callable[[], None] | None = None) -> None:
@@ -168,7 +171,7 @@ def start_new_change(app: object, *, refresh: Callable[[], None] | None = None) 
     app_any = app
     refresh_fn = refresh
 
-    # ponytail: object typing avoids importing Textual App just for one callback.
+    # NOTE: object typing avoids importing Textual App just for one callback.
     def _start(result: dict[str, str] | None) -> None:
         if not result:
             return

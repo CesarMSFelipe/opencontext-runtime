@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from opencontext_core.oc_new.models import OcNewRunState
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 
 
 class OcNewStore:
@@ -12,7 +13,7 @@ class OcNewStore:
         self.root = Path(root)
 
     def run_dir(self, run_id: str) -> Path:
-        return self.root / ".opencontext" / "runs" / run_id
+        return resolve_workspace_path(self.root, StorageMode.local) / "runs" / run_id
 
     def state_path(self, run_id: str) -> Path:
         return self.run_dir(run_id) / "state.json"
@@ -30,7 +31,7 @@ class OcNewStore:
         return OcNewRunState.model_validate_json(path.read_text(encoding="utf-8"))
 
     def list_runs(self) -> list[OcNewRunState]:
-        runs_dir = self.root / ".opencontext" / "runs"
+        runs_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs"
         if not runs_dir.exists():
             return []
         states: list[OcNewRunState] = []

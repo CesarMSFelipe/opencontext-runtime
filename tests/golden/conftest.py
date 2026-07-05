@@ -41,4 +41,5 @@ collect_ignore_glob = [
     "policy_security/*",
     "resume_rollback/*",
     "provider_fallback/*",
+    "kg_call_graph_python/*",
 ]

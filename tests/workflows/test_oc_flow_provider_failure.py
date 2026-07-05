@@ -78,7 +78,7 @@ def test_mutate_catches_provider_error_returns_empty_and_blocks(tmp_path: Path) 
     assert edits == []
     assert gateway.calls  # the gateway really was invoked
     assert executor.block_reason is not None
-    assert executor.block_reason.startswith("provider_fallback_exhausted")
+    assert executor.block_reason.startswith("configured provider failed")
     # The provider is marked unavailable so the completion gate emits needs_provider.
     assert executor.provider_available is False
 
@@ -96,7 +96,7 @@ def test_mutate_block_reason_redacts_secrets_and_urls(tmp_path: Path) -> None:
     # No secret or endpoint leaks into the user-visible block_reason.
     assert secret not in executor.block_reason
     assert url not in executor.block_reason
-    assert "REDACTED" in executor.block_reason
+    assert "next_action=" in executor.block_reason
 
 
 def test_mutate_provider_available_resets_between_calls(tmp_path: Path) -> None:
@@ -132,7 +132,7 @@ def test_provider_error_run_yields_needs_provider_not_exception(tmp_path: Path) 
     )
 
     assert result.status == "needs_provider"
-    assert "provider_fallback_exhausted" in result.completion_reason
+    assert "configured provider failed" in result.completion_reason
     # The bug was NOT mutated (no false completion).
     assert (tmp_path / "calc.py").read_text() == "def add(a, b):\n    return a - b\n"
 

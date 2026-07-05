@@ -1,6 +1,6 @@
 """Selectable agent personas — distinct behavioral profiles for OpenContext.
 
-Seven personas, each a different way of working with the verified-context runtime
+Fifteen personas, each a different way of working with the verified-context runtime
 and knowledge graph. They are emitted as native agent/subagent files so an editor
 can switch to one, and are listed/shown via the CLI. Prompts are original and
 self-contained; they reference OpenContext's own tools, nothing external.

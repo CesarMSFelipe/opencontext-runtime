@@ -139,10 +139,10 @@ class TestOrchestratorSectionInGeneratedFiles:
         assert "Orchestrator profile: subagent-native" in content
         assert ".kiro/specs" in content
 
-    def test_opencode_json_references_sdd_context(self, tmp_path: Path) -> None:
+    def test_opencode_generation_uses_agents_md_only(self, tmp_path: Path) -> None:
         AgentIntegrationGenerator().generate(tmp_path, target=AgentTarget.OPENCODE)
-        data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
-        assert ".opencontext/sdd/context.json" in data["instructions"]
+        assert (tmp_path / "AGENTS.md").exists()
+        assert not (tmp_path / "opencode.json").exists()
 
     def test_claude_md_contains_orchestrator_section(self, tmp_path: Path) -> None:
         AgentIntegrationGenerator().generate(tmp_path, target=AgentTarget.CLAUDE_CODE)

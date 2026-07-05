@@ -44,6 +44,18 @@ def add_bytecode_commands(subparsers: argparse._SubParsersAction[Any]) -> None:
     dp.add_argument("--json", dest="as_json", action="store_true")
 
 
+def _cell(value: str) -> str:
+    """Escape rich markup in literal payloads (queries, sources, instruction
+    args may contain ``[...]``) so the brand console renders them verbatim
+    instead of parsing them as style tags. No-op when rich is unavailable — the
+    plain-text table fallback does not interpret markup."""
+    if console.available:
+        from rich.markup import escape
+
+        return escape(value)
+    return value
+
+
 def handle_bytecode(args: argparse.Namespace) -> int:
     cmd = args.bytecode_command
     if cmd == "compile":
@@ -78,6 +90,18 @@ def _compile(args: argparse.Namespace) -> int:
     report = AICXValidator().validate(bc)
     metrics = compute_metrics(plan, bc)
 
+    # Persist as this project's last bytecode so a bare `bytecode inspect` /
+    # `bytecode decode` (no --path) resolves it — the sequence the README shows.
+    # Best-effort: a cache-write failure must never fail the compile.
+    try:
+        from opencontext_core.config_resolver import resolve_active_storage_file
+        from opencontext_core.context.bytecode.session_cache import save_last_bytecode
+
+        _cache_dir = resolve_active_storage_file(root, "last_bytecode.json").parent
+        save_last_bytecode(_cache_dir, bc)
+    except Exception:
+        pass
+
     saved_path: Path | None = None
     if args.save:
         saved_path = Path(args.save)
@@ -102,20 +126,24 @@ def _compile(args: argparse.Namespace) -> int:
 
 def _plan_from_runtime(query: str, root: Path, risk: str, budget: int) -> EvidencePlan | None:
     try:
+        from opencontext_core.config_resolver import resolve_active_storage_file
         from opencontext_core.retrieval.contracts import EvidenceRequest, RetrievalSurface
         from opencontext_core.retrieval.planner import RetrievalPlanner
 
-        manifest_path = root / ".storage" / "opencontext" / "project_manifest.json"
+        # Resolve the manifest through the active storage mode (legacy in-repo
+        # fallback for unmigrated projects); the graph db lives beside it.
+        manifest_path = resolve_active_storage_file(root, "project_manifest.json")
         if not manifest_path.exists():
             return None
+        storage = manifest_path.parent
 
         from opencontext_core.runtime import OpenContextRuntime
 
-        rt = OpenContextRuntime(storage_path=root / ".storage" / "opencontext")
+        rt = OpenContextRuntime(storage_path=storage)
         manifest = rt.load_manifest()
         planner = RetrievalPlanner(
             manifest,
-            graph_db_path=root / ".storage" / "opencontext" / "context_graph.db",
+            graph_db_path=storage / "context_graph.db",
         )
         return planner.plan(
             EvidenceRequest(
@@ -203,10 +231,11 @@ def _inspect(args: argparse.Namespace) -> int:
         for w in report.warnings:
             console.warning(w)
 
-    console.section("Instructions")
-    for instr in bc.instructions:
-        # Instruction args are literal data (may contain markup chars) — raw print.
-        print(f"  {instr.op:<8} {' '.join(instr.args)}")
+    console.table(
+        "Instructions",
+        ["Op", "Args"],
+        [[_cell(instr.op), _cell(" ".join(instr.args))] for instr in bc.instructions],
+    )
 
     return 0 if report.passed else 1
 
@@ -228,24 +257,30 @@ def _decode(args: argparse.Namespace) -> int:
         print(plan.model_dump_json(indent=2))
         return 0
 
-    console.header("Bytecode Decode")
+    console.header("AICX Plan")
     # Decoded fields are literal data (queries/IDs/sources may contain markup
-    # characters) — keep them on raw stdout so the payload is not corrupted.
-    print(f"Query     : {plan.request.query}")
-    print(f"Surface   : {plan.request.surface.value}")
-    print(f"Risk      : {plan.request.risk_level}")
-    print(f"Budget    : {plan.request.max_tokens}")
-    print(f"Trust     : {plan.trust_decision.status} — {plan.trust_decision.reason}")
-    print(f"Evidence  : {len(plan.evidence)} items (content lazy — not expanded)")
-    for item in plan.evidence:
-        print(
-            f"  [{item.id[:6]}] {item.source}  conf:{item.confidence:.2f}"
-            f"  fresh:{item.freshness.value}"
-        )
+    # characters) — escape each cell via _cell so the brand table renders the
+    # payload verbatim instead of parsing it as rich markup.
+    rows: list[list[str]] = [
+        ["Query", _cell(plan.request.query)],
+        ["Surface", _cell(plan.request.surface.value)],
+        ["Risk", _cell(plan.request.risk_level)],
+        ["Budget", str(plan.request.max_tokens)],
+        ["Trust", _cell(f"{plan.trust_decision.status} — {plan.trust_decision.reason}")],
+        ["Evidence", f"{len(plan.evidence)} items (content lazy — not expanded)"],
+    ]
     if plan.omissions:
-        print(f"Omissions : {', '.join(plan.omissions)}")
+        rows.append(["Omissions", _cell(", ".join(plan.omissions))])
     if plan.fallback_actions:
-        print(f"Fallbacks : {', '.join(plan.fallback_actions)}")
+        rows.append(["Fallbacks", _cell(", ".join(plan.fallback_actions))])
+    console.table("Plan", ["Field", "Value"], rows)
+    for item in plan.evidence:
+        console.print(
+            _cell(
+                f"  [{item.id[:6]}] {item.source}  conf:{item.confidence:.2f}"
+                f"  fresh:{item.freshness.value}"
+            )
+        )
     return 0
 
 
@@ -267,11 +302,14 @@ def _load_bc(path: str | None) -> Any:
             eprint(f"Failed to parse bytecode: {exc}")
             return None
 
-    # Try last_bytecode.json (written by `bytecode compile`)
+    # Try last_bytecode.json (written by `bytecode compile` into the active
+    # storage path; legacy in-repo fallback for unmigrated projects).
     try:
+        from opencontext_core.config_resolver import resolve_active_storage_file
         from opencontext_core.context.bytecode.session_cache import load_last_bytecode
 
-        bc = load_last_bytecode(".storage/opencontext")
+        cache = resolve_active_storage_file(Path.cwd(), "last_bytecode.json")
+        bc = load_last_bytecode(cache.parent)
         if bc is not None:
             return bc
     except Exception:
@@ -289,7 +327,7 @@ def _load_bc(path: str | None) -> Any:
     except Exception:
         pass
 
-    eprint("No AICX bytecode found. Run 'opencontext bytecode compile' first.")
+    console.error("No AICX bytecode found. Run 'opencontext bytecode compile' first.")
     return None
 
 

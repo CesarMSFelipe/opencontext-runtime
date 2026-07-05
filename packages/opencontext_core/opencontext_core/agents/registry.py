@@ -41,7 +41,7 @@ AGENT_CAPABILITIES: dict[str, AgentCapabilities] = {
         supports_subagents=False,
         supports_streaming=True,
         preferred_use_cases=["terminal_agent", "repo_investigation", "sdd_workflow"],
-        instruction_files=["AGENTS.md", "opencode.json"],
+        instruction_files=["AGENTS.md"],
         orchestrator_type="multi-phase",
     ),
     "cursor": AgentCapabilities(
@@ -111,7 +111,7 @@ AGENT_CAPABILITIES: dict[str, AgentCapabilities] = {
         supports_subagents=True,
         supports_streaming=True,
         preferred_use_cases=["terminal_agent", "multi_agent_workflow"],
-        instruction_files=["AGENTS.md", "opencode.json"],
+        instruction_files=["AGENTS.md"],
         orchestrator_type="multi-phase",
     ),
     "gemini-cli": AgentCapabilities(

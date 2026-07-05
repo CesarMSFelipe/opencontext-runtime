@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from opencontext_core.paths import StorageMode, resolve_workspace_path
+
 
 class RunStore:
     """Maps run IDs to artifact directory paths via a JSON index."""
 
     def __init__(self, root: Path | str = ".") -> None:
-        self.runs_path = Path(root) / ".opencontext" / "runs"
+        self.runs_path = resolve_workspace_path(root, StorageMode.local) / "runs"
         self.runs_path.mkdir(parents=True, exist_ok=True)
 
     def _index_path(self) -> Path:

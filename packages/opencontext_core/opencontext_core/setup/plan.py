@@ -200,7 +200,7 @@ def build_plan(
     # File changes
     plan.file_changes.append(FileChange(str(user_config_path), "modify", "Update user preferences"))
 
-    mcp_path = Path.home() / ".config" / "opencode" / "mcp.json"
+    mcp_path = Path.home() / ".config" / "opencode" / "opencode.json"
     if "mcp-server" in resolved_components:
         plan.file_changes.append(FileChange(str(mcp_path), "modify", "Configure MCP for OpenCode"))
 

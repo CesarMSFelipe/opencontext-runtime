@@ -29,6 +29,8 @@ FG = "#E6EDF3"
 def render_brand_header(state: RuntimeBrandState) -> str:
     """Render README logo + useful runtime state."""
     logo = README_LOGO_TERMINAL
+    width = max(len(line) for line in logo)
+    cell = [line.ljust(width) for line in logo]
     project_line = (
         f"Project: {state.project_name} · {state.project_status}"
         if state.files == 0 and state.symbols == 0
@@ -39,17 +41,17 @@ def render_brand_header(state: RuntimeBrandState) -> str:
     )
     return "\n".join(
         [
-            f"[bold {PRIMARY}]{logo[0]}[/]  [bold]OpenContext Runtime[/]",
-            f"[{DIM}]{logo[1]}[/]  {project_line}",
+            f"[bold {PRIMARY}]{cell[0]}[/]  [bold]OpenContext Runtime[/]",
+            f"[{DIM}]{cell[1]}[/]  {project_line}",
             (
-                f"[bold {SECONDARY}]{logo[2]}[/]  KG: {state.kg_status} · "
+                f"[bold {SECONDARY}]{cell[2]}[/]  KG: {state.kg_status} · "
                 f"Memory: {state.memory_backend} · Flow: {state.flow_mode}"
             ),
             (
-                f"[{DIM}]{logo[3]}[/]  Run: {state.run_label} · "
+                f"[{DIM}]{cell[3]}[/]  Run: {state.run_label} · "
                 f"phase: {state.phase_label} · next: {state.next_label}"
             ),
-            f"[bold {ACCENT}]{logo[4]}[/]",
+            f"[bold {ACCENT}]{cell[4]}[/]",
         ]
     )
 

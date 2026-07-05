@@ -15,7 +15,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from opencontext_core.compat.migration import MigrationState
+from opencontext_core.compat.migration import (
+    MigrationState,
+    ledger_state_for_flag,
+)
 
 # field -> (subsystem, migration state, owning PR, note). Defaults are NOT recorded
 # here; they are read live from the config model so this catalog cannot drift from
@@ -202,6 +205,45 @@ def flag_catalog() -> list[FlagSpec]:
             note="Run the post-run Learning Loop (Decision Log + learning candidates).",
         )
     )
+
+    # Phase-2 spine flags use hyphenated names so they live outside
+    # RuntimeMigrationConfig (Python field names cannot contain hyphens). Unlike the
+    # config-model flags above (whose default lives on the config field), these two
+    # have no config home, so their ACTIVE default DERIVES from the migration ledger
+    # -- the single source of truth for "is this subsystem migrated?". C15 flipped
+    # runtime/api.py + mcp/run_dispatcher.py to state=migrated behind their accepted
+    # flip-evidence bundles (tests/compat/flip_baseline/{rt_spine,mcp_runtime}.json).
+    # ``active_flag_value`` reads this default and the acceptance gate cross-checks it
+    # against those bundles; rollback = revert the ledger ``state=`` values
+    # (compat/migration.py), which flips both this default and the gate back to legacy.
+    for spine_flag, spine_field, subsystem, pr, note in (
+        (
+            "runtime.rt-spine",
+            "rt-spine",
+            "rt_spine",
+            "PR-006",
+            "Route all consumers through RuntimeApi (Phase-2 spine flip).",
+        ),
+        (
+            "runtime.mcp-runtime",
+            "mcp-runtime",
+            "mcp_runtime",
+            "PR-008",
+            "Enable the runtime.* MCP session dispatcher (Phase-2 spine flip).",
+        ),
+    ):
+        state = ledger_state_for_flag(spine_flag) or MigrationState.legacy
+        specs.append(
+            FlagSpec(
+                name=spine_flag,
+                field=spine_field,
+                subsystem=subsystem,
+                default=state in {MigrationState.migrated, MigrationState.removed},
+                migration_state=state,
+                superseding_pr=pr,
+                note=note,
+            )
+        )
     return specs
 
 

@@ -4,10 +4,10 @@ from pathlib import Path
 
 import yaml
 
-from conftest import create_sample_project, write_config
 from opencontext_core.config import default_config_data
 from opencontext_core.errors import ConfigurationError
 from opencontext_core.runtime import OpenContextRuntime
+from tests.core.conftest import create_sample_project, write_config
 
 
 def test_runtime_uses_safe_defaults_when_no_config_file_exists(

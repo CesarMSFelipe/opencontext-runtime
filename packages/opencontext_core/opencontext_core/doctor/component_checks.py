@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from opencontext_core.config import OpenContextConfig
+from opencontext_core.paths import StorageMode, resolve_storage_path
 
 
 @dataclass
@@ -93,15 +94,34 @@ class ComponentDoctor:
 
         checks = []
 
+        # Resolve the storage path from the config so we check the right location
+        # regardless of whether mode=user (XDG) or mode=local (in-repo).
+        _root = Path(self.config.project_index.root)
+        _storage = resolve_storage_path(
+            _root,
+            self.config.storage.mode,
+            self.config.storage.custom_path,
+        )
+
         # Check database. Mirror GraphDatabase's legacy-name shim: when the
         # canonical context_graph.db is absent, the runtime transparently uses an
         # older codegraph.db, so the doctor must too — otherwise it reports a
         # healthy legacy-named graph as "missing".
-        db_path = Path(".storage/opencontext/context_graph.db")
+        # Also check the local in-repo path as a legacy fallback (mode=user with
+        # existing local-layout state, or tests that seed the local path).
+        db_path = _storage / "context_graph.db"
         if not db_path.exists():
             legacy_path = db_path.with_name("codegraph.db")
             if legacy_path.exists():
                 db_path = legacy_path
+            else:
+                # Legacy fallback: check in-repo location when XDG path is empty.
+                _local_storage = resolve_storage_path(_root, StorageMode.local)
+                _local_db = _local_storage / "context_graph.db"
+                if _local_db.exists():
+                    db_path = _local_db
+                elif (_local_storage / "codegraph.db").exists():
+                    db_path = _local_storage / "codegraph.db"
         if db_path.exists():
             from opencontext_core.indexing.graph_db import GraphDatabase
 

@@ -9,7 +9,7 @@ Rules for maintaining visual consistency. Every future edit should follow this s
 - Main visual width: **720px** (all SVG images)
 - Main card content width: **760px** (`<td width="760">`)
 - Always wrap major sections in `<div align="center">` + centered card
-- Separate all sections with `divider.svg` — never use Markdown `---`
+- Separate sections with `###` Markdown headings; keep prose as plain Markdown, not wrapped in layout tables. Real TUI/CLI flows use the recorded `demo-*.gif` assets (see `scripts/render-readme-demos.sh`)
 
 ## Card Structure
 
@@ -69,7 +69,7 @@ All image captions use centered `<sub>`:
 ```
 
 Examples:
-- `Benchmark · psf/requests · retry bug · 62% fewer tokens`
+- `Benchmark · psf/requests · retry bug · 65% fewer tokens`
 - `Runtime · deterministic pipeline · no LLM in retrieval path · offline`
 - `Configuration · stack detection · editor setup · presets`
 
@@ -143,17 +143,9 @@ All five grouped in a single card at the bottom.
 |------|---------|-----------|
 | `logo.svg` | Hero logo | 108×108 |
 | `runtime-strip.svg` | Feature pills below title | 720×48 |
-| `demo-terminal.svg` | Hero terminal demo | 720×360 |
-| `before-after.svg` | Side-by-side comparison | 720×240 |
 | `stats-bar.svg` | 4 key metric cards | 720×88 |
-| `benchmark-card-requests.svg` | requests benchmark | 720×380 |
-| `benchmark-card-fastapi.svg` | fastapi benchmark | 720×380 |
 | `benchmark-numbers.svg` | Numbers summary table | 720×240 |
 | `workflow-audience.svg` | 4-card audience grid | 720×210 |
 | `pipeline.svg` | 8-step pipeline | 720×140 |
 | `sdd-phases.svg` | 9-phase SDD workflow | 720×160 |
-| `per-phase-models.svg` | Model routing table | 720×200 |
-| `wizard-flow.svg` | install wizard terminal | 720×400 |
-| `presets.svg` | preset list terminal | 720×290 |
 | `footer-mark.svg` | Footer logo + tagline | 720×64 |
-| `divider.svg` | Section separator | 720×24 |

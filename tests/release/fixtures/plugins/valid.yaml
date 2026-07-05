@@ -1,0 +1,27 @@
+schema_version: opencontext.plugin.v1
+id: sample.plugin
+name: Sample Plugin
+version: "0.1.0"
+type: analyzer
+entrypoint: sample_plugin.py
+permissions:
+  kg_write: []
+  memory_write: []
+contributes:
+  workflows: []
+  personas: []
+  skills: []
+  harnesses: []
+  policies: []
+  providers: []
+  kg_providers: []
+  memory_providers: []
+  context_strategies: []
+  runtime_intelligence_analyzers: []
+  studio_panels: []
+  cli_commands: []
+  mcp_tools: []
+  project_templates: []
+  benchmark_suites: []
+  execution_profiles: []
+  cache_providers: []

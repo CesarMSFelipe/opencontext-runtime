@@ -252,7 +252,11 @@ def _run_first_run(suite: GoldenSuite, fixture_dir: Path, smoke: bool) -> Benchm
         problems = [f"{label} exit {code}" for label, code in results.items() if code != 0]
         if not (work / "opencontext.yaml").is_file():
             problems.append("install wrote no opencontext.yaml")
-        if not _find_artifact(work, "project_manifest.json"):
+        # project_manifest.json may be under work (mode=local) or under the
+        # isolated HOME XDG state dir (mode=user, the default). Check both.
+        if not _find_artifact(work, "project_manifest.json") and not _find_artifact(
+            base, "project_manifest.json"
+        ):
             problems.append("index produced no project_manifest.json")
 
         fields = {"duration_ms": int(elapsed * 1000)}

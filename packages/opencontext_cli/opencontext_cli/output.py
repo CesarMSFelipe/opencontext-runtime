@@ -54,6 +54,22 @@ def resolve_output_mode(args: Any) -> OutputMode:
     return OutputMode.human
 
 
+def envelope(schema: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Prepend the ``schema`` discriminator to a machine-facing payload.
+
+    The machine-readable family (``status`` / ``install`` / ``memory`` /
+    ``explain`` / ``config show`` …) all emit a top-level ``schema`` key so a
+    consumer can tell what it is parsing. This is the single home for that
+    convention so the key name/placement cannot drift.
+
+    Deliberately NOT a wrapping envelope: it merges ``schema`` into the payload
+    rather than nesting under ``data``. Existing consumers read specific keys, so
+    an extra top-level key is additive; a wrapper would be a breaking change.
+    ``schema`` wins on collision — a payload cannot spoof its own discriminator.
+    """
+    return {**data, "schema": schema}
+
+
 def eprint(message: str) -> None:
     """Print a branded error line to *stderr* (brand palette, CI-safe).
 

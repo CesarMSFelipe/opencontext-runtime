@@ -26,7 +26,17 @@ from opencontext_core.models.memory import MemoryConflict, MemoryQuery, MemoryRe
 
 @runtime_checkable
 class MemoryProvider(Protocol):
-    """Book memory backend surface used by upper layers (OC-MEMORY-001 §26)."""
+    """Book memory backend surface used by upper layers (OC-MEMORY-001 §26).
+
+    This is the 5-method BASELINE every concrete provider must satisfy; upper
+    layers depend on it, not a concrete store. The PR2.d store extensions
+    (``bm25_search`` / ``topic_upsert`` / ``judge_relation``) are additive and
+    live on :class:`MemoryStoreSurface`, so a baseline provider keeps satisfying
+    ``isinstance(provider, MemoryProvider)`` — the extensions are NOT bundled
+    into the runtime-checkable baseline (a single ``@runtime_checkable`` protocol
+    would force every provider to implement all eight methods to pass isinstance,
+    which contradicts the "additive baseline" contract).
+    """
 
     def search(self, query: MemoryQuery) -> list[MemoryRecord]:
         """Return records relevant to a typed query, honoring its budgets."""
@@ -46,6 +56,46 @@ class MemoryProvider(Protocol):
 
     def detect_conflicts(self, candidate: MemoryCandidate) -> list[MemoryConflict]:
         """Return typed conflicts between a candidate and active beliefs."""
+        ...
+
+
+@runtime_checkable
+class MemoryStoreSurface(MemoryProvider, Protocol):
+    """The full store surface: the 5-method baseline PLUS the PR2.d store extensions.
+
+    A provider satisfies this ONLY when it offers the three extra methods
+    ``opencontext_memory`` consumers need (REQ-OMS-002 / REQ-OMPD-005 /
+    REQ-OMT-016). It extends :class:`MemoryProvider`, so anything satisfying
+    ``MemoryStoreSurface`` also satisfies the baseline; a baseline-only provider
+    (e.g. :class:`MemoryStoreProvider` over a ``LocalMemoryStore``) does not.
+    """
+
+    def bm25_search(self, query: str, *, limit: int = 10) -> list[MemoryRecord]:
+        """Full-text BM25 search across the raw store.
+
+        Default-returned records are NOT conflict-filtered (use
+        :meth:`detect_conflicts` for the structured conflict flow).
+        """
+        ...
+
+    def topic_upsert(self, topic_key: str, payload: MemoryRecord) -> MemoryReceipt:
+        """Idempotent insert keyed by ``topic_key`` (REQ-OMS-002).
+
+        A pre-existing record with the same ``topic_key`` is updated in
+        place; ``revision_count`` increments.
+        """
+        ...
+
+    def judge_relation(self, judgment_id: str, relation: str) -> dict[str, Any]:
+        """Apply a verdict to a pending relation row.
+
+        ``relation`` is one of the 7-verb literal values
+        (``related``/``compatible``/``scoped``/``conflicts_with``/
+        ``supersedes``/``not_conflict``/``orphaned`` - the seventh acts
+        as ``ignore``). Returns the refreshed row as a dict so the
+        protocol stays structurally typed without depending on
+        :mod:`opencontext_memory`.
+        """
         ...
 
 

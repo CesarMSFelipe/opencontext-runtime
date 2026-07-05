@@ -3,6 +3,8 @@
 Clients disagree on where MCP servers live:
 - JSON ``mcpServers`` (claude-code, cursor, windsurf, gemini-cli settings, cline, roo)
 - JSON ``servers`` (VS Code / Copilot ``.vscode/mcp.json``)
+- JSON ``mcp`` with ``{"type": "local", "command": [cmd, *args]}`` entries
+  (opencode ``opencode.json``)
 - TOML ``[mcp_servers.<name>]`` (codex ``~/.codex/config.toml``)
 - YAML ``mcpServers`` (continue)
 
@@ -25,6 +27,7 @@ class McpShape(StrEnum):
 
     JSON_MCP_SERVERS = "json_mcp_servers"
     JSON_SERVERS = "json_servers"
+    JSON_OPENCODE_MCP = "json_opencode_mcp"
     TOML_MCP_SERVERS = "toml_mcp_servers"
     YAML_MCP_SERVERS = "yaml_mcp_servers"
 
@@ -55,11 +58,32 @@ def plan_mcp_servers(
         return path, _plan_json(path, servers, root_key="mcpServers")
     if shape is McpShape.JSON_SERVERS:
         return path, _plan_json(path, servers, root_key="servers")
+    if shape is McpShape.JSON_OPENCODE_MCP:
+        return path, _plan_json(path, _to_opencode_entries(servers), root_key="mcp")
     if shape is McpShape.TOML_MCP_SERVERS:
         return path, _plan_toml(path, servers)
     if shape is McpShape.YAML_MCP_SERVERS:
         return path, _plan_yaml(path, servers)
     raise ValueError(f"unsupported MCP shape: {shape}")
+
+
+def _to_opencode_entries(servers: dict[str, Any]) -> dict[str, Any]:
+    """Translate canonical ``{command, args}`` entries into OpenCode's format.
+
+    OpenCode expects ``{"type": "local", "command": [cmd, *args], "enabled": true}``
+    under a root ``mcp`` key; it does not read the ``mcpServers`` wire shape.
+    """
+
+    translated: dict[str, Any] = {}
+    for name, entry in servers.items():
+        command = entry.get("command", "")
+        args = list(entry.get("args", []))
+        translated[name] = {
+            "type": "local",
+            "command": [command, *args],
+            "enabled": True,
+        }
+    return translated
 
 
 def remove_mcp_server(path: Path, name: str, *, shape: McpShape) -> bool:
@@ -72,8 +96,12 @@ def remove_mcp_server(path: Path, name: str, *, shape: McpShape) -> bool:
     path = Path(path)
     if not path.exists():
         return False
-    if shape in (McpShape.JSON_MCP_SERVERS, McpShape.JSON_SERVERS):
-        root_key = "mcpServers" if shape is McpShape.JSON_MCP_SERVERS else "servers"
+    if shape in (McpShape.JSON_MCP_SERVERS, McpShape.JSON_SERVERS, McpShape.JSON_OPENCODE_MCP):
+        root_key = {
+            McpShape.JSON_MCP_SERVERS: "mcpServers",
+            McpShape.JSON_SERVERS: "servers",
+            McpShape.JSON_OPENCODE_MCP: "mcp",
+        }[shape]
         content = _plan_remove_json(path, name, root_key=root_key)
     elif shape is McpShape.YAML_MCP_SERVERS:
         content = _plan_remove_yaml(path, name)

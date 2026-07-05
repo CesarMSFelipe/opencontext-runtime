@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
@@ -14,7 +13,8 @@ from opencontext_core.adapters.agent_manifest import AgentTarget
 from opencontext_core.agent_installer import AgentInstaller
 from opencontext_core.agent_installer import AgentTarget as GlobalAgentTarget
 from opencontext_core.configurator import KNOWN_AGENTS, Configurator
-from opencontext_core.dx.console_styles import console, show_logo
+from opencontext_core.dx.console_styles import console
+from opencontext_core.dx.wizard_frame import WizardStep, render_frame
 from opencontext_core.runtime import OpenContextRuntime
 from opencontext_core.sdd_runtime import write_sdd_context
 from opencontext_core.setup.plan import InstallAction, build_plan
@@ -33,6 +33,7 @@ def _save_install_ledger(report: dict[str, Any]) -> None:
         from opencontext_core.install_manager import InstallationManager, InstallState
 
         all_files = [f for r in report.get("results", []) for f in r.get("files", [])]
+        all_files.extend(report.get("extra_files_written", []))
         if not all_files:
             return
         mgr = InstallationManager()
@@ -46,28 +47,69 @@ def _save_install_ledger(report: dict[str, Any]) -> None:
         pass
 
 
+# Detail cards for the interactive setup steps — the shared wizard frame renders
+# these in the config-TUI info-pane format (Current/Effect/Recommended/Risk/CLI).
+_SETUP_WIZARD_STEPS: dict[str, WizardStep] = {
+    "preset": WizardStep(
+        title="Preset",
+        effect="Chooses which component set the install plan applies.",
+        recommended="context-first for most projects.",
+        risk="Nothing is written until you confirm the plan in the last step.",
+        cli="opencontext setup --preset <id>",
+    ),
+    "profile": WizardStep(
+        title="Profile",
+        effect="Applies security mode and feature defaults for a role.",
+        recommended="The profile suggested for your preset.",
+        risk="security-officer profiles lock down external providers.",
+        cli="opencontext setup --profile <id>",
+    ),
+    "components": WizardStep(
+        title="Components",
+        effect="Selects the exact components the plan installs.",
+        recommended="Keep the preset's component list.",
+        risk="Removing knowledge-graph disables context packs and KG queries.",
+        cli="opencontext setup --component <id> (repeatable)",
+    ),
+    "agents_tdd": WizardStep(
+        title="Agent clients & TDD",
+        effect="Writes MCP config + instructions per agent and sets TDD enforcement.",
+        recommended="The agents you actually use; TDD ask.",
+        risk="strict TDD requires a working test harness in the project.",
+        cli="opencontext setup --agent <id> --tdd <ask|strict|off>",
+    ),
+    "sdd_profile": WizardStep(
+        title="SDD model profile",
+        effect="Routes SDD phases (explore/design/apply...) to a model profile.",
+        recommended="default — one model for all phases.",
+        risk="premium may cost more; cheap may reduce design quality.",
+        cli="opencontext setup --sdd-profile <profile>",
+    ),
+    "review": WizardStep(
+        title="Plan review",
+        effect="Shows every planned action; confirming applies the plan.",
+        recommended="Read the action list before applying.",
+        risk="Apply writes config, agent files, SDD context, and indexes the project.",
+        cli="opencontext setup --dry-run",
+    ),
+}
+
+
 def _wizard_clear(
     step: int,
     total: int,
+    key: str,
     context: list[tuple[str, str]] | None = None,
 ) -> None:
-    """Clear the terminal and render a compact wizard step header."""
-    try:
-        console.clear()
-    except Exception:
-        pass
+    """Clear the terminal and render the shared wizard frame for one step.
 
-    show_logo(compact=True)
-    dots = "  ".join(
-        "[bold #00C9A7]●[/]" if i <= step else "[dim]○[/]" for i in range(1, total + 1)
-    )
-    console.print(
-        f"\n  [bold white]OpenContext Setup[/bold white]   {dots}   [dim]step {step}/{total}[/dim]"
-    )
+    Choices made so far (*context*) show as the card's ``Current:`` line so the
+    breadcrumb trail survives the per-step clear. Renders nothing on a non-TTY.
+    """
+    card = _SETUP_WIZARD_STEPS[key]
     if context:
-        crumbs = "   [dim]•[/dim]   ".join(f"[dim]{k}:[/dim] [bold]{v}[/bold]" for k, v in context)
-        console.print(f"  {crumbs}")
-    console.print()
+        card = card.with_current(" · ".join(f"{k} {v}" for k, v in context))
+    render_frame(step, total, card)
 
 
 def _check_first_run() -> bool:
@@ -76,16 +118,15 @@ def _check_first_run() -> bool:
     prefs = store.load()
     if prefs.first_run:
         console.print()
-        console.print(
-            Panel.fit(
-                "[bold yellow]First Run Detected[/bold yellow]\n"
-                "It looks like you haven't run [bold]opencontext install[/bold] yet.\n"
-                "For a complete project setup in one step, run:\n\n"
-                "  [bold cyan]opencontext install[/bold cyan]\n\n"
-                "This will auto-detect your project, create your config, index your code,\n"
-                "and configure SDD/TDD, agent integrations, and the harness workflow.",
-                border_style="yellow",
-            )
+        console.panel(
+            "[bold yellow]First Run Detected[/bold yellow]\n"
+            "It looks like you haven't run [bold]opencontext install[/bold] yet.\n"
+            "For a complete project setup in one step, run:\n\n"
+            "  [bold cyan]opencontext install[/bold cyan]\n\n"
+            "This will auto-detect your project, create your config, index your code,\n"
+            "and configure SDD/TDD, agent integrations, and the harness workflow.",
+            style="warning",
+            fit=True,
         )
         return True
     return False
@@ -322,7 +363,10 @@ def _run_configurator(args: Any) -> None:
         return
 
     if dry_run:
-        _report_dry_run(valid, unknown, scope, root, json_output)
+        report = configurator.configure(valid, scope=scope, dry_run=True)
+        if unknown:
+            report["skipped"] = unknown
+        _report_dry_run(report, unknown, json_output)
         return
 
     yes = _resolve_flag(getattr(args, "yes", False), "OPENCONTEXT_YES")
@@ -333,55 +377,81 @@ def _run_configurator(args: Any) -> None:
     report = configurator.configure(valid, scope=scope)
     if unknown:
         report["skipped"] = unknown
-    _maybe_write_stack_standards(root, scope, report)
-    _maybe_write_gitignore(root, scope)
+    _record_extra_files(report, _maybe_write_stack_standards(root, scope, report))
+    _record_extra_files(report, _maybe_write_gitignore(root, scope))
     _save_install_ledger(report)
     _report_configured(report, unknown, json_output)
 
 
-def _maybe_write_gitignore(root: Any, scope: str) -> None:
+def _record_extra_files(report: dict[str, Any], files: list[str]) -> None:
+    if files:
+        report.setdefault("extra_files_written", []).extend(files)
+
+
+def _maybe_write_gitignore(root: Any, scope: str) -> list[str]:
     """Keep the local index/memory out of git so teammates don't clone a stale
     binary graph — while the shareable config (opencontext.yaml, AGENTS.md) stays
     committed. Managed block, project scope only, best-effort.
+
+    Only writes the .gitignore block when mode=local (in-repo storage) or legacy
+    in-repo state dirs are detected. In user mode (default XDG), the block is
+    skipped because no in-repo state is written.
     """
     if scope != "local":
-        return
+        return []
     try:
         from pathlib import Path
 
+        from opencontext_core.config import load_config_or_defaults
         from opencontext_core.configurator.filemerge import (
             inject_managed_lines,
             write_text_atomic,
         )
+        from opencontext_core.paths import StorageMode, detect_legacy
 
-        path = Path(root) / ".gitignore"
+        root_path = Path(root)
+        _cfg_path = root_path / "opencontext.yaml"
+        if _cfg_path.exists():
+            _cfg = load_config_or_defaults(_cfg_path)
+            # Only skip the .gitignore block when we know mode=user and there are
+            # no legacy dirs (in-repo state is not written in user mode).
+            if _cfg.storage.mode != StorageMode.local and detect_legacy(root_path) is None:
+                return []
+        # No config found yet (first-time setup) — write the block as a safe default.
+
+        path = root_path / ".gitignore"
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
         merged = inject_managed_lines(existing, "storage", [".storage/", ".opencontext/"])
         if write_text_atomic(path, merged):
             console.success("Updated .gitignore (keeps the local index out of git).")
+            return [str(path)]
     except Exception:
-        return
+        return []
+    return []
 
 
-def _maybe_write_stack_standards(root: Any, scope: str, report: dict[str, Any]) -> None:
+def _maybe_write_stack_standards(root: Any, scope: str, report: dict[str, Any]) -> list[str]:
     """Prepare configured agents for the detected stack by writing AGENTS.md.
 
     Best-effort and project-scoped: stack standards are project-specific, so only
     write them for a local (in-project) configuration. Never fail setup over it.
     """
     if scope != "local":
-        return
+        return []
     try:
         from pathlib import Path
 
         from opencontext_cli.commands.stack_cmd import write_stack_standards
 
+        path = Path(root) / "AGENTS.md"
         changed, chosen = write_stack_standards(Path(root))
     except Exception:
-        return
+        return []
     if changed and chosen:
         report["stack_standards"] = chosen
         console.success(f"Prepared AGENTS.md with standards for: {', '.join(chosen)}")
+        return [str(path)]
+    return []
 
 
 def _confirm_configure(agents: list[str], scope: str, *, yes: bool, json_output: bool) -> bool:
@@ -420,28 +490,17 @@ def _report_no_agents(source: str, unknown: list[str], json_output: bool) -> Non
     console.dim(f"  Name an agent or use --all. Known agents: {', '.join(KNOWN_AGENTS)}")
 
 
-def _report_dry_run(
-    agents: list[str], unknown: list[str], scope: str, root: str, json_output: bool
-) -> None:
+def _report_dry_run(report: dict[str, Any], unknown: list[str], json_output: bool) -> None:
     if json_output:
-        print(
-            json.dumps(
-                {
-                    "status": "dry_run",
-                    "scope": scope,
-                    "project": str(root),
-                    "would_configure": agents,
-                    "skipped": unknown,
-                },
-                indent=2,
-            )
-        )
+        print(json.dumps(report, indent=2))
         return
     console.warning("Dry run — no changes made.")
-    console.print(f"  Scope: [cyan]{scope}[/]")
+    console.print(f"  Scope: [cyan]{report.get('scope')}[/]")
     console.print("  Would configure:")
-    for agent in agents:
-        console.print(f"    • {agent}")
+    for result in report.get("results", []):
+        console.print(f"    • {result['agent']}")
+        for entry in result.get("plan", []):
+            console.print(f"      [dim]{entry['action']}: {entry['path']}[/]")
     for agent in unknown:
         console.print(f"    [dim]- {agent} (unknown, skipped)[/]")
 
@@ -451,12 +510,11 @@ def _report_configured(report: dict[str, Any], unknown: list[str], json_output: 
         print(json.dumps(report, indent=2))
         return
     count = report.get("agents_configured", 0)
-    console.print(
-        Panel.fit(
-            f"[bold green]Configured {count} agent(s)[/bold green]   "
-            f"scope: [cyan]{report.get('scope')}[/]",
-            border_style="green",
-        )
+    console.panel(
+        f"[bold green]Configured {count} agent(s)[/bold green]   "
+        f"scope: [cyan]{report.get('scope')}[/]",
+        style="success",
+        fit=True,
     )
     for result in report.get("results", []):
         console.print(f"  [bold]{result['agent']}[/]")
@@ -483,17 +541,17 @@ def _run_interactive(
     """Run interactive setup with rich prompts."""
     # ── Step 1: Preset ──────────────────────────────────────────────────
     if not preset:
-        _wizard_clear(1, 6)
+        _wizard_clear(1, 6, "preset")
         preset = _choose_preset()
 
     # ── Step 2: Profile ─────────────────────────────────────────────────
     if not profile:
-        _wizard_clear(2, 6, [("preset", preset)])
+        _wizard_clear(2, 6, "profile", [("preset", preset)])
         profile = _choose_profile(preset)
 
     # ── Step 3: Components ──────────────────────────────────────────────
     if not components:
-        _wizard_clear(3, 6, [("preset", preset), ("profile", profile)])
+        _wizard_clear(3, 6, "components", [("preset", preset), ("profile", profile)])
         components = resolve_preset_components(preset)
         console.print(f"[bold]Components ({len(components)}):[/]")
         for c in components:
@@ -507,6 +565,7 @@ def _run_interactive(
     _wizard_clear(
         4,
         6,
+        "agents_tdd",
         [("preset", preset), ("profile", profile), ("components", str(len(components)))],
     )
     agents = _choose_agents(agents)
@@ -517,6 +576,7 @@ def _run_interactive(
         _wizard_clear(
             5,
             6,
+            "sdd_profile",
             [("preset", preset), ("profile", profile), ("tdd", tdd_mode)],
         )
         sdd_profile = _choose_sdd_profile()
@@ -525,6 +585,7 @@ def _run_interactive(
     _wizard_clear(
         6,
         6,
+        "review",
         [("preset", preset), ("profile", profile), ("tdd", tdd_mode), ("sdd", sdd_profile)],
     )
     plan = build_plan(preset_id=preset, profile_id=profile, components=components)
@@ -561,12 +622,11 @@ def _run_interactive(
         artifact_mode,
     )
     console.print()
-    console.print(
-        Panel.fit(
-            "[bold green]✓ Setup Complete[/bold green]\n"
-            "OpenContext SDD/TDD, graph, memory, and selected agents are ready.",
-            border_style="green",
-        )
+    console.panel(
+        "[bold green]✓ Setup Complete[/bold green]\n"
+        "OpenContext SDD/TDD, graph, memory, and selected agents are ready.",
+        style="success",
+        fit=True,
     )
 
 
@@ -629,6 +689,8 @@ def _choose_preset() -> str:
     sorted_presets = sorted(presets, key=preset_sort_key)
 
     console.print("\n[bold]Available Presets:[/]")
+    # NOTE: deliberate exception — this table needs per-column styling that
+    # console_styles.table (single brand column style) cannot represent.
     table = Table(box=None)
     table.add_column("Option", style="cyan")
     table.add_column("Preset", style="bold")
@@ -758,6 +820,8 @@ def _show_plan(plan: Any) -> None:
     console.print(f"  Profile: [cyan]{plan.profile}[/]")
 
     if plan.actions:
+        # NOTE: deliberate exception — per-cell status colors (done/skipped/failed)
+        # are beyond console_styles.table's single brand column style.
         table = RichTable(title="Actions", box=None)
         table.add_column("Status")
         table.add_column("Component")
@@ -854,7 +918,7 @@ def _execute_plan(
     # ── Agent integrations ─────────────────────────────────────
     generated_files: list[Any] = []
     agent_warnings: list[str] = []
-    with console.status("[cyan]Configuring agent integrations...[/]", spinner="dots"):
+    with console.status("Configuring agent integrations..."):
         from opencontext_core.adapters.agent_manifest import _base_rules, _orchestrator_section
 
         def _instructions(client: str) -> str:
@@ -888,7 +952,7 @@ def _execute_plan(
     sdd_files: list[Any] = []
     skill_generated = False
     skill_target = root_path / ".opencontext" / "skills" / "opencontext-agent" / "SKILL.md"
-    with console.status("[cyan]Writing SDD/TDD context...[/]", spinner="dots"):
+    with console.status("Writing SDD/TDD context..."):
         sdd_context, sdd_files = write_sdd_context(
             root_path,
             token_budget_per_phase=max_tokens,
@@ -915,7 +979,7 @@ def _execute_plan(
 
     # ── Project index ───────────────────────────────────────────
     index_status: dict[str, Any] = {}
-    with console.status("[cyan]Indexing project...[/]", spinner="dots"):
+    with console.status("Indexing project..."):
         try:
             manifest = OpenContextRuntime().index_project(root_path)
             index_status = {"files": len(manifest.files), "symbols": len(manifest.symbols)}
@@ -941,10 +1005,9 @@ def _execute_plan(
     if skill_generated:
         summary_rows.append(f"  [bold]Skill:[/]    {skill_target}")
 
-    console.print(
-        Panel.fit(
-            "\n".join(summary_rows),
-            title="[bold green]Setup applied[/bold green]",
-            border_style="green",
-        )
+    console.panel(
+        "\n".join(summary_rows),
+        title="[bold green]Setup applied[/bold green]",
+        style="success",
+        fit=True,
     )

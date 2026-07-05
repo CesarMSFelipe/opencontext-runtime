@@ -1,0 +1,14 @@
+{"host": "claude", "workflow": "oc-flow", "tdd": "off", "model": "haiku", "fixed": false, "test_passes": false, "flow_engaged": true, "outcome_ok": false}
+{"host": "claude", "workflow": "oc-flow", "tdd": "strict", "model": "haiku", "fixed": true, "test_passes": true, "flow_engaged": false, "outcome_ok": true}
+{"host": "claude", "workflow": "sdd", "tdd": "off", "model": "haiku", "fixed": true, "test_passes": true, "flow_engaged": true, "outcome_ok": true}
+{"host": "claude", "workflow": "sdd", "tdd": "strict", "model": "haiku", "fixed": true, "test_passes": true, "flow_engaged": true, "outcome_ok": true}
+{"host": "codex", "workflow": "oc-flow", "tdd": "off", "model": "gpt-5.5", "fixed": true, "test_passes": true, "flow_engaged": true, "outcome_ok": true}
+{"host": "codex", "workflow": "oc-flow", "tdd": "strict", "model": "gpt-5.5", "fixed": true, "test_passes": true, "flow_engaged": true, "outcome_ok": true}
+{"host": "codex", "workflow": "sdd", "tdd": "off", "model": "gpt-5.5", "fixed": true, "test_passes": true, "flow_engaged": true, "outcome_ok": true}
+{"host": "codex", "workflow": "sdd", "tdd": "strict", "model": "gpt-5.5", "fixed": true, "test_passes": true, "flow_engaged": true, "outcome_ok": true}
+{"host": "opencode", "workflow": "oc-flow", "tdd": "off", "model": "opencode/deepseek-v4-flash-free", "fixed": true, "test_passes": true, "flow_engaged": true, "outcome_ok": true}
+{"host": "opencode", "workflow": "oc-flow", "tdd": "strict", "model": "opencode/deepseek-v4-flash-free", "fixed": true, "test_passes": true, "flow_engaged": true, "outcome_ok": true}
+{"host": "opencode", "workflow": "sdd", "tdd": "off", "model": "opencode/deepseek-v4-flash-free", "fixed": true, "test_passes": true, "flow_engaged": true, "outcome_ok": true}
+{"host": "opencode", "workflow": "sdd", "tdd": "strict", "model": "opencode/deepseek-v4-flash-free", "fixed": true, "test_passes": true, "flow_engaged": true, "outcome_ok": true}
+{"host":"claude","workflow":"oc-flow","tdd":"strict","model":"sonnet","fixed":true,"test_passes":true,"flow_engaged":true,"outcome_ok":true}
+{"host":"claude","workflow":"oc-flow","tdd":"off","model":"sonnet","fixed":true,"test_passes":true,"flow_engaged":true,"outcome_ok":true}

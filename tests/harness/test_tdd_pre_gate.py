@@ -92,6 +92,23 @@ class TestTddPreGate:
         assert not blocking
         assert target.read_text(encoding="utf-8") == "x = 2\n"
 
+    def test_tdd_ask_fails_safe_noninteractive(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.delenv("OPENCONTEXT_TDD_MODE", raising=False)
+        target = tmp_path / "feature.py"
+        target.write_text("x = 1\n", encoding="utf-8")
+        (tmp_path / "tests").mkdir()
+
+        cfg = _apply_config("ask")
+        runner = HarnessRunner(root=tmp_path, config=cfg)
+        runner.run(
+            "apply-only",
+            "brand-new-feature",
+            BudgetMode.WARN,
+            apply_edits=[{"path": str(target), "content": "x = 2\n"}],
+        )
+
+        assert target.read_text(encoding="utf-8") == "x = 1\n"
+
     def test_tdd_enforcement_independent_of_budget_mode(self, tmp_path: Path) -> None:
         """budget_mode WARN + tdd strict still blocks (decoupled from budget)."""
         target = tmp_path / "feature.py"

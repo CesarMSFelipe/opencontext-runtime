@@ -78,10 +78,12 @@ class TestAgentInstaller:
         assert result["agents_configured"] == 1
         assert result["results"][0]["agent"] == "opencode"
 
-        # Check files were created
+        # Check files were created. OpenCode's native config is opencode.json
+        # (a sibling mcp.json is a file OpenCode never reads).
         config_dir = tmp_path / ".config" / "opencode"
-        assert (config_dir / "mcp.json").exists()
-        assert (config_dir / "agents" / "sdd-orchestrator.json").exists()
+        assert (config_dir / "opencode.json").exists()
+        assert (config_dir / "agents" / "oc-orchestrator.md").exists()
+        assert not (config_dir / "agents" / "sdd-orchestrator.json").exists()
 
     def test_all_agents_supported(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """All 14 agents now have config generators."""
@@ -126,7 +128,7 @@ class TestAgentInstaller:
         server = mcp_config["mcpServers"]["opencontext"]
         assert server["type"] == "stdio"
         assert server["command"] == "opencontext"
-        assert server["args"] == ["mcp"]
+        assert server["args"] == ["mcp", "--workflow-tools"]
 
     def test_permissions_content(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Verify permissions config lists OpenContext tools."""

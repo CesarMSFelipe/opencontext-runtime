@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from conftest import create_sample_project, write_config
 from opencontext_core.config import load_config
 from opencontext_core.errors import ConfigurationError
 from opencontext_core.indexing.project_indexer import ProjectIndexer
@@ -13,6 +12,7 @@ from opencontext_core.memory.stores import NullProjectMemoryStore
 from opencontext_core.trace.logger import LocalTraceLogger
 from opencontext_core.workflow.engine import WorkflowEngine
 from opencontext_core.workflow.steps import WorkflowServices
+from tests.core.conftest import create_sample_project, write_config
 
 
 def test_workflow_execution_persists_trace(tmp_path: Path) -> None:

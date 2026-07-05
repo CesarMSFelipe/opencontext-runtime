@@ -208,7 +208,6 @@ def handle_session(args: Any) -> None:
         sys.exit(1)
 
     def _human(d: dict[str, Any]) -> None:
-        for key, value in d.items():
-            print(f"{key:<16}: {value}")
+        console.table("", ["Field", "Value"], [[str(k), str(v)] for k, v in d.items()])
 
     emit(data, mode, _human)

@@ -182,7 +182,16 @@ class TestQualityScopeAll:
         server.close()
 
     def test_clean_project_scores_perfect_and_no_findings(self, tmp_path: Path) -> None:
-        """A project with no cycle has a perfect score and an empty result set."""
+        """A project with no cycle has a perfect score and an empty result set.
+
+        The autouse ``_stub_language_tools`` fixture in this module marks every
+        language tool as ``missing=True`` so the runner emits a SKIPPED verdict
+        per language rule and zero applicable verdicts overall. With no rules
+        RAN (``applicable == 0``) the gate is honestly ``not_applicable``, so
+        ``success`` is False (a not_applicable gate MUST NOT claim success — see
+        ``tests/mcp/test_quality_semantics.py``). The architecture metrics and
+        health score still read cleanly: no cycles, no god files, perfect score.
+        """
         (tmp_path / "solo.py").write_text("def only():\n    return 1\n", encoding="utf-8")
         server = _server(tmp_path)
         result = server._call_tool(_TOOL, {"scope": "all"})
@@ -190,8 +199,11 @@ class TestQualityScopeAll:
         assert result["data"]["health"]["metrics"]["cycles"] == 0
         assert result["data"]["health"]["score"] == 10000
         assert result["data"]["results"] == []
-        # No cycle, no boundary, no over-threshold complexity -> not blocking.
-        assert result["data"]["summary"]["success"] is True
+        # Architecture passes are clean (no findings), but the autouse stub
+        # degrades every language tool to SKIPPED. With no rule having RAN,
+        # the gate is not_applicable and ``success`` is False.
+        assert result["data"]["status"] == "not_applicable"
+        assert result["data"]["summary"]["success"] is False
         server.close()
 
 

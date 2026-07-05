@@ -1,10 +1,9 @@
-"""``opencontext index <root>`` persists storage under the root, not under cwd.
+"""``opencontext index <root>`` persists storage anchored to the project, not cwd.
 
-Regression: the runtime's default ``storage_path`` is relative
-(``.storage/opencontext``), so indexing a project from a *different* working
-directory wrote the knowledge graph + manifest under that cwd instead of the
-project. A later ``knowledge-graph status`` run from the project then found
-nothing. The fix anchors storage to the resolved ``<root>`` argument.
+Regression: the old default storage_path was relative (.storage/opencontext), so
+indexing from a different cwd wrote the KG under that cwd. The fix anchors storage
+to the resolved <root>. In user mode (default), storage goes to the XDG state dir;
+in local mode (OPENCONTEXT_STORAGE_MODE=local), it stays under the project root.
 """
 
 from __future__ import annotations
@@ -15,6 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from opencontext_cli.main import _runtime_for_root
+from opencontext_core.paths import StorageMode, resolve_storage_path
 
 
 def _sample_project(root: Path) -> None:
@@ -29,6 +29,7 @@ def _run_index(argv: list[str], cwd: Path, monkeypatch) -> None:
     from opencontext_cli import main as main_mod
 
     monkeypatch.chdir(cwd)
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
     # Reset the memoized config-path lookup so it resolves from this cwd.
     monkeypatch.setattr(main_mod, "_config_path_cache", None, raising=False)
     with (
@@ -42,8 +43,16 @@ def _run_index(argv: list[str], cwd: Path, monkeypatch) -> None:
             assert int(exc.code or 0) == 0
 
 
-def test_runtime_for_root_anchors_storage_to_root(tmp_path: Path) -> None:
-    """``_runtime_for_root`` points storage at ``<root>/.storage/opencontext``."""
+def test_runtime_for_root_anchors_storage_to_user_dir(tmp_path: Path) -> None:
+    """In user mode (default), _runtime_for_root points storage at the XDG state dir."""
+    runtime = _runtime_for_root("opencontext.yaml", tmp_path)
+    expected = resolve_storage_path(tmp_path, StorageMode.user)
+    assert runtime.storage_path == expected
+
+
+def test_runtime_for_root_local_mode_anchors_to_root(tmp_path: Path, monkeypatch) -> None:
+    """In local mode, _runtime_for_root points storage at <root>/.storage/opencontext."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
     runtime = _runtime_for_root("opencontext.yaml", tmp_path)
     assert runtime.storage_path == tmp_path.resolve() / ".storage" / "opencontext"
     assert runtime.knowledge_graph.db.db_path == (

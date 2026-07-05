@@ -136,7 +136,10 @@ class UserPreferences:
     sdd_model_profile: str = "default"
     setup_completed: bool = False
 
-    # Paths
+    # Paths — DEPRECATED(2.0): these flat string fields are superseded by
+    # StorageConfig (opencontext_core.config). They are kept for one release
+    # to allow in-flight user-config.json files to deserialise without error.
+    # Use storage_config_from_prefs() to translate them into StorageConfig.
     custom_storage_path: str = ".storage/opencontext"
     custom_workspace_path: str = ".opencontext"
 
@@ -161,6 +164,38 @@ def mark_setup_complete(prefs: UserPreferences) -> UserPreferences:
     prefs.first_run = False
     prefs.setup_completed = True
     return prefs
+
+
+def storage_config_from_prefs(prefs: UserPreferences) -> object:
+    """Translate legacy user-pref path fields into a ``StorageConfig`` instance.
+
+    This is the single bridge between the deprecated flat ``custom_storage_path``
+    / ``custom_workspace_path`` fields on :class:`UserPreferences` and the new
+    :class:`~opencontext_core.config.StorageConfig` model.
+
+    If ``custom_storage_path`` differs from the default legacy value, a
+    :py:exc:`DeprecationWarning` is emitted and the value is forwarded to
+    ``StorageConfig.custom_path`` so callers can migrate gradually.
+
+    Returns a :class:`~opencontext_core.config.StorageConfig` instance.
+    """
+    import warnings
+
+    from opencontext_core.config import StorageConfig
+
+    _DEFAULT_STORAGE = ".storage/opencontext"
+    custom: str | None = None
+
+    if prefs.custom_storage_path != _DEFAULT_STORAGE:
+        warnings.warn(
+            "UserPreferences.custom_storage_path is deprecated; "
+            "set storage.custom_path in opencontext.yaml instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        custom = prefs.custom_storage_path
+
+    return StorageConfig.from_env_and_config(custom_path=custom)
 
 
 class UserConfigStore:

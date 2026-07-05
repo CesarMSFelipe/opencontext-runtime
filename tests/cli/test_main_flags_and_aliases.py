@@ -71,7 +71,7 @@ def test_kg_alias_search_parses_query_and_flags() -> None:
 def test_kg_alias_dispatches_to_kg_handler(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, object] = {}
     monkeypatch.setattr(cli_main, "handle_kg", lambda args: seen.setdefault("cmd", args.kg_command))
-    monkeypatch.setattr(cli_main, "_check_first_run", lambda command: None)
+    monkeypatch.setattr(cli_main, "_check_first_run", lambda command, args=None: None)
     monkeypatch.setattr(cli_main, "_notify_outdated", lambda args: None)
 
     args = cli_main._build_parser().parse_args(["kg", "status"])
@@ -100,7 +100,7 @@ def test_context_alias_dispatches_to_verified_context(monkeypatch: pytest.Monkey
         )
 
     monkeypatch.setattr(cli_main, "_runtime", _fake_runtime)
-    monkeypatch.setattr(cli_main, "_check_first_run", lambda command: None)
+    monkeypatch.setattr(cli_main, "_check_first_run", lambda command, args=None: None)
     monkeypatch.setattr(cli_main, "_notify_outdated", lambda args: None)
 
     args = cli_main._build_parser().parse_args(["context", "auth", "--json"])

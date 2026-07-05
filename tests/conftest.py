@@ -13,6 +13,22 @@ from pathlib import Path
 
 import pytest
 
+
+@pytest.fixture()
+def xdg_state_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Set XDG_STATE_HOME to tmp_path so user-mode storage is isolated per test.
+
+    Also removes OPENCONTEXT_STORAGE_MODE from the environment so tests
+    see the default user-mode behaviour without interference from a
+    developer's local shell settings.
+    """
+    state_dir = tmp_path / "xdg_state"
+    state_dir.mkdir()
+    monkeypatch.setenv("XDG_STATE_HOME", str(state_dir))
+    monkeypatch.delenv("OPENCONTEXT_STORAGE_MODE", raising=False)
+    return state_dir
+
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _GUARDED = ("AGENTS.md", "CLAUDE.md", "GEMINI.md", "QWEN.md", "opencontext.yaml")
 _LOG = os.environ.get("OPENCONTEXT_POLLUTION_LOG")

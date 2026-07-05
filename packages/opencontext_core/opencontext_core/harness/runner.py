@@ -33,6 +33,7 @@ from opencontext_core.harness.gates import (
     ProviderPolicyPassedGate,
     ReviewArtifactCreatedGate,
     SecurityScanPassedGate,
+    TestsPassGate,
     TraceIdCreatedGate,
 )
 from opencontext_core.harness.models import (
@@ -62,6 +63,7 @@ from opencontext_core.harness.phases import (
     VerifyPhase,
 )
 from opencontext_core.models.trace import RunEvent
+from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.workflow.delegation_validator import (
     DelegationValidationError,
     DelegationValidator,
@@ -69,6 +71,24 @@ from opencontext_core.workflow.delegation_validator import (
 
 _log = logging.getLogger(__name__)
 _delegation_validator = DelegationValidator()
+
+# Verb lists for the NOT_APPLIED mutation-detection heuristic.
+# Imported once at module load; the fallback (None) is handled inline.
+# Declared as Optional so the None-fallback branch is reachable to mypy.
+_MUTATION_VERBS: tuple[str, ...] | None
+_READONLY_VERBS: tuple[str, ...] | None
+try:
+    from opencontext_core.oc_flow.completion import (
+        _MUTATION_VERBS,
+        _READONLY_VERBS,
+    )
+except ImportError:  # pragma: no cover — oc_flow is an optional extension
+    _log.warning(
+        "opencontext_core.oc_flow.completion not importable; "
+        "NOT_APPLIED heuristic will default to treating all tasks as mutations."
+    )
+    _MUTATION_VERBS = None
+    _READONLY_VERBS = None
 
 
 class HarnessState:
@@ -155,7 +175,9 @@ class HarnessRunner:
         llm_gateway: Any = None,
     ) -> None:
         self.root = root.resolve()
-        self.config = config or HarnessConfig.from_yaml_file(root / ".opencontext" / "harness.yaml")
+        self.config = config or HarnessConfig.from_yaml_file(
+            resolve_workspace_path(root, StorageMode.local) / "harness.yaml"
+        )
         self.enforcer = TokenBudgetEnforcer()
         # Optional explicit LLM gateway. When provided (and not the mock
         # provider) the runner builds a live executor from it and attaches it to
@@ -170,6 +192,7 @@ class HarnessRunner:
         self._registry_enabled = False
         self._durable_artifacts = False
         self._memory_v2 = False
+        self._sdd_runner_v2 = False  # PR4.a: delegate to opencontext_sdd.runner when True
         # Strict SDD scaffold-blocking posture (runtime.sdd_strict, spec PR-004
         # SDD-CONV). Default off → legacy advisory scaffold reporting.
         self._sdd_strict = False
@@ -201,7 +224,14 @@ class HarnessRunner:
             self._memory_v2 = bool(
                 getattr(getattr(oc_config, "runtime", None), "memory_v2_enabled", False)
             )
-            storage_path = self.root / ".storage" / "opencontext"
+            try:
+                storage_path = resolve_storage_path(
+                    self.root,
+                    oc_config.storage.mode,
+                    oc_config.storage.custom_path,
+                )
+            except Exception:
+                storage_path = resolve_storage_path(self.root, StorageMode.local)
             storage_path.mkdir(parents=True, exist_ok=True)
             self._memory_store = BackendFactory.create_memory_store(oc_config, storage_path)
         except Exception:
@@ -250,7 +280,7 @@ class HarnessRunner:
         (spec PR-004 SDD-CONV: meta-plan awareness).
         """
         try:
-            path = self.root / ".opencontext" / "program-plan.json"
+            path = resolve_workspace_path(self.root, StorageMode.local) / "program-plan.json"
             if not path.exists():
                 return None
             from opencontext_core.planning.program import ProgramPlan
@@ -344,7 +374,7 @@ class HarnessRunner:
         try:
             import json
 
-            context = self.root / ".opencontext" / "sdd" / "context.json"
+            context = resolve_workspace_path(self.root, StorageMode.local) / "sdd" / "context.json"
             name = (
                 json.loads(context.read_text(encoding="utf-8")).get("sdd_model_profile")
                 if context.exists()
@@ -410,6 +440,20 @@ class HarnessRunner:
             effective_provider = provider if provider != "mock" else "injected"
             return self._llm_gateway, effective_provider, model
 
+        # Test-only deterministic executor: a top-level `provider: test_stub` plus a
+        # resolvable `edits_file` under the run root builds a TestStubGateway so the
+        # SDD harness can mutate OFFLINE (parity with the oc-flow path). Never a
+        # production fallback — any other state falls through to the normal resolution.
+        _stub_provider = getattr(cfg, "provider", None)
+        _edits_file = getattr(cfg, "edits_file", None)
+        if _stub_provider == "test_stub" and isinstance(_edits_file, str) and _edits_file:
+            root_resolved = self.root.resolve()
+            edits_path = (root_resolved / _edits_file).resolve()
+            if edits_path.is_file() and edits_path.is_relative_to(root_resolved):
+                from opencontext_core.providers.test_stub import TestStubGateway
+
+                return TestStubGateway(edits_path), "test_stub", model
+
         # Prefer the host agent's selected model (MCP sampling) when available —
         # this is the zero-config path, so it overrides even a mock provider.
         from opencontext_core.config import SecurityMode
@@ -431,7 +475,6 @@ class HarnessRunner:
 
             runtime = OpenContextRuntime(
                 config=cfg,
-                storage_path=self.root / ".storage" / "opencontext",
             )
             return runtime.llm_gateway, provider, model
         except Exception:
@@ -622,7 +665,7 @@ class HarnessRunner:
     def _write_selection_receipt(self, state: HarnessState, receipt: Any) -> None:
         """Persist the workflow-selection receipt into the run dir (spec RCPT1)."""
         try:
-            run_dir = self.root / ".opencontext" / "runs" / state.run_id
+            run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             (run_dir / "workflow-selection.json").write_text(
                 json.dumps(receipt.model_dump(mode="json"), indent=2),
@@ -641,7 +684,9 @@ class HarnessRunner:
         """
         import json as _json
 
-        events_path = self.root / ".opencontext" / "runs" / run_id / "events.json"
+        events_path = (
+            resolve_workspace_path(self.root, StorageMode.local) / "runs" / run_id / "events.json"
+        )
         if not events_path.exists():
             return set()
         try:
@@ -670,6 +715,10 @@ class HarnessRunner:
     ) -> HarnessRunResult:
         """Execute a full workflow with all phases.
 
+        When ``_sdd_runner_v2`` is True, delegate to
+        :func:`opencontext_sdd.runner.run_phase` for the SDD lifecycle
+        instead of using the legacy inline phase loop.
+
         Args:
             workflow: Workflow name (sdd / explore-only / apply-only / ...).
             task: Task / change name.
@@ -689,6 +738,9 @@ class HarnessRunner:
                 # resumed mid-flow finds the earlier phase's output and runs to
                 # completion.
         """
+        if self._sdd_runner_v2:
+            return self._run_v2(workflow, task)
+
         state = self.create_run(workflow, task)
         if apply_edits:
             state.apply_edits = list(apply_edits)
@@ -778,7 +830,11 @@ class HarnessRunner:
             if self.config.privacy_profile is not PrivacyProfile.OFF:
                 privacy_rules = self._load_privacy_rules()
                 if privacy_rules:
-                    run_dir = state.root / ".opencontext" / "runs" / state.run_id
+                    run_dir = (
+                        resolve_workspace_path(state.root, StorageMode.local)
+                        / "runs"
+                        / state.run_id
+                    )
                     for rule in privacy_rules:
                         privacy_gate = PrivacyGate()
                         # Operation is determined by phase type
@@ -887,8 +943,11 @@ class HarnessRunner:
             scaffold_blocked = getattr(state, "sdd_strict", False) and any(
                 g.id == "guardrails" and g.status == GateStatus.FAILED for g in result.gates
             )
+            contract_blocked = getattr(state, "sdd_strict", False) and any(
+                g.id == "phase_contract" and g.status == GateStatus.WARNING for g in result.gates
+            )
             if result.status == GateStatus.FAILED:
-                if budget_mode is BudgetMode.STRICT or scaffold_blocked:
+                if budget_mode is BudgetMode.STRICT or scaffold_blocked or contract_blocked:
                     final_status = GateStatus.FAILED
                     hard_failed = True
                     break
@@ -896,6 +955,40 @@ class HarnessRunner:
                     final_status = GateStatus.WARNING
             elif result.status == GateStatus.WARNING and not hard_failed:
                 final_status = GateStatus.WARNING
+
+        # Provider-free apply detection: when the apply phase ran but produced no
+        # edits because no executor was wired, the run would otherwise appear as
+        # PASSED or WARNING — both ambiguous (PASSED falsely implies edits were
+        # written; WARNING is indistinguishable from a genuine advisory on a run
+        # that did real work). Override to NOT_APPLIED so consumers know exactly:
+        # "no executor, nothing was written".
+        #
+        # Two concrete signals combine: (1) the phase result metadata records
+        # apply_status=="planned" when ApplyPhase.run() skipped all writes, and
+        # (2) the task's LEADING verb is a mutation verb (not a read-only one).
+        # Checking only the leading word avoids false positives like
+        # "describe the add function" (where "add" is a symbol, not a directive).
+        # Scoped to PASSED/WARNING only — FAILED must not be softened to NOT_APPLIED.
+        _apply_was_planned = any(
+            r.phase == "apply" and r.metadata.get("apply_status") == "planned" for r in results
+        )
+        if _apply_was_planned and getattr(state, "delegate", None) is None:
+            # Use the module-level verb lists (imported once at startup).
+            # When the oc_flow extension was unavailable at import time,
+            # both are None and we fall back to treating the task as a mutation
+            # (conservative — prefer a false NOT_APPLIED over a false PASSED).
+            if _MUTATION_VERBS is not None and _READONLY_VERBS is not None:
+                _leading = (state.task or "").strip().lower().split()[0] if state.task else ""
+                _task_is_mutation = _leading in _MUTATION_VERBS or (
+                    _leading not in _READONLY_VERBS
+                    and any(v in (state.task or "").lower() for v in _MUTATION_VERBS)
+                    and not any(v in (state.task or "").lower() for v in _READONLY_VERBS)
+                )
+            else:
+                # oc_flow unavailable — default conservative: treat as mutation.
+                _task_is_mutation = True
+            if _task_is_mutation and final_status in (GateStatus.PASSED, GateStatus.WARNING):
+                final_status = GateStatus.NOT_APPLIED
 
         # Bounded apply->gate->fix loop: feed failing verify findings back to the
         # Builder for a re-attempt (revives quality rules' max_fix_loops). No-op
@@ -915,9 +1008,16 @@ class HarnessRunner:
         try:
             from opencontext_core.learning.feedback_collector import FeedbackCollector
 
-            fb = FeedbackCollector(
-                storage_path=state.root / ".storage" / "opencontext" / "learning"
-            )
+            try:
+                from opencontext_core.config import load_config_or_defaults
+
+                _rc = load_config_or_defaults(state.root / "opencontext.yaml", auto_detect=False)
+                _fb_base = resolve_storage_path(
+                    state.root, _rc.storage.mode, _rc.storage.custom_path
+                )
+            except Exception:
+                _fb_base = resolve_storage_path(state.root, StorageMode.local)
+            fb = FeedbackCollector(storage_path=_fb_base / "learning")
             op_id = fb.start_operation("context_pack", task)
             fb.finish_operation(
                 op_id,
@@ -947,6 +1047,58 @@ class HarnessRunner:
         self._post_run_update(state)
         self._post_run_evolution(state, run_result)
         return run_result
+
+    # ------------------------------------------------------------------
+    # PR4.a: v2 runner delegation
+    # ------------------------------------------------------------------
+
+    def _run_v2(self, workflow: str, task: str) -> HarnessRunResult:
+        """Delegate SDD lifecycle to ``opencontext_sdd.runner.run_phase``.
+
+        Called when ``_sdd_runner_v2`` is ``True``. Wraps the v2 result
+        in a ``HarnessRunResult`` for backward compatibility with the
+        existing telemetry and persistence chain.
+        """
+        try:
+            from opencontext_sdd.runner import run_phase
+
+            envelope = run_phase(workflow, change=task, cwd=str(self.root))
+        except ImportError:
+            envelope = type(
+                "FallbackEnvelope",
+                (),
+                {
+                    "status": "partial",
+                    "executive_summary": "opencontext_sdd not installed; using legacy runner.",
+                    "phase": workflow,
+                },
+            )()
+        except Exception as exc:
+            envelope = type(
+                "FallbackEnvelope",
+                (),
+                {
+                    "status": "failed",
+                    "executive_summary": str(exc),
+                    "phase": workflow,
+                },
+            )()
+
+        # Fake a HarnessRunResult that downstream persistence can consume
+        from dataclasses import dataclass, field
+
+        @dataclass
+        class _V2Result:
+            run_id: str = ""
+            workflow: str = workflow
+            phases_ok: int = 1 if envelope.status == "ok" else 0
+            phases_failed: int = 0 if envelope.status == "ok" else 1
+            status: str = envelope.status
+            executive_summary: str = envelope.executive_summary
+            artifacts: dict[Any, Any] = field(default_factory=dict)
+            trace_id: str = ""
+
+        return _V2Result()  # type: ignore[return-value]
 
     def _post_run_evolution(self, state: HarnessState, run_result: Any) -> None:
         """Generate and persist evolution proposals from the completed run.
@@ -984,9 +1136,20 @@ class HarnessRunner:
             try:
                 from opencontext_core.learning.learning_orchestrator import LearningOrchestrator
 
+                try:
+                    from opencontext_core.config import load_config_or_defaults
+
+                    _lrc = load_config_or_defaults(
+                        state.root / "opencontext.yaml", auto_detect=False
+                    )
+                    _ls = resolve_storage_path(
+                        state.root, _lrc.storage.mode, _lrc.storage.custom_path
+                    )
+                except Exception:
+                    _ls = resolve_storage_path(state.root, StorageMode.local)
                 orch = LearningOrchestrator(
-                    storage_path=state.root / ".storage" / "opencontext" / "learning",
-                    kg_db_path=state.root / ".storage" / "opencontext" / "context_graph.db",
+                    storage_path=_ls / "learning",
+                    kg_db_path=_ls / "context_graph.db",
                 )
                 orch.learn()
                 learned_patterns = list(orch.patterns.get_all_patterns().values())
@@ -1038,7 +1201,20 @@ class HarnessRunner:
                 from opencontext_core.indexing.project_indexer import _KG_EXTENSIONS
 
                 # Canonical KG db name — same as runtime/explore (context_graph.db).
-                db_path = state.root / ".storage" / "opencontext" / "context_graph.db"
+                try:
+                    from opencontext_core.config import load_config_or_defaults
+
+                    _krc = load_config_or_defaults(
+                        state.root / "opencontext.yaml", auto_detect=False
+                    )
+                    _ks = resolve_storage_path(
+                        state.root, _krc.storage.mode, _krc.storage.custom_path
+                    )
+                    db_path = _ks / "context_graph.db"
+                except Exception:
+                    db_path = (
+                        resolve_storage_path(state.root, StorageMode.local) / "context_graph.db"
+                    )
                 kg_changed = {p for p in changed if (state.root / p).suffix in _KG_EXTENSIONS}
                 if db_path.exists() and kg_changed:
                     kg = KnowledgeGraph(db_path=db_path)
@@ -1138,7 +1314,7 @@ class HarnessRunner:
             from opencontext_core.harness.receipt_store import ReceiptStore
             from opencontext_core.models.receipt import PhaseReceipt
 
-            run_dir = self.root / ".opencontext" / "runs" / state.run_id
+            run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             gate_digest = {
                 g.id: (g.status.value if hasattr(g.status, "value") else str(g.status))
@@ -1222,7 +1398,7 @@ class HarnessRunner:
                 handoff, from_persona=PHASE_PERSONAS.get(phase_id, "")
             )
 
-            run_dir = self.root / ".opencontext" / "runs" / state.run_id
+            run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             ArtifactStore(run_dir).write(
                 ArtifactWriteRequest(
@@ -1260,7 +1436,7 @@ class HarnessRunner:
 
             from opencontext_core.harness.run_store import RunStore
 
-            new_dir = self.root / ".opencontext" / "runs" / new_run_id
+            new_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / new_run_id
             new_dir.mkdir(parents=True, exist_ok=True)
             for src in RunStore(self.root).passed_phase_artifacts(resume_from, resume_completed):
                 dest = new_dir / src.name
@@ -1277,7 +1453,14 @@ class HarnessRunner:
         TDD/approval can be configured from the main config too. Decoupled from
         token ``budget_mode``.
         """
-        tdd_mode = getattr(self.config, "tdd_mode", "ask")
+        import os
+
+        _cfg_tdd = getattr(self.config, "tdd_mode", "ask")
+        # Env var only applies when config is at the default ("ask"); an explicit
+        # config value (e.g. from a test fixture) always wins.
+        tdd_mode = (
+            os.environ.get("OPENCONTEXT_TDD_MODE", _cfg_tdd) if _cfg_tdd == "ask" else _cfg_tdd
+        )
         approval_required = bool(getattr(self.config, "approval_required_for_writes", False))
 
         # Merge from the top-level config only to fill in non-overridden defaults.
@@ -1324,7 +1507,7 @@ class HarnessRunner:
 
         # TDD failing-test pre-gate (red before green). Only blocks in strict mode.
         if "failing_test_exists" in declared or tdd_mode == "strict":
-            gate = FailingTestExistsGate().evaluate(state.task, state.root)
+            gate = FailingTestExistsGate().evaluate(state.task, state.root, tdd_mode=tdd_mode)
             # Only strict mode enforces blocking; otherwise downgrade to WARNING.
             if tdd_mode == "strict":
                 gates.append(gate)
@@ -1333,17 +1516,21 @@ class HarnessRunner:
             elif tdd_mode == "off":
                 # tdd off: do not gate apply on tests at all.
                 pass
-            else:  # "ask": surface as a non-blocking signal
+            else:  # "ask": non-interactive harness cannot ask, so fail closed.
                 if gate.status == GateStatus.FAILED:
                     gates.append(
                         PhaseGate(
                             id=gate.id,
                             phase="apply",
-                            status=GateStatus.WARNING,
-                            message=gate.message,
+                            status=GateStatus.FAILED,
+                            message=(
+                                "TDD gate requires a failing test. Continue, add test, "
+                                "or switch mode? Non-interactive run blocked. " + gate.message
+                            ),
                             metadata=gate.metadata,
                         )
                     )
+                    blocked = True
                 else:
                     gates.append(gate)
 
@@ -1372,12 +1559,24 @@ class HarnessRunner:
         skip = {"approval_required_for_writes", "failing_test_exists"}
 
         dispatched: list[PhaseGate] = []
+        unbound: list[str] = []
         for gate_id in declared:
             if gate_id in already or gate_id in skip:
                 continue
             gate = self._dispatch_one_gate(gate_id, phase_id, state, result)
             if gate is not None:
                 dispatched.append(gate)
+            else:
+                # Declared in config but no dispatch binding: it is NOT evaluated.
+                # Do not fabricate a result — but do not drop it silently either,
+                # or a user believes a gate is enforcing when it is inert.
+                unbound.append(gate_id)
+        if unbound:
+            _log.warning(
+                "phase %s: declared gates with no dispatch binding (NOT evaluated): %s",
+                phase_id,
+                sorted(unbound),
+            )
         return dispatched
 
     def _dispatch_one_gate(
@@ -1438,6 +1637,20 @@ class HarnessRunner:
             return self._eval_test_gaps_gate(state, result)
         if gate_id == "code_economy":
             return self._eval_code_economy_gate(state, result)
+        if gate_id == "tests_pass":
+            # Use the SAME resolved tdd_mode as the RED (failing_test_exists) pre-gate
+            # so strict TDD set via opencontext.yaml's harness section — not only
+            # harness.yaml workflow_defaults — activates the GREEN gate too.
+            tdd_mode, _ = self._harness_governance()
+            # Discover the project's real test command instead of a bare ``pytest``,
+            # which fails to import project modules (exit 2) when the project has no
+            # pythonpath/rootdir config. Fall back to the interpreter's pytest module.
+            import sys as _sys
+
+            from opencontext_core.oc_flow.runner import _discover_test_command
+
+            cmd = _discover_test_command(state.root) or [_sys.executable, "-m", "pytest"]
+            return TestsPassGate().evaluate(cmd=cmd, cwd=state.root, tdd_mode=tdd_mode)
         # Unknown / unbound declared gate: do not fabricate a result.
         return None
 
@@ -1479,7 +1692,21 @@ class HarnessRunner:
     @staticmethod
     def _quality_db_path(root: Path) -> Path:
         """Path to the persisted knowledge graph the quality engine reads."""
-        return root / ".storage" / "opencontext" / "context_graph.db"
+        _local = resolve_storage_path(root, StorageMode.local) / "context_graph.db"
+        _oc_yaml = root / "opencontext.yaml"
+        if not _oc_yaml.exists():
+            return _local
+        try:
+            from opencontext_core.config import load_config_or_defaults
+
+            _qrc = load_config_or_defaults(_oc_yaml, auto_detect=False)
+            _resolved = (
+                resolve_storage_path(root, _qrc.storage.mode, _qrc.storage.custom_path)
+                / "context_graph.db"
+            )
+            return _resolved if _resolved.exists() or not _local.exists() else _local
+        except Exception:
+            return _local
 
     # Working-tree paths that are byproducts / control-plane, NOT source the graph
     # is built from. These are written *after* (or independently of) the graph and
@@ -2097,7 +2324,7 @@ class HarnessRunner:
         try:
             import yaml
 
-            privacy_path = self.root / ".opencontext" / "privacy.yaml"
+            privacy_path = resolve_workspace_path(self.root, StorageMode.local) / "privacy.yaml"
             if not privacy_path.exists():
                 return []
             data = yaml.safe_load(privacy_path.read_text(encoding="utf-8"))
@@ -2180,7 +2407,27 @@ class HarnessRunner:
         try:
             from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
 
-            kg = KnowledgeGraph(db_path=self.root / ".storage" / "opencontext" / "context_graph.db")
+            # Resolve DB path via StorageConfig. When an opencontext.yaml exists and
+            # sets mode=user, use the XDG path. Otherwise fall back to the in-repo
+            # local path for backward compatibility (legacy layout and tests without
+            # a project config file).
+            _local_kg_db = resolve_storage_path(self.root, StorageMode.local) / "context_graph.db"
+            _kg_db = _local_kg_db
+            _oc_yaml = self.root / "opencontext.yaml"
+            if _oc_yaml.exists():
+                try:
+                    from opencontext_core.config import load_config_or_defaults
+
+                    _crc = load_config_or_defaults(_oc_yaml, auto_detect=False)
+                    _cs = resolve_storage_path(
+                        self.root, _crc.storage.mode, _crc.storage.custom_path
+                    )
+                    _kg_db = _cs / "context_graph.db"
+                    if not _kg_db.exists() and _local_kg_db.exists():
+                        _kg_db = _local_kg_db
+                except Exception:
+                    _kg_db = _local_kg_db
+            kg = KnowledgeGraph(db_path=_kg_db)
             stats = kg.get_stats()
             kg.close()
             if stats.get("nodes", 0) == 0:
@@ -2194,7 +2441,7 @@ class HarnessRunner:
 
     def persist_run(self, state: HarnessState, result: HarnessRunResult) -> Path:
         """Persist run artifacts to .opencontext/runs/<run_id>/."""
-        run_dir = self.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         def _serialize(obj: Any) -> Any:
@@ -2249,6 +2496,29 @@ class HarnessRunner:
             "decisions.json": {"decisions": _serialize(result.decisions)},
             "events.json": {"events": _serialize(result.events)},
         }
+
+        # harness-report.json: a single consolidated run summary. Declared as a
+        # verify required_output but previously had no writer, so it never
+        # appeared on disk. Emit a compact status + gate tally + phase list.
+        _gate_tally: dict[str, int] = {}
+        _phases: list[str] = []
+        for _g in result.gates:
+            _gs = _g.status.value if hasattr(_g.status, "value") else str(_g.status)
+            _gate_tally[_gs] = _gate_tally.get(_gs, 0) + 1
+            _gp = getattr(_g, "phase", None)
+            if _gp and _gp not in _phases:
+                _phases.append(_gp)
+        files["harness-report.json"] = {
+            "run_id": result.run_id,
+            "workflow": result.workflow,
+            "status": (
+                result.status.value if hasattr(result.status, "value") else str(result.status)
+            ),
+            "phases": _phases,
+            "gates": {"total": len(result.gates), "by_status": _gate_tally},
+            "artifacts": len(result.artifacts),
+            "created_at": result.created_at,
+        }
         for filename, data in files.items():
             (run_dir / filename).write_text(
                 json.dumps(data, indent=2, default=str), encoding="utf-8"
@@ -2275,6 +2545,13 @@ class HarnessRunner:
 
                 if _cm_data is not None:
                     _matrix = ComplianceMatrix.model_validate(_cm_data)
+                    # Write the declared artifact name too: sdd.yaml/oc_new/archive_gate
+                    # reference `compliance-matrix.json` (the matrix), which previously
+                    # never appeared — only the verdict `verify-report-compliance.json`
+                    # was written.
+                    (run_dir / "compliance-matrix.json").write_text(
+                        json.dumps(_matrix.model_dump(mode="json"), indent=2), encoding="utf-8"
+                    )
                     _vreport = VerifyReport.compute_verdict(_matrix)
                     _vreport_path = run_dir / "verify-report-compliance.json"
                     _vreport_path.write_text(

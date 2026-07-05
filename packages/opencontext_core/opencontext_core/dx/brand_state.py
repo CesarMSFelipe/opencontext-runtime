@@ -6,6 +6,8 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
+from opencontext_core.config_resolver import resolve_active_storage_file
+
 
 @dataclass(frozen=True)
 class RuntimeBrandState:
@@ -46,7 +48,9 @@ def gather_runtime_brand_state(root: str | Path = ".") -> RuntimeBrandState:
 
 
 def _kg_status(base: Path) -> tuple[int, int, str]:
-    db = base / ".storage" / "opencontext" / "context_graph.db"
+    # Resolve through the active storage mode (same resolver the indexer uses),
+    # with an honest legacy in-repo fallback for unmigrated projects.
+    db = resolve_active_storage_file(base, "context_graph.db")
     if not db.exists():
         return 0, 0, "not indexed"
     try:

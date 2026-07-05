@@ -16,6 +16,12 @@ select = ["B", "E", "F", "I", "RUF", "UP"]
 [tool.ruff.lint.per-file-ignores]
 # HTML/CSS template strings in the KG viewer generator are legitimately long
 "packages/opencontext_cli/opencontext_cli/commands/kg_cmd.py" = ["E501"]
+"packages/opencontext_core/opencontext_core/context/v2/*.py" = ["E402"]
+"packages/opencontext_core/opencontext_core/graph/v2/*.py" = ["E402"]
+"packages/opencontext_core/opencontext_core/learning/v2/*.py" = ["E402"]
+"packages/opencontext_core/opencontext_core/memory/v2/*.py" = ["E402"]
+"packages/opencontext_core/opencontext_core/governance/*.py" = ["E402"]
+"packages/opencontext_core/opencontext_core/sdd_runtime.py" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -24,17 +30,24 @@ indent-style = "space"
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+markers = [
+  "real_host: end-to-end tests that drive the real codex/opencode/claude binaries (skip when absent)",
+]
 pythonpath = [
+  ".",
   "packages/opencontext_api",
   "packages/opencontext_cli",
   "packages/opencontext_core",
+  "packages/opencontext_memory",
   "packages/opencontext_profiles",
+  "packages/opencontext_sdd",
+  "packages/opencontext_studio",
 ]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
-mypy_path = "packages/opencontext_core:packages/opencontext_profiles"
+mypy_path = "packages/opencontext_core:packages/opencontext_memory:packages/opencontext_profiles:packages/opencontext_sdd"
 warn_unreachable = true
 exclude = [
   "packages/.*/build/",
@@ -49,3 +62,39 @@ exclude = [
 module = "InquirerPy.*"
 ignore_missing_imports = true
 follow_imports = "skip"
+
+# uvicorn is an optional runtime dep; studio_cmd guards its import inside a
+# try/except. Using ignore_missing_imports (not an inline # type: ignore) keeps
+# mypy clean in both envs: no error when uvicorn is absent, no unused-ignore
+# when it IS present (because a per-module override never becomes unused).
+[[tool.mypy.overrides]]
+module = "uvicorn.*"
+ignore_missing_imports = true
+
+# opencontext_studio is an optional package not installed in the mypy check
+# targets (core/api/cli/profiles). Guards are try/except ImportError at runtime.
+[[tool.mypy.overrides]]
+module = "opencontext_studio.*"
+ignore_missing_imports = true
+follow_imports = "skip"
+
+# fcntl is POSIX-only; write_queue.py guards with try/except ImportError for Windows.
+[[tool.mypy.overrides]]
+module = "fcntl"
+ignore_missing_imports = true
+follow_imports = "skip"
+
+# write_queue.py uses fcntl.flock/LOCK_EX/LOCK_UN which exist on Linux but are absent
+# from the Windows typeshed stub. Inline # type: ignore[attr-defined] suppresses the
+# Windows error; warn_unused_ignores=false prevents Linux from rejecting them as unused.
+[[tool.mypy.overrides]]
+module = "opencontext_memory.store.write_queue"
+warn_unused_ignores = false
+
+# main.py temporarily redirects sys.stdout to a StringIO sink. The assignment
+# is type-correct at runtime but mypy infers TextIO vs StringIO mismatch on some
+# versions; the inline # type: ignore[assignment] suppresses it. On Linux the
+# ignore may be flagged as unused depending on mypy version — suppress the noise.
+[[tool.mypy.overrides]]
+module = "opencontext_cli.main"
+warn_unused_ignores = false

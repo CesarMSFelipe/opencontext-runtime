@@ -105,11 +105,21 @@ class RuntimeBrain:
     def decide(self, kind: DecisionKind | str, context: Mapping[str, Any]) -> RuntimeDecision:
         """Return exactly one :class:`RuntimeDecision` for *kind*.
 
-        Raises ``ValueError`` for an unsupported kind (the eight
-        :class:`DecisionKind` values are all supported).
+        Raises ``ValueError`` for runner-level kinds (``workflow``,
+        ``memory_promotion``) — those are emitted directly by
+        ``oc_flow/runner.py`` at real selection sites, not through a brain
+        strategy. Raises ``ValueError`` for any other unsupported kind.
+        The eight brain-level :class:`DecisionKind` values listed in
+        ``_STRATEGIES`` are all supported.
         """
         decision_kind = DecisionKind(str(kind))
         ctx = dict(context)
+        if decision_kind in self._RUNNER_LEVEL_KINDS:
+            raise ValueError(
+                f"{decision_kind.value!r} is a runner-level DecisionKind emitted "
+                "by oc_flow/runner.py directly — it is not a brain strategy. "
+                "Brain strategies cover: " + ", ".join(k.value for k in self._STRATEGIES)
+            )
         strategy = self._STRATEGIES[decision_kind]
         chosen, alternatives, reason, confidence, inputs = strategy(self, ctx)
 
@@ -303,7 +313,15 @@ class RuntimeBrain:
             {"retry_budget": strategy.retry_budget, "profile": strategy.profile},
         )
 
-    # Strategy dispatch table — covers all eight DecisionKind values.
+    # Runner-level DecisionKind values (C16 / product-closure-r13): emitted
+    # directly by oc_flow/runner.py at real selection sites — not brain
+    # strategies.  brain.decide() refuses these with a clear ValueError.
+    _RUNNER_LEVEL_KINDS: ClassVar[frozenset[DecisionKind]] = frozenset(
+        {DecisionKind.workflow, DecisionKind.memory_promotion, DecisionKind.confidence_report}
+    )
+
+    # Strategy dispatch table — covers the eight brain-level DecisionKind
+    # values.  workflow and memory_promotion are runner-level (see above).
     _STRATEGIES: ClassVar[
         dict[
             DecisionKind,

@@ -1,15 +1,14 @@
-# demo-config.gif — the COMPLETE configuration walkthrough, all in one branded
-# Textual app. The 3-column Miller menu drives every setting: simple ones are
-# picked in place (the ✓ moves, a flash confirms); richer ones open a native modal
-# screen (toggles / typed value / two-step pick) that shares the same chrome, then
-# return to the menu. Real `opencontext config` against the indexed sandbox repo.
+# demo-config.gif — the unified configuration TUI (3-column Miller menu). Shows
+# the new OC Flow mode setting, then switches the UI language to Spanish LIVE
+# (the whole menu re-renders in Spanish without a relaunch). Real `opencontext
+# config` against the indexed sandbox repo.
 Source "docs/demos/tapes/_common.tape"
 Set Height 760
 Set TypingSpeed 60ms
 Output "docs/assets/demo-config.gif"
 
 Hide
-Type `export PS1="$ "` Enter
+Type `export PS1="$ " FORCE_COLOR=1 CLICOLOR_FORCE=1 RICH_FORCE_TERMINAL=1 COLORTERM=truecolor TERM=xterm-256color; unset NO_COLOR` Enter
 Type `cd "$OC_DEMO_EXPLAIN"` Enter
 Type "clear" Enter
 Show
@@ -18,148 +17,44 @@ Sleep 800ms
 Type "opencontext config"
 Sleep 500ms
 Enter
-
-# MegaMenu renders: Category · Setting · Options + footer.
+# 3-column menu renders (Category | Setting | Options), categories focused.
 Sleep 3500ms
 
-# Tour the categories, settle on Settings, drill in.
+# Agentic workflow -> the new OC Flow mode.
 Down
-Sleep 1200ms
+Sleep 1100ms
 Down
-Sleep 1200ms
+Sleep 1400ms
+Right
+Sleep 1300ms
+Down
+Sleep 1000ms
+Down
+Sleep 1500ms
+Right
+Sleep 2200ms
+Left
+Sleep 1000ms
+Left
+Sleep 1000ms
+
+# Runtime -> Language -> Espanol (the whole menu flips to Spanish, live).
 Up
 Sleep 1200ms
 Right
-Sleep 1600ms
-
-# 1 — Security (in-place select): drill to modes, pick one, apply, back.
-Right
-Sleep 1500ms
-Down
-Sleep 900ms
-Down
-Sleep 1200ms
-Enter
-Sleep 2200ms
-Left
-Sleep 1200ms
-
-# 2 — Features (native toggle modal): toggle one off, save, return.
-Down
-Sleep 900ms
-Enter
-Sleep 2600ms
-Down
-Sleep 1100ms
-Space
 Sleep 1300ms
-Type "s"
-Sleep 2200ms
-
-# 3 — Token budgets (native input modal): replace the value.
 Down
-Sleep 900ms
-Enter
-Sleep 2400ms
-Backspace
-Backspace
-Backspace
-Backspace
-Backspace
-Sleep 600ms
-Type "8000"
-Sleep 1100ms
-Enter
-Sleep 2200ms
-
-# 4 — Providers & models (native two-step modal): provider → model.
+Sleep 500ms
 Down
-Sleep 900ms
-Enter
-Sleep 2400ms
+Sleep 500ms
 Down
-Sleep 1100ms
-Enter
-Sleep 1600ms
+Sleep 500ms
 Down
-Sleep 1100ms
-Enter
-Sleep 2200ms
-
-# 5 — Agent integrations (native toggle modal).
-Down
-Sleep 900ms
-Enter
-Sleep 2400ms
-Space
-Sleep 1000ms
-Down
-Sleep 900ms
-Space
-Sleep 1200ms
-Type "s"
-Sleep 2200ms
-
-# 6 — Plugins (native toggle modal): update prefs + any plugins.
-Down
-Sleep 900ms
-Enter
-Sleep 3200ms
-Down
-Sleep 1000ms
-Space
 Sleep 1300ms
-Type "s"
-Sleep 2200ms
-
-# 7 — Memory backend (native single-pick modal).
-Down
-Sleep 900ms
-Enter
-Sleep 2400ms
-Down
-Sleep 900ms
-Down
-Sleep 1100ms
-Enter
-Sleep 2200ms
-
-# 8 — Language (in-place select).
-Down
-Sleep 900ms
-Right
-Sleep 1400ms
-Down
-Sleep 1100ms
-Enter
-Sleep 2000ms
-Left
-Sleep 1100ms
-
-# 9 — SDD model profile (in-place select).
-Down
-Sleep 900ms
 Right
 Sleep 1300ms
 Down
 Sleep 1100ms
 Enter
-Sleep 2000ms
-Left
-Sleep 1100ms
-
-# 10 — TDD mode (in-place select).
-Down
-Sleep 900ms
-Right
-Sleep 1300ms
-Down
-Sleep 1100ms
-Enter
-Sleep 2000ms
-Left
-Sleep 1200ms
-
-# Quit.
-Type "q"
-Sleep 1500ms
+# Menu re-renders in Spanish. Linger so it is readable.
+Sleep 5000ms

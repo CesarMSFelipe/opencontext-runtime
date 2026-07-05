@@ -185,7 +185,10 @@ class TreeSitterParser:
             # Try to load common language grammars
             self._load_language("python", "tree_sitter_python")
             self._load_language("javascript", "tree_sitter_javascript")
-            self._load_language("typescript", "tree_sitter_typescript")
+            # tree_sitter_typescript exposes language_typescript(), not language()
+            self._load_language(
+                "typescript", "tree_sitter_typescript", fn_name="language_typescript"
+            )
             self._load_language("go", "tree_sitter_go")
             self._load_language("rust", "tree_sitter_rust")
             self._load_language("java", "tree_sitter_java")
@@ -205,15 +208,21 @@ class TreeSitterParser:
 
             self._fallback_parser = SymbolExtractor()
 
-    def _load_language(self, name: str, module_name: str) -> bool:
-        """Attempt to load a tree-sitter language grammar."""
+    def _load_language(self, name: str, module_name: str, fn_name: str = "language") -> bool:
+        """Attempt to load a tree-sitter language grammar.
+
+        ``fn_name`` is the callable on the grammar package that returns the
+        PyCapsule.  Most packages expose ``language()``; ``tree_sitter_typescript``
+        exposes ``language_typescript()`` and ``language_tsx()`` instead.
+        """
 
         if not self._available:
             return False
 
         try:
             module = __import__(module_name)
-            language_capsule = module.language()
+            language_fn = getattr(module, fn_name)
+            language_capsule = language_fn()
             # Wrap PyCapsule in tree_sitter.Language
             from tree_sitter import Language as TSLanguage
 
@@ -953,7 +962,8 @@ class TreeSitterParser:
         edges: list[ParsedEdge] = []
 
         def walk_calls(child: Any) -> None:
-            if child.type == "call":
+            # Python uses "call"; JS/TS/Go/Rust use "call_expression"
+            if child.type in ("call", "call_expression"):
                 func_node = child.child_by_field_name("function")
                 if func_node:
                     target = func_node.text.decode("utf-8")

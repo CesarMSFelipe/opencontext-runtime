@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opencontext-memory"
+version = "0.1.0"
+description = "SQLite + FTS5 memory store and 19 MCP-style tools for OpenContext Runtime"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "OpenContext Runtime maintainers" }]
+keywords = ["memory", "fts5", "sqlite", "opencontext", "knowledge-graph"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Database",
+]
+# PR2.a is stdlib-only at runtime: sqlite3 (FTS5 built-in on Python 3.12),
+# fcntl / msvcrt for the cross-process write queue. Pydantic is the only
+# runtime dep because Observation mirrors the project's Pydantic-first style
+# (kept in sync with opencontext_core.models.agent_memory.MemoryRecord).
+dependencies = [
+  "pydantic>=2.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/CesarMSFelipe/OpenContext-Runtime"
+Issues = "https://github.com/CesarMSFelipe/OpenContext-Runtime/issues"
+Source = "https://github.com/CesarMSFelipe/OpenContext-Runtime"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["opencontext_memory*"]
+
+# The SQLite schema ships as a data file loaded at runtime by the store; without
+# this it is dropped from the wheel and every memory op fails on a real install
+# with "schema.sql not found".
+[tool.setuptools.package-data]
+opencontext_memory = ["store/*.sql", "**/*.sql"]

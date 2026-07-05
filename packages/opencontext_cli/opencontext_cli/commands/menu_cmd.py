@@ -33,6 +33,9 @@ def _action_header(title: str) -> None:
 
 def run_main_menu() -> None:
     """Show the main OpenContext menu and delegate to the selected command."""
+    from opencontext_core.i18n import load_language_from_config
+
+    load_language_from_config(".")  # open the menu in the project's configured language
 
     # NOTE: CockpitScreen is the default bare-opencontext entry point.
     # Falls back to HomeScreen, then to the text-only message.
@@ -69,6 +72,10 @@ def run_config_menu() -> None:
     the user at the non-interactive equivalents rather than spawning a second,
     parallel selector — duplicate menus are exactly what this unification removes.
     """
+    from opencontext_core.i18n import load_language_from_config
+
+    load_language_from_config(".")  # open the menu in the project's configured language
+
     try:
         from opencontext_cli.tui import run_config_tui
 
@@ -78,9 +85,9 @@ def run_config_menu() -> None:
         pass
 
     console.print(
-        "[yellow]The configuration menu needs a terminal.[/] Use "
-        "[cyan]opencontext config wizard --non-interactive[/], or a direct subcommand: "
-        "[cyan]config reconfigure <section>[/] · [cyan]config set[/] · [cyan]config get[/]."
+        "[yellow]The configuration menu needs a terminal.[/] Configure non-interactively with a "
+        "direct subcommand: [cyan]config reconfigure <section>[/] · [cyan]config set[/] · "
+        "[cyan]config get[/] (or [cyan]opencontext init --non-interactive[/] for first-time setup)."
     )
 
 
@@ -145,8 +152,6 @@ def _offer_engram_install() -> None:
     import shutil
     import subprocess
 
-    from rich.status import Status
-
     # Prefer pipx so the `engram` CLI lands on PATH (detect_engram looks for it);
     # fall back to pip in the current interpreter.
     cmd = (
@@ -156,9 +161,7 @@ def _offer_engram_install() -> None:
     )
     console.print(f"[dim]$ {' '.join(cmd)}[/]")
     try:
-        with Status(
-            "Installing Engram...", console=getattr(console, "_console", None), spinner="dots"
-        ):
+        with console.status("Installing Engram..."):
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     except subprocess.TimeoutExpired:
         console.print("[red]Install timed out.[/] Try [cyan]pipx install engram[/] manually.")
@@ -199,7 +202,7 @@ def _run_doctor() -> None:
         from opencontext_core.doctor.checks import run_doctor
         from opencontext_core.runtime import OpenContextRuntime
 
-        with console.status("[cyan]Running health checks...[/]", spinner="dots"):
+        with console.status("Running health checks..."):
             config_path = Path("opencontext.yaml")
             runtime = OpenContextRuntime(
                 config_path=str(config_path) if config_path.exists() else None,
@@ -265,7 +268,7 @@ def _run_verified_context() -> None:
         runtime = OpenContextRuntime(
             config_path=str(config_path) if config_path.exists() else None,
         )
-        with console.status("[cyan]Building verified context...[/]", spinner="dots"):
+        with console.status("Building verified context..."):
             result = runtime.verify_context(VerifiedContextRequest(query=query))
     except Exception as exc:
         console.error(f"Verified context failed: {exc}")
@@ -382,7 +385,7 @@ def _run_uninstall() -> None:
 
     project_ok = False
     project_err = ""
-    with console.status("[cyan]Removing project files...[/]", spinner="dots"):
+    with console.status("Removing project files..."):
         try:
             from opencontext_cli.main import _clean
 
@@ -399,7 +402,7 @@ def _run_uninstall() -> None:
 
     global_ok = False
     global_items: list[Any] = []
-    with console.status("[cyan]Removing global installation state...[/]", spinner="dots"):
+    with console.status("Removing global installation state..."):
         try:
             from opencontext_core.configurator import KNOWN_AGENTS, Configurator
 

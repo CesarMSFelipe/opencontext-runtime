@@ -17,6 +17,7 @@ def test_local_scope_writes_stack_block(tmp_path: Path) -> None:
     assert "<!-- opencontext:stack:start -->" in body
     assert "### Python" in body
     assert report.get("stack_standards") == ["python"]
+    assert _maybe_write_stack_standards(str(tmp_path), "local", report) == []
 
 
 def test_global_scope_does_not_write_project_file(tmp_path: Path) -> None:

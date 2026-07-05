@@ -134,6 +134,6 @@ def test_verified_mutation_completes_via_runner(tmp_path: Path) -> None:
     result = OCFlowRunner(root=tmp_path).run(
         "Fix failing test", lane=Lane.FAST, requested_edits=[edit]
     )
-    assert result.status == "completed"
+    assert result.status == "needs_verification"
     assert result.mutation_required is True
     assert (tmp_path / "fix.py").exists()

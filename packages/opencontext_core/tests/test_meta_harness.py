@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.harness.meta import MetaHarnessCheck, MetaHarnessReport, MetaHarnessScanner
 
 
@@ -161,8 +163,12 @@ class TestKgSubstrateCheckIsBehavioral:
         conn.commit()
         conn.close()
 
-    def test_substrate_check_passes_with_real_schema_db(self, tmp_path: Path) -> None:
+    def test_substrate_check_passes_with_real_schema_db(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """_check_context_substrate must pass and report non-null hash when DB is populated."""
+        # Use local mode so the config-driven resolver finds the provisioned DB.
+        monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
         self._provision_real_schema_db(tmp_path)
         scanner = MetaHarnessScanner(root=tmp_path)
         passed, explanation = scanner._check_context_substrate()
@@ -226,6 +232,8 @@ class TestKgSnapshotCheckIsBehavioral:
 
     def test_empty_kg_db_fails(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
+        # Use local mode so the resolver finds the DB at the expected path.
+        monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
         self._make_db(tmp_path / ".storage" / "opencontext" / "context_graph.db", 0)
         passed, explanation = MetaHarnessScanner(root=tmp_path)._check_kg_snapshot_path()
         assert passed is False
@@ -233,11 +241,16 @@ class TestKgSnapshotCheckIsBehavioral:
 
     def test_missing_kg_fails(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
         passed, _ = MetaHarnessScanner(root=tmp_path)._check_kg_snapshot_path()
         assert passed is False
 
     def test_populated_kg_db_passes(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
+        # Use local mode so resolve_active_storage_path returns the local path
+        # where we created the test DB (C1: migrated from pinned StorageMode.local
+        # to config-driven resolver).
+        monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
         self._make_db(tmp_path / ".storage" / "opencontext" / "context_graph.db", 3)
         passed, explanation = MetaHarnessScanner(root=tmp_path)._check_kg_snapshot_path()
         assert passed is True

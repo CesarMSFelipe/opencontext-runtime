@@ -38,6 +38,12 @@ dev:
 test:
 	$(PYTEST) -q
 
+test-sdd:
+	$(PYTEST) packages/opencontext_sdd/tests/ -q
+
+test-memory:
+	$(PYTEST) packages/opencontext_memory/tests/ -q
+
 lint:
 	$(RUFF) check .
 

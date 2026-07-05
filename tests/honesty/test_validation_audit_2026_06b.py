@@ -12,6 +12,16 @@ from pathlib import Path
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _local_storage_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin OPENCONTEXT_STORAGE_MODE=local so resolve_active_storage_path resolves
+    relative to tmp-created roots instead of the global user storage path.
+
+    Same pattern as ff5673a applied to tests/core/test_context_substrate.py."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
+
+
 # ---------------------------------------------------------------------------
 # T1: _install_dry_run flag precedence
 # ---------------------------------------------------------------------------

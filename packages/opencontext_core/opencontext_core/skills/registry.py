@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from dataclasses import dataclass as _dc
 from dataclasses import field as _field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 from opencontext_core.registries.base import Registry, RegistryNotFound
 from opencontext_core.registries.loader import load_defs_from_dir
 from opencontext_core.skills.builtins import builtins_dir
@@ -323,7 +324,7 @@ def scan_skills(project_root: Path) -> list[SkillEntryV2]:
 
     for search_dir in [
         project_root / "skills",
-        project_root / ".opencontext" / "skills",
+        resolve_workspace_path(project_root, StorageMode.local) / "skills",
     ]:
         if search_dir.is_dir():
             for p in sorted(search_dir.rglob("*.skill.md")):
@@ -346,7 +347,7 @@ def scan_skills(project_root: Path) -> list[SkillEntryV2]:
 def refresh(project_root: Path, force: bool = False) -> Path:
     """Write .opencontext/skill-registry.md and return the path."""
     entries = scan_skills(project_root)
-    out_dir = project_root / ".opencontext"
+    out_dir = resolve_workspace_path(project_root, StorageMode.local)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "skill-registry.md"
     lines = ["# Skill Registry", "", f"_Generated from {len(entries)} skill files._", ""]
@@ -434,3 +435,37 @@ class SkillRegistryV2(Registry[SkillDefinition]):
         for defn in load_defs_from_dir(builtins_dir(), SkillDefinition):
             registry.register(defn)
         return registry
+
+
+# ---------------------------------------------------------------------------
+# match_skills Protocol — re-export from opencontext_sdd when available
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class MatchSkillsFn(Protocol):
+    """Signature that both core and sdd match_skills implement."""
+
+    def __call__(
+        self,
+        entries: list[Any],
+        keywords: list[str] | None = None,
+        *,
+        name: str | None = None,
+    ) -> list[Any]: ...
+
+
+def match_skills_v2(
+    entries: list[Any], keywords: list[str] | None = None, *, name: str | None = None
+) -> list[Any]:
+    """Delegate to ``opencontext_sdd.skill_registry.match_skills`` when installed.
+
+    Falls back to the core's legacy match_skills when the v2 package is
+    not available.
+    """
+    try:
+        from opencontext_sdd.skill_registry import match_skills as _v2
+
+        return _v2(entries, keywords=keywords, name=name)
+    except ImportError:
+        return match_skills(entries, list(entries), keywords or [])

@@ -13,12 +13,12 @@ import pytest
 
 from opencontext_core.config import SecurityMode, load_config
 from opencontext_core.onboarding.service import OnboardingOptions, OnboardingService
-from opencontext_core.onboarding.wizard import OnboardingWizard
+from opencontext_core.onboarding.wizard import InteractiveOnboardingWizard
 
 
 def test_wizard_security_choices_are_valid_enum_values() -> None:
     """Every security choice the wizard can return must be a SecurityMode value."""
-    wizard = OnboardingWizard(root=".")
+    wizard = InteractiveOnboardingWizard(root=".")
     valid = {m.value for m in SecurityMode}
     choices = wizard.security_mode_choices()
     assert choices, "wizard exposed no security-mode choices"
@@ -28,7 +28,7 @@ def test_wizard_security_choices_are_valid_enum_values() -> None:
 
 def test_wizard_template_choices_are_valid() -> None:
     """Template choices must not include the hyphenated 'air-gapped' enum mismatch."""
-    wizard = OnboardingWizard(root=".")
+    wizard = InteractiveOnboardingWizard(root=".")
     templates = wizard.template_choices()
     assert "air-gapped" not in templates
     assert "air_gapped" in templates
@@ -36,7 +36,7 @@ def test_wizard_template_choices_are_valid() -> None:
 
 def test_wizard_output_round_trips_through_load_config(tmp_path: Path) -> None:
     """A config written by the wizard (air-gapped) must load without raising."""
-    wizard = OnboardingWizard(root=tmp_path)
+    wizard = InteractiveOnboardingWizard(root=tmp_path)
     wizard.run(non_interactive=True, template="air_gapped", security_mode="air_gapped")
 
     config_path = tmp_path / "opencontext.yaml"

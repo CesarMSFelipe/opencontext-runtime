@@ -60,10 +60,12 @@ def test_setup_mcp_writes_mcp_config_entry(tmp_path: Path, monkeypatch: Any) -> 
         )
     )
 
-    mcp_path = home / ".config" / "opencode" / "mcp.json"
+    # OpenCode's native config: ``opencode.json`` with a root ``mcp`` key.
+    # (The historical ``mcp.json``/``mcpServers`` file is one OpenCode never reads.)
+    mcp_path = home / ".config" / "opencode" / "opencode.json"
     assert mcp_path.exists(), "MCP config was not written for the detected agent target"
     data = json.loads(mcp_path.read_text(encoding="utf-8"))
-    assert "opencontext" in data.get("mcpServers", {})
+    assert "opencontext" in data.get("mcp", {})
 
 
 def test_setup_mcp_false_does_not_configure(tmp_path: Path, monkeypatch: Any) -> None:

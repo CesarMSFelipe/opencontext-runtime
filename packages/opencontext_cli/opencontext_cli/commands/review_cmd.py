@@ -199,8 +199,6 @@ def handle_review(args: Any) -> None:
     """Handle review command."""
     import sys
 
-    from rich.status import Status
-
     from opencontext_cli.output import eprint
     from opencontext_core.dx.console_styles import console
 
@@ -226,10 +224,7 @@ def handle_review(args: Any) -> None:
 
     reports: list[dict[str, Any]] = []
 
-    # Drive the spinner through the brand console's underlying rich console so the
-    # interleaved status lines share one render surface.
-    spinner_console = getattr(console, "_console", None)
-    with Status("[bold green]Spawning reviewers...", console=spinner_console):
+    with console.status("Spawning reviewers..."):
         for role in roles:
             prompt = generate_role_prompt(role, context)
             report = _run_reviewer(role, prompt, context=context, config=config)

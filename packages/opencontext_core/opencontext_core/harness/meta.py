@@ -13,6 +13,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from opencontext_core.config_resolver import (
+    resolve_active_storage_path,
+    resolve_active_workspace_path,
+)
+
 
 @dataclass
 class MetaHarnessCheck:
@@ -162,7 +167,7 @@ class MetaHarnessScanner:
         import sqlite3
 
         cwd = self._root
-        db = cwd / ".storage" / "opencontext" / "context_graph.db"
+        db = resolve_active_storage_path(cwd) / "context_graph.db"
         if db.exists():
             try:
                 conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
@@ -176,7 +181,7 @@ class MetaHarnessScanner:
                 return True, f"KG populated: {count} node(s) in {db!s}"
             return False, "KG db exists but is empty — run 'opencontext index .' first"
 
-        json_path = cwd / ".opencontext" / "knowledge_graph.json"
+        json_path = resolve_active_workspace_path(cwd) / "knowledge_graph.json"
         if json_path.exists():
             try:
                 data = json.loads(json_path.read_text(encoding="utf-8"))
@@ -189,8 +194,8 @@ class MetaHarnessScanner:
 
         return (
             False,
-            "No KG artifact found (expected .storage/opencontext/context_graph.db "
-            "or .opencontext/knowledge_graph.json) — run 'opencontext index .' first",
+            f"No KG artifact found (expected {db} or {json_path}) "
+            "— run 'opencontext index .' first",
         )
 
     def _check_context_substrate(self) -> tuple[bool, str]:

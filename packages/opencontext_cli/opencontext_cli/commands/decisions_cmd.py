@@ -82,11 +82,18 @@ def add_decisions_parser(subparsers: Any) -> None:
     decisions_subs = decisions_parser.add_subparsers(dest="decisions_action")
 
     list_p = decisions_subs.add_parser("list", help="List runs that have recorded decisions.")
+    list_p.add_argument("--root", default=None, help="Project root to scope the search.")
     list_p.add_argument("--json", action="store_true", help="JSON output.")
 
     show_p = decisions_subs.add_parser("show", help="Show a run's recorded decisions.")
     show_p.add_argument("run_id", help="Run ID.")
+    show_p.add_argument("--root", default=None, help="Project root to scope the search.")
     show_p.add_argument("--json", action="store_true", help="JSON output.")
+
+    explain_p = decisions_subs.add_parser("explain", help="Explain per-decision details for a run.")
+    explain_p.add_argument("run_id", help="Run ID.")
+    explain_p.add_argument("--root", default=None, help="Project root to scope the search.")
+    explain_p.add_argument("--json", action="store_true", help="JSON output.")
 
 
 def handle_decisions(args: Any) -> None:
@@ -141,5 +148,36 @@ def handle_decisions(args: Any) -> None:
                 console.print(f"    alternatives: {', '.join(drow['alternatives'])}")
         return
 
-    eprint("Usage: opencontext decisions [list|show]")
+    if action == "explain":
+        explain_dir = next((d for d in _run_dirs(store) if d.name == args.run_id), None)
+        if explain_dir is None:
+            eprint(f"Run not found: {args.run_id}")
+            sys.exit(1)
+        decision_rows = _decisions_for(explain_dir) or []
+        if getattr(args, "json", False):
+            print(json.dumps(decision_rows, indent=2))  # pure JSON to stdout
+            return
+        console.header(f"Explain: {args.run_id}")
+        if not decision_rows:
+            console.info(f"Run {args.run_id}: no decisions recorded.")
+            return
+        for drow in decision_rows:
+            kind = drow.get("kind", "?")
+            selected = drow.get("selected", "?")
+            governed = drow.get("governed_by", "") or ""
+            confidence = drow.get("confidence")
+            inputs = drow.get("inputs") or {}
+            alternatives = drow.get("alternatives") or []
+            console.print(f"- {kind}: {selected}")
+            if governed:
+                console.print(f"    governed_by: {governed}")
+            if confidence is not None:
+                console.print(f"    confidence: {confidence}")
+            if inputs:
+                console.print(f"    inputs: {inputs}")
+            if alternatives:
+                console.print(f"    alternatives: {', '.join(str(a) for a in alternatives)}")
+        return
+
+    eprint("Usage: opencontext decisions [list|show|explain]")
     sys.exit(1)

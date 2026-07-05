@@ -8,7 +8,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import yaml
 
@@ -44,6 +44,7 @@ from opencontext_cli.commands.memory_benchmark_cmd import (
     add_memory_benchmark_parser,
     handle_memory_benchmark,
 )
+from opencontext_cli.commands.memory_v2_cmd import add_memory_v2_parser, handle_memory_v2
 from opencontext_cli.commands.metaharness_cmd import (
     handle_doctor_metaharness,
 )
@@ -71,6 +72,7 @@ from opencontext_cli.commands.run_cmd import (
     handle_run_inspect,
     handle_simulate,
 )
+from opencontext_cli.commands.sdd_cmd import add_sdd_parser, handle_sdd
 from opencontext_cli.commands.session_cmd import add_session_parser, handle_session
 from opencontext_cli.commands.setup_cmd import add_setup_parser, handle_setup
 from opencontext_cli.commands.skill_cmd import add_skill_parser, handle_skill
@@ -96,6 +98,7 @@ from opencontext_core.dx.console_styles import BrandConsole, console
 from opencontext_core.dx.instructions import import_instructions
 from opencontext_core.dx.security_reports import scan_project
 from opencontext_core.dx.tokens import build_token_report
+from opencontext_core.dx.wizard_frame import WizardStep
 from opencontext_core.errors import OpenContextError
 from opencontext_core.evaluation import (
     BasicEvaluator,
@@ -151,6 +154,9 @@ from opencontext_core.safety.redaction import SinkGuard
 from opencontext_core.update import EcosystemUpdateChecker, UpdateChecker
 from opencontext_core.workspace.layout import ensure_workspace
 
+if TYPE_CHECKING:
+    from opencontext_core.agentic.config import AgenticFlowConfig
+
 try:
     from opencontext_profiles import first_party_profiles
 except ModuleNotFoundError:
@@ -201,13 +207,17 @@ def _config_profile_names() -> list[str]:
 
 
 def _get_version() -> str:
-    """Get installed version via importlib.metadata, with fallback."""
+    """Get installed version, preferring bundled metadata inside zipapps."""
+    from opencontext_cli._version import VERSION
+
+    if ".pyz/" in __file__:
+        return VERSION
     try:
         import importlib.metadata
 
         return importlib.metadata.version("opencontext-cli")
     except (importlib.metadata.PackageNotFoundError, ImportError):
-        return "0.0.0"
+        return VERSION
 
 
 __version__ = _get_version()
@@ -267,6 +277,14 @@ def _force_utf8_output() -> None:
 def main() -> None:
     """CLI entry point."""
     _force_utf8_output()
+    # The runtime emits the legacy-state notice via BOTH warnings.warn (kept for
+    # programmatic detection / tests) AND the opencontext logger. In the CLI we
+    # only want the single clean logger line — suppressing the raw warning display
+    # stops Python from dumping an internal source path (main.py:NNNN: UserWarning)
+    # over the user. Tests still catch it via their own catch_warnings(record=True).
+    import warnings as _warnings
+
+    _warnings.filterwarnings("ignore", message="legacy local state detected.*")
     try:
         from opencontext_core.i18n import load_language_from_config
 
@@ -333,7 +351,7 @@ def _print_suggestion(command: str) -> None:
         err_console.dim("Run 'opencontext --help' for usage information.")
 
 
-def _check_first_run(command: str) -> None:
+def _check_first_run(command: str, args: argparse.Namespace | None = None) -> None:
     """Check if this is a first run and offer to launch the wizard."""
     try:
         root = Path.cwd()
@@ -347,11 +365,19 @@ def _check_first_run(command: str) -> None:
     if not sys.stdout.isatty():
         return
 
-    from rich.console import Console
-    from rich.panel import Panel
+    # Machine output and explicit no-prompt runs must never block on the offer:
+    # a pty-allocated CI/agent session still has a TTY on stdout, but --json
+    # stdout must stay pure and --yes/--non-interactive promise zero prompts.
+    if args is not None and (
+        getattr(args, "json", False)
+        or getattr(args, "json_out", False)
+        or getattr(args, "yes", False)
+        or getattr(args, "non_interactive", False)
+    ):
+        return
 
-    fr_console = Console(file=sys.stderr)
-    banner = Panel(
+    # Brand chrome on stderr (err_console) so JSON stdout stays clean.
+    err_console.panel(
         "[bold cyan]Welcome to OpenContext![/]\n\n"
         "It looks like this is your first time using OpenContext in this project.\n"
         "The setup wizard will help you configure:\n"
@@ -360,10 +386,7 @@ def _check_first_run(command: str) -> None:
         "  • AI coding agent integrations\n"
         "  • Project indexing",
         title="First Run",
-        border_style="cyan",
-        padding=(1, 2),
     )
-    fr_console.print(banner)
 
     try:
         from opencontext_core import prompts
@@ -373,13 +396,13 @@ def _check_first_run(command: str) -> None:
         run_wizard = False
 
     if run_wizard:
-        from opencontext_core.onboarding.wizard import OnboardingWizard
+        from opencontext_core.onboarding.wizard import InteractiveOnboardingWizard
 
-        wizard = OnboardingWizard(root=root)
+        wizard = InteractiveOnboardingWizard(root=root)
         wizard.run()
-        fr_console.print("[green]Setup complete! Run `opencontext doctor` to verify.[/]")
+        err_console.success("Setup complete! Run `opencontext doctor` to verify.")
     else:
-        fr_console.print("[dim]Run `opencontext init` anytime to set up your project.[/]")
+        err_console.dim("Run `opencontext init` anytime to set up your project.")
 
 
 def _notify_outdated(args: argparse.Namespace) -> None:
@@ -419,7 +442,9 @@ class _DeprecationAwareParser(argparse.ArgumentParser):
             "governance",
             "evidence",
             # v1.0 removals:
-            "sdd",
+            # NOTE: "sdd" intentionally omitted — it is a live subcommand registered
+            # via add_sdd_parser(). Keeping it here would cause argparse errors on
+            # valid sdd sub-flags (e.g. --json) to print "'sdd' has been removed."
             "check",
             "packs",
             "cost",
@@ -590,6 +615,7 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="openspec_mode",
         help="OpenSpec artifact persistence mode.",
     )
+    install_parser.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
     install_parser.add_argument(
         "--budget",
         default=None,
@@ -922,6 +948,30 @@ def _build_parser() -> argparse.ArgumentParser:
     add_kg_parser(subparsers)
     # ── Config, Plugins & Stack ───────────────────────────────────────
     add_config_parser(subparsers)
+    # storage: storage location management
+    _storage_parser = subparsers.add_parser(
+        "storage",
+        help="Manage OpenContext storage location.",
+        description="Commands for managing where OpenContext stores project state.",
+    )
+    _storage_sub = _storage_parser.add_subparsers(dest="storage_command")
+    _migrate_parser = _storage_sub.add_parser(
+        "migrate",
+        help="Move legacy in-repo state (.storage/opencontext, .opencontext) to the user XDG dir.",
+    )
+    _migrate_parser.add_argument(
+        "project",
+        nargs="?",
+        default=".",
+        help="Project root to migrate (default: current directory).",
+    )
+    _migrate_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        dest="dry_run",
+        help="Print what would be moved without actually moving anything.",
+    )
     add_plugin_parser(subparsers)
     add_setup_parser(subparsers)
     add_uninstall_parser(subparsers)
@@ -1012,8 +1062,16 @@ def _build_parser() -> argparse.ArgumentParser:
     mcp_parser = subparsers.add_parser("mcp", help="Start MCP server for agent integration.")
     mcp_parser.add_argument(
         "--db-path",
-        default=".storage/opencontext/context_graph.db",
-        help="Path to knowledge graph database.",
+        default=None,
+        help="Path to knowledge graph database (default: resolved from storage config).",
+    )
+    mcp_parser.add_argument(
+        "--workflow-tools",
+        action="store_true",
+        help=(
+            "Also allowlist opencontext_run and the session step tools "
+            "(agent-driven OC Flow / SDD runs). Symbol-write tools stay opt-in."
+        ),
     )
     security_parser = subparsers.add_parser("security", help="Security commands.")
     security_sub = security_parser.add_subparsers(dest="security_command", required=True)
@@ -1072,6 +1130,7 @@ def _build_parser() -> argparse.ArgumentParser:
     cache_warm = cache_sub.add_parser("warm")
     cache_warm.add_argument("--workflow", default="code-review")
 
+    add_sdd_parser(subparsers)
     harness_parser = subparsers.add_parser(
         "harness",
         help="Run OpenContext harness workflows.",
@@ -1081,6 +1140,38 @@ def _build_parser() -> argparse.ArgumentParser:
             "phases (explore -> propose -> apply -> verify -> review -> archive) "
             "and persists results to .opencontext/runs/<run_id>/."
         ),
+    )
+
+    agent_harness_parser = subparsers.add_parser(
+        "agent-harness",
+        help="Agent/harness readiness gates (PR-AHE-009 / final-acceptance-gates).",
+        description=(
+            "Evaluate the agent/harness 1.0 readiness gate set: every named "
+            "gate (mcp-oc-flow-sampling-bugfix, mcp-oc-flow-no-executor, "
+            "mcp-sdd-junk-output-blocked, mcp-sdd-valid-output, tdd-strict-gate, "
+            "kg-call-graph-basic-python, context-pack-truthfulness, "
+            "memory-runtime-backed, engram-fake-routing, agent-docs-parity, "
+            "quality-semantics) must MET for ``ready=true``. Mirrors the "
+            "release acceptance shape — JSON-only output, exit 1 if any gate "
+            "is FAILED, exit 0 only when all gates are MET."
+        ),
+    )
+    agent_harness_sub = agent_harness_parser.add_subparsers(
+        dest="agent_harness_command", required=True
+    )
+    agent_harness_acceptance = agent_harness_sub.add_parser(
+        "acceptance",
+        help="Evaluate every named gate and emit a JSON readiness verdict.",
+    )
+    agent_harness_acceptance.add_argument(
+        "--root",
+        default=".",
+        help="Project root to evaluate against (default: current directory).",
+    )
+    agent_harness_acceptance.add_argument(
+        "--report",
+        default=None,
+        help="Optional path to also persist the verdict JSON.",
     )
     harness_sub = harness_parser.add_subparsers(dest="harness_command", required=True)
     harness_run = harness_sub.add_parser(
@@ -1241,8 +1332,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "memory", help="Progressive memory commands.", formatter_class=_PublicHelpFormatter
     )
     memory_sub = memory_parser.add_subparsers(dest="memory_command", required=True)
-    memory_sub.add_parser("init", help="Create context repository layout.")
-    memory_sub.add_parser("list", help="List local memory.")
+    add_memory_v2_parser(memory_sub)
+    _mem_init = memory_sub.add_parser("init", help="Create context repository layout.")
+    _mem_init.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
+    _mem_list = memory_sub.add_parser("list", help="List local memory.")
+    _mem_list.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
     memory_search = memory_sub.add_parser("search", help="Search local memory.")
     memory_search.add_argument("query")
     memory_expand = memory_sub.add_parser("expand", help="Expand a memory item by id.")
@@ -1319,6 +1413,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     status_parser = subparsers.add_parser("status", help="Show project status.")
     status_parser.add_argument("root", nargs="?", default=".", help="Project root.")
+    status_parser.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
 
     add_git_parser(subparsers)
     add_ci_check_parser(subparsers)
@@ -1419,7 +1514,7 @@ def _dispatch(args: argparse.Namespace) -> None:
 
     # First-run detection for commands that can benefit from onboarding
     if command and command not in ("init", "install", "onboard", "--help", None):
-        _check_first_run(command)
+        _check_first_run(command, args)
 
     if command is None:
         # No command — launch the main TUI menu
@@ -1504,6 +1599,12 @@ def _dispatch(args: argparse.Namespace) -> None:
         return
     if command == "cache":
         _cache(args, args.config)
+        return
+    if command == "sdd":
+        handle_sdd(args)
+        return
+    if command == "agent-harness":
+        _agent_harness(args)
         return
     if command == "harness":
         _harness(
@@ -1606,10 +1707,13 @@ def _dispatch(args: argparse.Namespace) -> None:
         handle_health(args)
         return
     if command == "status":
-        _status(getattr(args, "root", "."))
+        _status(getattr(args, "root", "."), json_output=getattr(args, "json", False))
         return
     if command == "config":
         handle_config(args)
+        return
+    if command == "storage":
+        _storage(args)
         return
     if command == "skill":
         handle_skill(args)
@@ -1632,7 +1736,9 @@ def _dispatch(args: argparse.Namespace) -> None:
         handle_receipt(args)
         return
     if command == "run":
-        handle_run_exec(args)
+        _rc = handle_run_exec(args)
+        if _rc:
+            raise SystemExit(_rc)
         return
     if command == "runs":
         handle_run_inspect(args)
@@ -1695,6 +1801,7 @@ def _dispatch(args: argparse.Namespace) -> None:
         else:
             from opencontext_core.skills.registry import refresh as _skill_refresh
 
+            console.header("Skill Registry")
             _sr_out = _skill_refresh(_sr_root)
             console.success(f"Skill registry written: {_sr_out}")
         return
@@ -1764,7 +1871,7 @@ def _dispatch(args: argparse.Namespace) -> None:
             # Always index an explicit path; for `.` index only when there is no
             # manifest yet, so a fresh checkout yields a real pack instead of an
             # empty one (without re-indexing an already-indexed project).
-            manifest = pack_root / ".storage" / "opencontext" / "project_manifest.json"
+            manifest = runtime.storage_path / "project_manifest.json"
             if args.root != "." or not manifest.exists():
                 runtime.index_project(pack_root)
         _pack(
@@ -1823,7 +1930,10 @@ def _dispatch(args: argparse.Namespace) -> None:
     elif command == "provider":
         _provider_simulate(args.provider, args.classification, runtime, args.mode)
     elif command == "mcp":
-        _mcp_serve(getattr(args, "db_path", ".storage/opencontext/context_graph.db"))
+        _mcp_serve(
+            getattr(args, "db_path", None) or str(runtime.storage_path / "context_graph.db"),
+            workflow_tools=getattr(args, "workflow_tools", False),
+        )
     else:
         _unreachable(command)
 
@@ -1857,7 +1967,7 @@ def _init(
 
     if is_interactive:
         # Launch the full wizard
-        from opencontext_core.onboarding.wizard import OnboardingWizard
+        from opencontext_core.onboarding.wizard import InteractiveOnboardingWizard
 
         kwargs: dict[str, Any] = {}
         if security_mode:
@@ -1867,7 +1977,7 @@ def _init(
         if agent:
             kwargs["agents"] = [a.strip() for a in agent.split(",") if a.strip()]
 
-        wizard = OnboardingWizard(root=root)
+        wizard = InteractiveOnboardingWizard(root=root)
         wizard.run(non_interactive=False, **kwargs)
         if profile:
             _apply_profile_to_config(root / "opencontext.yaml", profile)
@@ -1932,19 +2042,27 @@ def _runtime(config_path: str) -> OpenContextRuntime:
 def _runtime_for_root(config_path: str, root: str | Path) -> OpenContextRuntime:
     """Build a runtime whose storage resolves under the indexed *root*, not cwd.
 
-    ``index <root>`` must persist the knowledge graph + manifest under
-    ``<root>/.storage/opencontext``. The default runtime storage path is relative
-    (``.storage/opencontext``), so when ``index`` runs from a different cwd the
-    graph lands under that cwd instead of the project, and a later
-    ``knowledge-graph status`` run from the project finds nothing. Anchoring the
-    storage path to the resolved root fixes that; ``index .`` is unchanged because
-    cwd == root there.
+    ``index <root>`` must persist the knowledge graph + manifest under the path
+    determined by ``StorageConfig`` (user-dir XDG by default, or in-repo when
+    ``mode=local``).  The config is loaded from *config_path* so that the
+    storage mode declared in ``opencontext.yaml`` is honoured; the root passed
+    to the runtime overrides ``project_index.root`` so the resolver computes the
+    correct per-project XDG path even when ``index`` runs from a different cwd.
     """
+    from opencontext_core.config import load_config_or_defaults
+
     resolved = Path(config_path)
+    cfg = load_config_or_defaults(resolved if resolved.exists() else None)
+    # Anchor project_index.root to the explicit root so the storage resolver
+    # computes the correct XDG project path (sha256 of the resolved root),
+    # even when ``index <root>`` is run from a different cwd.
+    abs_root = str(Path(root).resolve())
+    cfg = cfg.model_copy(
+        update={"project_index": cfg.project_index.model_copy(update={"root": abs_root})}
+    )
     return OpenContextRuntime(
-        config_path=str(resolved) if resolved.exists() else None,
+        config=cfg,
         technology_profiles=first_party_profiles(),
-        storage_path=Path(root).resolve() / ".storage" / "opencontext",
     )
 
 
@@ -1995,30 +2113,80 @@ _SAMPLING_CLIENTS = {
 }
 
 
+# Detail cards for the install wizard steps — the shared wizard frame renders
+# these in the config-TUI info-pane format (Current/Effect/Recommended/Risk/CLI).
+_INSTALL_WIZARD_STEPS: dict[str, WizardStep] = {
+    "language": WizardStep(
+        title="Interface language",
+        effect="Sets the CLI/TUI copy language; writes ui_language to opencontext.yaml.",
+        recommended="Your team language.",
+        risk="Logs and artifacts may still contain English schema fields.",
+        cli="opencontext config set ui_language <en|es>",
+    ),
+    "editor": WizardStep(
+        title="AI coding editor",
+        effect="Chooses which agent gets MCP config, instructions, and persona files.",
+        recommended="The agent CLI you actually use.",
+        risk="Only the selected editor is wired now; add others via opencontext setup.",
+        cli="opencontext install --agent <agent>",
+    ),
+    "model_routing": WizardStep(
+        title="Model routing (SDD phases)",
+        effect="Routes explore/propose/spec/design/tasks/apply/verify to a model profile.",
+        recommended="default — your client's model for every phase.",
+        risk="premium may cost more; cheap may reduce design quality.",
+        cli="opencontext config set sdd.model_profile <profile>",
+    ),
+    "provider": WizardStep(
+        title="LLM provider key",
+        effect="Sets the chosen provider API key for this shell session only.",
+        recommended="Skip when your editor's model runs the phases (MCP sampling).",
+        risk="The key is never written to disk; add it to your shell profile to keep it.",
+        cli="export <PROVIDER>_API_KEY=<key>",
+    ),
+}
+
+
 def _install_wizard(args: Any, console: Any) -> None:
-    """Interactive wizard: language → editor → API key."""
-    from rich.console import Console as _Console
+    """Interactive wizard: language → editor → model routing → API key.
 
+    Every step renders the shared wizard frame (brand logo + live status line +
+    progress + detail card) so install carries the same aspect as the config TUI.
+    """
     from opencontext_core import prompts
+    from opencontext_core.dx.wizard_frame import render_frame, wizard_status_line
 
-    _c = _Console()
+    # Interstitial prints share the caller's brand console; only the prompts
+    # themselves come from opencontext_core.prompts.
+    _c = console
     root = Path(getattr(args, "root", "."))
+    _total = len(_INSTALL_WIZARD_STEPS)
+    _status = wizard_status_line(root)
 
     # Step 1 — Language
     try:
         from opencontext_core.i18n import set_language, t
 
+        cfg_path = root / "opencontext.yaml"
+        cfg: dict[str, Any] = {}
+        current_lang = "en"
+        if cfg_path.exists():
+            import yaml as _yaml
+
+            cfg = _yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+            current_lang = str(cfg.get("ui_language") or "en")
+        render_frame(
+            1, _total, _INSTALL_WIZARD_STEPS["language"].with_current(current_lang), _status
+        )
         lang = prompts.select(
             t("onboarding.language_prompt"),
             [("en", "English (en)"), ("es", "Español (es)")],
             default="en",
         )
         set_language(lang)
-        cfg_path = root / "opencontext.yaml"
         if cfg_path.exists():
             import yaml as _yaml
 
-            cfg = _yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
             cfg["ui_language"] = lang
             cfg_path.write_text(_yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
     except Exception:
@@ -2032,7 +2200,7 @@ def _install_wizard(args: Any, console: Any) -> None:
         def _t(k: str, **kw: str) -> str:  # type: ignore[misc]
             return k
 
-    _c.print()
+    render_frame(2, _total, _INSTALL_WIZARD_STEPS["editor"], _status)
     _EDITORS = [
         ("claude-code", "Claude Code (Anthropic)"),
         ("cursor", "Cursor"),
@@ -2055,9 +2223,10 @@ def _install_wizard(args: Any, console: Any) -> None:
         except Exception:
             pass
 
-    # Step 2b — model routing across SDD phases. 'default' = your client's model
+    # Step 3 — model routing across SDD phases. 'default' = your client's model
     # everywhere (no surprise model picks); presets route per phase/persona and
     # can be tuned later with `opencontext models set-persona`.
+    render_frame(3, _total, _INSTALL_WIZARD_STEPS["model_routing"], _status)
     chosen_profile = prompts.select(
         "Model routing across SDD phases?",
         [
@@ -2076,15 +2245,20 @@ def _install_wizard(args: Any, console: Any) -> None:
         except Exception:
             pass
 
-    # Step 3 — API key (only if not already set and editor needs LLM)
+    # Step 4 — API key (only if not already set and editor needs LLM)
     try:
         from opencontext_core.providers.detect import detect_provider
 
         current = detect_provider()
         if current.source == "fallback":
-            _c.print()
-            _c.print("[bold]No LLM provider detected.[/bold]")
-            _c.print("Agentic phases (loop, spec, design) need a real LLM provider.")
+            render_frame(
+                4,
+                _total,
+                _INSTALL_WIZARD_STEPS["provider"].with_current("no provider detected"),
+                _status,
+            )
+            # The frame's info-pane card already states the effect/risk; no raw
+            # interstitial lines here — keep step 4 a clean single frame like 1-3.
             _PROVIDERS = [
                 ("ANTHROPIC_API_KEY", "Anthropic (Claude)"),
                 ("OPENAI_API_KEY", "OpenAI (GPT-4)"),
@@ -2102,7 +2276,7 @@ def _install_wizard(args: Any, console: Any) -> None:
                     import os
 
                     os.environ[pkey] = api_key.strip()
-                    _c.print(f"[green]✓[/] {pkey} set for this session.")
+                    _c.success(f"{pkey} set for this session.")
                     _c.print(
                         "[dim]To persist it, add it to your shell profile (e.g. ~/.zshrc).[/dim]"
                     )
@@ -2112,8 +2286,6 @@ def _install_wizard(args: Any, console: Any) -> None:
 
 def _print_agent_instructions(agents: list[Any], console: Any) -> None:
     """Print client-specific usage instructions after install."""
-    from rich.panel import Panel
-
     _INSTRUCTIONS = {
         "claude-code": (
             "Claude Code ready.\n"
@@ -2128,7 +2300,7 @@ def _print_agent_instructions(agents: list[Any], console: Any) -> None:
         ),
         "opencode": (
             "OpenCode ready.\n"
-            "OpenContext MCP configured at ~/.config/opencode/mcp.json\n"
+            "OpenContext MCP configured at ~/.config/opencode/opencode.json\n"
             "Use /context, /impact, /search commands in OpenCode."
         ),
         "codex": (
@@ -2144,13 +2316,15 @@ def _print_agent_instructions(agents: list[Any], console: Any) -> None:
         agent_id = agent.value if hasattr(agent, "value") else str(agent)
         msg = _INSTRUCTIONS.get(agent_id)
         if msg:
-            console.print(
-                Panel.fit(msg, title=f"[bold cyan]{agent_id}[/bold cyan]", border_style="cyan")
-            )
+            console.panel(msg, title=f"[bold]{agent_id}[/bold]", fit=True)
 
 
-def _install_dry_run(args: argparse.Namespace) -> None:
-    """Print the agentic install plan without making any changes."""
+def _build_agentic_cfg_from_args(args: argparse.Namespace) -> AgenticFlowConfig:
+    """Build an AgenticFlowConfig from CLI flags (shared between dry-run and real install).
+
+    Explicit flags take precedence over preset/default (flag > preset > default).
+    Returns an ``AgenticFlowConfig`` with only the explicitly requested values set.
+    """
     from opencontext_core.agentic.config import (
         AgenticFlowConfig,
         BudgetMode,
@@ -2159,7 +2333,6 @@ def _install_dry_run(args: argparse.Namespace) -> None:
         OpenSpecMode,
         PresetId,
     )
-    from opencontext_core.agentic.install_plan import build_install_plan, render_dry_run
     from opencontext_core.agentic.presets import preset_config
 
     preset_str = getattr(args, "preset", None)
@@ -2168,7 +2341,6 @@ def _install_dry_run(args: argparse.Namespace) -> None:
     else:
         cfg = AgenticFlowConfig()
 
-    # NOTE: Explicit flags take precedence over preset/default (flag > preset > default).
     overlay: dict[str, object] = {}
     if getattr(args, "memory_mode", None):
         overlay["memory_mode"] = MemoryMode(args.memory_mode)
@@ -2176,16 +2348,175 @@ def _install_dry_run(args: argparse.Namespace) -> None:
         overlay["budget_mode"] = BudgetMode(args.budget_mode)
     if getattr(args, "git_mode", None):
         overlay["git_mode"] = GitMode(args.git_mode)
-    if getattr(args, "openspec", None):
-        overlay["openspec_mode"] = OpenSpecMode(args.openspec)
+    if getattr(args, "openspec_mode", None):
+        overlay["openspec_mode"] = OpenSpecMode(args.openspec_mode)
     if overlay:
         cfg = cfg.model_copy(update=overlay)
 
+    return cfg
+
+
+def _apply_agentic_flags_to_yaml(yaml_path: Path, cfg: AgenticFlowConfig) -> None:
+    """Apply an AgenticFlowConfig overlay to an existing opencontext.yaml.
+
+    Only non-default flag values are written; default values are left unchanged so
+    a bare ``opencontext install`` with no flags is a no-op for all agentic keys.
+
+    YAML key mapping
+    ----------------
+    memory_mode  engram   → memory.provider=engram, memory.mode=engram
+    memory_mode  local    → memory.provider=local,  memory.mode=local
+    memory_mode  off      → memory.mode=off
+    budget_mode  strict   → context.budget_mode=strict
+    budget_mode  off      → context.budget_mode=off
+    openspec_mode full    → sdd.artifact_store.mode=openspec
+    openspec_mode minimal → sdd.artifact_store.mode=engram
+    git_mode stacked_prs  → sdd.delivery_strategy=auto-chain, sdd.chain_strategy=stacked-to-main
+    git_mode single_pr    → sdd.delivery_strategy=single-pr
+    """
+    import yaml as _yaml
+
+    from opencontext_core.agentic.config import BudgetMode, GitMode, MemoryMode, OpenSpecMode
+
+    if not yaml_path.exists():
+        return
+
+    data: dict[str, Any] = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+
+    # ── memory flags ────────────────────────────────────────────────────────
+    if cfg.memory_mode not in (MemoryMode.AUTO,):
+        memory = data.setdefault("memory", {})
+        if cfg.memory_mode == MemoryMode.ENGRAM:
+            memory["provider"] = "engram"
+            memory["mode"] = "engram"
+        elif cfg.memory_mode == MemoryMode.LOCAL:
+            memory["provider"] = "local"
+            memory["mode"] = "local"
+        elif cfg.memory_mode == MemoryMode.OFF:
+            memory["mode"] = "off"
+        # hybrid/engram_only handled via mode key only (provider stays at default)
+        elif cfg.memory_mode in (MemoryMode.HYBRID, MemoryMode.ENGRAM_ONLY):
+            memory["mode"] = str(cfg.memory_mode)
+
+    # ── budget mode ─────────────────────────────────────────────────────────
+    if cfg.budget_mode != BudgetMode.WARN:  # WARN is the YAML default
+        context = data.setdefault("context", {})
+        context["budget_mode"] = str(cfg.budget_mode)
+
+    # ── openspec mode → sdd.artifact_store.mode ─────────────────────────────
+    if cfg.openspec_mode != OpenSpecMode.OFF:
+        sdd = data.setdefault("sdd", {})
+        artifact_store = sdd.setdefault("artifact_store", {})
+        if cfg.openspec_mode == OpenSpecMode.FULL:
+            artifact_store["mode"] = "openspec"
+        elif cfg.openspec_mode == OpenSpecMode.MINIMAL:
+            artifact_store["mode"] = "engram"
+
+    # ── git mode → sdd delivery keys ─────────────────────────────────────────
+    if cfg.git_mode not in (GitMode.NONE, GitMode.LOCAL_BRANCH, GitMode.COMMIT_ONLY):
+        sdd = data.setdefault("sdd", {})
+        if cfg.git_mode == GitMode.STACKED_PRS:
+            sdd["delivery_strategy"] = "auto-chain"
+            sdd["chain_strategy"] = "stacked-to-main"
+        elif cfg.git_mode == GitMode.SINGLE_PR:
+            sdd["delivery_strategy"] = "single-pr"
+        elif cfg.git_mode == GitMode.PER_TASK_PRS:
+            sdd["delivery_strategy"] = "auto-chain"
+            sdd["chain_strategy"] = "feature-branch-chain"
+
+    yaml_path.write_text(_yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+
+
+def _install_dry_run(args: argparse.Namespace) -> None:
+    """Print the agentic install plan without making any changes."""
+    from opencontext_core.agentic.install_plan import build_install_plan, render_dry_run
+
+    cfg = _build_agentic_cfg_from_args(args)
     plan = build_install_plan(cfg)
     console.header("Install Plan (Dry Run)")
     # Payload is a pre-rendered multi-line plan — print raw so rich never tries to
     # parse stray brackets as markup.
     print(render_dry_run(plan))
+
+
+def _storage(args: argparse.Namespace) -> None:
+    """Dispatch storage sub-commands."""
+    storage_command = getattr(args, "storage_command", None)
+    if storage_command == "migrate":
+        _storage_migrate(
+            project=Path(getattr(args, "project", ".")),
+            dry_run=getattr(args, "dry_run", False),
+        )
+    else:
+        from opencontext_core.dx.console_styles import console as dx_console
+
+        dx_console.print(
+            "Usage: opencontext storage <command>\n\n"
+            "Available commands:\n"
+            "  migrate   Move legacy in-repo state to the user XDG directory"
+        )
+
+
+def _storage_migrate(project: Path, *, dry_run: bool = False) -> None:
+    """Move legacy in-repo state (.storage/opencontext, .opencontext) to the user XDG dir.
+
+    Idempotent: already-migrated or already-absent dirs are skipped gracefully.
+    Supports ``--dry-run`` to preview moves without executing them.
+    """
+    import shutil
+
+    from opencontext_core.dx.console_styles import console as dx_console
+    from opencontext_core.paths import (
+        StorageMode,
+        detect_legacy,
+        is_owned,
+        resolve_storage_path,
+        resolve_workspace_path,
+    )
+
+    root = project.resolve()
+    legacy = detect_legacy(root)
+
+    if legacy is None:
+        dx_console.print("[green]Nothing to migrate — no legacy in-repo state detected.[/]")
+        return
+
+    moves: list[tuple[Path, Path]] = []
+
+    if legacy.storage_path is not None and not is_owned(legacy.storage_path):
+        dest = resolve_storage_path(root, StorageMode.user)
+        moves.append((legacy.storage_path, dest))
+
+    if legacy.workspace_path is not None and not is_owned(legacy.workspace_path):
+        dest = resolve_workspace_path(root, StorageMode.user)
+        moves.append((legacy.workspace_path, dest))
+
+    if not moves:
+        dx_console.print("[green]Nothing to migrate — all detected dirs are already user-owned.[/]")
+        return
+
+    if dry_run:
+        dx_console.print("[yellow]Dry run — would perform the following moves:[/]")
+        for src, dst in moves:
+            dx_console.print(f"  {src}  →  {dst}")
+        return
+
+    migrated: list[str] = []
+    for src, dst in moves:
+        if dst.exists():
+            # Destination already populated: merge files not yet present there.
+            for item in src.iterdir():
+                item_dst = dst / item.name
+                if not item_dst.exists():
+                    shutil.move(str(item), str(item_dst))
+        else:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+        migrated.append(str(src))
+
+    for path_str in migrated:
+        dx_console.print(f"[green]✓ Migrated {path_str}[/]")
+    dx_console.print("[green]Migration complete.[/]")
 
 
 def _install_provision_engram(args: argparse.Namespace) -> None:
@@ -2200,16 +2531,87 @@ def _install_provision_engram(args: argparse.Namespace) -> None:
         err_console.warning(f"Engram provisioning: {exc}")
 
 
+def _install_json(args: argparse.Namespace) -> None:
+    """Emit a machine-readable install result without polluting stdout.
+
+    Runs the non-interactive onboarding engine with all console/rich output
+    redirected to stderr, then emits a single JSON object to stdout.
+
+    Schema: ``{schema, status, project, detected, error}``.
+    """
+    import io
+
+    root = Path(getattr(args, "root", "."))
+    has_config = (root / "opencontext.yaml").exists()
+    has_git = (root / ".git").exists()
+    has_pytest = (
+        (root / "pyproject.toml").exists()
+        or (root / "pytest.ini").exists()
+        or (root / "setup.cfg").exists()
+    )
+    has_package_json = (root / "package.json").exists()
+    stack: list[str] = []
+    if has_pytest:
+        stack.append("python")
+    if has_package_json:
+        stack.append("nodejs")
+    tdd = getattr(args, "tdd", None) or ("strict" if has_pytest else "ask")
+
+    # Redirect stdout to a sink while running the install so rich chrome stays
+    # off the JSON stream. All informational output goes to stderr via the
+    # already-configured err_console / stderr console.
+    _sink = io.StringIO()
+    _real_stdout = sys.stdout
+    sys.stdout = _sink  # type: ignore[assignment]
+    try:
+        import argparse as _ap
+
+        _non_interactive = _ap.Namespace(**vars(args))
+        _non_interactive.yes = True
+        _non_interactive.json = False  # prevent recursion
+        _install(_non_interactive)
+        status = "ok"
+        error = None
+    except SystemExit as exc:
+        # Exit code None or 0 = graceful completion; anything else = error.
+        status = "ok" if exc.code in (None, 0) else "error"
+        error = None if exc.code in (None, 0) else f"install exited with code {exc.code}"
+    except Exception as exc:
+        status = "error"
+        error = str(exc)
+    finally:
+        sys.stdout = _real_stdout
+
+    payload: dict[str, Any] = {
+        "schema": "opencontext/install/v1",
+        "status": status,
+        "project": str(root.resolve()),
+        "detected": {
+            "config_existed": has_config,
+            "git": has_git,
+            "stack": stack,
+            "tdd": tdd,
+        },
+        "error": error,
+    }
+    json.dump(payload, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+
+
 def _install(args: argparse.Namespace) -> None:
     """Quick project setup wizard with auto-detection and step-by-step progress."""
-    from rich.status import Status
-
     from opencontext_core import prompts
     from opencontext_core.dx.console_styles import console
 
     # NOTE: Handle --dry-run before any side effects.
     if getattr(args, "dry_run", False):
         _install_dry_run(args)
+        return
+
+    # NOTE: --json requests a machine-readable summary; pair it with --yes for
+    # non-interactive operation and emit the JSON report only (no human chrome).
+    if getattr(args, "json", False):
+        _install_json(args)
         return
 
     # NOTE: Handle --install-engram provisioning before the main flow.
@@ -2250,32 +2652,43 @@ def _install(args: argparse.Namespace) -> None:
     )
     has_package_json = (root / "package.json").exists()
 
-    console.print(f"  [bold]Project:[/]  {root.name or '.'}")
-    console.print(f"  [bold]Config:[/]   {'exists' if has_config else 'not yet created'}")
-    console.print(f"  [bold]Git:[/]     {'yes' if has_git else 'no'}")
     detected = []
     if has_pytest:
         detected.append("Python (pytest)")
     if has_package_json:
         detected.append("Node.js")
+    _detected_rows = [
+        f"  [bold]Project:[/]  {root.name or '.'}",
+        f"  [bold]Config:[/]   {'exists' if has_config else 'not yet created'}",
+        f"  [bold]Git:[/]      {'yes' if has_git else 'no'}",
+    ]
     if detected:
-        console.print(f"  [bold]Stack:[/]   {', '.join(detected)}")
+        _detected_rows.append(f"  [bold]Stack:[/]    {', '.join(detected)}")
+    console.panel("\n".join(_detected_rows), title="Detected", fit=True)
     console.print()
 
     tdd = getattr(args, "tdd", None) or ("strict" if has_pytest else "ask")
     flow = getattr(args, "flow", "oc-new") or "oc-new"
     agent_arg = getattr(args, "agent", None)
-    console.print("  Will configure:")
-    console.print("    • Project index + knowledge graph")
-    console.print(f"    • SDD/TDD (mode: {tdd})")
-    console.print(f"    • Agent integration ({agent_arg or 'auto-detect'})")
-    console.print(f"    • Flow: {flow}")
-    console.print("    • Harness workflow")
-    console.print()
 
-    # Interactive wizard (language + editor + API key)
+    def _print_install_plan(agent_label: str) -> None:
+        console.print("  Will configure:")
+        console.print("    • Project index + knowledge graph")
+        console.print(f"    • SDD/TDD (mode: {tdd})")
+        console.print(f"    • Agent integration ({agent_label})")
+        console.print(f"    • Flow: {flow}")
+        console.print("    • Harness workflow")
+        console.print()
+
+    _print_install_plan(agent_arg or "auto-detect")
+
+    # Interactive wizard (language + editor + model routing + API key). The
+    # framed steps clear the screen, so recap the plan before the confirm.
     if not args.yes and sys.stdout.isatty():
         _install_wizard(args, console)
+        console.print()
+        wizard_editor = os.environ.get("_OC_WIZARD_EDITOR", "").strip()
+        _print_install_plan(agent_arg or wizard_editor or "auto-detect")
 
     if not args.yes:
         proceed = prompts.confirm("Proceed with setup?", default=not already_setup)
@@ -2324,7 +2737,7 @@ def _install(args: argparse.Namespace) -> None:
         workspace_only=(getattr(args, "scope", None) == "workspace"),
     )
     _msg = "Setting up project (config, index, SDD, agents, harness)..."
-    with Status(_msg, console=console, spinner="dots"):  # type: ignore[arg-type]
+    with console.status(_msg):
         try:
             ob = OnboardingService().run(options)
             summary.append(f"✓ Indexed {ob.indexed_files} files, {ob.indexed_symbols} symbols")
@@ -2334,6 +2747,16 @@ def _install(args: argparse.Namespace) -> None:
         except Exception as exc:
             console.print(f"  [red]✗ Setup failed: {exc}[/]")
             return
+
+    # ── Apply agentic-flow flags to the written opencontext.yaml ─────────────
+    # OnboardingService writes the YAML first; we overlay the explicitly requested
+    # flags on top so they are not silently ignored (F1 fix).
+    _agentic_cfg = _build_agentic_cfg_from_args(args)
+    _yaml_path = root / "opencontext.yaml"
+    try:
+        _apply_agentic_flags_to_yaml(_yaml_path, _agentic_cfg)
+    except Exception as exc:
+        summary.append(f"⚠ Agentic flags not applied: {exc}")
 
     mgr = InstallationManager()
     try:
@@ -2377,9 +2800,15 @@ def _install(args: argparse.Namespace) -> None:
 
     # ── Summary ────────────────────────────────────────────────────────
     console.print()
-    console.rule("[bold]Install Complete[/]", style="green")
-    for line in summary:
-        console.print(f"  [{'green' if line.startswith('✓') else 'yellow'}]{line}[/]")
+    _summary_body = "\n".join(
+        f"  [{'green' if line.startswith('✓') else 'yellow'}]{line}[/]" for line in summary
+    )
+    console.panel(
+        _summary_body,
+        title="[bold green]Install Complete[/bold green]",
+        style="success",
+        fit=True,
+    )
 
     # Capability-aware next-step
     try:
@@ -2457,8 +2886,15 @@ def _index(
     console.info(f"Root: {manifest.root}")
     console.info(f"Files: {len(manifest.files)}")
     console.info(f"Symbols: {len(manifest.symbols)}")
+    kg_stats = manifest.metadata.get("knowledge_graph", {})
+    skipped = kg_stats.get("skipped_unchanged", 0)
+    reindexed = kg_stats.get("reindexed_changed", 0)
+    if skipped > 0:
+        console.info(f"Unchanged (skipped): {skipped}")
+    if reindexed > 0:
+        console.info(f"Changed (reindexed): {reindexed}")
     console.info(f"Technology profiles: {', '.join(manifest.technology_profiles)}")
-    console.info("Manifest: .storage/opencontext/project_manifest.json")
+    console.info(f"Manifest: {runtime.storage_path / 'project_manifest.json'}")
     if incremental:
         console.info("Incremental mode scaffold active in v0.1.")
 
@@ -2829,17 +3265,66 @@ def _workflow_pack_metadata(name: str | None) -> dict[str, Any]:
     }
 
 
-def _status(root: str = ".") -> None:
+def _status(root: str = ".", *, json_output: bool = False) -> None:
     """Show project status at a glance."""
+    from opencontext_core.config import load_config_or_defaults
     from opencontext_core.dx.console_styles import console
     from opencontext_core.indexing.git_context import GitContextProvider
+    from opencontext_core.paths import resolve_storage_path
 
     project_root = Path(root).resolve()
     config_path = project_root / "opencontext.yaml"
     opencontext_dir = project_root / ".opencontext"
-    manifest_path = project_root / ".storage" / "opencontext" / "project_manifest.json"
+    _cfg = load_config_or_defaults(config_path if config_path.exists() else None)
+    manifest_path = (
+        resolve_storage_path(project_root, _cfg.storage.mode, _cfg.storage.custom_path)
+        / "project_manifest.json"
+    )
     hints_path = project_root / ".opencontexthints"
     checks_dir = project_root / ".opencontext" / "checks"
+
+    # Collect data for both human and JSON rendering
+    has_config = config_path.exists()
+    index_info: dict[str, Any] = {"indexed": False, "files": 0, "symbols": 0}
+    if manifest_path.exists():
+        try:
+            with open(manifest_path) as _f:
+                _manifest = json.load(_f)
+            index_info = {
+                "indexed": True,
+                "files": len(_manifest.get("files", [])),
+                "symbols": len(_manifest.get("symbols", [])),
+            }
+        except Exception:
+            index_info = {"indexed": True, "files": 0, "symbols": 0, "error": "unreadable"}
+
+    git = GitContextProvider(project_root)
+    git_info: dict[str, Any] = {"available": git.available}
+    if git.available:
+        stats = git.get_repo_stats()
+        git_info["commits"] = stats.get("total_commits", 0)
+        git_info["contributors"] = stats.get("contributors", 0)
+
+    has_hints = hints_path.exists()
+    checks_count = len(list(checks_dir.glob("*.md"))) if checks_dir.exists() else 0
+    has_workspace = opencontext_dir.exists()
+
+    if json_output:
+        payload: dict[str, Any] = {
+            "schema": "opencontext/status/v1",
+            "project": str(project_root),
+            "status": "ready" if (has_config and index_info["indexed"]) else "partial",
+            "config": {"exists": has_config, "path": str(config_path)},
+            "index": index_info,
+            "git": git_info,
+            "hints": {"exists": has_hints},
+            "ci_checks": {"count": checks_count},
+            "workspace": {"exists": has_workspace},
+            "error": None,
+        }
+        json.dump(payload, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        return
 
     console.header("OpenContext Status")
     console.print(f"[bold]Project:[/] {project_root}")
@@ -2847,55 +3332,48 @@ def _status(root: str = ".") -> None:
 
     # Config status
     console.section("Configuration")
-    if config_path.exists():
+    if has_config:
         console.success(f"Config: {config_path}")
     else:
         console.error("Config: not found (run 'opencontext install')")
 
     # Index status
     console.section("Index")
-    if manifest_path.exists():
-        try:
-            import json
-
-            with open(manifest_path) as f:
-                manifest = json.load(f)
-            files = len(manifest.get("files", []))
-            symbols = len(manifest.get("symbols", []))
-            console.success(f"Indexed: {files} files, {symbols} symbols")
-        except Exception:
+    if index_info["indexed"]:
+        if index_info.get("error"):
             console.warning("Index: manifest exists but could not be read")
+        else:
+            files = index_info["files"]
+            syms = index_info["symbols"]
+            console.success(f"Indexed: {files} files, {syms} symbols")
     else:
         console.warning("Index: not indexed (run 'opencontext index .')")
 
     # Git status
     console.section("Git")
-    git = GitContextProvider(project_root)
     if git.available:
-        stats = git.get_repo_stats()
-        console.success(f"Commits: {stats.get('total_commits', 0)}")
-        console.success(f"Contributors: {stats.get('contributors', 0)}")
+        console.success(f"Commits: {git_info.get('commits', 0)}")
+        console.success(f"Contributors: {git_info.get('contributors', 0)}")
     else:
         console.warning("Git: not a repository")
 
     # Hints
     console.section("Agent Hints")
-    if hints_path.exists():
+    if has_hints:
         console.success(f"Hints: {hints_path}")
     else:
         console.warning("Hints: not found (run 'opencontext hints init')")
 
     # CI Checks
     console.section("CI Checks")
-    if checks_dir.exists():
-        checks = list(checks_dir.glob("*.md"))
-        console.success(f"Checks: {len(checks)} check(s) configured")
+    if checks_count:
+        console.success(f"Checks: {checks_count} check(s) configured")
     else:
         console.warning("Checks: not found (run 'opencontext ci-check init')")
 
     # Working directory
     console.section("Workspace")
-    if opencontext_dir.exists():
+    if has_workspace:
         console.success(f"Workspace: {opencontext_dir}")
     else:
         console.warning("Workspace: not initialized")
@@ -2984,7 +3462,7 @@ def _doctor(
     if scope == "graph":
         from opencontext_core.indexing.graph_health import compute_graph_health
 
-        graph_report = compute_graph_health(".storage/opencontext/context_graph.db")
+        graph_report = compute_graph_health(str(runtime.storage_path / "context_graph.db"))
 
         if json_output:
             json.dump(graph_report.model_dump(), sys.stdout, indent=2)
@@ -3423,7 +3901,7 @@ def _checkpoint(action: str) -> None:
     _unreachable(action)
 
 
-def _mcp_serve(db_path: str) -> None:
+def _mcp_serve(db_path: str, workflow_tools: bool = False) -> None:
     """Start MCP server for agent integration."""
     from pathlib import Path
 
@@ -3439,7 +3917,7 @@ def _mcp_serve(db_path: str) -> None:
     except Exception:
         runtime = None
 
-    server = MCPServer(db_path=db_path, runtime=runtime)
+    server = MCPServer(db_path=db_path, runtime=runtime, allow_workflow_tools=workflow_tools)
     try:
         server.run()
     except KeyboardInterrupt:
@@ -3449,31 +3927,20 @@ def _mcp_serve(db_path: str) -> None:
 
 
 def _setup_mcp_for_opencode() -> None:
-    """Configure MCP integration for OpenCode."""
-    import json
-    from pathlib import Path
+    """Configure MCP integration for OpenCode.
 
-    opencode_dir = Path.home() / ".config" / "opencode"
-    if not opencode_dir.exists():
-        opencode_dir.mkdir(parents=True, exist_ok=True)
+    Routes through the configurator's per-agent layout so the entry lands in
+    ``opencode.json`` in OpenCode's native ``mcp`` shape. The historical
+    hand-rolled writer emitted ``mcp.json`` in ``mcpServers`` shape — a file
+    OpenCode never reads.
+    """
+    from opencontext_core.configurator import constants
+    from opencontext_core.configurator.mcp_strategy import write_mcp_servers
 
-    mcp_config_path = opencode_dir / "mcp.json"
-    mcp_config = {
-        "mcpServers": {"opencontext": {"type": "stdio", "command": "opencontext", "args": ["mcp"]}}
-    }
-
-    # Merge with existing config if present
-    if mcp_config_path.exists():
-        try:
-            existing = json.loads(mcp_config_path.read_text(encoding="utf-8"))
-            if "mcpServers" not in existing:
-                existing["mcpServers"] = {}
-            existing["mcpServers"]["opencontext"] = mcp_config["mcpServers"]["opencontext"]
-            mcp_config = existing
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    mcp_config_path.write_text(json.dumps(mcp_config, indent=2), encoding="utf-8")
+    mcp_config_path = constants.mcp_config_path("opencode")
+    mcp_config_path.parent.mkdir(parents=True, exist_ok=True)
+    servers = {constants.MCP_LABEL: dict(constants.MCP_SERVER_ENTRY)}
+    write_mcp_servers(mcp_config_path, servers, shape=constants.mcp_shape("opencode"))
     console.success(f"MCP config written to: {mcp_config_path}")
 
 
@@ -3657,6 +4124,48 @@ def _cache(args: argparse.Namespace, config_path: str) -> None:
             indent=2,
         )
     )
+
+
+def _agent_harness(args: argparse.Namespace) -> None:
+    """Dispatch the ``agent-harness`` subcommand tree.
+
+    Only ``acceptance`` exists today; new subcommands (e.g. ``gates list``)
+    can plug in here without changing the parser layout.
+    """
+    if args.agent_harness_command == "acceptance":
+        _agent_harness_acceptance(args)
+        return
+    _unreachable(args.agent_harness_command)
+
+
+def _agent_harness_acceptance(args: argparse.Namespace) -> None:
+    """Run every named gate and emit the readiness verdict as JSON.
+
+    Mirrors the ``opencontext release acceptance`` shape so the two
+    verdicts are interchangeable in dashboards / CI scripts. Exit code 1 if
+    any gate is FAILED (the spec's contract); exit 0 only when every gate
+    is MET (no NOT_MEASURED, no FAILED). The verdict is also persisted to
+    ``--report`` if supplied, so a downstream studio panel can read it
+    without re-running the evaluator.
+    """
+    from opencontext_core.agent_harness_acceptance import (
+        AgentHarnessAcceptanceEvaluator,
+        render_verdict_json,
+    )
+
+    root = Path(getattr(args, "root", "."))
+    verdict = AgentHarnessAcceptanceEvaluator(root).evaluate()
+    rendered = render_verdict_json(verdict)
+    print(rendered)
+
+    report_path = getattr(args, "report", None)
+    if report_path:
+        out = Path(report_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(rendered + "\n", encoding="utf-8")
+
+    if not verdict.ready:
+        raise SystemExit(1)
 
 
 def _harness_error_hint(error_msg: str, workflow: str | None) -> str:
@@ -4034,16 +4543,13 @@ def _preset(command: str, name: str | None, root: str = ".", dry_run: bool = Fal
     from opencontext_core.workflow.presets import find_presets, load_preset
 
     if command == "list":
+        dx_console.header("Presets")
         presets = find_presets(root)
-        from rich.table import Table as RichTable
-
-        table = RichTable(title="Available Presets")
-        table.add_column("Name", style="cyan")
-        table.add_column("Description")
-        table.add_column("Strategy")
-        for preset in presets:
-            table.add_row(preset.name, preset.description, preset.strategy)
-        dx_console.print(table)
+        dx_console.table(
+            "Available Presets",
+            ["Name", "Description", "Strategy"],
+            [[p.name, p.description, p.strategy] for p in presets],
+        )
         dx_console.print(
             "[dim]These tune an existing config. Project scaffolding presets "
             "(context-first, full, enterprise, …) live under "
@@ -4054,6 +4560,7 @@ def _preset(command: str, name: str | None, root: str = ".", dry_run: bool = Fal
     if command == "apply":
         if not name:
             raise OpenContextError("preset name is required")
+        dx_console.header("Preset Apply")
         resolved_preset = load_preset(name, root=root)
         if resolved_preset is None:
             available = ", ".join(p.name for p in find_presets(root)) or "(none)"
@@ -4076,12 +4583,24 @@ def _preset(command: str, name: str | None, root: str = ".", dry_run: bool = Fal
         updated = compose(current, resolved_preset)
 
         if dry_run:
-            dx_console.print(f"[yellow]Dry run — would apply preset '{name}':[/]")
+            dx_console.info(f"Dry run — would apply preset '{name}':")
             dx_console.print(yaml.safe_dump(updated, sort_keys=False))
             return
 
         config_path.write_text(yaml.safe_dump(updated, sort_keys=False), encoding="utf-8")
-        dx_console.print(f"[green]✓ Preset '{name}' applied to {config_path}[/]")
+        dx_console.success(f"Preset '{name}' applied to {config_path}")
+
+        # Warn when the resulting config enables air-gapped mode because it silently
+        # disables MCP adapters, which breaks several commands.
+        _resulting_security_mode = (
+            updated.get("security", {}).get("mode", "") if isinstance(updated, dict) else ""
+        )
+        if _resulting_security_mode == "air_gapped":
+            dx_console.warning(
+                "air-gapped mode disables MCP adapters. "
+                "The following commands will not work until the mode is changed: "
+                "clarify, explain, memory collect"
+            )
         return
 
     _scaffold_deprecated(f"preset {command}", "opencontext preset list")
@@ -4345,15 +4864,23 @@ def _pack(
         # Show the win on every pack. stderr keeps stdout clean for --copy / JSON / pipes.
         # Cap the displayed percent below 100 — "100% fewer" reads as fake even when
         # the rounding is honest; the absolute counts carry the real story.
-        if reduction_pct > 0 and naive_tokens > optimized_tokens:
-            import sys as _sys
+        # NEVER claim a saving when the pack is empty: under budget pressure an
+        # over-budget span is omitted (used_tokens=0), and `used_tokens or 1` would
+        # otherwise fabricate a 99.9% win over ZERO content. Require real content.
+        import sys as _sys
 
+        if pack.used_tokens <= 0 or not pack.included:
+            print(
+                "  ! no content fit the token budget — raise --max-tokens or narrow the query",
+                file=_sys.stderr,
+            )
+        elif reduction_pct > 0 and naive_tokens > optimized_tokens:
             shown_pct = min(reduction_pct, 99.9)
             mem_indicator = ""
             try:
                 import sqlite3 as _sqlite3
 
-                mem_db = naive_root / ".storage" / "opencontext" / "memory.db"
+                mem_db = runtime.storage_path / "memory.db"
                 if mem_db.exists():
                     with _sqlite3.connect(str(mem_db)) as _mc:
                         row = _mc.execute("SELECT COUNT(*) FROM memories").fetchone()
@@ -4647,21 +5174,85 @@ def _agent_memory_store(args: argparse.Namespace) -> Any:
 def _memory(args: argparse.Namespace) -> None:
     """Handle memory subcommands."""
     command = args.memory_command
+    # Delegated subcommands own their full surface (their own branded header and
+    # output format), so they return before the shared "Memory" header below.
     if command == "migrate":
         raise SystemExit(handle_migrate("memory", args))
     if command == "audit":
         raise SystemExit(_memory_audit(args))
+    if command == "v2":
+        handle_memory_v2(args)
+        return
+    if command == "doctor":
+        _memory_doctor()
+        return
+    if command == "benchmark":
+        handle_memory_benchmark(args)
+        return
+    if command == "export":
+        _memory_export(ContextRepository(Path(".")), args.output)
+        return
+    if command == "import":
+        _memory_import(ContextRepository(Path(".")), args.path)
+        return
+    # Every remaining subcommand renders under the shared branded header, so the
+    # whole memory family carries the same brand chrome as `config`, `index`, etc.
+    # Under --json the header is suppressed so stdout stays a pure JSON object.
+    if not getattr(args, "json", False):
+        console.header("Memory")
     repo = ContextRepository(Path("."))
     if command == "init":
         created = repo.init_layout()
+        if getattr(args, "json", False):
+            payload: dict[str, Any] = {
+                "schema": "opencontext/memory-init/v1",
+                "status": "ok",
+                "created": [str(p) for p in created],
+                "error": None,
+            }
+            json.dump(payload, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+            return
         console.success("Initialized context repository.")
         for path in created:
             print(f"  - {path}")
         return
     if command == "list":
-        console.header("Memory")
         # Canonical SQLite store first (what the agent recalls), markdown second.
         shown = False
+        if getattr(args, "json", False):
+            records: list[dict[str, Any]] = []
+            store = _agent_memory_store(args)
+            if store is not None and hasattr(store, "list_records"):
+                for rec in store.list_records(limit=200):
+                    records.append(
+                        {
+                            "id": rec.id,
+                            "layer": rec.layer.value,
+                            "key": rec.key,
+                            "size": len(rec.content),
+                            "source": "sqlite",
+                        }
+                    )
+            for item in repo.list_items():
+                records.append(
+                    {
+                        "id": item.id,
+                        "kind": item.kind,
+                        "classification": item.classification.value,
+                        "tokens": item.tokens,
+                        "source": "markdown",
+                    }
+                )
+            list_payload: dict[str, Any] = {
+                "schema": "opencontext/memory-list/v1",
+                "records": records,
+                "count": len(records),
+                "error": None,
+            }
+            json.dump(list_payload, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+            return
         store = _agent_memory_store(args)
         if store is not None and hasattr(store, "list_records"):
             for rec in store.list_records(limit=200):
@@ -4763,7 +5354,8 @@ def _memory(args: argparse.Namespace) -> None:
         else:
             # NOTE: single trace store — trace_id maps directly to a file path.
             # Add source routing when traces span multiple stores.
-            trace_path = Path(f".storage/opencontext/traces/{trace_id}.json")
+            _rt = _runtime(args.config)
+            trace_path = _rt.storage_path / "traces" / f"{trace_id}.json"
             trace_data = json.loads(trace_path.read_text(encoding="utf-8"))
             trace = RuntimeTrace.model_validate(trace_data)
         result = recorder.harvest(trace)
@@ -4800,7 +5392,7 @@ def _memory(args: argparse.Namespace) -> None:
     if command == "maintain":
         from opencontext_core.memory.graph import LocalMemoryStore
 
-        db_path = Path(".storage/opencontext/memory.db")
+        db_path = _runtime(args.config).storage_path / "memory.db"
         if not db_path.exists():
             console.info(f"No memory store at {db_path} yet — nothing to maintain.")
             return
@@ -4830,9 +5422,11 @@ def _memory(args: argparse.Namespace) -> None:
         import uuid
         from datetime import UTC, datetime
 
+        from opencontext_core.config_resolver import resolve_active_storage_file
         from opencontext_core.memory.graph import LocalMemoryStore
 
-        db_path = Path(".storage/opencontext/memory.db")
+        # Same storage-mode resolution the writers use (legacy in-repo fallback).
+        db_path = resolve_active_storage_file(Path.cwd(), "memory.db")
         if not db_path.exists():
             console.info(f"No memory store at {db_path} yet — nothing to review.")
             return
@@ -4880,65 +5474,29 @@ def _memory(args: argparse.Namespace) -> None:
             print(f"  {rec.id} [{kind}] {rec.content[:80]}")
         console.dim("Confirm with 'memory review --confirm <id>' or correct with --supersede <id>.")
         return
-    if command == "export":
-        _memory_export(repo, args.output)
-        return
-    if command == "import":
-        _memory_import(repo, args.path)
-        return
-    if command == "doctor":
-        _memory_doctor()
-        return
-    if command == "benchmark":
-        handle_memory_benchmark(args)
-        return
     _unreachable(command)
 
 
 def _memory_export(repo: Any, output: str) -> None:
-    """Write all memory items to a shareable JSON file (commit it for the team)."""
-    items = repo.list_items(include_archive=True)
-    payload = {
-        "version": 1,
-        "count": len(items),
-        "items": [item.model_dump(mode="json") for item in items],
-    }
-    out = Path(output)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    console.success(f"Exported {len(items)} memory item(s) to {out}")
+    """Write all memory items to a shareable JSON file (commit it for the team).
+
+    Delegates to :func:`opencontext_core.memory.transfer.memory_export` so the
+    same logic is available to adapters without importing the CLI layer.
+    """
+    from opencontext_core.memory.transfer import memory_export as _core_export
+
+    _core_export(repo, output)
 
 
 def _memory_import(repo: Any, path: str) -> None:
-    """Import memory items from an exported file, skipping ids already present."""
-    from datetime import datetime
+    """Import memory items from an exported file, skipping ids already present.
 
-    source = Path(path)
-    if not source.exists():
-        eprint(f"file not found: {source}")
-        raise SystemExit(1)
-    payload = json.loads(source.read_text(encoding="utf-8"))
-    items = payload.get("items", []) if isinstance(payload, dict) else []
-    existing = {item.id for item in repo.list_items(include_archive=True)}
-    imported = 0
-    skipped = 0
-    for entry in items:
-        mem_id = entry.get("id")
-        if not mem_id or mem_id in existing:
-            skipped += 1
-            continue
-        valid_until = entry.get("valid_until")
-        repo.store(
-            content=entry.get("content", ""),
-            kind=entry.get("kind", "fact"),
-            source=entry.get("source", "import"),
-            pin=bool(entry.get("pin", False)),
-            memory_id=mem_id,
-            valid_until=datetime.fromisoformat(valid_until) if valid_until else None,
-            metadata=entry.get("metadata") or {},
-        )
-        imported += 1
-    console.success(f"Imported {imported} item(s), skipped {skipped} (already present or invalid).")
+    Delegates to :func:`opencontext_core.memory.transfer.memory_import` so the
+    same logic is available to adapters without importing the CLI layer.
+    """
+    from opencontext_core.memory.transfer import memory_import as _core_import
+
+    _core_import(repo, path)
 
 
 def _memory_doctor() -> None:
@@ -4956,7 +5514,13 @@ def _memory_doctor() -> None:
         checks.append(("context_repository", False, f"Cannot read local memory: {exc}"))
 
     # Check 2: LocalMemoryStore (SQLite FTS5)
-    db_path = Path(".storage/opencontext/memory.db")
+    from opencontext_core.config import load_config_or_defaults
+    from opencontext_core.paths import resolve_storage_path
+
+    _dc = load_config_or_defaults()
+    db_path = (
+        resolve_storage_path(Path.cwd(), _dc.storage.mode, _dc.storage.custom_path) / "memory.db"
+    )
     if db_path.exists():
         try:
             store = LocalMemoryStore(db_path)

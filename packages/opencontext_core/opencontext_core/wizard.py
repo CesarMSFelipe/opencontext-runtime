@@ -6,12 +6,14 @@ providers, and plugins. Uses rich for a modern interactive TUI.
 
 from __future__ import annotations
 
-from rich.console import Console
-from rich.prompt import IntPrompt
+from pathlib import Path
+
 from rich.table import Table
 
 from opencontext_core import prompts
 from opencontext_core.config import SecurityMode
+from opencontext_core.dx.console_styles import console
+from opencontext_core.dx.wizard_frame import WizardStep, render_frame
 from opencontext_core.plugin_system import (
     PluginInstaller,
     PluginRegistry,
@@ -27,7 +29,52 @@ from opencontext_core.user_prefs import (
 # saved preference is always a value the runtime config can load.
 _SECURITY_MODE_CHOICES = [mode.value for mode in SecurityMode]
 
-console = Console()
+# Detail cards for every config-wizard section — the shared wizard frame renders
+# these in the config-TUI info-pane format (Current/Effect/Recommended/Risk/CLI).
+_CONFIG_WIZARD_STEPS: dict[str, WizardStep] = {
+    "security": WizardStep(
+        title="Security & privacy",
+        effect="Sets the security posture; air_gapped also disables network features.",
+        recommended="private_project for local work.",
+        risk="Lower postures may allow more external integrations.",
+        cli="opencontext config set security_mode <mode>",
+    ),
+    "features": WizardStep(
+        title="Features",
+        effect="Enables KG, call graph, learning, governance, embeddings, MCP, git.",
+        recommended="Knowledge Graph on.",
+        risk="More features can add indexing work.",
+        cli="opencontext config set features.<name> <true|false>",
+    ),
+    "tokens": WizardStep(
+        title="Token budgets",
+        effect="Caps context size per operation and the max input tokens.",
+        recommended="8k-16k budget for normal repos.",
+        risk="Too low can hide needed evidence.",
+        cli="opencontext config set default_token_budget <n>",
+    ),
+    "agents": WizardStep(
+        title="Agent integrations",
+        effect="Marks which AI agents OpenContext integrates with.",
+        recommended="Only the agents you actually use.",
+        risk="Integration files are written by install/setup, not by this toggle.",
+        cli="opencontext install --agent <agent>",
+    ),
+    "plugins": WizardStep(
+        title="Plugins",
+        effect="Installs registry plugins and sets plugin auto-update preferences.",
+        recommended="Keep minimal until a workflow needs a plugin.",
+        risk="Third-party plugins extend the local tool surface.",
+        cli="opencontext plugin install <name>",
+    ),
+    "learning": WizardStep(
+        title="Learning & optimization",
+        effect="Toggles auto token-budget optimization and anonymous usage stats.",
+        recommended="Auto-optimize on; share stats only if you opt in.",
+        risk="Sharing sends anonymized usage counters only.",
+        cli="opencontext config set auto_optimize <true|false>",
+    ),
+}
 
 
 def _ask_bool(question: str, default: bool = True) -> bool:
@@ -44,25 +91,15 @@ def _ask_choice(question: str, choices: list[str], default: int = 0) -> str:
 
 
 def _ask_int(question: str, default: int, min_val: int = 1, max_val: int = 1000000) -> int:
-    """Ask for an integer value."""
+    """Ask for an integer value via the shared prompt primitives."""
 
-    result = IntPrompt.ask(
-        f"\n[bold]{question}[/]",
-        default=default,
-    )
-    if result < min_val:
-        console.print(f"[yellow]Value too low. Using minimum: {min_val}[/]")
-        return min_val
-    if result > max_val:
-        console.print(f"[yellow]Value too high. Using maximum: {max_val}[/]")
-        return max_val
-    return result
+    return prompts.int_input(question, default=default, min_value=min_val, max_value=max_val)
 
 
 def _print_section(title: str) -> None:
-    """Print a section header."""
+    """Print a brand section header."""
 
-    console.rule(f"[bold]{title}[/]", style="cyan")
+    console.section(title)
 
 
 def _plugin_wizard_step(prefs: UserPreferences) -> None:
@@ -83,6 +120,8 @@ def _plugin_wizard_step(prefs: UserPreferences) -> None:
 
     if available:
         console.print("[bold]Available plugins:[/]")
+        # NOTE: deliberate exception — headerless list layout with per-column
+        # styling that console_styles.table (titled, uniform style) can't render.
         table = Table(box=None, show_header=False)
         table.add_column("")
         table.add_column("Plugin", style="cyan")
@@ -141,15 +180,29 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
     prefs = store.load()
 
     if non_interactive:
-        mark_setup_complete(prefs)
-        store.save(prefs)
-        return prefs
+        import sys
+
+        print(
+            "opencontext config wizard --non-interactive is not supported.\n"
+            "To configure OpenContext non-interactively use:\n"
+            "  opencontext config set <key> <value>   # set individual keys\n"
+            "  edit opencontext.yaml directly          # full config control",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+    def _frame(step_index: int, key: str, current: str = "") -> None:
+        """Shared wizard frame per section (brand logo + status + detail card)."""
+        card = _CONFIG_WIZARD_STEPS[key]
+        if current:
+            card = card.with_current(current)
+        render_frame(step_index, len(_CONFIG_WIZARD_STEPS), card)
 
     _print_section("OpenContext Configuration Wizard")
     console.print("\nWelcome! Let's set up OpenContext for your workflow.")
     console.print("You can re-run this anytime with: opencontext config wizard")
 
-    _print_section("Step 1: Security & Privacy")
+    _frame(1, "security", prefs.security_mode or "not set")
     console.print("\nChoose your security mode:")
     console.print("  developer        - Local dev posture, fewest restrictions")
     console.print("  private_project  - Local only, no external APIs")
@@ -171,8 +224,6 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
         prefs.features.semantic_search = False
         console.print("\nAir-gapped mode: disabling network features.")
 
-    _print_section("Step 2: Features")
-
     # One multi-select instead of a long yes/no chain. Network features are
     # hidden (and stay off) in air-gapped mode.
     feature_opts: list[tuple[str, str]] = [
@@ -189,11 +240,16 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
     feature_opts.append(("git_integration", "Git Integration (context from git history)"))
 
     enabled_defaults = [key for key, _ in feature_opts if getattr(prefs.features, key)]
+    _frame(2, "features", f"{len(enabled_defaults)} of {len(feature_opts)} enabled")
     selected = set(prompts.checkbox("Enable features", feature_opts, defaults=enabled_defaults))
     for key, _ in feature_opts:
         setattr(prefs.features, key, key in selected)
 
-    _print_section("Step 3: Token Budgets")
+    _frame(
+        3,
+        "tokens",
+        f"budget {prefs.default_token_budget} · max input {prefs.max_input_tokens}",
+    )
     console.print("\nConfigure default token limits:")
 
     prefs.default_token_budget = _ask_int(
@@ -202,12 +258,13 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
     prefs.max_input_tokens = _ask_int("Max input tokens", prefs.max_input_tokens, 1000, 200000)
 
     # Step 4: Agent Integrations
-    _print_section("Step 4: Agent Integrations")
     if prefs.context_first_mode:
+        _print_section("Step 4: Agent Integrations")
         console.print("[dim]Skipped (context-first mode)[/dim]")
     else:
         agent_keys = list(prefs.agent_integrations.keys())
         defaults = [a for a in agent_keys if prefs.agent_integrations[a]]
+        _frame(4, "agents", ", ".join(defaults) or "none")
         selected = set(
             prompts.checkbox("Which AI agents do you use?", agent_keys, defaults=defaults)
         )
@@ -215,14 +272,15 @@ def run_wizard(non_interactive: bool = False, defaults_only: bool = False) -> Us
             prefs.agent_integrations[agent] = agent in selected
 
     # Step 5: Plugins
-    _print_section("Step 5: Plugins")
     if prefs.context_first_mode:
+        _print_section("Step 5: Plugins")
         console.print("[dim]Skipped (context-first mode)[/dim]")
     else:
+        _frame(5, "plugins")
         _plugin_wizard_step(prefs)
 
     # Step 6: Learning & Analytics
-    _print_section("Step 6: Learning & Optimization")
+    _frame(6, "learning", f"auto-optimize {'on' if prefs.learning_auto_optimize else 'off'}")
 
     prefs.learning_auto_optimize = _ask_bool(
         "Auto-optimize token budgets based on usage?", prefs.learning_auto_optimize
@@ -278,12 +336,20 @@ def reconfigure(section: str | None = None) -> None:
     store = UserConfigStore()
     prefs = store.load()
 
+    def _frame_section(key: str, current: str = "") -> None:
+        """One-section rerun still carries the shared wizard frame (Step 1/1)."""
+        card = _CONFIG_WIZARD_STEPS[key]
+        if current:
+            card = card.with_current(current)
+        render_frame(1, 1, card)
+
     if section == "security":
         current = (
             _SECURITY_MODE_CHOICES.index(prefs.security_mode)
             if prefs.security_mode in _SECURITY_MODE_CHOICES
             else _SECURITY_MODE_CHOICES.index(SecurityMode.PRIVATE_PROJECT.value)
         )
+        _frame_section("security", str(getattr(prefs, "security_mode", "") or ""))
         prefs.security_mode = _ask_choice(
             "Security mode:",
             _SECURITY_MODE_CHOICES,
@@ -296,18 +362,22 @@ def reconfigure(section: str | None = None) -> None:
             ("learning_system", "Learning System"),
         ]
         enabled = [key for key, _ in feature_opts if getattr(prefs.features, key)]
+        _frame_section("features", f"{len(enabled)} of {len(feature_opts)} enabled")
         selected = set(prompts.checkbox("Features", feature_opts, defaults=enabled))
         for key, _ in feature_opts:
             setattr(prefs.features, key, key in selected)
     elif section == "tokens":
+        _frame_section("tokens", f"budget {prefs.default_token_budget}")
         prefs.default_token_budget = _ask_int("Token budget", prefs.default_token_budget)
     elif section == "agents":
         agent_keys = list(prefs.agent_integrations.keys())
         defaults = [a for a in agent_keys if prefs.agent_integrations[a]]
+        _frame_section("agents", ", ".join(defaults) or "none")
         selected = set(prompts.checkbox("Agent integrations", agent_keys, defaults=defaults))
         for agent in agent_keys:
             prefs.agent_integrations[agent] = agent in selected
     elif section == "plugins":
+        _frame_section("plugins")
         _plugin_wizard_step(prefs)
     else:
         console.print(f"Unknown section: {section}")
@@ -318,10 +388,18 @@ def reconfigure(section: str | None = None) -> None:
     console.print(f"\n{section} configuration updated.")
 
 
-def show_config() -> None:
-    """Display current configuration."""
+def show_config(root: Path | None = None) -> None:
+    """Display current configuration.
+
+    Parameters
+    ----------
+    root:
+        Optional project root to resolve ``opencontext.yaml`` from.  When
+        ``None`` the current working directory is used.  If no
+        ``opencontext.yaml`` is found a graceful "no project config" line is
+        emitted instead of a section header with keys.
+    """
     from opencontext_core.dx.console_styles import BRAND_PRIMARY
-    from opencontext_core.dx.console_styles import console as brand_console
 
     store = UserConfigStore()
     prefs = store.load()
@@ -333,9 +411,16 @@ def show_config() -> None:
         console.print(f"\n  [bold {BRAND_PRIMARY}]{text}[/]")
 
     # Canonical brand header (logo + brand panel) — replaces the ad-hoc cyan rule.
-    brand_console.header("Current Configuration")
+    console.header("Current Configuration")
     console.print(f"\n  Config file: {store.CONFIG_FILE}")
-    console.print(f"  First run: {'Yes' if prefs.first_run else 'No'}")
+    # "First run" must agree with reality: once a project opencontext.yaml exists
+    # (or an install date is recorded), it is no longer a first run — otherwise
+    # `config show` says "First run: Yes" on an initialized, ready project.
+    _yaml_present = (
+        (Path(root) if root is not None else Path.cwd()) / "opencontext.yaml"
+    ).is_file()
+    _is_first_run = prefs.first_run and not _yaml_present and not prefs.install_date
+    console.print(f"  First run: {'Yes' if _is_first_run else 'No'}")
     if prefs.install_date:
         console.print(f"  Installed: {prefs.install_date}")
 
@@ -375,6 +460,66 @@ def show_config() -> None:
     _label("Updates")
     console.print(f"    Check updates: {_flag(prefs.check_updates)}")
     console.print(f"    Auto-update plugins: {_flag(prefs.auto_update_plugins)}")
+
+    # --- Project (opencontext.yaml) section ----------------------------------
+    _label("Project (opencontext.yaml)")
+    project_root = Path(root) if root is not None else Path.cwd()
+    yaml_path = project_root / "opencontext.yaml"
+    if not yaml_path.is_file():
+        console.print("    [dim]no project config (opencontext.yaml not found)[/]")
+    else:
+        try:
+            import yaml as _yaml
+
+            _loaded = _yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+            raw: dict[str, dict[str, object]] = _loaded or {}
+        except Exception as exc:
+            console.print(f"    [dim](error reading opencontext.yaml: {exc})[/]")
+        else:
+            console.print(f"    Config file: {yaml_path}")
+            # memory.provider
+            memory_cfg = raw.get("memory", {}) or {}
+            console.print(f"    memory.provider: {memory_cfg.get('provider', '(not set)')}")
+            # storage.mode
+            storage_cfg = raw.get("storage", {}) or {}
+            console.print(f"    storage.mode: {storage_cfg.get('mode', '(not set)')}")
+            # sdd.flow_mode
+            sdd_cfg = raw.get("sdd", {}) or {}
+            console.print(f"    sdd.flow_mode: {sdd_cfg.get('flow_mode', '(not set)')}")
+            # models.roles
+            models_cfg = raw.get("models", {}) or {}
+            roles = models_cfg.get("roles")
+            if roles and isinstance(roles, dict):
+                console.print("    models.roles:")
+                for _role, _rc in roles.items():
+                    if isinstance(_rc, dict):
+                        _prov = _rc.get("provider", "?")
+                        _model = _rc.get("model", "?")
+                        console.print(f"      {_role}: {_prov} / {_model}")
+                    else:
+                        console.print(f"      {_role}: {_rc}")
+            elif roles:
+                console.print(f"    models.roles: {roles}")
+            else:
+                console.print("    models.roles: (not set)")
+
+            # --- Provenance section (7-layer resolution) ----------------------
+            _label("Provenance")
+            try:
+                from opencontext_core.config_resolver import resolve as _resolve
+
+                resolved = _resolve(project_path=project_root)
+                prov = resolved.provenance
+                # Show the winning layer for the three key dimensions.
+                for dotted_key, top_key in [
+                    ("memory.provider", "memory"),
+                    ("storage.mode", "storage"),
+                    ("sdd.flow_mode", "sdd"),
+                ]:
+                    layer = prov.layer_of(top_key)
+                    console.print(f"    {dotted_key}: [dim]{layer}[/]")
+            except Exception as exc:
+                console.print(f"    [dim](provenance unavailable: {exc})[/]")
 
 
 def reset_config() -> None:

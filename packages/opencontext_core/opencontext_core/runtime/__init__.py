@@ -50,6 +50,14 @@ from opencontext_core.operating_model.events import ProviderEventEmitter
 from opencontext_core.operating_model.performance import CostLedger, ModelRoleRouter
 from opencontext_core.operating_model.quality import PreLLMQualityGate
 from opencontext_core.operating_model.receipts import RunReceiptStore
+from opencontext_core.paths import (
+    StorageMode,
+    detect_legacy,
+    is_owned,
+    resolve_storage_path,
+    resolve_workspace_path,
+    write_manifest,
+)
 from opencontext_core.project.profiles import TechnologyProfile
 from opencontext_core.providers.gateway import ProviderGateway as UnifiedProviderGateway
 from opencontext_core.retrieval.contracts import (
@@ -262,19 +270,86 @@ class ProjectSetupResult(BaseModel):
 class OpenContextRuntime:
     """Facade for project indexing and configured workflow execution."""
 
+    #: Sentinel used to detect when the caller did not pass ``storage_path``.
+    _STORAGE_PATH_UNSET: object = object()
+
     def __init__(
         self,
         config_path: str | Path | None = None,
         config: OpenContextConfig | None = None,
-        storage_path: str | Path = ".storage/opencontext",
+        storage_path: str | Path | object = _STORAGE_PATH_UNSET,
         memory_store: ProjectMemoryStore | None = None,
         llm_gateway: LLMGateway | None = None,
         technology_profiles: list[TechnologyProfile] | None = None,
         embedding_worker: AsyncEmbeddingWorker | None = None,
     ) -> None:
+        import logging as _logging
+
         self.config_path = Path(config_path) if config_path is not None else None
         self.config = config or self._load_config_or_defaults(self.config_path)
-        self.storage_path = Path(storage_path)
+
+        # --- Path resolution (user-dir-storage PR Phase 1) ---
+        # Derive the project root from config so the resolver can compute
+        # the XDG/LOCALAPPDATA project directory.  Callers that pass an
+        # explicit ``storage_path`` retain full backward compatibility — their
+        # value wins and the resolver is NOT called.
+        _root = Path(self.config.project_index.root)
+        # Store root explicitly so subcomponents (e.g. RunReceiptStore) that
+        # need the project root can use self.root instead of path math on
+        # storage_path — which breaks in user mode because storage_path is
+        # under XDG, not the repo.
+        self.root: Path = _root.resolve()
+
+        if storage_path is OpenContextRuntime._STORAGE_PATH_UNSET:
+            # No explicit override — use the resolver.
+            _storage_config = self.config.storage
+            self.storage_path = resolve_storage_path(
+                _root, _storage_config.mode, _storage_config.custom_path
+            )
+            self.workspace_path = resolve_workspace_path(
+                _root, _storage_config.mode, _storage_config.custom_path
+            )
+            # Ensure the storage directory exists and write the ownership manifest.
+            _manifest_first_write = not self.storage_path.exists()
+            self.storage_path.mkdir(parents=True, exist_ok=True)
+            try:
+                from importlib.metadata import version as _pkg_version
+
+                _oc_version = _pkg_version("opencontext-core")
+            except Exception:
+                _oc_version = "unknown"
+            write_manifest(self.storage_path, _root, _oc_version)
+            # Legacy detection — warn if old in-repo state dirs exist.
+            _legacy = detect_legacy(_root)
+            if _legacy is not None:
+                # Ownership skip: if the detected path carries our own manifest
+                # (written by write_manifest above), it was self-created by the
+                # current OC install — not alien legacy state from a previous
+                # tool. Only emit the warning for paths we did not create.
+                _owned = (_legacy.storage_path is not None and is_owned(_legacy.storage_path)) or (
+                    _legacy.workspace_path is not None and is_owned(_legacy.workspace_path)
+                )
+                if not _owned:
+                    _legacy_paths = [
+                        str(p)
+                        for p in [_legacy.storage_path, _legacy.workspace_path]
+                        if p is not None
+                    ]
+                    _legacy_str = " and ".join(_legacy_paths)
+                    warnings.warn(
+                        f"legacy local state detected at {_legacy_str}; "
+                        "run `opencontext storage migrate` to move it",
+                        stacklevel=2,
+                    )
+                    _logging.getLogger("opencontext").warning(
+                        "legacy local state detected at %s; "
+                        "run `opencontext storage migrate` to move it",
+                        _legacy_str,
+                    )
+        else:
+            # Explicit storage_path passed — backward-compat path; resolver skipped.
+            self.storage_path = Path(storage_path)  # type: ignore[arg-type]
+            self.workspace_path = resolve_workspace_path(_root, StorageMode.local)
         self.memory_store = memory_store or LocalProjectMemoryStore(self.storage_path)
         # Parsed-manifest cache (stat-signature keyed). Parsing the whole-repo
         # manifest JSON through Pydantic is query-independent and was repeated on
@@ -355,11 +430,12 @@ class OpenContextRuntime:
             from opencontext_core.learning.feed import record_outcome
 
             self.cost_ledger = CostLedger()
-            # RunReceiptStore appends ``.opencontext/receipts`` to its root, so it
-            # must receive the PROJECT root, not the storage dir. storage_path is
-            # ``<root>/.storage/opencontext``; passing it directly produced the
-            # double-nested ``.storage/opencontext/.opencontext/receipts``.
-            self.provider_receipts = RunReceiptStore(self.storage_path.parent.parent)
+            # RunReceiptStore appends ``.opencontext/receipts`` to its root.
+            # Use self.root (the project root) directly so the path is correct
+            # in both local mode (where storage_path is <root>/.storage/opencontext)
+            # and user mode (where storage_path is in XDG and .parent.parent would
+            # point to the wrong XDG ancestor directory).
+            self.provider_receipts = RunReceiptStore(self.root)
             self.provider_decisions = DecisionRecorder()
             self.provider_events = ProviderEventEmitter()
             # PR-000.3 provider-response cache seam, plugged in but conservative
@@ -593,7 +669,7 @@ class OpenContextRuntime:
         return ProjectSetupResult(
             root=str(project_root),
             config_path=str(config_path),
-            workspace_path=str(project_root / ".opencontext"),
+            workspace_path=str(resolve_workspace_path(project_root, StorageMode.local)),
             manifest_path=str(self.storage_path / "project_manifest.json"),
             files=len(manifest.files),
             symbols=len(manifest.symbols),

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 240" width="720" height="240" role="img" aria-label="Benchmark numbers: psf/requests retry bug 62% reduction, requests SSL 37%, fastapi OAuth2 82%, django overview impractical to 1560 tokens">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 240" width="720" height="240" role="img" aria-label="Benchmark numbers, measured on public repos: psf/requests retry bug 65% fewer tokens (15,691 vs 44,494), requests SSL verification 69% (12,499 vs 40,834), fastapi OAuth2 auth 42% (12,932 vs 22,477), django ORM-to-SQL 87% (14,728 vs 117,057). Pack vs reading the relevant files whole.">
 
   <rect width="720" height="240" rx="14" fill="#0B0F14"/>
   <rect x="1" y="1" width="718" height="238" rx="13" fill="none" stroke="rgba(0,201,167,0.12)" stroke-width="1"/>
@@ -16,7 +16,7 @@
         font-size="10" font-weight="600" fill="#606978" letter-spacing="0.8">TASK</text>
   <text x="440" y="26"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="10" font-weight="600" fill="#606978" letter-spacing="0.8">AGENT LOOP</text>
+        font-size="10" font-weight="600" fill="#606978" letter-spacing="0.8">WHOLE-FILE</text>
   <text x="570" y="26"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
         font-size="10" font-weight="600" fill="#606978" letter-spacing="0.8">OPENCONTEXT</text>
@@ -37,20 +37,20 @@
         font-size="11" fill="#E6EDF3">fix retry bug</text>
   <text x="440" y="63"
         font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
-        font-size="11" fill="#E8706A">~16,657 tok</text>
+        font-size="11" fill="#E8706A">44,494 tok</text>
   <text x="440" y="80"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="10" fill="#606978">4 rounds</text>
+        font-size="10" fill="#606978">5 files</text>
   <text x="570" y="63"
         font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
-        font-size="11" fill="#2DC4A4">6,301 tok</text>
+        font-size="11" fill="#2DC4A4">15,691 tok</text>
   <text x="570" y="80"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
         font-size="10" fill="#606978">1 call</text>
   <rect x="668" y="52" width="44" height="24" rx="6" fill="rgba(0,201,167,0.15)" stroke="rgba(0,201,167,0.35)" stroke-width="1"/>
   <text x="690" y="68" text-anchor="middle"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="12" font-weight="700" fill="#2DC4A4">62%</text>
+        font-size="12" font-weight="700" fill="#2DC4A4">65%</text>
 
   <!-- Row 2 — requests SSL -->
   <rect x="0" y="92" width="720" height="48" fill="#0B0F14"/>
@@ -65,20 +65,20 @@
         font-size="11" fill="#E6EDF3">SSL cert verification</text>
   <text x="440" y="111"
         font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
-        font-size="11" fill="#E8706A">~12,000 tok</text>
+        font-size="11" fill="#E8706A">40,834 tok</text>
   <text x="440" y="128"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="10" fill="#606978">3 rounds</text>
+        font-size="10" fill="#606978">5 files</text>
   <text x="570" y="111"
         font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
-        font-size="11" fill="#2DC4A4">7,513 tok</text>
+        font-size="11" fill="#2DC4A4">12,499 tok</text>
   <text x="570" y="128"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
         font-size="10" fill="#606978">1 call</text>
   <rect x="668" y="100" width="44" height="24" rx="6" fill="rgba(0,168,232,0.12)" stroke="rgba(0,168,232,0.30)" stroke-width="1"/>
   <text x="690" y="116" text-anchor="middle"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="12" font-weight="700" fill="#35ADE5">37%</text>
+        font-size="12" font-weight="700" fill="#35ADE5">69%</text>
 
   <!-- Row 3 — fastapi OAuth2 -->
   <rect x="0" y="140" width="720" height="48" fill="#0E1420"/>
@@ -87,28 +87,28 @@
         font-size="11" fill="#35ADE5">tiangolo/fastapi</text>
   <text x="20" y="176"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="10" fill="#606978">1,121 Python files</text>
+        font-size="10" fill="#606978">1,129 Python files</text>
   <text x="220" y="159"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
         font-size="11" fill="#E6EDF3">add OAuth2 auth</text>
   <text x="440" y="159"
         font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
-        font-size="11" fill="#E8706A">~65,000 tok</text>
+        font-size="11" fill="#E8706A">22,477 tok</text>
   <text x="440" y="176"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="10" fill="#606978">4–8 rounds</text>
+        font-size="10" fill="#606978">13 files</text>
   <text x="570" y="159"
         font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
-        font-size="11" fill="#2DC4A4">11,740 tok</text>
+        font-size="11" fill="#2DC4A4">12,932 tok</text>
   <text x="570" y="176"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
         font-size="10" fill="#606978">1 call</text>
-  <rect x="668" y="148" width="44" height="24" rx="6" fill="rgba(0,201,167,0.15)" stroke="rgba(0,201,167,0.35)" stroke-width="1"/>
+  <rect x="668" y="148" width="44" height="24" rx="6" fill="rgba(0,168,232,0.12)" stroke="rgba(0,168,232,0.30)" stroke-width="1"/>
   <text x="690" y="164" text-anchor="middle"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="12" font-weight="700" fill="#2DC4A4">82%</text>
+        font-size="12" font-weight="700" fill="#35ADE5">42%</text>
 
-  <!-- Row 4 — django -->
+  <!-- Row 4 — django ORM -->
   <rect x="0" y="188" width="720" height="48" rx="14" fill="#0B0F14"/>
   <rect x="0" y="188" width="720" height="14" fill="#0B0F14"/>
   <text x="20" y="207"
@@ -116,24 +116,25 @@
         font-size="11" fill="#35ADE5">django/django</text>
   <text x="20" y="224"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="10" fill="#606978">2,922 Python files</text>
+        font-size="10" fill="#606978">2,924 Python files</text>
   <text x="220" y="207"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="11" fill="#E6EDF3">project overview</text>
+        font-size="11" fill="#E6EDF3">ORM → SQL query</text>
   <text x="440" y="207"
-        font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="11" fill="#606978">impractical</text>
+        font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
+        font-size="11" fill="#E8706A">117,057 tok</text>
   <text x="440" y="224"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="10" fill="#606978">at this scale</text>
+        font-size="10" fill="#606978">10 files</text>
   <text x="570" y="207"
         font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
-        font-size="11" fill="#2DC4A4">1,560 tok</text>
+        font-size="11" fill="#2DC4A4">14,728 tok</text>
   <text x="570" y="224"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
         font-size="10" fill="#606978">1 call</text>
-  <text x="690" y="213" text-anchor="middle"
+  <rect x="668" y="196" width="44" height="24" rx="6" fill="rgba(0,201,167,0.15)" stroke="rgba(0,201,167,0.35)" stroke-width="1"/>
+  <text x="690" y="212" text-anchor="middle"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        font-size="12" fill="#606978">—</text>
+        font-size="12" font-weight="700" fill="#2DC4A4">87%</text>
 
 </svg>

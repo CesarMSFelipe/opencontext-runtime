@@ -28,6 +28,7 @@ class ApplyOperation(StrEnum):
     REPLACE_RANGE = "replace_range"
     INSERT_AFTER = "insert_after"
     DELETE_RANGE = "delete_range"
+    DELETE_FILE = "delete_file"
     CREATE_FILE = "create_file"
 
 
@@ -73,6 +74,10 @@ def apply_edit(root: Path, edit: ApplyEdit) -> AppliedEditReceipt:
 
     if not path.exists():
         raise RuntimeError(f"File not found: {edit.path}")
+
+    if edit.operation == ApplyOperation.DELETE_FILE:
+        path.unlink()
+        return AppliedEditReceipt(path=edit.path, operation=edit.operation, changed=True)
 
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
 

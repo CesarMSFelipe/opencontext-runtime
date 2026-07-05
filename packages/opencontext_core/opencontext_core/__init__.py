@@ -9,6 +9,7 @@ from opencontext_core.config import (
     OpenContextConfig,
     SDDConfig,
     SkillsConfig,
+    StorageConfig,
     load_config,
 )
 from opencontext_core.doctor.deep import (
@@ -21,6 +22,7 @@ from opencontext_core.evaluation.benchmark_suite import (
     ContextScorer,
     QualityDimension,
 )
+from opencontext_core.paths import StorageMode
 from opencontext_core.plugin_system import (
     InstallResult,
     Plugin,
@@ -123,6 +125,8 @@ __all__ = [
     "SDDConfig",
     "SkillsConfig",
     "StateStore",
+    "StorageConfig",
+    "StorageMode",
     "UpdateCheck",
     "UpdateChecker",
     "UserConfigStore",

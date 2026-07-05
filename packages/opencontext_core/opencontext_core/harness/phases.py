@@ -33,6 +33,7 @@ from opencontext_core.harness.models import (
     PhaseGate,
     PhaseLedger,
 )
+from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 
 
 @dataclass
@@ -162,6 +163,22 @@ def _guardrail_gate(phase: str, content: str, *, strict: bool = False) -> PhaseG
     return PhaseGate(id="guardrails", phase=phase, status=GateStatus.WARNING, message=msg)
 
 
+def _phase_contract_gate(phase: str, content: str, *, enabled: bool) -> PhaseGate:
+    if not enabled:
+        return PhaseGate(id="phase_contract", phase=phase, status=GateStatus.SKIPPED)
+    from opencontext_core.sdd.validators import validate_phase
+
+    result = validate_phase(phase, content)
+    # WARNING (not FAILED) so individual phase status stays PASSED/WARNING.
+    # Hard blocking only happens in sdd_strict mode via the runner's contract_blocked check.
+    return PhaseGate(
+        id="phase_contract",
+        phase=phase,
+        status=GateStatus.PASSED if result.passed else GateStatus.WARNING,
+        message=result.reason,
+    )
+
+
 def _is_scaffold_content(content: str) -> bool:
     """Detect a static SCAFFOLD template in a phase's produced content.
 
@@ -212,6 +229,39 @@ def _render_memory_records(records: Any) -> str:
             continue
         lines.append(f"- [{layer or 'memory'}] {content}")
     return "\n".join(lines)
+
+
+def _recall_observations(root: Any, task: str, *, limit: int = 5) -> str:
+    """Render CLI/MCP observations (memory_v2.db) matching *task* as a memory block.
+
+    Parity with the OC Flow recall bridge: the `opencontext memory v2` store was
+    disjoint from the SDD harness recall, so a user's `memory v2 save` never
+    informed SDD planning. Best-effort and read-only. Recall is associative — the
+    store's FTS combines tokens with implicit AND, so search per salient token and
+    union the hits.
+    """
+    try:
+        obs_db = resolve_storage_path(Path(root), StorageMode.local) / "memory_v2.db"
+        if not obs_db.is_file():
+            return ""
+        from opencontext_memory import MemoryStore, mem_search
+
+        store = MemoryStore.open(obs_db)
+        project = Path(root).name
+        seen: dict[str, dict[str, Any]] = {}
+        for token in {t.lower() for t in re.findall(r"[A-Za-z]{4,}", task)}:
+            for row in mem_search(store, query=token, limit=limit, project=project):
+                rid = str(row.get("id") or row.get("topic_key") or row.get("title") or "")
+                if rid and rid not in seen:
+                    seen[rid] = row
+        lines = []
+        for row in list(seen.values())[:limit]:
+            content = str(row.get("content") or row.get("title") or "").strip()
+            if content:
+                lines.append(f"- [observation] {content[:240]}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
 
 
 def _compact_artifact(text: str, state: Any, target_tokens: int = _HANDOFF_TARGET_TOKENS) -> str:
@@ -280,7 +330,7 @@ class ExplorePhase(HarnessPhase):
             config_path=state.root / "opencontext.yaml"
             if (state.root / "opencontext.yaml").exists()
             else None,
-            storage_path=state.root / ".storage" / "opencontext",
+            storage_path=resolve_storage_path(state.root, StorageMode.local),
         )
         manifest = runtime.index_project(state.root)
 
@@ -340,7 +390,7 @@ class ExplorePhase(HarnessPhase):
             pack, pack_trace_id = runtime.build_context_pack_with_trace(state.task, full_budget)
 
         # Persist context pack to run directory
-        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         pack_path = run_dir / "context-pack.json"
         pack_path.write_text(pack.model_dump_json(indent=2), encoding="utf-8")
@@ -355,6 +405,11 @@ class ExplorePhase(HarnessPhase):
                 )
             except Exception:
                 memory_block = ""  # memory is optional, never block explore
+        # Also fold CLI/MCP observations (memory_v2.db) so a user's `memory v2 save`
+        # informs SDD planning — parity with the OC Flow recall bridge.
+        _obs_block = _recall_observations(state.root, state.task)
+        if _obs_block:
+            memory_block = (memory_block + "\n" + _obs_block) if memory_block else _obs_block
 
         # Make the verified context available to later work phases' executor prompts
         # (spec/design/tasks) so the model works from retrieved evidence, not the bare
@@ -380,9 +435,10 @@ class ExplorePhase(HarnessPhase):
         kg_available: bool = False
         kg_error: str | None = None
         try:
+            from opencontext_core.config_resolver import resolve_active_storage_file
             from opencontext_core.indexing.impact_analysis import ImpactAnalyzer
 
-            db_path = state.root / ".storage" / "opencontext" / "context_graph.db"
+            db_path = resolve_active_storage_file(state.root, "context_graph.db")
             if db_path.exists():
                 from opencontext_core.indexing.graph_db import GraphDatabase
 
@@ -450,7 +506,12 @@ class ExplorePhase(HarnessPhase):
             HarnessArtifact(
                 id=f"explore-pack-{state.run_id[:8]}",
                 phase="explore",
-                path=str(state.root / ".opencontext" / "runs" / state.run_id / "context-pack.json"),
+                path=str(
+                    resolve_workspace_path(state.root, StorageMode.local)
+                    / "runs"
+                    / state.run_id
+                    / "context-pack.json"
+                ),
                 kind="context-pack",
                 description=f"Context pack with {len(pack.included)} items",
             )
@@ -565,7 +626,7 @@ class ArchivePhase(HarnessPhase):
         self._memory_v2 = memory_v2
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         # run.json is finalized by the runner's persist_run() AFTER all phases,
@@ -686,6 +747,38 @@ class ArchivePhase(HarnessPhase):
             except Exception:
                 pass  # harvesting is optional, never block archive
 
+            # Dual-write a compact run observation to the CLI/MCP store (memory_v2.db)
+            # so `opencontext memory v2 search` surfaces harvested runs — the harvest
+            # above only populates the agent memory.db. topic_key dedups re-runs.
+            try:
+                obs_db = resolve_storage_path(Path(state.root), StorageMode.local) / "memory_v2.db"
+                obs_db.parent.mkdir(parents=True, exist_ok=True)
+                from opencontext_memory import MemoryStore, mem_save
+
+                from opencontext_core.safety.secrets import SecretScanner
+
+                _changed = list(getattr(state, "changed_files", []) or [])
+                _content = (
+                    f"SDD run {state.run_id} ({getattr(state, 'workflow', 'sdd')}): "
+                    f"{state.task}. status={status}."
+                    + (f" changed: {', '.join(_changed)}" if _changed else "")
+                )
+                # memory_v2.db is a NEW sink with no auto-redaction (unlike the agent
+                # store's SinkGuard) — redact before persisting a secret in the task.
+                _content = SecretScanner().redact(_content)
+                mem_save(
+                    MemoryStore.open(obs_db),
+                    session_id=f"run-{state.run_id}",
+                    project=Path(state.root).name,
+                    title=SecretScanner().redact(f"run: {str(state.task)[:60]}"),
+                    content=_content,
+                    type="run",
+                    topic_key=f"run/{state.run_id}",
+                    capture_prompt=False,
+                )
+            except Exception:
+                pass  # dual-write is best-effort; never block archive
+
         return PhaseResult(
             phase="archive",
             status=status,
@@ -804,7 +897,7 @@ class ProposePhase(HarnessPhase):
     id = "propose"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         proposal_path = run_dir / "proposal.json"
@@ -842,10 +935,16 @@ class ProposePhase(HarnessPhase):
         # nothing downstream has to fall back to the bare task text.
         evidence = {
             "explore_pack": str(
-                state.root / ".opencontext" / "runs" / state.run_id / "context-pack.json"
+                resolve_workspace_path(state.root, StorageMode.local)
+                / "runs"
+                / state.run_id
+                / "context-pack.json"
             ),
             "contract_path": str(
-                state.root / ".opencontext" / "runs" / state.run_id / "contract.yaml"
+                resolve_workspace_path(state.root, StorageMode.local)
+                / "runs"
+                / state.run_id
+                / "contract.yaml"
             ),
             "affected_files": impacted_files,
             "affected_tests": impacted_tests,
@@ -1449,7 +1548,7 @@ class ApplyPhase(HarnessPhase):
         return [executor._resolve(e.path) for e in edits]
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         apply_manifest_path = run_dir / "apply-manifest.json"
 
@@ -1572,7 +1671,7 @@ class ApplyPhase(HarnessPhase):
                 from opencontext_core.runtime import OpenContextRuntime
 
                 OpenContextRuntime(
-                    storage_path=state.root / ".storage" / "opencontext"
+                    storage_path=resolve_storage_path(state.root, StorageMode.local)
                 ).reindex_files(changed_paths, root=state.root)
             except Exception:
                 pass  # freshness is best-effort; never block apply on a reindex error
@@ -1721,7 +1820,7 @@ class SpecPhase(HarnessPhase):
     id = "spec"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         proposal_path = run_dir / "proposal.json"
@@ -1800,6 +1899,7 @@ _None._
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(spec_path),
             _guardrail_gate("spec", spec_content, strict=bool(getattr(state, "sdd_strict", False))),
+            _phase_contract_gate("spec", spec_content, enabled=outcome.is_real),
         ]
         ledger = self._token_ledger(
             "spec", estimate_tokens(outcome.output or "") if outcome.is_real else 0
@@ -1840,7 +1940,7 @@ class DesignPhase(HarnessPhase):
     id = "design"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         spec_path = run_dir / "spec.md"
@@ -1930,6 +2030,7 @@ This section describes the high-level architecture for implementing: {task}.
             _guardrail_gate(
                 "design", design_content, strict=bool(getattr(state, "sdd_strict", False))
             ),
+            _phase_contract_gate("design", design_content, enabled=outcome.is_real),
         ]
         ledger = self._token_ledger(
             "design", estimate_tokens(outcome.output or "") if outcome.is_real else 0
@@ -1970,7 +2071,7 @@ class TasksPhase(HarnessPhase):
     id = "tasks"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         design_path = run_dir / "design.md"
@@ -2082,6 +2183,9 @@ class TasksPhase(HarnessPhase):
                 tasks_path.read_text(encoding="utf-8"),
                 strict=bool(getattr(state, "sdd_strict", False)),
             ),
+            _phase_contract_gate(
+                "tasks", tasks_path.read_text(encoding="utf-8"), enabled=outcome.is_real
+            ),
         ]
         ledger = self._token_ledger(
             "tasks", estimate_tokens(outcome.output or "") if outcome.is_real else 0
@@ -2122,7 +2226,7 @@ class VerifyPhase(HarnessPhase):
     id = "verify"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         verify_report_path = run_dir / "verify-report.json"
@@ -2472,7 +2576,7 @@ class ReviewPhase(HarnessPhase):
     id = "review"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         review_path = run_dir / "review.json"
@@ -2614,7 +2718,7 @@ class JudgmentDayPhase(HarnessPhase):
     id = "judgment"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         apply_artifacts = [a for a in state.artifacts if a.phase == "apply"]
@@ -2775,7 +2879,7 @@ class GGARulesPhase(HarnessPhase):
         return paths
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = state.root / ".opencontext" / "runs" / state.run_id
+        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         rules = self._load_rules(state.root)
@@ -2821,7 +2925,7 @@ class GGARulesPhase(HarnessPhase):
         report = {
             "run_id": state.run_id,
             "created_at": datetime.now(UTC).isoformat(),
-            "rules_file": str(state.root / ".opencontext" / "rules.yaml"),
+            "rules_file": str(resolve_workspace_path(state.root, StorageMode.local) / "rules.yaml"),
             "violations": violations,
             "blocker_count": blocker_count,
         }
@@ -2871,7 +2975,7 @@ class GGARulesPhase(HarnessPhase):
     @staticmethod
     def _load_rules(root: Path) -> dict[str, Any]:
         """Load .opencontext/rules.yaml if present, else return empty rules."""
-        rules_path = root / ".opencontext" / "rules.yaml"
+        rules_path = resolve_workspace_path(root, StorageMode.local) / "rules.yaml"
         if not rules_path.exists():
             return {}
         try:

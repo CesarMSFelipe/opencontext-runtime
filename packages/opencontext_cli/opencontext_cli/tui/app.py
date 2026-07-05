@@ -137,8 +137,29 @@ class ConfigScreen(Screen[None]):
         if leaf and leaf.kind == "select" and leaf.options and leaf.apply and ov.index is not None:
             value = leaf.options()[ov.index][0]
             message = leaf.apply(value)
-            await self._refresh_options()
+            if leaf.key == "language":
+                # Re-translate the menu live so the language switch is visible
+                # without a relaunch.
+                from opencontext_cli.tui.config_model import build_config_model
+                from opencontext_core.i18n import set_language
+
+                set_language(value)
+                self.model = build_config_model()
+                await self._rebuild_columns()
+            else:
+                await self._refresh_options()
             self.query_one("#info", Static).update(f"[{SUCCESS}]✓ {message}[/]")
+
+    async def _rebuild_columns(self) -> None:
+        """Repopulate every column from ``self.model`` — used after a live
+        language switch so category/setting labels re-render in the new language."""
+        cats = self.query_one("#cats", ListView)
+        await cats.clear()
+        for cat in self.model:
+            cats.append(ListItem(Label(cat.label)))
+        self.cat_idx = min(self.cat_idx, len(self.model) - 1)
+        cats.index = self.cat_idx
+        await self._refresh_settings()
 
     async def _after_memory(self) -> None:
         """After the memory pick: refresh, and if the chosen backend needs Engram but

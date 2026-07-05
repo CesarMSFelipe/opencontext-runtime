@@ -18,6 +18,7 @@ non-selectable separator (skipped in the fallbacks).
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -26,6 +27,7 @@ __all__ = [
     "SEPARATOR",
     "checkbox",
     "confirm",
+    "int_input",
     "pause",
     "secret",
     "select",
@@ -51,6 +53,26 @@ def _inquirer() -> Any | None:
     except ImportError:
         return None
     return inquirer
+
+
+def _execute(prompt: Any) -> Any:
+    """Run an InquirerPy prompt, tolerating an already-running event loop.
+
+    TUI suspend paths (config menu guided setup, plugin manager) invoke these
+    prompts while the app's asyncio loop is still current on this thread.
+    prompt_toolkit refuses to start a nested loop there, which would silently
+    degrade every selector to the plain-text fallback and leak an un-awaited
+    coroutine warning. Executing on a worker thread gives prompt_toolkit a
+    fresh loop, keeping the one arrow-key UX everywhere.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return prompt.execute()
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(prompt.execute).result()
 
 
 def _normalize(choices: Sequence[Any]) -> list[tuple[Any, str]]:
@@ -98,13 +120,15 @@ def select(
                 Separator(label) if value is None else Choice(value=value, name=label)
                 for value, label in pairs
             ]
-            return iq.select(
-                message=message,
-                choices=iq_choices,
-                default=default,
-                long_instruction=instruction or _SELECT_HINT,
-                show_cursor=True,
-            ).execute()
+            return _execute(
+                iq.select(
+                    message=message,
+                    choices=iq_choices,
+                    default=default,
+                    long_instruction=instruction or _SELECT_HINT,
+                    show_cursor=True,
+                )
+            )
         except Exception:
             pass
 
@@ -158,7 +182,7 @@ def checkbox(
             if require_one:
                 kwargs["validate"] = lambda result: len(result) > 0
                 kwargs["invalid_message"] = "Select at least one option."
-            return list(iq.checkbox(**kwargs).execute())
+            return list(_execute(iq.checkbox(**kwargs)))
         except Exception:
             pass
 
@@ -200,7 +224,7 @@ def text(message: str, *, default: str = "", instruction: str | None = None) -> 
             kwargs: dict[str, Any] = {"message": message, "default": default}
             if instruction:
                 kwargs["long_instruction"] = instruction
-            return str(iq.text(**kwargs).execute())
+            return str(_execute(iq.text(**kwargs)))
         except Exception:
             pass
     if not _is_tty():
@@ -210,12 +234,53 @@ def text(message: str, *, default: str = "", instruction: str | None = None) -> 
     return Prompt.ask(message, default=default)
 
 
+def int_input(
+    message: str,
+    *,
+    default: int,
+    min_value: int | None = None,
+    max_value: int | None = None,
+    instruction: str | None = None,
+) -> int:
+    """Integer input with range clamping and the standard degradation path.
+
+    Values outside ``[min_value, max_value]`` are clamped to the nearest bound
+    instead of raising, so a mistyped number never aborts a wizard run.
+    """
+
+    def _clamp(value: int) -> int:
+        if min_value is not None and value < min_value:
+            return min_value
+        if max_value is not None and value > max_value:
+            return max_value
+        return value
+
+    iq = _inquirer()
+    if iq is not None and _is_tty():
+        try:
+            kwargs: dict[str, Any] = {"message": message, "default": default}
+            if min_value is not None:
+                kwargs["min_allowed"] = min_value
+            if max_value is not None:
+                kwargs["max_allowed"] = max_value
+            if instruction:
+                kwargs["long_instruction"] = instruction
+            return _clamp(int(_execute(iq.number(**kwargs))))
+        except Exception:
+            pass
+    if not _is_tty():
+        return _clamp(int(default))
+    from rich.prompt import IntPrompt
+
+    return _clamp(int(IntPrompt.ask(message, default=default)))
+
+
 def secret(message: str) -> str:
     """Hidden input (passwords / API keys)."""
     iq = _inquirer()
     if iq is not None and _is_tty():
         try:
-            return str(iq.secret(message=message).execute())
+            return str(_execute(iq.secret(message=message)))
         except Exception:
             pass
     if not _is_tty():

@@ -22,12 +22,11 @@ def test_agent_integration_generator_creates_windsurf_rule(tmp_path: Path) -> No
     assert "Windsurf" in rule_path.read_text(encoding="utf-8")
 
 
-def test_agent_integration_generator_creates_opencode_files(tmp_path: Path) -> None:
+def test_agent_integration_generator_creates_opencode_agents_md_only(tmp_path: Path) -> None:
     AgentIntegrationGenerator().generate(tmp_path, target=AgentTarget.OPENCODE)
 
     assert (tmp_path / "AGENTS.md").exists()
-    assert (tmp_path / "opencode.json").exists()
-    assert "AGENTS.md" in (tmp_path / "opencode.json").read_text(encoding="utf-8")
+    assert not (tmp_path / "opencode.json").exists()
 
 
 def test_agent_integration_generator_does_not_overwrite_without_force(tmp_path: Path) -> None:
@@ -55,8 +54,8 @@ def test_agent_integration_generator_generic_covers_all_community_targets(tmp_pa
     assert "SDD + TDD rules" in (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
 
 
-def test_agent_integration_generator_creates_kilo_opencode_overlay(tmp_path: Path) -> None:
+def test_agent_integration_generator_creates_kilo_agents_md_only(tmp_path: Path) -> None:
     AgentIntegrationGenerator().generate(tmp_path, target=AgentTarget.KILO_CODE)
 
     assert (tmp_path / "AGENTS.md").exists()
-    assert (tmp_path / "opencode.json").exists()
+    assert not (tmp_path / "opencode.json").exists()

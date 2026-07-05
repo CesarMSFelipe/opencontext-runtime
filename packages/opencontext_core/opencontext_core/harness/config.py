@@ -167,6 +167,11 @@ class HarnessConfig:
                     # with no caller/importer/reference — an orphan = likely dead or
                     # speculative code. Scoped to the change; SKIPs without graph.
                     "code_economy",
+                    # tests_pass: the GREEN half of strict TDD — runs the configured
+                    # test command and FAILS if it does not pass. Inactive (skips)
+                    # unless tdd_mode is strict, so non-TDD runs are unaffected; it
+                    # completes RED (failing_test_exists pre-gate) -> GREEN here.
+                    "tests_pass",
                 ],
             ),
             "review": PhaseConfig(

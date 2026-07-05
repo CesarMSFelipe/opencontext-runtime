@@ -191,11 +191,18 @@ class AsyncEmbeddingWorker:
                 self._stats.failed_count += len(batch)
 
     def _enqueue_one(self, item: EmbeddedItem) -> None:
-        """Put one item on the queue from within the worker loop (drops if full)."""
+        """Put one item on the queue from within the worker loop (drops if full).
+
+        A full queue is expected backpressure during a bulk index (more symbols
+        than the generator can drain). Count the drop so ``stats()`` stays honest,
+        but keep it off the console — per-item warnings flood a first-time index.
+        """
         try:
             self._queue.put_nowait(item)
         except asyncio.QueueFull:
-            _log.warning("embedding queue full, dropping item")
+            with self._lock:
+                self._stats.dropped_count += 1
+            _log.debug("embedding queue full, dropping item")
 
     def enqueue_sync(self, items: list[EmbeddedItem]) -> int:
         """Synchronously enqueue items for embedding.
@@ -225,7 +232,10 @@ class AsyncEmbeddingWorker:
                     self._queue.put_nowait(item)
                     queued += 1
                 except asyncio.QueueFull:
-                    _log.warning("embedding queue full, dropping %d items", len(items) - queued)
+                    dropped = len(items) - queued
+                    with self._lock:
+                        self._stats.dropped_count += dropped
+                    _log.debug("embedding queue full, dropping %d items", dropped)
                     break
 
         with self._lock:

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from opencontext_core.paths import StorageMode, resolve_workspace_path
+
 CHECK_NAMES = ["security", "quality", "docs", "performance", "dependencies"]
 
 
 def ensure_checks(root: Path) -> list[Path]:
     """Ensure local checks exist and return their paths."""
 
-    checks_dir = root / ".opencontext" / "checks"
+    checks_dir = resolve_workspace_path(root, StorageMode.local) / "checks"
     checks_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
     for name in CHECK_NAMES:

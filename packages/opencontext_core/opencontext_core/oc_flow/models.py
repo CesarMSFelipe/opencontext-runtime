@@ -158,6 +158,8 @@ class InspectionReport(BaseModel):
     outcome: Literal["passed", "failed_recoverable", "failed_blocking", "skipped_with_reason"]
     gate_results: list[dict[str, Any]] = Field(default_factory=list)
     failure_summary: str = Field(default="", description="Why it failed, if it did.")
+    verified_by: list[str] = Field(default_factory=list, description="Commands that verified it.")
+    verification_outcome: str = Field(default="not_run", description="passed|failed|not_run.")
     llm_tokens: int = Field(default=0, description="Always 0 — local inspection is LLM-free.")
 
     @field_validator("llm_tokens")
@@ -197,6 +199,19 @@ class ContextEnvelopeItem(BaseModel):
     full_file_reason: str = Field(
         default="", description="Recorded reason if a whole file was read (book §8 rule)."
     )
+    # C17 (product-closure-r13): why this item was included (source + match reason).
+    why_included: str = Field(
+        default="",
+        description="Source type + match reason from ranking (e.g. 'file:seed', 'kg:score=0.9').",
+    )
+    # Per-item confidence score derived from KG node temporal confidence.
+    # 0.0 for fallback/seed items; >0 for KG-grounded items.
+    confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Item-level retrieval confidence [0,1]; 0.0 for non-KG items.",
+    )
 
 
 class ContextEnvelope(BaseModel):
@@ -205,6 +220,12 @@ class ContextEnvelope(BaseModel):
     This is the typed *seam* PR-010 will own (the surgical ``ContextEnvelope``).
     Today it is assembled by the existing retrieval planner / KG; the shape is
     stable so the planner output can be projected into it without caller churn.
+
+    C17 (product-closure-r13): deepened with receipt provenance fields so the
+    artifact written to context-envelope.json carries full auditability —
+    receipt_id, why_included per item, why_omitted, budget_used/budget_available,
+    ranking_hash, decision_dependency, and confidence.  All fields are optional
+    (defaulted) so existing callers need no changes.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -219,6 +240,39 @@ class ContextEnvelope(BaseModel):
         default=0, description="Deterministic token estimate (PR-011 seam)."
     )
     cache_hit: bool = Field(default=False, description="True when reused from the semantic cache.")
+    # C17: receipt provenance (all defaulted — backward-compatible).
+    receipt_id: str = Field(
+        default="",
+        description="Unique envelope receipt id (ULID/UUID) for cross-run traceability.",
+    )
+    why_omitted: list[str] = Field(
+        default_factory=list,
+        description="Reasons for each deliberate omission (mirrors omissions list).",
+    )
+    decision_dependency: str = Field(
+        default="",
+        description="Which runtime decision drove context strategy (e.g. context_strategy kind).",
+    )
+    confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Normalized envelope confidence [0,1] derived from included item scores.",
+    )
+    budget_used: int = Field(
+        default=0,
+        ge=0,
+        description="Token budget consumed by this envelope (== token_estimate after packing).",
+    )
+    budget_available: int = Field(
+        default=0,
+        ge=0,
+        description="Per-node token budget limit available for this context build.",
+    )
+    ranking_hash: str = Field(
+        default="",
+        description="SHA-1 prefix of the ordered item refs — detects ranking changes.",
+    )
 
     @property
     def has_items(self) -> bool:

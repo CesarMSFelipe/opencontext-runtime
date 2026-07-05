@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from conftest import create_sample_project, write_config
 from opencontext_core.compat import UTC
 from opencontext_core.indexing.graph_db import FileRecord, GraphDatabase, Node
 from opencontext_core.models.context import ContextItem
 from opencontext_core.models.project import DependencyGraph, FileKind, ProjectFile, ProjectManifest
 from opencontext_core.runtime import OpenContextRuntime
+from tests.core.conftest import create_sample_project, write_config
 
 
 def _manifest(root: Path) -> ProjectManifest:

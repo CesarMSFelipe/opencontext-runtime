@@ -37,7 +37,7 @@ opencontext pack . --query "How does auth work?" --copy
 
 - **Knowledge Graph** — Indexes symbols, call chains, imports, framework routes into SQLite. No external services.
 - **Context Packs** — Retrieves relevant code for a task. Token-budgeted, ranked, redacted.
-- **MCP Tools** — 14 tools for search, context, graph tracing, impact analysis, symbol edits, and in-process agentic runs.
+- **MCP Tools** — 32 tools for search, context, graph tracing, impact analysis, symbol edits, memory, quality, session steps, and in-process agentic runs.
 - **SDD Workflow** — Spec-Driven Development with phase governance and traceable decisions.
 - **Agent Memory** — 5-layer local memory (SQLite + FTS5). Past outcomes, learned rules, failure patterns.
 - **Security** — Secrets redacted, external providers disabled by default, air-gapped mode supported.

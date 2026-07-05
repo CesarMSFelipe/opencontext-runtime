@@ -21,6 +21,7 @@ from opencontext_core.oc_flow.models import Lane
 from opencontext_core.oc_flow.nodes import NodeExecutor, ProviderBackedNodeExecutor
 from opencontext_core.oc_flow.runner import OCFlowRunner
 from opencontext_core.operating_model.receipts import RunReceiptStore
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 from opencontext_core.providers.detect import detect_provider
 from opencontext_core.providers.gateway import ProviderGateway
 from opencontext_core.providers.test_stub import TestStubGateway
@@ -36,9 +37,16 @@ def run_oc_flow_cli(
     resume: str | None = None,
     enabled: bool = True,
     as_json: bool = False,
+    quiet: bool = False,
     executor: NodeExecutor | None = None,
 ) -> dict[str, Any]:
     """Execute or resume OC Flow from the CLI; returns a JSON-serialisable summary.
+
+    ``quiet`` suppresses the human/JSON summary print entirely. Embedders that
+    share stdout with a wire protocol (the MCP stdio server) MUST use it instead
+    of redirecting stdout: a blanket ``redirect_stdout`` would also swallow
+    server->client ``sampling/createMessage`` requests emitted mid-run, so the
+    host never sees them and every sampling call stalls to its timeout.
 
     ``executor`` is injectable: a productive ``ProviderBackedNodeExecutor`` /
     ``McpSamplingNodeExecutor`` can be supplied when a provider is configured;
@@ -57,7 +65,8 @@ def run_oc_flow_cli(
             "status": "disabled",
             "message": "OC Flow is off; enable it with runtime.oc_flow_enabled: true",
         }
-        _maybe_print(summary, as_json)
+        if not quiet:
+            _maybe_print(summary, as_json)
         return summary
 
     # An explicitly injected executor (tests / embedders) always wins; otherwise
@@ -82,12 +91,14 @@ def run_oc_flow_cli(
             "diagnosis_attempts": len(resumed.diagnosis_attempts),
             "inspection": resumed.inspection.outcome if resumed.inspection else None,
         }
-        _maybe_print(summary, as_json)
+        if not quiet:
+            _maybe_print(summary, as_json)
         return summary
 
     if task is None:
         summary = {"status": "error", "message": "a task is required for 'run'"}
-        _maybe_print(summary, as_json)
+        if not quiet:
+            _maybe_print(summary, as_json)
         return summary
 
     selected = workflow
@@ -110,7 +121,8 @@ def run_oc_flow_cli(
             "recommended_command": recommended_command,
             "task": task,
         }
-        _maybe_print(summary, as_json)
+        if not quiet:
+            _maybe_print(summary, as_json)
         return summary
 
     result = runner.run(task, lane=Lane(lane), profile=profile)
@@ -127,12 +139,15 @@ def run_oc_flow_cli(
         "graph_status": result.graph_status,
         "completion_reason": result.completion_reason,
         "mutation_required": result.mutation_required,
+        "verified_by": result.verified_by,
+        "verification_outcome": result.verification_outcome,
         "selection_reason": result.workflow_selection.get("reason", selection_reason),
         "artifacts_dir": str(result.artifacts_dir) if result.artifacts_dir else None,
     }
     if result.status != "completed":
         summary["message"] = f"{result.status}: {result.completion_reason}"
-    _maybe_print(summary, as_json)
+    if not quiet:
+        _maybe_print(summary, as_json)
     return summary
 
 
@@ -153,6 +168,11 @@ def _resolve_executor(root: Path) -> NodeExecutor | None:
     """
     det = detect_provider()
     if det.name == "mock":
+        from opencontext_core.llm.sampling_gateway import get_host_sampler
+        from opencontext_core.oc_flow.mcp_executor import MCPSamplingNodeExecutor
+
+        if sampler := get_host_sampler():
+            return MCPSamplingNodeExecutor(sampler=sampler, root=root)
         # TEST-ONLY gate (PROD-002 / design B2): a config that EXPLICITLY declares
         # `provider: test_stub` with a resolvable `edits_file` drives the real mutation
         # pipeline credential-free. This is NEVER a production fallback — any other
@@ -226,7 +246,7 @@ def _within(root: Path, candidate: Path) -> bool:
 
 
 def _latest_session(root: Path) -> str:
-    sessions = root / ".opencontext" / "sessions"
+    sessions = resolve_workspace_path(root, StorageMode.local) / "sessions"
     if not sessions.is_dir():
         return ""
     candidates = sorted((d for d in sessions.iterdir() if d.is_dir()), key=lambda d: d.name)

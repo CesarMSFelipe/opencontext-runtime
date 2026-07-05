@@ -129,6 +129,8 @@ def run_local_inspection(
             gates.append(g)
 
     # External, opportunistic checks (lint -> typecheck -> tests) — only when enabled.
+    verified_by: list[str] = []
+    verification_outcome = "not_run"
     if run_external:
         for label, command in (
             ("lint", lint_command),
@@ -136,7 +138,14 @@ def run_local_inspection(
             ("targeted_tests", test_command),
         ):
             if command:
-                gates.append(_run_command(label, command, root))
+                gate = _run_command(label, command, root)
+                gates.append(gate)
+                if label == "targeted_tests":
+                    verified_by.append(" ".join(command))
+                    verification_outcome = "passed" if gate["status"] == _PASSED else "failed"
+
+    if mutation_required and test_command and verification_outcome == "not_run":
+        gates.append(_gate("targeted_tests", _RECOVERABLE, "targeted tests did not run"))
 
     if not changed_files:
         if mutation_required:
@@ -153,5 +162,7 @@ def run_local_inspection(
         outcome=outcome,  # type: ignore[arg-type]
         gate_results=gates,
         failure_summary=failure,
+        verified_by=verified_by,
+        verification_outcome=verification_outcome,
         llm_tokens=0,
     )

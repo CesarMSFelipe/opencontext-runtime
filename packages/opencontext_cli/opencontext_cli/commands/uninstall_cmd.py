@@ -13,14 +13,32 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from rich.panel import Panel
-
 from opencontext_cli.output import eprint
 from opencontext_core import prompts
 from opencontext_core.configurator import KNOWN_AGENTS, Configurator
 from opencontext_core.configurator.constants import MCP_LABEL
 from opencontext_core.configurator.mcp_strategy import McpShape
 from opencontext_core.dx.console_styles import console
+from opencontext_core.dx.wizard_frame import WizardStep, render_frame
+
+# Detail cards for the interactive uninstall steps — the shared wizard frame
+# renders these in the config-TUI info-pane format.
+_UNINSTALL_WIZARD_STEPS: dict[str, WizardStep] = {
+    "scope": WizardStep(
+        title="Uninstall scope",
+        effect="Chooses what is removed: this project's wiring, HOME state, or both.",
+        recommended="workspace — keeps global config for other projects.",
+        risk="full removes all traces, including HOME-level OpenContext state.",
+        cli="opencontext uninstall --scope <workspace|global> | --full",
+    ),
+    "confirm": WizardStep(
+        title="Confirm removal",
+        effect="Strips the managed config and MCP entries for the selected scope.",
+        recommended="Preview first with --dry-run.",
+        risk="Destructive; --purge additionally deletes local state directories.",
+        cli="opencontext uninstall --yes [--dry-run]",
+    ),
+}
 
 
 def _strip_project_managed_blocks(root: object, scope: str) -> None:
@@ -75,9 +93,16 @@ _PURGE_TARGETS = (
 def _purge_project_artifacts(root: object) -> list[str]:
     """Delete OpenContext's project-local artifacts. Best-effort; returns what
     was removed. Only paths under ``root`` are touched.
+
+    In-repo state dirs (``.storage/opencontext``, ``.opencontext``) are always
+    removed when present — ``--purge`` is an explicit cleanup pass. The XDG
+    user-mode state directory for this project is additionally removed when the
+    ownership manifest matches the given root (``is_owned()`` gate).
     """
     import shutil
     from pathlib import Path
+
+    from opencontext_core.paths import StorageMode, is_owned, resolve_storage_path
 
     base = Path(str(root))
     removed: list[str] = []
@@ -93,6 +118,16 @@ def _purge_project_artifacts(root: object) -> list[str]:
             removed.append(name)
         except Exception:
             pass
+
+    # Also remove the XDG user-mode state directory for this project if owned.
+    try:
+        _xdg_path = resolve_storage_path(base, StorageMode.user)
+        if _xdg_path.exists() and is_owned(_xdg_path):
+            shutil.rmtree(_xdg_path)
+            removed.append(str(_xdg_path))
+    except Exception:
+        pass
+
     storage = base / ".storage"
     if storage.is_dir() and not any(storage.iterdir()):
         try:
@@ -123,7 +158,13 @@ def add_uninstall_parser(subparsers: Any) -> None:
         "--all", dest="all_agents", action="store_true", help="Remove from every known agent."
     )
     parser.add_argument(
-        "--scope", choices=["global", "local"], default="local", help="Where config was written."
+        "--scope",
+        choices=["workspace", "global", "all", "local"],  # local = legacy alias for workspace
+        default=None,  # None = not given; a TTY offers a selector, otherwise 'workspace'
+        help=(
+            "Purge scope: 'workspace' (project state), 'global' (HOME OC state), "
+            "'all' (both). Legacy alias 'local' maps to 'workspace'. Default: workspace."
+        ),
     )
     parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation.")
     parser.add_argument("--json", action="store_true", help="Emit the report as JSON.")
@@ -164,8 +205,179 @@ def _global_state_targets() -> list[Path]:
     ]
 
 
+def _global_product_install_targets() -> list[Path]:
+    """Return the fixed paths that install.sh creates for the product install.
+
+    # NOTE: known fixed-path removal — upgrade to manifest-driven if install
+    # methods diversify (e.g. brew/npm managed paths are added to install.sh).
+    # Paths intentionally excluded (not created by install.sh):
+    #   - ~/.local/bin/oc        (not in install.sh)
+    #   - ~/.cache/opencontext   (not in install.sh)
+    #   - ~/.local/state/opencontext (not in install.sh)
+    """
+    home = Path.home()
+    return [
+        home / ".opencontext" / "venv",
+    ]
+
+
+def _detect_install_methods() -> list[dict[str, str]]:
+    """Report how the OpenContext package itself is installed — REPORT ONLY.
+
+    Config/state residue is handled by ``verify_no_global_traces``; this is the
+    orthogonal question "is the distribution still installed, and by what?". The
+    uninstall command manages agent config, never the package: removing a
+    pipx/pip/zipapp install is the package manager's job, so we surface the exact
+    command instead of deleting anything. Never counted as residue — a machine
+    that can run this code necessarily has OpenContext installed.
+    """
+    import shutil
+
+    methods: list[dict[str, str]] = []
+    home = Path.home()
+
+    # pipx — a dedicated venv under the pipx home.
+    pipx_venv = home / ".local" / "share" / "pipx" / "venvs" / "opencontext-cli"
+    if pipx_venv.is_dir():
+        methods.append(
+            {"method": "pipx", "location": str(pipx_venv), "hint": "pipx uninstall opencontext-cli"}
+        )
+
+    # zipapp — the CLI shim on PATH resolves to a .pyz.
+    which = shutil.which("opencontext")
+    if which and which.endswith(".pyz"):
+        methods.append({"method": "zipapp", "location": which, "hint": f"delete {which}"})
+
+    # pip / editable — packaging metadata resolves, and it is not the pipx venv.
+    if not any(m["method"] == "pipx" for m in methods):
+        try:
+            import importlib.metadata as im
+
+            dist = im.distribution("opencontext-cli")
+            editable = False
+            raw = dist.read_text("direct_url.json")
+            if raw:
+                editable = bool(json.loads(raw).get("dir_info", {}).get("editable"))
+            loc = str(dist.locate_file(""))
+            if editable:
+                methods.append(
+                    {"method": "editable", "location": loc, "hint": "pip uninstall opencontext-cli"}
+                )
+            else:
+                methods.append(
+                    {"method": "pip", "location": loc, "hint": "pip uninstall opencontext-cli"}
+                )
+        except Exception:
+            pass
+
+    return methods
+
+
+def _oc_symlink_in_local_bin() -> Path | None:
+    """Return ~/.local/bin/opencontext if it is a symlink pointing into ~/.opencontext.
+
+    Guards:
+    - Only removes if the path is under the user's home.
+    - Only removes if it is a symlink (not a regular file from pipx/brew).
+    - Only removes if the symlink target resolves into ~/.opencontext.
+    Returns None when the path does not exist or does not meet the guards.
+    """
+    home = Path.home()
+    candidate = home / ".local" / "bin" / "opencontext"
+    if not candidate.is_symlink():
+        return None
+    try:
+        # resolve() follows the symlink chain; we check whether the result lives
+        # under ~/.opencontext so we never remove an unrelated tool's entry.
+        resolved = candidate.resolve()
+        oc_root = (home / ".opencontext").resolve()
+        resolved.relative_to(oc_root)  # raises ValueError when not under oc_root
+    except (OSError, ValueError):
+        return None
+    return candidate
+
+
+# RC files that _add_venv_to_path in install.sh may modify.
+_RC_FILES = (".bashrc", ".zshrc", ".profile")
+
+# Exact comment line that install.sh writes before the PATH export.
+_RC_OC_COMMENT = "# OpenContext Runtime"
+
+
+def _strip_rc_path_lines(home: Path) -> list[str]:
+    """Remove the '# OpenContext Runtime' + export PATH block from shell rc files.
+
+    install.sh writes exactly two lines:
+        # OpenContext Runtime
+        export PATH="<venv_bin>:$PATH"
+
+    Only those two consecutive lines are removed. All other rc content is
+    preserved. Returns list of rc file paths that were modified.
+    """
+    modified: list[str] = []
+    for rc_name in _RC_FILES:
+        rc_path = home / rc_name
+        if not rc_path.exists():
+            continue
+        try:
+            lines = rc_path.read_text(encoding="utf-8").splitlines(keepends=True)
+        except OSError:
+            continue
+        new_lines: list[str] = []
+        i = 0
+        changed = False
+        while i < len(lines):
+            stripped = lines[i].rstrip("\n").rstrip()
+            if stripped == _RC_OC_COMMENT:
+                # Consume the comment line and the immediately following export line.
+                i += 1
+                if i < len(lines) and lines[i].lstrip().startswith("export PATH="):
+                    i += 1
+                changed = True
+                # Also consume a blank line that install.sh prepends before the comment.
+                # The blank line was already emitted — trim trailing blank from output.
+                if new_lines and new_lines[-1].strip() == "":
+                    new_lines.pop()
+                continue
+            new_lines.append(lines[i])
+            i += 1
+        if changed:
+            try:
+                rc_path.write_text("".join(new_lines), encoding="utf-8")
+                modified.append(str(rc_path))
+            except OSError:
+                pass
+    return modified
+
+
+def resolve_uninstall_scope(args: Any) -> str:
+    """Return the effective purge scope from parsed args.
+
+    Resolution order (highest → lowest precedence):
+      1. --full without explicit scope → 'all' (covers both tiers)
+      2. --scope <value> → normalise alias 'local' → 'workspace'
+      3. default → 'workspace'
+
+    The scope returned is always one of: 'workspace', 'global', 'all'.
+    """
+    raw_scope = getattr(args, "scope", "workspace") or "workspace"
+    # Normalise legacy alias.
+    if raw_scope == "local":
+        raw_scope = "workspace"
+    # --full implies scope=all when no more-specific scope was given.
+    if getattr(args, "full", False) and raw_scope == "workspace":
+        return "all"
+    return raw_scope
+
+
 def _purge_global_state() -> list[str]:
     """Delete OpenContext HOME state. Best-effort and scoped to known OC dirs.
+
+    Removes (in order):
+      1. Paths from _global_state_targets() — config profiles + home backups.
+      2. Product-install paths from install.sh: ~/.opencontext/venv.
+      3. ~/.local/bin/opencontext symlink — only when it points into ~/.opencontext.
+      4. Shell rc PATH lines: the '# OpenContext Runtime' + export PATH block.
 
     NOTE: a system-level Engram provisioned by ``install --install-engram`` (pipx/npm)
     is intentionally NOT reversed here — that is a separate system install the user
@@ -174,6 +386,9 @@ def _purge_global_state() -> list[str]:
     import shutil
 
     removed: list[str] = []
+    home = Path.home()
+
+    # 1. Config profiles + home backups (original targets)
     for target in _global_state_targets():
         if not target.exists():
             continue
@@ -186,7 +401,33 @@ def _purge_global_state() -> list[str]:
         except Exception:
             pass
 
-    for parent in (Path.home() / ".config", Path.home() / ".opencontext"):
+    # 2. Product-install paths (venv created by install.sh)
+    for target in _global_product_install_targets():
+        if not target.exists():
+            continue
+        try:
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+            removed.append(str(target))
+        except Exception:
+            pass
+
+    # 3. ~/.local/bin/opencontext symlink — guard: only if it points into ~/.opencontext
+    oc_symlink = _oc_symlink_in_local_bin()
+    if oc_symlink is not None:
+        try:
+            oc_symlink.unlink()
+            removed.append(str(oc_symlink))
+        except Exception:
+            pass
+
+    # 4. Strip the '# OpenContext Runtime' PATH block from shell rc files
+    removed.extend(_strip_rc_path_lines(home))
+
+    # 5. Prune empty parent dirs (best-effort; silently skips non-empty)
+    for parent in (home / ".config", home / ".opencontext"):
         try:
             parent.rmdir()
         except OSError:
@@ -291,12 +532,7 @@ def _run_full_uninstall(
         print(json.dumps(report, indent=2))
         return
     console.header("Full Uninstall")
-    console.print(
-        Panel.fit(
-            "[bold green]Full uninstall complete[/bold green]",
-            border_style="green",
-        )
-    )
+    console.panel("[bold green]Full uninstall complete[/bold green]", style="success", fit=True)
     if report.get("purged"):
         console.dim(f"  purged: {', '.join(report['purged'])}")
     if report.get("global_removed"):
@@ -453,28 +689,99 @@ def verify_no_global_traces(agents: list[str]) -> list[str]:
         if state_path.exists():
             residue.append(str(state_path))
 
+    # Product-install paths created by install.sh.
+    for install_path in _global_product_install_targets():
+        if install_path.exists():
+            residue.append(str(install_path))
+
+    # ~/.local/bin/opencontext symlink pointing into ~/.opencontext.
+    oc_symlink = _oc_symlink_in_local_bin()
+    if oc_symlink is not None:
+        residue.append(str(oc_symlink))
+
     return list(dict.fromkeys(residue))
+
+
+def _select_scope_interactive(args: Any) -> None:
+    """Offer the scope choice the flags encode (``--scope`` / ``--full``).
+
+    Mutates ``args`` in place: 'full' flips ``args.full`` so the normal --full
+    path (scope=all) runs; otherwise the chosen scope is recorded on
+    ``args.scope`` exactly as if the flag had been passed.
+    """
+    render_frame(1, 2, _UNINSTALL_WIZARD_STEPS["scope"])
+    choice = prompts.select(
+        "What should be uninstalled?",
+        [
+            ("workspace", "Workspace — this project's agent config and state"),
+            ("global", "Global — HOME-level OpenContext state"),
+            ("full", "Full — remove all traces (workspace + global)"),
+        ],
+        default="workspace",
+    )
+    if choice == "full":
+        args.full = True
+    else:
+        args.scope = choice
 
 
 def handle_uninstall(args: Any) -> None:
     """Remove OpenContext's managed config from the requested agents."""
     from opencontext_cli.main import _resolve_flag
 
-    scope = getattr(args, "scope", "local")
     dry_run = _resolve_flag(getattr(args, "dry_run", False), "OPENCONTEXT_DRY_RUN")
     json_output = _resolve_flag(getattr(args, "json", False), "OPENCONTEXT_JSON")
     yes = _resolve_flag(getattr(args, "yes", False), "OPENCONTEXT_YES")
     root = getattr(args, "root", ".")
 
-    # --verify: read-only trace scan
-    if getattr(args, "verify", False):
-        residue = verify_no_traces(root)
-        global_residue = verify_no_global_traces([])
+    # Bare interactive run (no scope flags, no automation flags) → offer the
+    # same choice the flags encode instead of silently assuming workspace.
+    # Non-TTY runs never prompt (they fall through to the existing guards).
+    framed_wizard = False
+    if (
+        getattr(args, "scope", None) is None
+        and not getattr(args, "full", False)
+        and not getattr(args, "verify", False)
+        and not dry_run
+        and not json_output
+        and not yes
+        and sys.stdin.isatty()
+    ):
+        _select_scope_interactive(args)
+        framed_wizard = True
+
+    scope = getattr(args, "scope", None) or "workspace"
+
+    # Is a removal action requested alongside --verify? When the user runs the
+    # natural "remove and confirm clean" form (e.g. ``--purge --full --verify
+    # --yes``), --verify must NOT short-circuit into a read-only scan — the
+    # removal must run first and then verify. --verify is verify-only ONLY when
+    # it is the sole action.
+    _removal_requested = (
+        getattr(args, "full", False)
+        or _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE")
+        or getattr(args, "all_agents", False)
+        or bool(_parse_agents(getattr(args, "agents", None)))
+    )
+
+    # --verify (alone): read-only trace scan scoped to the resolved scope.
+    if getattr(args, "verify", False) and not _removal_requested:
+        effective_scope = resolve_uninstall_scope(args)
+        residue = verify_no_traces(root) if effective_scope in ("workspace", "all") else []
+        global_residue = verify_no_global_traces([]) if effective_scope in ("global", "all") else []
+        # Report-only: how the package itself is installed. Advisory, NOT residue —
+        # it never affects `passed` (the machine running this IS installed).
+        install_methods = _detect_install_methods()
         passed = len(residue) == 0 and len(global_residue) == 0
         if json_output:
             print(
                 json.dumps(
-                    {"passed": passed, "residue": residue, "global_residue": global_residue},
+                    {
+                        "passed": passed,
+                        "residue": residue,
+                        "global_residue": global_residue,
+                        "install_methods": install_methods,
+                    },
                     indent=2,
                 )
             )
@@ -492,6 +799,13 @@ def handle_uninstall(args: Any) -> None:
                     for p in global_residue:
                         console.dim(f"  {p}")
                 console.dim("Run 'opencontext uninstall --full --global-state --yes' to clean up.")
+            if install_methods:
+                console.dim(
+                    "The OpenContext package is still installed (config removal does not "
+                    "uninstall the package):"
+                )
+                for m in install_methods:
+                    console.dim(f"  {m['method']}: {m['hint']}")
         sys.exit(0 if passed else 1)
 
     # --full: complete trace removal
@@ -505,6 +819,19 @@ def handle_uninstall(args: Any) -> None:
             ]
             if getattr(args, "global_state", False):
                 targets.extend(str(p) for p in _global_state_targets())
+                targets.extend(str(p) for p in _global_product_install_targets())
+                oc_sym = _oc_symlink_in_local_bin()
+                if oc_sym is not None:
+                    targets.append(str(oc_sym))
+                home = Path.home()
+                for rc_name in _RC_FILES:
+                    rc_path = home / rc_name
+                    if rc_path.exists():
+                        try:
+                            if _RC_OC_COMMENT in rc_path.read_text(encoding="utf-8"):
+                                targets.append(f"{rc_path} (rc PATH block)")
+                        except OSError:
+                            pass
             if json_output:
                 print(json.dumps({"dry_run": True, "would_remove": targets}, indent=2))
             else:
@@ -518,14 +845,20 @@ def handle_uninstall(args: Any) -> None:
             eprint("--full requires --yes in non-interactive mode.")
             sys.exit(1)
         if not yes:
+            if framed_wizard:
+                render_frame(2, 2, _UNINSTALL_WIZARD_STEPS["confirm"].with_current("full removal"))
             console.warning("--full will delete all OpenContext traces under the project root.")
-            if not __import__("opencontext_core.prompts", fromlist=["confirm"]).confirm(
-                "Proceed?", default=False
-            ):
+            if not prompts.confirm("Proceed?", default=False):
                 console.warning("Full uninstall cancelled.")
                 return
+        effective_scope = resolve_uninstall_scope(args)
         _run_full_uninstall(
-            root, scope, json_output, global_state=getattr(args, "global_state", False)
+            root,
+            scope,
+            json_output,
+            global_state=(
+                effective_scope in ("global", "all") or getattr(args, "global_state", False)
+            ),
         )
         return
 
@@ -569,12 +902,23 @@ def handle_uninstall(args: Any) -> None:
                 console.dim(f"  would purge: {', '.join(_PURGE_TARGETS)}")
         return
 
-    # Destructive: require explicit confirmation unless --yes (or non-interactive
-    # JSON). Never proceed silently on a non-TTY without --yes.
-    if not yes and not json_output:
-        if not sys.stdin.isatty():
-            console.warning("Refusing non-interactive uninstall; pass --yes.")
-            return
+    # Destructive: require explicit confirmation. --json selects machine-readable
+    # OUTPUT; it does NOT imply consent to delete. Any non-interactive caller
+    # (no TTY, or --json) MUST pass --yes — otherwise refuse with exit 2, so a
+    # script/agent that runs `uninstall --json` can never silently wipe data.
+    if not yes:
+        if json_output or not sys.stdin.isatty():
+            msg = (
+                "Refusing uninstall without --yes in non-interactive/JSON mode "
+                "(pass --yes to confirm, or --dry-run to preview)."
+            )
+            if json_output:
+                print(json.dumps({"status": "refused", "reason": msg}))
+            else:
+                eprint(msg)
+            sys.exit(2)
+        if framed_wizard:
+            render_frame(2, 2, _UNINSTALL_WIZARD_STEPS["confirm"].with_current(", ".join(valid)))
         console.print(f"About to remove OpenContext from: [bold]{', '.join(valid)}[/]")
         if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE"):
             console.warning(
@@ -601,19 +945,33 @@ def handle_uninstall(args: Any) -> None:
         except Exception:
             pass
 
-    if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE") and scope == "local":
+    # --purge deletes project artifacts for any workspace-scoped run. The default
+    # scope is "workspace" ("local" is its legacy alias); "all" covers it too.
+    # Only a global-only scope skips the project purge.
+    if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE") and scope in (
+        "workspace",
+        "local",
+        "all",
+    ):
         report["purged"] = _purge_project_artifacts(getattr(args, "root", "."))
+
+    # --verify combined with a removal action: verify AFTER removal, and let the
+    # exit code reflect whether traces remain (the natural "remove and confirm" form).
+    if getattr(args, "verify", False):
+        residue = verify_no_traces(getattr(args, "root", "."))
+        report["verify"] = {"passed": len(residue) == 0, "residue": residue}
 
     if json_output:
         print(json.dumps(report, indent=2))
+        if "verify" in report and not report["verify"]["passed"]:
+            sys.exit(1)
         return
     removed_n = report["agents_removed"]
     console.header("Uninstall OpenContext")
-    console.print(
-        Panel.fit(
-            f"[bold green]Removed OpenContext from {removed_n} agent(s)[/bold green]",
-            border_style="green",
-        )
+    console.panel(
+        f"[bold green]Removed OpenContext from {removed_n} agent(s)[/bold green]",
+        style="success",
+        fit=True,
     )
     for result in report.get("results", []):
         console.print(f"  [bold]{result['agent']}[/]")
@@ -625,6 +983,18 @@ def handle_uninstall(args: Any) -> None:
         console.dim("  global install state cleared (reinstall will re-run setup)")
     if report.get("purged"):
         console.dim(f"  purged: {', '.join(report['purged'])}")
+    if "verify" in report:
+        if report["verify"]["passed"]:
+            console.success("verify passed: no traces remain.")
+        else:
+            console.warning("verify failed: project traces remain:")
+            for p in report["verify"]["residue"]:
+                console.dim(f"  {p}")
+            console.dim(
+                "These are agent instruction files (kept because they may hold your own "
+                "content). Run 'opencontext uninstall --full --yes' to remove all traces."
+            )
+            sys.exit(1)
 
 
 def _parse_agents(values: list[str] | None) -> list[str]:

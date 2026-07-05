@@ -9,7 +9,7 @@ keep using the legacy ``get_persona``/``PHASE_PERSONAS`` path unchanged.
 
 from __future__ import annotations
 
-from pathlib import Path
+from importlib.resources import files
 from typing import Any
 
 import yaml
@@ -24,15 +24,15 @@ class PersonaNotFound(RegistryNotFound):
     """Raised when a persona id is not registered."""
 
 
-def builtins_dir() -> Path:
+def builtins_dir() -> Any:
     """Directory holding the built-in persona enrichment YAML."""
-    return Path(__file__).resolve().parent / "builtins"
+    return files(__package__) / "builtins"
 
 
 def _load_enrichment() -> dict[str, dict[str, Any]]:
     """Load the persona enrichment table keyed by persona id."""
     path = builtins_dir() / "core.yaml"
-    if not path.exists():
+    if not path.is_file():
         return {}
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or []
     table: dict[str, dict[str, Any]] = {}

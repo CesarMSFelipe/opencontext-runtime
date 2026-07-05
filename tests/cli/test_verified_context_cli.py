@@ -30,7 +30,7 @@ def test_verified_context_cli_outputs_json_and_passes(
         "_runtime",
         lambda config: SimpleNamespace(verify_context=lambda request: result),
     )
-    monkeypatch.setattr(cli_main, "_check_first_run", lambda command: None)
+    monkeypatch.setattr(cli_main, "_check_first_run", lambda command, args=None: None)
 
     args = cli_main._build_parser().parse_args(["verified-context", "auth", "--json"])
     cli_main._dispatch(args)
@@ -59,7 +59,7 @@ def test_verified_context_cli_fails_when_required_gate_fails(
         "_runtime",
         lambda config: SimpleNamespace(verify_context=lambda request: result),
     )
-    monkeypatch.setattr(cli_main, "_check_first_run", lambda command: None)
+    monkeypatch.setattr(cli_main, "_check_first_run", lambda command, args=None: None)
 
     args = cli_main._build_parser().parse_args(["verified-context", "secret"])
 

@@ -37,7 +37,11 @@ def test_configure_claude_writes_project_mcp_json(home: Path, tmp_path: Path) ->
     assert project_mcp.exists(), "project-level .mcp.json was not written"
     data = json.loads(project_mcp.read_text(encoding="utf-8"))
     entry = data["mcpServers"]["opencontext"]
-    assert entry == {"type": "stdio", "command": "opencontext", "args": ["mcp"]}
+    assert entry == {
+        "type": "stdio",
+        "command": "opencontext",
+        "args": ["mcp", "--workflow-tools"],
+    }
 
 
 def test_project_mcp_json_merges_and_reverses(home: Path, tmp_path: Path) -> None:
@@ -118,3 +122,32 @@ def test_detect_installed(home: Path) -> None:
     detected = Configurator(project_root=home).detect_installed()
     assert "claude-code" in detected
     assert "codex" in detected
+
+
+def test_opencode_local_scope_reports_home_writes(home: Path, tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    report = Configurator(project_root=project).configure(["opencode"], scope="local")
+    result = report["results"][0]
+
+    assert (project / "AGENTS.md").as_posix() in [
+        Path(p).as_posix() for p in result["local_files_written"]
+    ]
+    global_posix = {Path(p).as_posix() for p in result["global_files_written"]}
+    assert any(".config/opencode/opencode.json" in p for p in global_posix)
+    assert any(".config/opencode/agents" in p for p in global_posix)
+    assert result["global_write_reason"].startswith("Host-constrained local setup")
+    assert not (home / ".config" / "opencode" / "agents" / "sdd-orchestrator.json").exists()
+
+
+def test_dry_run_reports_exact_opencode_file_plan(home: Path, tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    report = Configurator(project_root=project).configure(["opencode"], scope="local", dry_run=True)
+    result = report["results"][0]
+    planned_paths = {Path(entry["path"]).as_posix() for entry in result["plan"]}
+
+    assert (project / "AGENTS.md").as_posix() in planned_paths
+    assert any(path.endswith(".config/opencode/opencode.json") for path in planned_paths)
+    assert not any(path.endswith("sdd-orchestrator.json") for path in planned_paths)
+    assert result["local_files_written"]
+    assert result["global_files_written"]
+    assert result["global_write_reason"].startswith("Host-constrained local setup")

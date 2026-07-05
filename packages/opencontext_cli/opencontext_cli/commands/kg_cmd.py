@@ -11,6 +11,7 @@ from typing import Any
 
 from opencontext_core.dx.console_styles import console
 from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+from opencontext_core.paths import StorageMode, resolve_storage_path
 
 
 def add_kg_parser(subparsers: Any) -> None:
@@ -67,7 +68,8 @@ def add_kg_parser(subparsers: Any) -> None:
     kg_node.add_argument("--root", default=".", help="Project root (default: cwd).")
     kg_node.add_argument("--json", action="store_true")
 
-    kg_sub.add_parser("status", help="Check index status.")
+    kg_status = kg_sub.add_parser("status", help="Check index status.")
+    kg_status.add_argument("--json", action="store_true")
 
     from opencontext_cli.commands.migration_cmd import add_migrate_subparser
 
@@ -117,7 +119,7 @@ def handle_kg(args: Any) -> None:
 
         raise SystemExit(handle_migrate("kg", args))
     if command == "rebuild":
-        print("KG rebuild: run `opencontext index .` to rebuild the graph from source.")
+        console.info("KG rebuild: run `opencontext index .` to rebuild the graph from source.")
         return
     query = getattr(args, "query", "")
     symbol = getattr(args, "symbol", "")
@@ -127,11 +129,21 @@ def handle_kg(args: Any) -> None:
     radius = getattr(args, "radius", 2)
     json_output = getattr(args, "json", False)
     # Project-scoped commands (search/node) accept an explicit `--root PATH`; the
-    # graph store lives under `<root>/.storage/opencontext`, matching `index`. For
-    # commands without --root this resolves to cwd — identical to the old default.
+    # graph store location is resolved via StorageConfig so it respects user-dir
+    # (XDG) or local (in-repo) mode. For commands without --root this resolves to
+    # cwd — identical to the old default in local mode.
     root = getattr(args, "root", ".")
+    try:
+        from opencontext_core.config import load_config_or_defaults
 
-    kg = KnowledgeGraph(db_path=Path(root) / ".storage" / "opencontext" / "context_graph.db")
+        _cfg = load_config_or_defaults(Path(root) / "opencontext.yaml")
+        _storage_mode = _cfg.storage.mode
+        _custom_path = _cfg.storage.custom_path
+    except Exception:
+        _storage_mode = StorageMode.local
+        _custom_path = None
+    _storage_path = resolve_storage_path(Path(root), _storage_mode, _custom_path)
+    kg = KnowledgeGraph(db_path=_storage_path / "context_graph.db")
 
     # Graph-reading commands need an index; if it's empty, say so rather than
     # returning a bare "No results" (indistinguishable from "indexed, no match").

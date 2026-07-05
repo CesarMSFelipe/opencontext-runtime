@@ -46,8 +46,14 @@ def evidence_to_context_item(item: EvidenceItem) -> ContextItem:
     """Convert planner evidence into packable context while preserving trace metadata."""
 
     priority = ContextPriority.P0 if item.protected else _priority_from_provenance(item)
+    # Derive per-item retrieval_source from the planner's provenance dict so agents can
+    # distinguish call_graph traversal items from query_match items (PR-AHE-006 task 6.4).
+    retrieval_source = item.provenance.get("retrieval_source") or item.provenance.get(
+        "source", "query_match"
+    )
     metadata = {
         **item.provenance,
+        "retrieval_source": retrieval_source,
         "evidence": {
             "id": item.id,
             "traceable_source": item.source,

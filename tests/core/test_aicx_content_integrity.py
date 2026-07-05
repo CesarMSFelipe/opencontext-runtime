@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from conftest import create_sample_project, write_config
 from opencontext_core.context.bytecode import AICXCompiler, AICXDecoder, compute_metrics
 from opencontext_core.models.context import DataClassification
 from opencontext_core.retrieval.contracts import (
@@ -25,6 +24,7 @@ from opencontext_core.retrieval.contracts import (
     VerifiedContextRequest,
 )
 from opencontext_core.runtime import OpenContextRuntime, _verified_context_gates
+from tests.core.conftest import create_sample_project, write_config
 
 
 def _runtime(tmp_path: Path) -> tuple[OpenContextRuntime, Path]:

@@ -39,8 +39,8 @@ class EngramInstallPlan:
 
 def _probe_package_managers() -> list[str] | None:
     """Probe for a usable package manager and return its install command, or None."""
-    if sys.platform == "darwin" and shutil.which("brew"):
-        return ["brew", "install", "gentleman-programming/tap/engram"]
+    if shutil.which("pipx"):
+        return ["pipx", "install", "engram"]
     if sys.platform == "win32" and shutil.which("scoop"):
         return ["scoop", "install", "engram"]
     return None
@@ -88,8 +88,9 @@ class EngramProvisioner:
                 install_command=None,
                 setup_command=None,
                 message=(
-                    "No supported package manager found (brew/scoop). "
-                    "Install Engram manually: https://github.com/gentleman-programming/engram"
+                    "No supported package manager found (pipx/scoop). "
+                    "Install Engram manually: pipx install engram  "
+                    "(see https://pypi.org/project/engram/)"
                 ),
             )
         return EngramInstallPlan(

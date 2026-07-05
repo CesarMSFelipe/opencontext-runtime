@@ -99,6 +99,138 @@ def test_full_without_yes_non_tty_exits(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Regression: --verify combined with removal flags must REMOVE then verify,
+# not short-circuit into a read-only scan (the natural "remove and confirm" form).
+# ---------------------------------------------------------------------------
+
+
+def _seed_project_artifacts(root: Path) -> None:
+    (root / ".opencontext").mkdir()
+    (root / "opencontext.yaml").write_text("schema: v1\n", encoding="utf-8")
+    (root / ".mcp.json").write_text(
+        '{"mcpServers": {"opencontext": {"command": "opencontext"}}}', encoding="utf-8"
+    )
+
+
+def test_full_verify_combined_removes_then_verifies_clean(tmp_path, monkeypatch):
+    import opencontext_cli.main as main_mod
+
+    monkeypatch.setattr(main_mod, "_resolve_flag", lambda v, _: v)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    home = tmp_path / "home"
+    home.mkdir()
+    _isolate_home(monkeypatch, home)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    _seed_project_artifacts(proj)
+
+    from opencontext_cli.commands.uninstall_cmd import handle_uninstall
+
+    args = SimpleNamespace(
+        full=True,
+        verify=True,  # combined with --full: must remove first, THEN verify
+        purge=True,
+        yes=True,
+        dry_run=False,
+        json=False,
+        scope=None,
+        root=str(proj),
+        all_agents=False,
+        agents=[],
+        global_state=False,
+    )
+    handle_uninstall(args)  # --full path removes + verifies, returns (no exit)
+
+    from opencontext_cli.commands.uninstall_cmd import verify_no_traces
+
+    assert verify_no_traces(proj) == [], "combined --full --verify left traces behind"
+    assert not (proj / ".opencontext").exists()
+    assert not (proj / "opencontext.yaml").exists()
+
+
+def test_purge_default_workspace_scope_actually_purges(tmp_path, monkeypatch, capsys):
+    """--purge with the default (workspace) scope must delete project artifacts.
+
+    Regression: the purge was gated on ``scope == 'local'`` while the default
+    scope resolves to ``'workspace'``, so ``uninstall <agent> --purge --yes``
+    silently skipped the purge.
+    """
+    import opencontext_cli.main as main_mod
+
+    monkeypatch.setattr(main_mod, "_resolve_flag", lambda v, _: v)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    home = tmp_path / "home"
+    home.mkdir()
+    _isolate_home(monkeypatch, home)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    _seed_project_artifacts(proj)
+
+    from opencontext_cli.commands.uninstall_cmd import handle_uninstall
+
+    args = SimpleNamespace(
+        full=False,
+        verify=False,
+        purge=True,
+        yes=True,
+        dry_run=False,
+        json=True,
+        scope=None,  # -> default "workspace"
+        root=str(proj),
+        all_agents=False,
+        agents=["claude-code"],
+        global_state=False,
+    )
+    handle_uninstall(args)
+    report = json.loads(capsys.readouterr().out)
+    assert report.get("purged"), "purge skipped under default workspace scope"
+    assert not (proj / ".opencontext").exists()
+
+
+def test_json_without_yes_refuses_and_preserves_data(tmp_path, monkeypatch, capsys):
+    """Safety: --json must NOT imply consent. Without --yes (non-TTY) it refuses.
+
+    Regression: `uninstall <agent> --purge --json` (no --yes) used to silently
+    delete user data (opencontext.yaml, .opencontext/) and exit 0 — a fail-closed
+    hole for scripts/agents that pass --json for machine-readable output.
+    """
+    import opencontext_cli.main as main_mod
+
+    monkeypatch.setattr(main_mod, "_resolve_flag", lambda v, _: v)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    home = tmp_path / "home"
+    home.mkdir()
+    _isolate_home(monkeypatch, home)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    _seed_project_artifacts(proj)
+
+    from opencontext_cli.commands.uninstall_cmd import handle_uninstall
+
+    args = SimpleNamespace(
+        full=False,
+        verify=False,
+        purge=True,
+        yes=False,  # NO consent
+        dry_run=False,
+        json=True,  # machine-readable output — must NOT imply consent
+        scope=None,
+        root=str(proj),
+        all_agents=False,
+        agents=["claude-code"],
+        global_state=False,
+    )
+    with pytest.raises(SystemExit) as exc:
+        handle_uninstall(args)
+    assert exc.value.code == 2
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "refused"
+    # User data untouched.
+    assert (proj / "opencontext.yaml").exists()
+    assert (proj / ".opencontext").exists()
+
+
+# ---------------------------------------------------------------------------
 # --verify exits 0 when clean, 1 when traces remain
 # ---------------------------------------------------------------------------
 
@@ -495,8 +627,10 @@ def test_verify_no_global_traces_detects_state_dirs(tmp_path, monkeypatch):
 def test_verify_flag_exits_1_on_global_only_residue(tmp_path, monkeypatch):
     """A clean project but global HOME state present must make --verify exit non-zero.
 
-    Anti-regression for the old `passed = len(residue) == 0` that ignored global
-    residue, so verify reported clean while ~/.config/opencontext survived.
+    Anti-regression: --verify with scope 'all' (or 'global') must detect global
+    HOME residue even when no project-local traces exist. Uses scope='all' to
+    match the C5 scope-aware verify semantics (scope='workspace' only scans
+    project state; 'all' scans both project + HOME).
     """
     home = tmp_path / "home"
     home.mkdir()
@@ -514,7 +648,7 @@ def test_verify_flag_exits_1_on_global_only_residue(tmp_path, monkeypatch):
         yes=False,
         dry_run=False,
         json=False,
-        scope="local",
+        scope="all",  # must include global tier to detect HOME residue
         root=str(project),
         all_agents=False,
         agents=[],

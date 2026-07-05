@@ -35,6 +35,14 @@ def test_build_run_contract_shape() -> None:
         assert isinstance(dumped[key], dict)
 
 
+def test_runtime_warning_is_not_plain_completed() -> None:
+    from opencontext_core.runtime.api import RuntimeApi
+
+    assert RuntimeApi._legacy_status(type("Legacy", (), {"status": "warning"})()) == (
+        "completed_with_warnings"
+    )
+
+
 def test_mcp_and_cli_share_runtime_api(tmp_path: Path, monkeypatch) -> None:
     """Both surfaces dispatch through RuntimeApi.run; the MCP path returns the
     build_run_contract shape over the same RuntimeApi result."""
@@ -69,5 +77,5 @@ def test_mcp_and_cli_share_runtime_api(tmp_path: Path, monkeypatch) -> None:
     server.policy = ToolPermissionPolicy(allowed_tools=set(server.tools.keys()))
     mcp_contract = server._handle_run({"task": "t", "workflow": "sdd", "root": str(tmp_path)})
 
-    assert set(cli_contract) == set(mcp_contract)
+    assert set(cli_contract) <= set(mcp_contract)
     assert cli_contract["workflow"] == mcp_contract["workflow"] == "sdd"

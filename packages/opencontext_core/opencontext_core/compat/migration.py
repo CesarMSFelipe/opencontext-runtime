@@ -152,6 +152,52 @@ def is_migrated(
     return (ledger or MIGRATION_LEDGER).is_migrated(module, root=root)
 
 
+def ledger_state_for_flag(
+    flag: str, *, ledger: MigrationLedger | None = None
+) -> MigrationState | None:
+    """Return the migration state recorded on the ledger entry for *flag*, or ``None``.
+
+    Accepts the bare flag (``"rt-spine"``) or the dotted name
+    (``"runtime.rt-spine"``); the ledger stores the dotted form, so a leading
+    ``"runtime."`` is stripped before matching. This is the single matching
+    implementation shared by :func:`is_migrated_flag` and the flag catalog
+    (``compat.flags.flag_catalog``) so the ledger stays the ONE source of truth
+    for a subsystem's migration state.
+    """
+    target = ledger or MIGRATION_LEDGER
+    bare = flag[len("runtime.") :] if flag.startswith("runtime.") else flag
+    for entry in target.modules:
+        stored = entry.flag or ""
+        stored_bare = stored[len("runtime.") :] if stored.startswith("runtime.") else stored
+        if stored == flag or stored_bare == bare:
+            return entry.state
+    return None
+
+
+def is_migrated_flag(flag: str, *, ledger: MigrationLedger | None = None) -> bool:
+    """Flag-level convenience for the v2 migration flags (commit-006).
+
+    Looks up the ledger entry whose ``flag`` field equals *flag* and returns
+    ``True`` only when the subsystem is fully migrated (vNext-only reach,
+    legacy shimmed, parity green, no direct importers). An unknown flag or a
+    flag whose entry is not ``migrated``/``removed`` returns ``False`` --
+    subsystems move forward via an accepted flip bundle, never by a default
+    flip (CL-005).
+
+    Accepts the bare flag (``"rt-spine"``) or the dotted name
+    (``"runtime.rt-spine"``); the ledger stores the dotted form, so we
+    strip a leading ``"runtime."`` before matching.
+
+    This is the public seam for the v2 migration (``rt-spine``,
+    ``mcp-runtime``, ``rt-budget``, ``skills-v2``, ``studio-control-plane``)
+    so consumers (CLI, MCP, TUI) can write
+    ``compat.is_migrated_flag("rt-spine")`` instead of fishing for module
+    paths.
+    """
+    state = ledger_state_for_flag(flag, ledger=ledger)
+    return state in {MigrationState.migrated, MigrationState.removed}
+
+
 def _evaluate_migrated(
     entry: ModuleMigration, *, root: Path | str | None
 ) -> tuple[bool, list[str]]:
@@ -215,7 +261,7 @@ def direct_legacy_importers(
         except (SyntaxError, UnicodeDecodeError, OSError):
             continue
         if _imports_symbol(tree, dotted, legacy_symbol):
-            importers.append(str(path.relative_to(root)))
+            importers.append(path.relative_to(root).as_posix())
 
     return importers
 
@@ -326,6 +372,63 @@ MIGRATION_LEDGER = MigrationLedger(
             superseded_by="PR-010",
             removal_milestone="milestone-D",
             flag="runtime.context_engine_enabled",
+        ),
+        # CL-V2 (commit 006) RuntimeApi parallel class — Phase 2 spine.
+        # C15: flipped to migrated (C14 parity suite green; rollback: revert state=).
+        ModuleMigration(
+            module="runtime/api.py",
+            legacy_symbol="RuntimeApi",
+            state=MigrationState.migrated,
+            superseded_by="PR-006",
+            removal_milestone="milestone-F",
+            flag="runtime.rt-spine",
+            vnext_only=True,
+            legacy_shimmed=True,
+            parity_test="tests/release/test_runtime_spine_parity.py",
+        ),
+        # CL-V2 (commit 006) MCP ``runtime.*`` dispatcher — Phase 2 spine.
+        # C15: flipped to migrated (C14 parity suite green; rollback: revert state=).
+        ModuleMigration(
+            module="mcp/run_dispatcher.py",
+            legacy_symbol="runtime_dispatcher",
+            state=MigrationState.migrated,
+            superseded_by="PR-008",
+            removal_milestone="milestone-F",
+            flag="runtime.mcp-runtime",
+            vnext_only=True,
+            legacy_shimmed=True,
+            parity_test="tests/release/test_runtime_spine_parity.py",
+        ),
+        # CL-V2 (commit 010) unified ResourceBudget — Phase 6.
+        ModuleMigration(
+            module="context/v2/budget.py",
+            legacy_symbol="ResourceBudget",
+            state=MigrationState.legacy,
+            superseded_by="PR-010",
+            removal_milestone="milestone-H",
+            flag="runtime.rt-budget",
+        ),
+        # CL-V2 (commit 011) skills v2 ecosystem — Phase 8.
+        ModuleMigration(
+            module="skills/v2/bundle.py",
+            legacy_symbol="SkillBundle",
+            state=MigrationState.legacy,
+            superseded_by="PR-011",
+            removal_milestone="milestone-I",
+            flag="runtime.skills-v2",
+        ),
+        # CL-V2 (commit 012) studio control plane — Phase 11. Flipped to migrated
+        # at commit-013m: v2 endpoints + 12-screen TUI are live, the legacy
+        # stdlib StudioServer is preserved as a backwards-compatible alias.
+        ModuleMigration(
+            module="opencontext_studio/server.py",
+            legacy_symbol="StudioServer",
+            state=MigrationState.migrated,
+            superseded_by="PR-012",
+            removal_milestone="milestone-J",
+            flag="runtime.studio-control-plane",
+            vnext_only=True,
+            legacy_shimmed=True,
         ),
     ],
 )

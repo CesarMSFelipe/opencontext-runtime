@@ -16,6 +16,17 @@ FRONTMATTER_RE = re.compile(
     re.DOTALL | re.MULTILINE,
 )
 
+# Bracket-free severity labels. Rendering severities as `[error]`/`[ERROR]`
+# lets rich parse them as (nonexistent) style tags and strip/mangle the output;
+# these plain labels keep both lint and audit severity rendering safe.
+_SEVERITY_LABELS = {
+    "error": "✗ error",
+    "warning": "⚠ warning",
+    "info": "i info",
+    "ERROR": "✗ ERROR",
+    "WARN": "⚠ WARN",
+}
+
 
 def add_skill_parser(subparsers: Any) -> None:
     """Add skill command parsers."""
@@ -52,6 +63,25 @@ def add_skill_parser(subparsers: Any) -> None:
     lint_parser.add_argument("path", help="Path to SKILL.md or skill directory.")
     lint_parser.add_argument("--json", action="store_true", help="JSON output.")
 
+    audit_parser = skill_sub.add_parser(
+        "audit", help="Audit skill YAML files for quality/security issues."
+    )
+    audit_parser.add_argument(
+        "--root", default=".", help="Root directory containing skill YAML files."
+    )
+    audit_parser.add_argument("--json", action="store_true", help="JSON output.")
+
+    catalog_parser = skill_sub.add_parser("catalog", help="Manage the skill catalog.")
+    catalog_subs = catalog_parser.add_subparsers(dest="catalog_command", required=True)
+    cat_gen = catalog_subs.add_parser("generate", help="Generate or check the skill catalog.")
+    cat_gen.add_argument("--root", default=".", help="Root directory containing skill YAML files.")
+    cat_gen.add_argument(
+        "--check",
+        action="store_true",
+        help="Dry-run check: exit 1 when catalog is drifted, 0 when in sync.",
+    )
+    cat_gen.add_argument("--json", action="store_true", help="JSON output.")
+
 
 def handle_skill(args: Any) -> None:
     """Handle skill commands."""
@@ -68,6 +98,10 @@ def handle_skill(args: Any) -> None:
         _handle_explain(args)
     elif command == "lint":
         _handle_lint(args)
+    elif command == "audit":
+        _handle_audit(args)
+    elif command == "catalog":
+        _handle_catalog(args)
 
 
 def _handle_list(args: Any) -> None:
@@ -246,13 +280,85 @@ def _handle_lint(args: Any) -> None:
         console.success(f"No issues — {report.path}")
         raise SystemExit(0)
 
-    _labels = {"error": "✗ error", "warning": "⚠ warning", "info": "i info"}
     console.table(
         str(report.path),
         ["Severity", "Code", "Message"],
-        [[_labels.get(f.severity, f.severity), f.code, f.message] for f in report.findings],
+        [
+            [_SEVERITY_LABELS.get(f.severity, f.severity), f.code, f.message]
+            for f in report.findings
+        ],
     )
     raise SystemExit(0 if report.ok() else 1)
+
+
+def _handle_audit(args: Any) -> None:
+    import json as _json
+    from pathlib import Path as _Path
+
+    from opencontext_core.skills.v2.audit import SkillAudit
+
+    root = _Path(getattr(args, "root", ".")).resolve()
+    report = SkillAudit().run(root)
+
+    if getattr(args, "json", False):
+        print(_json.dumps([f.__dict__ for f in report.findings], indent=2))
+    else:
+        if not report.findings:
+            console.success(f"No issues found in {root}")
+        else:
+            for finding in report.findings:
+                label = _SEVERITY_LABELS.get(finding.severity, finding.severity)
+                console.print(f"{label} {finding.code}: {finding.message}")
+
+    if report.errors:
+        raise SystemExit(1)
+
+
+def _handle_catalog(args: Any) -> None:
+    catalog_cmd = getattr(args, "catalog_command", None)
+    if catalog_cmd == "generate":
+        _handle_catalog_generate(args)
+    else:
+        eprint("Usage: opencontext skill catalog generate [--check]")
+        raise SystemExit(1)
+
+
+def _handle_catalog_generate(args: Any) -> None:
+    import json as _json
+    from pathlib import Path as _Path
+
+    from opencontext_core.skills.v2.catalog import dry_run_update, generate_catalog
+
+    root = _Path(getattr(args, "root", ".")).resolve()
+    check = getattr(args, "check", False)
+
+    if check:
+        report = dry_run_update(root)
+        if getattr(args, "json", False):
+            print(
+                _json.dumps(
+                    {
+                        "drifted": report.drifted,
+                        "current_count": len(report.current),
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            if report.drifted:
+                eprint(
+                    f"Catalog is out of date with {root}. "
+                    "Run 'opencontext skill catalog generate' to update."
+                )
+            else:
+                console.success("Catalog is up to date.")
+        if report.drifted:
+            raise SystemExit(1)
+    else:
+        catalog = generate_catalog(root)
+        cat_path = root / "catalog.json"
+        cat_path.write_text(catalog.to_json(), encoding="utf-8")
+        console.success(f"Catalog written to {cat_path}")
 
 
 def _parse_frontmatter(content: str) -> dict[str, Any]:

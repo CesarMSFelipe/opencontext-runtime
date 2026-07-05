@@ -298,8 +298,47 @@ def test_report_to_report_dict_counts_match_findings_and_verdicts() -> None:
 
 
 def test_report_to_report_dict_success_true_when_status_ok() -> None:
+    """PASSED + no verdicts is not_applicable + success=False (coherence, ahe-010).
+
+    A QualityReport with status=PASSED and zero verdicts has ``applicable == 0``
+    — nothing ran, so the gate is honestly ``not_applicable``. Per the
+    ahe-010-quality-semantics spec, ``success`` requires at least one rule to
+    have RAN (``applicable > 0``); the previous formula
+    ``failed == 0 and is_ok`` claimed success=True here, contradicting the
+    ``not_applicable`` status (nothing measured yet "all green"). The new
+    formula: ``success = applicable > 0 and failed == 0``.
+    """
     out = _report(GateStatus.PASSED, (), ()).to_report_dict()
+    assert out["status"] == "not_applicable"
+    assert out["summary"]["success"] is False
+
+
+def test_report_to_report_dict_success_true_when_applicable_passes() -> None:
+    """The complementary happy path: PASSED + at least one PASSED verdict.
+
+    Pairs with the test above: when a rule RAN and passed, the gate is
+    ``passed`` AND ``success=True``. Together they pin the contract that
+    ``success`` is grounded in actual measurement.
+    """
+    verdicts = (RuleVerdict(rule="r", status=CheckStatus.PASSED, severity=CheckSeverity.INFO),)
+    out = _report(GateStatus.PASSED, (), verdicts).to_report_dict()
+    assert out["status"] == "passed"
+    assert out["summary"]["passed"] == 1
     assert out["summary"]["success"] is True
+
+
+def test_report_to_report_dict_failed_checks_make_success_false() -> None:
+    verdicts = (RuleVerdict(rule="r", status=CheckStatus.FAILED, severity=CheckSeverity.ERROR),)
+    out = _report(GateStatus.SKIPPED, (), verdicts).to_report_dict()
+    assert out["summary"]["failed"] == 1
+    assert out["summary"]["success"] is False
+
+
+def test_report_to_report_dict_skipped_checks_not_failed() -> None:
+    verdicts = (RuleVerdict(rule="r", status=CheckStatus.SKIPPED, severity=CheckSeverity.WARNING),)
+    out = _report(GateStatus.SKIPPED, (), verdicts).to_report_dict()
+    assert out["status"] == "not_applicable"
+    assert out["summary"]["failed"] == 0
 
 
 def test_report_to_report_dict_delta_reflects_baseline() -> None:

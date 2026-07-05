@@ -13,7 +13,7 @@
         font-size="12" font-weight="600" fill="#E6EDF3">Install</text>
   <text x="36" y="78"
         font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace"
-        font-size="10" fill="#606978">pip · uv · brew</text>
+        font-size="10" fill="#606978">curl · ps1 · pipx</text>
 
   <!-- Arrow -->
   <text x="183" y="56" text-anchor="middle"

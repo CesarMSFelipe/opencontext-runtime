@@ -1,7 +1,7 @@
-"""GraphScreen must be openable by mode/root/run_id, not only a prebuilt view_state.
+"""GraphScreen (knowledge-graph explorer) — construction + data loaders.
 
-Validation report 16.3: the natural UX is GraphScreen(mode=..., root=..., run_id=...).
-Previously the constructor only accepted view_state and raised TypeError on `mode`.
+The explorer reads the project's KG SQLite DB; with no graph it degrades to an
+empty, non-crashing view.
 """
 
 from __future__ import annotations
@@ -9,23 +9,24 @@ from __future__ import annotations
 from pathlib import Path
 
 from opencontext_cli.tui.graph.models import GraphMode
-from opencontext_cli.tui.screens.graph import GraphScreen
+from opencontext_cli.tui.screens.graph import GraphScreen, load_node_neighbors, pick_focus
 
 
-def test_graphscreen_kg_mode_constructs(tmp_path: Path) -> None:
-    """KG mode with an empty project loads an empty (non-crashing) view."""
-    screen = GraphScreen(mode=GraphMode.KG, root=tmp_path)
-    assert screen._view_state.mode == GraphMode.KG
+def test_graphscreen_constructs() -> None:
+    screen = GraphScreen(mode=GraphMode.KG, root=".")
+    assert screen._mode == GraphMode.KG
 
 
-def test_graphscreen_run_mode_constructs(tmp_path: Path) -> None:
-    """RUN mode with an unknown run_id falls back to an empty RUN view."""
-    screen = GraphScreen(mode=GraphMode.RUN, run_id="does-not-exist", root=tmp_path)
-    assert screen._view_state.mode == GraphMode.RUN
-    assert screen._view_state.nodes == []
+def test_pick_focus_no_graph(tmp_path: Path) -> None:
+    assert pick_focus(tmp_path) is None
 
 
-def test_graphscreen_default_constructs() -> None:
-    """No args still works (back-compat)."""
-    screen = GraphScreen()
-    assert screen._view_state is not None
+def test_load_neighbors_no_graph(tmp_path: Path) -> None:
+    focus, neighbors = load_node_neighbors("missing", root=tmp_path)
+    assert focus is None
+    assert neighbors == []
+
+
+def test_render_text_without_graph_does_not_crash() -> None:
+    screen = GraphScreen(mode=GraphMode.KG, root=".")
+    assert isinstance(screen.render_text(), str)

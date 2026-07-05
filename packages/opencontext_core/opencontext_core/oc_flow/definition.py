@@ -13,6 +13,7 @@ L9 OC Flow models — never Runtime upward.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Any
 
 from opencontext_core.oc_flow.models import NodeOutcome
 from opencontext_core.workflows.builtins import builtins_dir
@@ -36,8 +37,8 @@ _CONDITION_TO_OUTCOME: dict[str, str] = {
 }
 
 
-def _oc_flow_yaml_path() -> str:
-    return str(builtins_dir() / "oc_flow.yaml")
+def _oc_flow_yaml_path() -> Any:
+    return builtins_dir() / "oc_flow.yaml"
 
 
 @lru_cache(maxsize=1)

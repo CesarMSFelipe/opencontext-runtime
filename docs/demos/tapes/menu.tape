@@ -7,7 +7,7 @@ Set TypingSpeed 55ms
 Output "docs/assets/demo-menu.gif"
 
 Hide
-Type `export PS1="$ "` Enter
+Type `export PS1="$ " FORCE_COLOR=1 CLICOLOR_FORCE=1 RICH_FORCE_TERMINAL=1 COLORTERM=truecolor TERM=xterm-256color; unset NO_COLOR` Enter
 Type `cd "$OC_DEMO_EXPLAIN"` Enter
 Type "clear" Enter
 Show
@@ -34,6 +34,5 @@ Sleep 1300ms
 Up
 Sleep 1500ms
 
-# Quit.
-Type "q"
-Sleep 1500ms
+# Linger on the screen so the final frame is readable (no blank exit frame).
+Sleep 4500ms

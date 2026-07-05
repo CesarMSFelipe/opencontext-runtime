@@ -7,6 +7,7 @@ import logging
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from opencontext_core.compat import UTC
 from opencontext_core.config import ProjectIndexConfig
@@ -69,18 +70,51 @@ class ProjectIndexer:
 
         # Populate knowledge graph with batch checkpointing
         # Checkpoint persists which files have been indexed so interrupted runs resume.
-        kg_stats = {"files_indexed": 0, "nodes": 0, "edges": 0}
+        kg_stats: dict[str, Any] = {"files_indexed": 0, "nodes": 0, "edges": 0}
         if self.knowledge_graph is not None:
-            checkpoint_path = project_root / ".storage" / "opencontext" / "index_checkpoint.json"
-            done_paths: set[str] = _load_checkpoint(checkpoint_path)
+            # The checkpoint lives BESIDE the KG db it checkpoints, wherever the
+            # active storage mode put that db — writing it into the legacy
+            # in-repo layout would pollute user-mode repos with a stray
+            # .storage/ directory.
+            checkpoint_path = Path(self.knowledge_graph.db.db_path).parent / "index_checkpoint.json"
+            # K3: checkpoint is now dict[str, float] (path → mtime); legacy list
+            # format is transparently upgraded to empty dict → one-time full reindex.
+            done_mtimes: dict[str, float] = _load_checkpoint(checkpoint_path)
+            # K4 (checkpoint validity guard): the checkpoint is only meaningful
+            # relative to an existing, non-empty KG database.  When the KG has
+            # zero nodes — because install indexed into a different storage path,
+            # the DB was cleared, or this is the very first real index run — the
+            # checkpoint is stale evidence and must be ignored so files are
+            # re-indexed into the live database.
+            if done_mtimes:
+                try:
+                    _kg_nodes = self.knowledge_graph.db.get_stats().get("nodes", 0)
+                    if _kg_nodes == 0:
+                        _log.debug(
+                            "indexer: checkpoint exists but KG has 0 nodes "
+                            "— ignoring checkpoint, full reindex"
+                        )
+                        done_mtimes = {}
+                except Exception as _exc:
+                    _log.debug("indexer: checkpoint validity check failed (%s), proceeding", _exc)
             indexed_files: list[tuple[str, str]] = []
             batch_size = 50
             batch_count = 0
+            # K2: per-language count of files in _KG_LANGUAGES that were counted
+            # but not actually AST-parsed (grammar unavailable + regex yields nothing).
+            unparsed_by_lang: dict[str, int] = {}
             for scanned_file in scanned_files:
                 if scanned_file.language not in _KG_LANGUAGES:
                     continue
-                if scanned_file.relative_path in done_paths:
+                # K3: skip if mtime is unchanged since last checkpoint
+                try:
+                    current_mtime = scanned_file.path.stat().st_mtime
+                except OSError:
+                    current_mtime = 0.0
+                stored_mtime = done_mtimes.get(scanned_file.relative_path)
+                if stored_mtime is not None and stored_mtime == current_mtime:
                     kg_stats["files_indexed"] += 1
+                    kg_stats["skipped_unchanged"] = kg_stats.get("skipped_unchanged", 0) + 1
                     indexed_files.append((scanned_file.relative_path, scanned_file.content))
                     continue
                 try:
@@ -90,22 +124,38 @@ class ProjectIndexer:
                     kg_stats["files_indexed"] += 1
                     kg_stats["nodes"] += stats.get("nodes", 0)
                     kg_stats["edges"] += stats.get("edges", 0)
+                    # K2: detect "counted but not parsed" — regex fallback with zero nodes
+                    if stats.get("parse_mode") == "regex" and stats.get("nodes", 0) == 0:
+                        lang = scanned_file.language
+                        unparsed_by_lang[lang] = unparsed_by_lang.get(lang, 0) + 1
                     indexed_files.append((scanned_file.relative_path, scanned_file.content))
-                    done_paths.add(scanned_file.relative_path)
+                    # K3: record current mtime in checkpoint
+                    done_mtimes[scanned_file.relative_path] = current_mtime
+                    # K3: track how many files were actually re-indexed (mtime changed or new)
+                    kg_stats["reindexed_changed"] = kg_stats.get("reindexed_changed", 0) + 1
                     batch_count += 1
                     if batch_count % batch_size == 0:
-                        _save_checkpoint(checkpoint_path, done_paths)
+                        _save_checkpoint(checkpoint_path, done_mtimes)
                 except Exception as exc:
                     # A broken parser must not silently shrink the graph — count and
                     # log it so a systematically-failing file is visible, not hidden.
                     kg_stats["files_failed"] = kg_stats.get("files_failed", 0) + 1
                     _log.warning("indexing failed for %s: %s", scanned_file.relative_path, exc)
-            _save_checkpoint(checkpoint_path, done_paths)
+            _save_checkpoint(checkpoint_path, done_mtimes)
             if kg_stats.get("files_failed"):
                 _log.warning(
                     "indexing: %d file(s) failed to index — graph may be incomplete",
                     kg_stats["files_failed"],
                 )
+            # K2: surface unparsed-file counts and emit one honest log line per language
+            if unparsed_by_lang:
+                kg_stats["unparsed_files"] = unparsed_by_lang
+                for lang, count in sorted(unparsed_by_lang.items()):
+                    _log.warning(
+                        "%d %s file(s) counted but not parsed — grammar unavailable",
+                        count,
+                        lang,
+                    )
             # Single FTS5 rebuild after all files are indexed (was per-file — huge speedup)
             try:
                 self.knowledge_graph.db.rebuild_fts()
@@ -145,11 +195,10 @@ class ProjectIndexer:
                 kg_stats["edges"] = real.get("edges", kg_stats["edges"])
             except Exception as exc:
                 _log.debug("kg get_stats failed: %s", exc)
-            # Clear checkpoint after successful full index
-            try:
-                checkpoint_path.unlink(missing_ok=True)
-            except Exception as exc:
-                _log.debug("checkpoint cleanup failed: %s", exc)
+            # K3: persist the final mtime registry so the next run can skip
+            # unchanged files.  The checkpoint is now a permanent per-project
+            # registry (dict[path, mtime]), not a one-shot resumption marker.
+            _save_checkpoint(checkpoint_path, done_mtimes)
 
         # Run route scanners for detected profiles
         detected_profile_names = [
@@ -280,16 +329,27 @@ class ProjectIndexer:
         return profiles[0]
 
 
-def _load_checkpoint(path: Path) -> set[str]:
+def _load_checkpoint(path: Path) -> dict[str, float]:
+    """Load the index checkpoint, returning a ``{path: mtime}`` dict.
+
+    Handles two formats:
+    - New format: JSON object ``{path: mtime_float, ...}``
+    - Legacy format: JSON array of paths — returns ``{}`` so the next run
+      performs a full reindex, then persists the mtime-dict format.
+    """
     try:
-        return set(json.loads(path.read_text(encoding="utf-8")))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return {str(k): float(v) for k, v in data.items()}
+        # Legacy list format — force full reindex, do not raise
+        return {}
     except Exception:
-        return set()
+        return {}
 
 
-def _save_checkpoint(path: Path, done: set[str]) -> None:
+def _save_checkpoint(path: Path, done: dict[str, float]) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(sorted(done)), encoding="utf-8")
+        path.write_text(json.dumps(done), encoding="utf-8")
     except Exception:
         pass

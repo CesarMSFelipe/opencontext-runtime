@@ -59,16 +59,37 @@ def test_install_then_run_reads_installed_config(tmp_path: Path) -> None:
 
 
 def test_handle_run_exec_uses_installed_config(tmp_path: Path, monkeypatch) -> None:
-    """End-to-end: the ``run`` command honors the installed config's OC Flow flag."""
+    """End-to-end: the ``run`` command roots OC Flow at the installed project.
+
+    Post C15 the command routes through ``RuntimeApi`` → ``_OCFlowHarness`` →
+    ``OCFlowRunner`` (never ``run_oc_flow_cli``), so the seam is the runner:
+    it must be constructed with the SAME root whose ``opencontext.yaml`` the
+    resolver honors (config honoring itself is covered by the sibling
+    resolver tests above).
+    """
     project = tmp_path / "proj"
     _write_config(project / "opencontext.yaml", oc_flow_enabled=True)
 
+    from opencontext_core.oc_flow.runner import OCFlowRunner, OCFlowRunResult
+
     captured: dict[str, object] = {}
+    original_init = OCFlowRunner.__init__
 
-    def _fake_run(task, **kwargs):  # type: ignore[no-untyped-def]
-        captured.update(kwargs)
+    def _capture_init(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        original_init(self, *args, **kwargs)
+        captured["root"] = kwargs.get("root") or (args[0] if args else None)
 
-    monkeypatch.setattr("opencontext_core.oc_flow.cli.run_oc_flow_cli", _fake_run)
+    def _fake_run(self, task, **kwargs):  # type: ignore[no-untyped-def]
+        captured["task"] = task
+        return OCFlowRunResult(
+            run_id="run-test",
+            session_id="sess-test",
+            status="completed",
+            final_node="completed",
+        )
+
+    monkeypatch.setattr(OCFlowRunner, "__init__", _capture_init)
+    monkeypatch.setattr(OCFlowRunner, "run", _fake_run)
 
     from opencontext_cli.commands.run_cmd import handle_run_exec
 
@@ -83,7 +104,10 @@ def test_handle_run_exec_uses_installed_config(tmp_path: Path, monkeypatch) -> N
         json=False,
     )
     handle_run_exec(args)
-    assert captured["enabled"] is True
+    assert Path(str(captured["root"])).resolve() == project.resolve()
+    assert captured["task"] == "Fix failing test"
+    config = load_config_or_defaults(resolve_config_path(project, None), auto_detect=False)
+    assert config.runtime.oc_flow_enabled is True
 
 
 # (b) <root>/opencontext.yaml honored when no configs/ subdirectory exists.

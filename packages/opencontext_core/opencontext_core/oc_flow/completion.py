@@ -30,6 +30,7 @@ class CompletionStatus(StrEnum):
     blocked = "blocked"
     needs_executor = "needs_executor"
     needs_provider = "needs_provider"
+    needs_verification = "needs_verification"
     needs_user_edit = "needs_user_edit"
     escalated = "escalated"
 
@@ -113,12 +114,19 @@ def mutation_required(task: str) -> bool:
     return True
 
 
+def verification_required(task: str) -> bool:
+    """Return whether success requires a real test/check command."""
+    lowered = task.lower()
+    return "test" in lowered or "pytest" in lowered or "failing" in lowered
+
+
 def resolve_completion(
     graph_status: str,
     ctx: OCFlowContext,
     *,
     mutation_required: bool,
     provider_available: bool,
+    verification_required: bool = False,
 ) -> CompletionStatus:
     """Map the raw graph status onto an honest :class:`CompletionStatus` (ADR-A1).
 
@@ -146,6 +154,11 @@ def resolve_completion(
         and ctx.inspection.outcome == "passed"
     )
     if verified and graph_status == "completed":
+        if (
+            verification_required
+            and getattr(ctx.inspection, "verification_outcome", "not_run") != "passed"
+        ):
+            return CompletionStatus.needs_verification
         return CompletionStatus.completed
 
     if not ctx.changed_files:
@@ -174,6 +187,9 @@ def completion_reason(status: CompletionStatus, *, mutation_required: bool) -> s
         ),
         CompletionStatus.needs_provider: (
             "mutation task produced no edits because no provider was available"
+        ),
+        CompletionStatus.needs_verification: (
+            "mutation applied but no targeted verification passed"
         ),
         CompletionStatus.needs_user_edit: "edits are awaiting user approval",
         CompletionStatus.escalated: (

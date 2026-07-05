@@ -25,10 +25,19 @@ _CONTEXT = {
     "task": "add a security review harness",
 }
 
+# Brain-level kinds: the 8 DecisionKind values that RuntimeBrain has strategies
+# for.  workflow, memory_promotion, and confidence_report are runner-level
+# (emitted by oc_flow/runner.py directly — not brain strategies).
+_BRAIN_KINDS = frozenset(DecisionKind) - {
+    DecisionKind.workflow,
+    DecisionKind.memory_promotion,
+    DecisionKind.confidence_report,
+}
+
 
 def test_all_eight_kinds_return_a_runtime_decision() -> None:
     brain = RuntimeBrain()
-    for kind in DecisionKind:
+    for kind in _BRAIN_KINDS:
         decision = brain.decide(kind, _CONTEXT)
         assert isinstance(decision, RuntimeDecision)
         assert decision.kind == kind.value
@@ -37,11 +46,11 @@ def test_all_eight_kinds_return_a_runtime_decision() -> None:
 
 def test_each_decision_emits_an_agentic_receipt_no_new_model() -> None:
     brain = RuntimeBrain()
-    for kind in DecisionKind:
+    for kind in _BRAIN_KINDS:
         decision = brain.decide(kind, _CONTEXT)
         assert decision.receipt_id is not None
         assert decision.receipt_id.startswith("rcpt_")
-    assert len(brain.emitted_receipts) == len(list(DecisionKind))
+    assert len(brain.emitted_receipts) == len(_BRAIN_KINDS)
     assert all(isinstance(r, AgenticReceipt) for r in brain.emitted_receipts)
     # The decision links the receipt it emitted (RB-010).
     assert brain.emitted_receipts[-1].trace_id == decision.receipt_id

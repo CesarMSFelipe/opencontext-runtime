@@ -18,6 +18,7 @@ OC Flow models/inspection downward.
 
 from __future__ import annotations
 
+import difflib
 import json
 import re
 import subprocess
@@ -45,6 +46,7 @@ from opencontext_core.oc_flow.models import (
     NodeOutcome,
     TaskContract,
 )
+from opencontext_core.safety.secrets import SecretScanner
 
 
 class OCFlowError(RuntimeError):
@@ -93,6 +95,24 @@ class OCFlowContext:
     # inspection scope gate (no-op on a mutation task is blocking) and the post-graph
     # completion gate (a no-op mutation may never report `completed`).
     mutation_required: bool = False
+    # Memory parity (SDD ExplorePhase/ArchivePhase): when ``memory_enabled`` and a
+    # store is resolvable, gather_context folds prior memory recall into the envelope
+    # and consolidation persists the memory delta through the harvester/harness path.
+    # A missing store degrades to a recorded omission / no-op reason, never an error.
+    memory_enabled: bool = False
+    memory_store: Any | None = None  # AgentMemoryStore (duck-typed port)
+    memory_harvest_enabled: bool = False  # memory.harvest_after_run
+    # Strict-TDD posture threaded from the runner (config.harness.tdd_mode /
+    # OPENCONTEXT_TDD_MODE). "strict" enables the RED-first pre-check in node_mutate;
+    # "ask"/"off" (the default) leave the flow's behaviour byte-for-byte unchanged.
+    tdd_mode: str = "ask"
+    memory_v2_enabled: bool = False  # runtime.memory_v2_enabled → MemoryHarness routing
+    run_id: str = ""  # run provenance carried into harvested memory records
+    # Compression parity (context substrate): when enabled, gather_context runs the
+    # CompressionEngine over oversized envelope content (SQLite-KG items honestly
+    # skipped) and records the evidence in context-receipt.json.
+    compression_enabled: bool = False
+    compression_config: Any | None = None  # config.CompressionConfig (None → defaults)
 
     # live state produced by nodes
     init_done: bool = False
@@ -100,6 +120,7 @@ class OCFlowContext:
     contract: TaskContract | None = None
     changed_files: list[str] = field(default_factory=list)
     checkpoint_id: str | None = None
+    checkpoint: Any | None = None
     inspection: InspectionReport | None = None
     diagnosis_attempts: list[DiagnosisAttempt] = field(default_factory=list)
     failed_strategies: list[str] = field(default_factory=list)
@@ -151,14 +172,25 @@ class DeterministicNodeExecutor:
         for rel in list(seed_paths)[: max(1, depth) * 4]:
             items.append(
                 ContextEnvelopeItem(
-                    source="file", ref=rel, summary=f"seed file for: {task[:60]}", tokens=200
+                    source="file",
+                    ref=rel,
+                    summary=f"seed file for: {task[:60]}",
+                    tokens=200,
+                    # C17: why_included records source type + selection reason.
+                    why_included="file:seed",
                 )
             )
         if not items:
             # No seeds resolved — still produce a usable, minimal envelope so the
             # run can proceed, and record the omission (book §8).
             items.append(
-                ContextEnvelopeItem(source="memory", ref="task", summary=task[:120], tokens=120)
+                ContextEnvelopeItem(
+                    source="memory",
+                    ref="task",
+                    summary=task[:120],
+                    tokens=120,
+                    why_included="memory:task-statement-fallback",
+                )
             )
             omissions.append("no source files seeded; planning from task statement only")
         return ContextEnvelope(
@@ -244,7 +276,7 @@ _APPLY_EDIT_INSTRUCTION = (
     "Implement the task below as concrete file edits. Output ONLY a JSON array of "
     "ApplyEdit objects, nothing else: "
     '[{"path":"<root-relative>","operation":"replace_range|insert_after|delete_range'
-    '|create_file","start_line":1,"end_line":3,"content":"<new content>",'
+    '|create_file|delete_file","start_line":1,"end_line":3,"content":"<new content>",'
     '"reason":"<why>","requirement_refs":["<criterion>"]}]. '
     "Use surgical line anchors; no prose, no Markdown fences, nothing outside the array."
 )
@@ -295,10 +327,38 @@ def _parse_apply_edit_set(text: str) -> list[ApplyEdit] | None:
         if not isinstance(item, dict):
             return None
         try:
-            edits.append(ApplyEdit.model_validate(item))
+            edit = ApplyEdit.model_validate(item)
         except ValidationError:
             return None
+        if _invalid_edit_contract_reason(edit):
+            return None
+        edits.append(edit)
     return edits
+
+
+def _invalid_edit_contract_reason(edit: ApplyEdit) -> str | None:
+    if edit.operation in (ApplyOperation.REPLACE_RANGE, ApplyOperation.DELETE_RANGE):
+        if edit.start_line is None or edit.end_line is None:
+            return f"{edit.operation.value} requires start_line and end_line"
+        if edit.start_line < 1 or edit.end_line < edit.start_line:
+            return "invalid line range"
+    if edit.operation == ApplyOperation.INSERT_AFTER:
+        if edit.after_line is None or edit.after_line < 0:
+            return "insert_after requires non-negative after_line"
+    return None
+
+
+def _unsafe_edit_reason(edit: ApplyEdit) -> str | None:
+    """Pre-apply denylist + proposed-content secret scan."""
+    path = Path(edit.path)
+    parts = path.parts
+    if path.name == ".env" or path.suffix in {".pem", ".key"} or (parts and parts[0] == "secrets"):
+        return "forbidden secret-bearing path"
+    findings = SecretScanner().scan_secret_findings(edit.content or "")
+    if findings:
+        kinds = ", ".join(sorted({f.kind for f in findings}))
+        return f"secret(s) detected in proposed content ({kinds})"
+    return None
 
 
 class ProviderBackedNodeExecutor:
@@ -373,19 +433,15 @@ class ProviderBackedNodeExecutor:
         )
         try:
             response = self._gateway.generate(request)
-        except ProviderError as exc:
+        except ProviderError:
             # Provider fallback chain exhausted (or no adapter / unsupported capability)
             # at runtime. Catch it here so the failure flows node_mutate ->
             # resolve_completion as a structured `needs_provider`, never a raw traceback
             # in user-visible output. The redacted detail is honest about the failure
             # mode; the raw exception is reserved for --strict.
-            detail = (
-                _redact_provider_error(exc).removeprefix("provider_fallback_exhausted:").strip()
-            )
             self.block_reason = (
-                f"provider_fallback_exhausted: {detail}"
-                if detail
-                else "provider_fallback_exhausted"
+                "configured provider failed and fallback unavailable; "
+                "next_action=configure a valid provider, disable fallback, or enable MCP sampling"
             )
             # Mark the provider unavailable so the completion gate emits needs_provider
             # (a provider-backed run that produced nothing because the provider failed),
@@ -405,6 +461,9 @@ class ProviderBackedNodeExecutor:
             decision = self._policy_decision(edit)
             if not decision.allowed:
                 self.block_reason = f"policy denied write to {edit.path}: {decision.reason}"
+                return []
+            if reason := _unsafe_edit_reason(edit):
+                self.block_reason = f"policy denied write to {edit.path}: {reason}"
                 return []
         # Carry a reason + acceptance-criterion ref on every edit (FLOW-7).
         prepared: list[ApplyEdit] = []
@@ -544,9 +603,89 @@ def node_gather_context(ctx: OCFlowContext) -> NodeResult:
             envelope = _context_engine_envelope(ctx, depth)
         else:
             envelope = ctx.executor.gather_context(ctx.task, ctx.seed_paths, depth)
+            # Opportunistic KG grounding (C17+): when no seed paths were provided,
+            # a KG index is available, and the kg_v2_enabled explicit-flag path did
+            # not already attempt the KG, try seeding from the graph before falling
+            # back to the task-statement placeholder. This ensures graph-indexed
+            # projects always produce grounded envelopes without requiring flag changes.
+            if not ctx.seed_paths and ctx.graph_db_path is not None and not ctx.kg_v2_enabled:
+                _opp_items = _kg_v2_seed_items(ctx)
+                if _opp_items:
+                    kg_consulted = True
+                    envelope = ContextEnvelope(
+                        task=ctx.task,
+                        items=_opp_items,
+                        omissions=[],
+                        token_estimate=sum(i.tokens for i in _opp_items),
+                    )
     envelope = envelope.model_copy(update={"cache_hit": cache_hit})
+    # Memory recall parity (SDD ExplorePhase): fold prior memory into the envelope.
+    # A cached envelope was already folded + compressed on its original build, so
+    # neither step re-runs on a cache hit.
+    if not cache_hit:
+        envelope = _fold_memory_recall(ctx, envelope)
+        envelope, compression_evidence = _compress_envelope(ctx, envelope)
+    else:
+        compression_evidence = {
+            "enabled": bool(ctx.compression_enabled),
+            "applied": False,
+            "reason": "cache hit; envelope reused verbatim",
+        }
+    # C17 (product-closure-r13): enrich envelope with receipt provenance fields so
+    # context-envelope.json carries full auditability.  All fields are optional; this
+    # is additive — callers that already set these values keep them unchanged.
+    import hashlib
+    import uuid as _uuid
+
+    _budget_cap = OC_FLOW_BUDGETS["gather_context"][1]
+    _ranking_hash = hashlib.sha1("|".join(i.ref for i in envelope.items).encode()).hexdigest()[:12]
+    receipt_updates: dict[str, Any] = {}
+    if not envelope.receipt_id:
+        receipt_updates["receipt_id"] = str(_uuid.uuid4())
+    if not envelope.ranking_hash:
+        receipt_updates["ranking_hash"] = _ranking_hash
+    if envelope.budget_used == 0:
+        receipt_updates["budget_used"] = envelope.token_estimate
+    if envelope.budget_available == 0:
+        receipt_updates["budget_available"] = _budget_cap
+    if not envelope.why_omitted:
+        receipt_updates["why_omitted"] = list(envelope.omissions)
+    # Set envelope confidence from KG item scores when KG was consulted and
+    # envelope confidence has not been set by a caller.
+    if kg_consulted and envelope.confidence == 0.0 and envelope.items:
+        _mean_conf = sum(i.confidence for i in envelope.items) / len(envelope.items)
+        if _mean_conf > 0.0:
+            receipt_updates["confidence"] = _mean_conf
+    if receipt_updates:
+        envelope = envelope.model_copy(update=receipt_updates)
     ctx.envelope = envelope
     name = _write_json(ctx.artifacts_dir / "context-envelope.json", envelope.model_dump())
+    # P1.2: persist context-receipt.json — a receipt view of the envelope that exposes
+    # the key auditability fields next to context-envelope.json for easy discovery.
+    # Laziest implementation: project the envelope's receipt fields into a flat dict.
+    receipt_payload: dict[str, Any] = {
+        "receipt_id": envelope.receipt_id,
+        "items": [
+            {
+                "ref": i.ref,
+                "why_included": i.why_included,
+                "confidence": i.confidence,
+            }
+            for i in envelope.items
+        ],
+        "omissions": [{"why_omitted": o} for o in envelope.why_omitted],
+        "budget": {
+            "used": envelope.budget_used,
+            "available": envelope.budget_available,
+        },
+        "ranking_hash": envelope.ranking_hash,
+        "decision_dependency": envelope.decision_dependency,
+        "confidence": envelope.confidence,
+        # Compression evidence (context substrate parity): ratio, savings and the
+        # honestly-skipped items are auditable next to the envelope items.
+        "compression": compression_evidence,
+    }
+    receipt_name = _write_json(ctx.artifacts_dir / "context-receipt.json", receipt_payload)
     tokens = (
         0
         if cache_hit
@@ -565,7 +704,7 @@ def node_gather_context(ctx: OCFlowContext) -> NodeResult:
             "kg_consulted": kg_consulted,
         },
         llm_tokens=tokens,
-        artifacts=[name],
+        artifacts=[name, receipt_name],
     )
 
 
@@ -640,9 +779,253 @@ def _kg_v2_seed_items(ctx: OCFlowContext) -> list[ContextEnvelopeItem] | None:
             ref=(n.path or n.name),
             summary=f"{n.type.value} {n.name}",
             tokens=80,
+            why_included=f"kg:score={n.temporal.confidence:.2f}",
+            confidence=n.temporal.confidence,
         )
         for n in subgraph.nodes
     ]
+
+
+# Items whose carried content estimates below this are left uncompressed: shrinking
+# an already-small summary would claim savings the envelope never actually spends.
+_COMPRESSION_MIN_ITEM_TOKENS = 256
+
+# Honest-skip reason for KG-sourced items (context substrate SQLite/JSON asymmetry):
+# their summaries derive from the SQLite-backed graph, not a raw text payload, so
+# compressing them would produce char-based token counts inconsistent with the
+# graph-anchored estimate.
+_KG_SQLITE_SKIP_REASON = (
+    "sqlite-backed kg content; honest skip (token accounting stays graph-anchored)"
+)
+
+
+def _compress_envelope(
+    ctx: OCFlowContext, envelope: ContextEnvelope
+) -> tuple[ContextEnvelope, dict[str, Any]]:
+    """Apply the CompressionEngine to oversized envelope content (substrate parity).
+
+    Runs only when ``ctx.compression_enabled`` and the envelope exceeds the
+    gather_context budget cap. KG-sourced items are honestly skipped (see
+    :data:`_KG_SQLITE_SKIP_REASON`); compressed items re-anchor their token count
+    to the char-based estimate of the compressed content. Returns the (possibly
+    updated) envelope plus the evidence dict recorded in context-receipt.json.
+    Best-effort: any engine failure leaves the envelope untouched with a reason.
+    """
+    if not ctx.compression_enabled:
+        return envelope, {
+            "enabled": False,
+            "applied": False,
+            "reason": "compression disabled (context.compression.enabled=false)",
+        }
+    budget_cap = OC_FLOW_BUDGETS["gather_context"][1]
+    baseline = envelope.token_estimate
+    if baseline <= budget_cap:
+        return envelope, {
+            "enabled": True,
+            "applied": False,
+            "reason": "envelope within gather budget; no compression needed",
+            "baseline_tokens": baseline,
+            "compressed_tokens": baseline,
+            "ratio": 1.0,
+            "skipped": [],
+        }
+    try:
+        from opencontext_core.context.budgeting import estimate_tokens
+        from opencontext_core.context.compression import CompressionEngine
+        from opencontext_core.models.context import ContextItem, ContextPriority
+
+        config = ctx.compression_config
+        if config is None:
+            from opencontext_core.config import CompressionConfig
+
+            config = CompressionConfig()
+        engine = CompressionEngine(config)
+    except Exception as exc:  # compression is optional — never break the gather
+        return envelope, {
+            "enabled": True,
+            "applied": False,
+            "reason": f"compression engine unavailable: {type(exc).__name__}",
+            "baseline_tokens": baseline,
+            "compressed_tokens": baseline,
+            "ratio": 1.0,
+            "skipped": [],
+        }
+    skipped: list[dict[str, str]] = []
+    new_items: list[ContextEnvelopeItem] = []
+    compressed_any = False
+    for item in envelope.items:
+        if item.source == "kg":
+            skipped.append({"ref": item.ref, "reason": _KG_SQLITE_SKIP_REASON})
+            new_items.append(item)
+            continue
+        content = item.summary
+        content_tokens = estimate_tokens(content)
+        if content_tokens < _COMPRESSION_MIN_ITEM_TOKENS:
+            new_items.append(item)
+            continue
+        try:
+            result = engine.compress_item(
+                ContextItem(
+                    id=item.ref,
+                    content=content,
+                    source=item.ref,
+                    source_type=item.source,
+                    priority=ContextPriority.P2,
+                    tokens=content_tokens,
+                    score=item.confidence or 0.5,
+                )
+            )
+        except Exception:
+            new_items.append(item)
+            continue
+        if result.compressed_tokens >= content_tokens:
+            new_items.append(item)  # engine kept it (protected spans / no gain)
+            continue
+        new_items.append(
+            item.model_copy(
+                update={"summary": result.item.content, "tokens": result.compressed_tokens}
+            )
+        )
+        compressed_any = True
+    total = sum(i.tokens for i in new_items)
+    evidence: dict[str, Any] = {
+        "enabled": True,
+        "applied": compressed_any,
+        "baseline_tokens": baseline,
+        "compressed_tokens": total,
+        "savings": max(0, baseline - total),
+        "ratio": round(total / baseline, 4) if baseline else 1.0,
+        "skipped": skipped,
+    }
+    if not compressed_any:
+        evidence["reason"] = (
+            "no compressible items (kg content honestly skipped)"
+            if skipped
+            else "no compressible items"
+        )
+        return envelope, evidence
+    return envelope.model_copy(update={"items": new_items, "token_estimate": total}), evidence
+
+
+# Omission notes recorded when memory recall cannot run (silent degrade, book §8).
+_MEMORY_STORE_MISSING_NOTE = "memory enabled but no store resolvable; memory recall skipped"
+_MEMORY_RECALL_FAILED_NOTE = "memory recall failed; envelope built without memory"
+
+# How many memory records gather_context recalls (SDD ExplorePhase parity: limit=5).
+_MEMORY_RECALL_LIMIT = 5
+
+# Longest per-item summary carried into the envelope for a recalled memory record.
+_MEMORY_SUMMARY_MAX_CHARS = 240
+
+
+def _fold_memory_recall(ctx: OCFlowContext, envelope: ContextEnvelope) -> ContextEnvelope:
+    """Fold prior memory recall into the envelope (SDD ExplorePhase parity).
+
+    When memory is enabled and a store is resolvable, the task statement is
+    searched and the top-scoring, non-episodic records join the envelope as
+    ``source="memory"`` items — only while they fit the gather_context budget
+    cap. A missing store or a failing search degrades to a recorded omission,
+    never an error (memory is optional, it must not block a run).
+    """
+    if not ctx.memory_enabled:
+        return envelope
+    if ctx.memory_store is None:
+        return envelope.model_copy(
+            update={"omissions": [*envelope.omissions, _MEMORY_STORE_MISSING_NOTE]}
+        )
+    try:
+        records = ctx.memory_store.search(ctx.task, limit=_MEMORY_RECALL_LIMIT)
+    except Exception:
+        return envelope.model_copy(
+            update={"omissions": [*envelope.omissions, _MEMORY_RECALL_FAILED_NOTE]}
+        )
+    from opencontext_core.context.budgeting import estimate_tokens
+
+    budget_cap = OC_FLOW_BUDGETS["gather_context"][1]
+    candidates = sorted(
+        (r for r in records or [] if str(getattr(r, "content", "") or "").strip()),
+        key=lambda r: float(getattr(r, "confidence", 0.0) or 0.0),
+        reverse=True,
+    )
+    items = list(envelope.items)
+    total = envelope.token_estimate
+    added = False
+    for record in candidates:
+        layer = getattr(record, "layer", None)
+        if str(getattr(layer, "value", layer or "")) == "episodic":
+            # Per-run breadcrumbs carry no actionable signal (ExplorePhase filter).
+            continue
+        content = str(record.content)
+        tokens = estimate_tokens(content)
+        if total + tokens > budget_cap:
+            continue  # respect the existing envelope budget: never blow the cap
+        confidence = min(max(float(getattr(record, "confidence", 0.0) or 0.0), 0.0), 1.0)
+        items.append(
+            ContextEnvelopeItem(
+                source="memory",
+                ref=str(getattr(record, "key", "") or getattr(record, "id", "memory")),
+                summary=content[:_MEMORY_SUMMARY_MAX_CHARS],
+                tokens=tokens,
+                why_included=f"memory:score={confidence:.2f}",
+                confidence=confidence,
+            )
+        )
+        total += tokens
+        added = True
+
+    # Also fold in the user's CLI/MCP observations (memory_v2.db) so an
+    # `opencontext memory v2 save` is visible to runs — the observations store and
+    # the in-loop agent store (memory.db) were otherwise disjoint. Best-effort and
+    # read-only: a missing/failing store is a silent no-op (memory never blocks a run).
+    try:
+        from pathlib import Path
+
+        from opencontext_core.paths import StorageMode, resolve_storage_path
+
+        obs_db = resolve_storage_path(Path(ctx.root), StorageMode.local) / "memory_v2.db"
+        if obs_db.is_file():
+            from opencontext_memory import MemoryStore, mem_search
+
+            # Recall is associative, not exact: the store's FTS combines tokens
+            # with implicit AND, so the full task rarely matches. Search per
+            # salient token (len >= 4) and union the observations by id — any
+            # token hit surfaces the observation.
+            store = MemoryStore.open(obs_db)
+            project = Path(ctx.root).name
+            seen_obs: dict[str, dict[str, Any]] = {}
+            task_tokens = {t.lower() for t in re.findall(r"[A-Za-z]{4,}", ctx.task)}
+            for token in list(task_tokens)[:12]:
+                for row in mem_search(
+                    store, query=token, limit=_MEMORY_RECALL_LIMIT, project=project
+                ):
+                    rid = str(row.get("id") or row.get("topic_key") or row.get("title") or "")
+                    if rid and rid not in seen_obs:
+                        seen_obs[rid] = row
+            for row in seen_obs.values():
+                content = str(row.get("content") or row.get("title") or "").strip()
+                if not content:
+                    continue
+                tokens = estimate_tokens(content)
+                if total + tokens > budget_cap:
+                    continue
+                items.append(
+                    ContextEnvelopeItem(
+                        source="memory",
+                        ref=str(row.get("id") or row.get("topic_key") or "observation"),
+                        summary=content[:_MEMORY_SUMMARY_MAX_CHARS],
+                        tokens=tokens,
+                        why_included="memory:observation",
+                        confidence=0.5,
+                    )
+                )
+                total += tokens
+                added = True
+    except Exception:
+        pass
+
+    if not added:
+        return envelope
+    return envelope.model_copy(update={"items": items, "token_estimate": total})
 
 
 def node_plan(ctx: OCFlowContext) -> NodeResult:
@@ -683,24 +1066,123 @@ def node_mutate(ctx: OCFlowContext) -> NodeResult:
         if not (edit.requirement_refs or edit.task_refs):
             raise OCFlowError(f"edit for {edit.path} references no acceptance criterion")
 
+    # RED-first (strict TDD ONLY): under a strict-TDD posture, the test must be
+    # FAILING before we mutate — a "fix" applied to an already-green test would
+    # otherwise report completed without having fixed anything. Gated on strict so
+    # default ("ask"/"off") flows are byte-for-byte unchanged. Best-effort: a
+    # test-runner error never blocks.
+    if edits and ctx.tdd_mode == "strict" and ctx.test_command:
+        import os
+
+        # Never write bytecode: the pre-check compiles the PRE-mutation (buggy)
+        # source, and a same-second mutation would leave stale __pycache__ that the
+        # post-mutation verify then reuses. Also add the root to PYTHONPATH so the
+        # test imports the project's own modules.
+        _red_env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
+        _red_env["PYTHONDONTWRITEBYTECODE"] = "1"
+        _red_env["PYTHONPATH"] = str(ctx.root) + (
+            os.pathsep + _red_env["PYTHONPATH"] if _red_env.get("PYTHONPATH") else ""
+        )
+        try:
+            _pre = subprocess.run(
+                ctx.test_command,
+                cwd=ctx.root,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                env=_red_env,
+            )
+        except (subprocess.SubprocessError, OSError):
+            _pre = None
+        if _pre is not None and _pre.returncode == 0:
+            ctx.block_reason = "RED-first: the test already passes — no failing test to fix"
+            edits = []
+
     changed_paths = [(ctx.root / e.path).resolve() for e in edits]
     store = CheckpointStore(ctx.root)
     checkpoint = store.create(changed_paths, source="oc-flow-mutate") if changed_paths else None
     ctx.checkpoint_id = checkpoint.id if checkpoint is not None else "empty"
+    ctx.checkpoint = checkpoint
+
+    import hashlib
+
+    # Pre-edit checksums per changed path (from the checkpoint's before-bytes) so
+    # the receipt is a tamper-evident before→after record, not just a path list.
+    _pre_ck: dict[Path, str] = {}
+    if checkpoint is not None:
+        for cf in checkpoint.files:
+            if cf.existed and cf.blob:
+                try:
+                    _pre_ck[cf.path] = hashlib.sha256(
+                        (checkpoint.dir / "files" / cf.blob).read_bytes()
+                    ).hexdigest()
+                except OSError:
+                    pass
 
     receipts: list[dict[str, Any]] = []
-    for edit in edits:
-        applied = apply_edit(ctx.root, edit)
-        receipts.append(applied.model_dump())
-        if edit.path not in ctx.changed_files:
-            ctx.changed_files.append(edit.path)
+    try:
+        for edit in edits:
+            applied = apply_edit(ctx.root, edit)
+            rec = applied.model_dump()
+            abs_path = (ctx.root / edit.path).resolve()
+            rec["checksum_before"] = _pre_ck.get(abs_path)
+            rec["checksum_after"] = (
+                hashlib.sha256(abs_path.read_bytes()).hexdigest() if abs_path.is_file() else None
+            )
+            receipts.append(rec)
+            if edit.path not in ctx.changed_files:
+                ctx.changed_files.append(edit.path)
+    except Exception as exc:
+        if checkpoint is not None:
+            checkpoint.restore()
+            _write_json(
+                ctx.artifacts_dir / "rollback-report.json",
+                {"checkpoint_id": checkpoint.id, "reason": f"apply failed: {type(exc).__name__}"},
+            )
+        ctx.block_reason = f"apply failed: {type(exc).__name__}"
+        raise
 
-    patch_lines = [f"# {e.operation.value} {e.path} :: {e.reason}" for e in edits] or [
-        "# no edits proposed (honest no-op mutation)"
-    ]
+    # C10 (product-closure-r13): build a real unified diff from checkpoint before-bytes
+    # and current (post-edit) file bytes. OQ-1 resolved: CheckpointStore.create captures
+    # pre-edit bytes in checkpoint.dir/"files"/{index}.blob for every changed path.
+    patch_parts: list[str] = []
+    if edits and checkpoint is not None:
+        snap_by_path = {f.path: f for f in checkpoint.files}
+        for edit in edits:
+            abs_path = (ctx.root / edit.path).resolve()
+            snap = snap_by_path.get(abs_path)
+            if snap and snap.existed and snap.blob:
+                before_bytes = (checkpoint.dir / "files" / snap.blob).read_bytes()
+                before_lines = before_bytes.decode("utf-8", errors="replace").splitlines(
+                    keepends=True
+                )
+            else:
+                before_lines = []
+            after_lines = (
+                abs_path.read_bytes().decode("utf-8", errors="replace").splitlines(keepends=True)
+                if abs_path.exists()
+                else []
+            )
+            diff = list(
+                difflib.unified_diff(
+                    before_lines,
+                    after_lines,
+                    fromfile=f"a/{edit.path}",
+                    tofile=f"b/{edit.path}",
+                )
+            )
+            patch_parts.extend(diff)
+    if not patch_parts:
+        patch_parts = ["# no edits proposed (honest no-op mutation)\n"]
     patch_name = ctx.artifacts_dir / "patch.diff"
     patch_name.parent.mkdir(parents=True, exist_ok=True)
-    patch_name.write_text("\n".join(patch_lines) + "\n", encoding="utf-8")
+    # Write as bytes: unified-diff line endings must be preserved exactly so
+    # ``git apply --check`` works on Windows where text-mode write_text would
+    # double-CR the CRLF lines already present in the diff payload.
+    # Normalise CRLF → LF so the patch stays portable across platforms
+    # (works against either LF or CRLF working trees after git checkout).
+    patch_text = "".join(patch_parts).replace("\r\n", "\n").replace("\r", "\n")
+    patch_name.write_bytes(patch_text.encode("utf-8", errors="replace"))
     rec_name = _write_json(
         ctx.artifacts_dir / "apply-receipts.json",
         {"checkpoint_id": ctx.checkpoint_id, "receipts": receipts},
@@ -731,6 +1213,17 @@ def node_local_inspection(ctx: OCFlowContext) -> NodeResult:
     )
     ctx.inspection = report
     name = _write_json(ctx.artifacts_dir / "inspection-report.json", report.model_dump())
+    rollback_name = None
+    if report.outcome == "failed_blocking" and ctx.checkpoint is not None:
+        ctx.checkpoint.restore()
+        rollback_name = _write_json(
+            ctx.artifacts_dir / "rollback-report.json",
+            {
+                "checkpoint_id": ctx.checkpoint.id,
+                "reason": report.failure_summary or "blocking inspection failure",
+                "restored_files": list(ctx.changed_files),
+            },
+        )
     outcome_map = {
         "passed": NodeOutcome.PASSED,
         "failed_recoverable": NodeOutcome.FAILED_RECOVERABLE,
@@ -742,7 +1235,7 @@ def node_local_inspection(ctx: OCFlowContext) -> NodeResult:
         outcome=outcome_map[report.outcome],
         outputs={"outcome": report.outcome, "gates": len(report.gate_results)},
         llm_tokens=0,
-        artifacts=[name],
+        artifacts=[a for a in [name, rollback_name] if a],
     )
 
 
@@ -825,14 +1318,140 @@ def node_escalation(ctx: OCFlowContext) -> NodeResult:
     )
 
 
+def _persist_memory_delta(ctx: OCFlowContext, memory_delta: dict[str, Any]) -> dict[str, Any]:
+    """Persist the run's memory delta via the harvester/harness (ArchivePhase parity).
+
+    Durable memory writes MUST route through ``MemoryHarvester`` — and through the
+    ``MemoryHarness`` sole writer when ``memory_v2_enabled`` — exactly like the SDD
+    ArchivePhase; this function never calls ``store.write`` directly (AVH-002).
+    Returns a harvest outcome dict recorded inside memory-delta.json: either
+    ``persisted: True`` with run provenance (``run_id``, ``origin="agent"``) or an
+    honest no-op with a reason. Best-effort: a failing harvest never blocks the run.
+    """
+    if not ctx.memory_enabled:
+        return {"persisted": False, "reason": "memory disabled (memory.enabled=false)"}
+    if ctx.memory_store is None:
+        return {"persisted": False, "reason": "no memory store resolvable for project root"}
+    if not ctx.memory_harvest_enabled:
+        return {"persisted": False, "reason": "harvest disabled (memory.harvest_after_run=false)"}
+    try:
+        from types import SimpleNamespace
+
+        from opencontext_core.memory.harvester import MemoryHarvester
+
+        harness = None
+        if ctx.memory_v2_enabled:
+            from opencontext_core.memory.harness import MemoryHarness
+
+            harness = MemoryHarness(ctx.memory_store)
+        run_id = ctx.run_id or "unknown"
+        # Duck-typed run result matching what the SDD ArchivePhase feeds the
+        # harvester (task/run_id/status + empty gate/ledger evidence for OC Flow).
+        run_result = SimpleNamespace(
+            run_id=run_id,
+            task=ctx.task,
+            status=ctx.inspection.outcome if ctx.inspection else "not_run",
+            gates=[],
+            ledgers=[],
+            artifacts=[],
+            context_omitted_paths=[],
+        )
+        harvester = MemoryHarvester(ctx.memory_store, harness=harness)
+        records = harvester.harvest(run_result)
+        outcome: dict[str, Any] = {
+            "persisted": True,
+            "run_id": run_id,
+            "origin": "agent",
+            "harvested_records": len(records),
+            "via": "harness" if harness is not None else "harvester-legacy",
+        }
+        durable_notes = memory_delta.get("durable_notes") or []
+        if durable_notes:
+            if harness is not None:
+                outcome["promoted_notes"] = _promote_durable_notes(harness, durable_notes, run_id)
+            else:
+                # Honest skip: without the harness sole writer there is no
+                # sanctioned promotion path for free-form notes from here.
+                outcome["durable_notes_skipped_reason"] = (
+                    "memory_v2 disabled; durable notes remain in memory-delta.json only"
+                )
+        return outcome
+    except Exception as exc:  # memory is optional — never block consolidation
+        return {"persisted": False, "reason": f"harvest failed: {type(exc).__name__}"}
+
+
+def _promote_durable_notes(harness: Any, durable_notes: list[str], run_id: str) -> int:
+    """Promote consolidation durable notes through the sole-writer harness.
+
+    Each note becomes a :class:`MemoryCandidate` with run provenance
+    (``run:{run_id}`` evidence + ``origin="agent"`` metadata) and runs the full
+    8-step promotion lifecycle; rejected candidates are counted out honestly.
+    """
+    from opencontext_core.memory_usability.memory_candidates import (
+        MemoryCandidate,
+        MemoryKind,
+    )
+    from opencontext_core.models.context import DataClassification
+    from opencontext_core.models.evidence import EvidenceRef
+
+    promoted = 0
+    for note in durable_notes:
+        candidate = MemoryCandidate(
+            content=str(note),
+            source=f"run:{run_id}",
+            kind=MemoryKind.FACT,  # harness re-classifies from content
+            novelty_score=0.6,
+            reuse_likelihood=0.7,
+            classification=DataClassification.INTERNAL,
+            token_cost=max(1, len(str(note)) // 4),
+            source_trust=0.7,
+            proposed_by="oc-flow-consolidation",
+            evidence_refs=[
+                EvidenceRef(
+                    source=f"run:{run_id}",
+                    source_type="run",
+                    confidence=0.7,
+                    run_id=run_id,
+                )
+            ],
+            expected_reuse="bias future oc-flow runs of similar tasks",
+            confidence=0.7,
+            metadata={"origin": "agent", "run_id": run_id},
+        )
+        receipt = harness.promote(candidate)
+        if getattr(receipt, "action", "reject") != "reject":
+            promoted += 1
+    return promoted
+
+
 def node_consolidation(ctx: OCFlowContext) -> NodeResult:
     """Finalize: deltas, summary, reindex, cost report (book §14, FLOW-14)."""
-    memory_delta = {
+    # C11 (product-closure-r13): gate durable_notes behind PromotionPolicyV2.
+    # Composite score derived from run signals: inspection outcome + changed-file count.
+    # A generic no-op run scores 0.0 → REJECT (below keep threshold 0.6).
+    from opencontext_core.memory.v2.promotion import (
+        PromotionPolicyV2,
+        PromotionVerdictV2,
+        evaluate_promotion,
+    )
+
+    score = 0.0
+    if ctx.inspection and ctx.inspection.outcome in ("ok", "passed"):
+        score += 0.3
+    score += min(len(ctx.changed_files), 5) * 0.1
+    score = min(score, 1.0)
+
+    verdict = evaluate_promotion(score, PromotionPolicyV2())
+
+    memory_delta: dict[str, Any] = {
         "task": ctx.task,
-        "durable_notes": [f"OC Flow change: {ctx.task[:160]}"],
         "failed_strategies": list(ctx.failed_strategies),
         "saved_chain_of_thought": False,  # book §14: never save CoT
     }
+    if verdict == PromotionVerdictV2.PROMOTE:
+        memory_delta["durable_notes"] = [f"OC Flow change: {ctx.task[:160]}"]
+    else:
+        memory_delta["promotion"] = "not_promoted"
     graph_delta = {
         "reindexed_files": list(ctx.changed_files),
         "changed_areas": list(ctx.contract.changed_areas) if ctx.contract else [],
@@ -842,6 +1461,11 @@ def node_consolidation(ctx: OCFlowContext) -> NodeResult:
         "cache_hits": ctx.cache_hits,
         "changed_files": len(ctx.changed_files),
     }
+    # Persist the memory delta through the harvester/harness sole-writer path
+    # (SDD ArchivePhase parity). The outcome — persisted or an honest no-op with
+    # a reason — is recorded inside memory-delta.json (the run's evidence).
+    harvest_outcome = _persist_memory_delta(ctx, memory_delta)
+    memory_delta["harvest"] = harvest_outcome
     mem_name = _write_json(ctx.artifacts_dir / "consolidation" / "memory-delta.json", memory_delta)
     graph_name = _write_json(ctx.artifacts_dir / "consolidation" / "graph-delta.json", graph_delta)
     summary = (
@@ -854,11 +1478,21 @@ def node_consolidation(ctx: OCFlowContext) -> NodeResult:
     summary_path = ctx.artifacts_dir / "consolidation" / "summary.md"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(summary, encoding="utf-8")
+    # C13 (product-closure-r13): stable alias at the artifacts root for easy discovery.
+    alias_path = ctx.artifacts_dir / "run-summary.md"
+    alias_path.write_text(summary, encoding="utf-8")
     _write_json(ctx.artifacts_dir / "consolidation" / "cost-report.json", cost_report)
     return NodeResult(
         node="consolidation",
         outcome=NodeOutcome.OK,
-        outputs={"reindexed": list(ctx.changed_files), "cost": cost_report},
+        # C16 (product-closure-r13): expose promotion_verdict so runner.py can emit
+        # a typed memory_promotion RuntimeDecision without re-importing promotion here.
+        outputs={
+            "reindexed": list(ctx.changed_files),
+            "cost": cost_report,
+            "promotion_verdict": verdict.value,
+            "memory_persisted": bool(harvest_outcome.get("persisted", False)),
+        },
         llm_tokens=_budget_for("consolidation"),
         artifacts=[mem_name, graph_name, "consolidation/summary.md"],
     )

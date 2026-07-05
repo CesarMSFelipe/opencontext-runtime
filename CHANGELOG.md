@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-30
+
+This release lands the **vNext agentic-engineering runtime**: twelve new subsystems behind a parity-gated compatibility layer, all flipped to their vNext implementation as the default. Legacy paths remain available and revertible.
+
+### Added
+
+- **vNext runtime core**: a workflow-neutral runtime (`opencontext_core.runtime`) with a session/run/event model, an explicit state machine, an event bus, a decision log, a `RuntimeApi`, and brain/scheduler seams — plus a meta-planning intent layer (`IntentRecord`, `ProgramPlan`, `ConvergenceMap`) for multi-change programs.
+- **vNext evidence contracts**: versioned data contracts that tie a run together — `RunEnvelope` (contract + tool calls + policy decisions + model use + artifacts), `RunReceipt` v2 (actual-vs-requested model, envelope/artifact hashes, decision lists, quality status), an append-only `RunReceiptStore` (JSONL) + `RunStore` index, `ContextContract` v2 (auto-derived `contract_id`, policy/quality profiles, coverage), a unified `ContextReceipt`, and an `aicx` lockfile that pins the agentic context surface (schema versions + capability matrix + graph shape) into a deterministic hash with drift detection.
+- **Knowledge graph v2**: typed nodes and edges with temporal and evidence tracking, graph-delta computation, a query planner and subgraph extraction, engineering-domain kinds (`REQUIREMENT`/`TASK`/`TEST`/`PHASE` nodes, `IMPLEMENTS`/`VERIFIED_BY`/`DEPENDS_ON` edges), and a `KGFreshnessChecker` for staleness.
+- **Memory v2**: a harness-as-sole-writer model with 6 memory types, an 8-step record lifecycle (`MemoryLifecycle`: `CANDIDATE`/`ACTIVE`/`SUPERSEDED`/`EXPIRED`), per-record provenance (`run_id` + origin), a per-SDD-phase read/write policy, project memory files, capture hooks wired into the conductor, and a recall@k / MRR benchmark (`opencontext memory benchmark`).
+- **Context engine v2**: a 3-layer context envelope with pluggable assembly strategies, a `ContextBudgetBroker`, semantic GC, tier profiles, and `ArtifactRef` backends (local/engram/openspec/aicx). The `ContextSavingsReport` degrades honestly — it returns `savings_ratio=0.0` with a warning when the pack builder is unavailable rather than fabricating a number.
+- **OC Flow workflow engine**: an 8-node workflow with a completion gate, a productive (provider-backed) node executor, and bounded diagnosis. `opencontext run --workflow auto` recommends the SDD flow with a structured JSON handoff.
+- **Unified provider gateway** (`providers/gateway.py`): capability- and cost-aware routing with bounded fallback/retry (local-first, terminating in an always-available mock), structured output, and per-call receipts. A config-driven `test_stub` executor (`provider: test_stub` in `opencontext.yaml`) lets the real `run` path fix a bug deterministically without an external provider, gated to in-root edits files only.
+- **Unified runtime policy engine** (`policy/`): named presets and a single decision path for command execution, secret handling, and auto-apply.
+- **Capability graph and execution profiles**: a capability graph with named execution profiles, plus a `CapabilityMatrix` derived from live adapter declarations so per-client support (MCP wire shape, `AGENTS.md`, instruction scope) is stated honestly rather than assumed uniform.
+- **Persona, skill, and harness registries** (`registries/`): a shared registry base spanning 15 personas, 29 skills, and 13 harnesses; `opencontext doctor graph` now also detects python/pytest/git from source evidence so it works on clean repos.
+- **Plugin SDK and marketplace**: a typed plugin manifest with 17 extension points, lifecycle hooks, and conformance + benchmark gates (`plugins/`); a marketplace package format with signing, trust levels, versioning, and publish/install flows (`marketplace/`); installed via `opencontext plugin`.
+- **Read-only Studio** (`studio/`): a `StudioReader` data layer behind a GET-only JSON API and static UI exposing per-run and per-project views, with redaction applied; launched via `opencontext studio`.
+- **Runtime intelligence** (`intelligence/`): cost and confidence estimators, a run simulator (`opencontext simulate`), structural health scoring, and an evolution engine — together with a benchmark runner, a release acceptance gate (`AcceptanceEvaluator`), and golden suites. Two provider-dependent acceptance gates (`kg-retrieval-precision`, `context-token-efficiency`) ship **deferred**: they report `NOT_MEASURED` and are excluded from the `ready` denominator rather than fabricating a `MET`/`FAILED`.
+- **Learning loop and evolution proposals**: a decision log and a benchmark-gated learning loop; `EvolutionEngine` generates proposals from context omissions, budget patterns, and failed gates, tracked in an `EvolutionStore` and reviewed via `opencontext evolve` / `opencontext learn`. Note: `harness_gate` proposals always require approval, and applying a proposal returns an explicit *unsupported* result — automatic config-file mutation is intentionally not performed.
+- **Stateful `oc-new` conductor**: an `oc_new/` conductor package (models, flow, store, conductor, handoff, archive gate, receipt) driving all 10 SDD phases, exposed as `opencontext oc-new start/status/next/done/resume/list [--watch]`. An `AgenticFlowConfig` layer adds 6 named presets (including `AGENTIC_SAFE`), `--flow` modes (incl. observe/engram/openspec-only that skip the apply phase), a per-phase `BudgetLedger`, `AgentHandoff` v2 (skill/artifact refs/budget/context-report ref), and a fail-closed archive gate that parses verdicts from `verify-report.json`, `compliance-matrix.json`, and `harness-report.json`.
+- **CLI and MCP modernization**: 32 MCP tools (KG navigation, symbol edits, memory, quality, `run`, `session_*`, `profile_*`, `workflow_*`) wrapped in a `ToolResultEnvelope` (success under `result["data"]`, plus denied/failed framing) with per-tool output schemas; a safe-default allowlist exposing only read + memory tools (code-write tools and `opencontext_run` require explicit policy opt-in); a `PolicySimulator` that previews allow/deny without executing; new CLI verbs (`run`, `simulate`, `session`, `maturity`, `health`, `capabilities`, `runs`, `receipt`, `studio`, `aicx`, `architecture`, `plugin`); and route-grouped `--help` (Observe/Integrate/Operate/Govern/Learn).
+- **Config v2 and migration tooling**: `opencontext.yaml` v2 (sectioned, 5 profiles, a 7-layer resolver, snapshot, and `config doctor`) at a canonical path, with migration tooling for harness/config/kg/memory/session.
+- **Architecture and readiness diagnostics**: `opencontext architecture diff [--json]` snapshots and diffs contracts + dependency edges against a frozen baseline (exit 0 clean / 1 drift / 2 missing baseline); `opencontext doctor graph` reports structural KG health (healthy/degraded/empty/unavailable, orphans, dangling edges, per-language); `opencontext doctor metaharness` scores project readiness with behavioral probes (below 90 fails the release gate).
+- **Textual TUI cockpit**: running `opencontext` with no subcommand launches a mission cockpit that polls live run state, alongside an interactive graph screen (5 modes — RUN/KG/MEMORY/CONTEXT/IMPACT — with an ASCII renderer and non-TTY fallback), a config TUI, and budget/memory/context/receipt/harness/learning-inbox panels.
+
+### Changed
+
+- **vNext is now the default substrate**: all 12 subsystems (runtime, durable harness, context, KG, memory, gateway, runtime intelligence, OC Flow, the persona/skill/harness registries, the runtime brain, and the workflow registry) flip from their legacy path to their vNext implementation. The flip is governed by the compatibility layer (`compat/`): a migration ledger, a config-backed flag registry (each flag mapped to its subsystem, live default, owner, and migration state, with single-flag revertibility), parity checks, collision detection, and committed flip evidence — and the legacy seams (policy/firewall/gateway) are shimmed onto the vNext path so each flip is parity-gated and reversible.
+- **CLI output discipline**: all command output now flows through the brand console — consistent headers, `console_styles` tables, brand palette, errors routed to stderr, and `--json` stdout purity (the status spinner no longer corrupts machine-readable output); CLI glyphs are sourced from a single `brand_mark`.
+- **Persona surface trimmed**: `opencontext persona list` shows only the public personas (`oc-orchestrator`, `oc-professor`, `oc-reviewer`) by default, with `--all` / `--delegates` for the rest; a `PersonaVisibility` enum (`PUBLIC_MAIN`/`PUBLIC_SUPPORT`/`HIDDEN_DELEGATION`) installs hidden delegation subagents under `.claude/agents/.opencontext-delegates/`.
+- **Smaller on-disk footprint**: `init` writes a single managed `.gitignore` block instead of empty placeholder files/dirs, uses a single telemetry ledger, creates directories lazily, and no longer double-nests `.storage`.
+
+### Deprecated
+
+- **2.0-removal backlog** (`REMOVE-IN-2.0.md`): legacy modules superseded by the vNext subsystems are annotated for removal in 2.0 — notably the old `llm/provider_gateway` and `llm/sampling_gateway` (superseded by the unified `providers/gateway`) — continuing the `agents`/`adapters` deprecations from 1.5.0.
+
+### Removed
+
+- Redundant IDE ignore files (`.codeiumignore`, `.cursorignore`, `.geminiignore`) — `.gitignore` already covers those paths.
+- Three unverified product claims ("87% token reduction", "13+ agents", "Zero secrets") and two duplicated logo constants from the CLI, now sourced from the shared `brand_mark` and guarded by an anti-regression test.
+
+### Fixed
+
+- **Type safety**: the `mypy --strict` gate was extended from `opencontext_core` to all four packages (core, api, profiles, cli). The pass surfaced and fixed real latent crashes — a `DeepReport`/`GraphHealthReport` type confusion in `main.py` that would `AttributeError`, an `EvolutionStore.append` called with over-wide kwargs, a `BrandConsole` passed where a `rich.Console` was required, and a learning-inbox using a nonexistent method/field. Repo-wide `ruff format` (line-length 100) and forbidden-name comment cleanups settled the format/lint gates.
+- **Cross-platform / Windows CI**: path keys, `SessionStore` records, and contract snapshots use `as_posix()` so the contract-drift and direct-provider guards no longer read every module as moved; uninstall tests isolate both `HOME` and `USERPROFILE`; and byte-exact LF fixtures stop CRLF mismatches.
+- **Uninstall leaves zero traces**: `opencontext uninstall --full` / `--verify` now achieve full global+local symmetry — the purge is ordered last so the install manager cannot resurrect `.opencontext`, the managed `# opencontext:storage` `.gitignore` block is stripped (and `verify` flags a leftover), and emptied `.claude/{agents,commands}` dirs are removed.
+- **OpenContext artifacts excluded from the graph**: `opencontext.yaml` and the OC-only `.gitignore` block are no longer indexed, retrieved, or included in context packs.
+- **SQLite KG detection**: the context substrate builder and index checks now read the SQLite graph at `.storage/opencontext/context_graph.db` (computing a deterministic sha256 hash and real token counts) instead of returning a null hash / 0 tokens / `indexed=False` from an absent JSON snapshot; the `doctor metaharness` KG check now requires a populated graph rather than a self-created empty DB.
+- **Edit containment and API crashes**: the code-edit and `test_stub` executors reject absolute paths and `../` escapes before any write; `POST /v1/refactor/sdd` derives severity from scan findings (the `severity` field never existed) and the firewall gate inspects redacted content, not source paths.
+- **Honest degradation**: `ContextSubstrateBuilder` emits a warning and returns `context_pack_hash=None` when the pack builder is absent (never fabricating a hash), and `EvolutionApplier` returns an explicit unsupported result instead of a misleading "not yet wired" stub.
+- **Packaging**: the benchmark suite and memory fixtures ship as package data and resolve via `importlib.resources` (working under both editable and wheel installs), and the benchmark fails loudly when a `--suite` path is missing outside the dev repo instead of silently reporting 0.0 coverage.
+
+### Security
+
+- **Safe-default MCP posture**: the MCP server exposes only read + memory tools by default; code-write tools and `opencontext_run` require an explicit policy opt-in, and denied/failed/unknown calls return a structured `ToolResultEnvelope`.
+- **Plugin capability broker**: plugin load is gated by a deny-by-default capability broker (filesystem/network/command/provider/KG/memory) plus an import guard. This is an honest portable floor — explicitly **not** an OS-level sandbox (no seccomp/landlock/namespaces).
+- **Read-only Studio**: the Studio web shell registers only `GET` routes (no POST/PUT/DELETE) over a read-only reader, with redaction applied to surfaced data.
+
+### Docs
+
+- **README repositioned** as a local control plane for AI software engineering (verified context, governed workflows, secure MCP tools, project memory, quality gates, auditable receipts), with the MCP tool count corrected to 32 and a Studio packaging extra documented.
+- **Architecture book and release docs**: added the architecture book, convergence/plans, and the 1.0 gate/dependency/contracts docs, plus an explicit classification of the deferred provider-CI gates (`POST-1.0.md`, `DEFERRED_PROVIDER_CI.md`).
+- **README demos**: six pre-rendered terminal GIFs (install/explain/menu/kept-out/config/uninstall) under `docs/assets/` with a reproducible `scripts/render-readme-demos.sh` (vhs + ttyd + ffmpeg, sandboxed `HOME`/`XDG_CONFIG_HOME`).
+
 ### Deferred (DEFERRED_PROVIDER_CI)
 
 - **Two 1.0 acceptance gates ship deferred to a provider-CI lane (Option A), non-blocking for 1.0.**

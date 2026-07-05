@@ -84,9 +84,9 @@ echo "All packages published!"
 
 | Version | Status | Notes |
 |---------|--------|-------|
-| 0.1.0 | Previous | MVP — core indexing, repo maps, memory |
-| 0.2.0 | Current dev | SDD orchestration, agent system, learning, quality gates |
-| 1.0.0 | Planned | Stable API, production ready |
+| 1.5.0 | Previous | Code-economy + quality (test-gaps, quality trend, project profile) |
+| 1.6.0 | Current | vNext agentic runtime (KG/memory/context v2, providers, plugins, marketplace, studio) |
+| 2.0.0 | Planned | Removal of deprecated `agents`/`adapters` layers (see the CHANGELOG "Deprecated" notes) |
 
 ## Dependencies Per Package
 
@@ -169,7 +169,7 @@ These work as **implicit namespace packages** (PEP 420) in Python 3.12+ and
 are included correctly in the built wheel. All imports work both in editable
 mode and from the wheel install.
 
-**Action before 1.0.0**: Add `__init__.py` to each directory to avoid
+**Optional hardening**: Add `__init__.py` to each directory to avoid
 potential issues with older packaging tools or alternative build backends.
 
 ### Pre-Release Checklist

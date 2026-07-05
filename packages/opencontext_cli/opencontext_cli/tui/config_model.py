@@ -13,6 +13,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from opencontext_core.i18n import t
+
 
 @dataclass(frozen=True)
 class Leaf:
@@ -98,6 +100,23 @@ def build_config_model() -> list[Category]:
         store.save(p)
         return f"TDD mode → {val}"
 
+    def flow_cur() -> str:
+        from opencontext_core.config import find_config, load_config
+
+        cf = find_config(".")
+        if cf and cf.exists():
+            try:
+                mode = getattr(load_config(cf).sdd, "flow_mode", None)
+                return str(mode) if mode else "hybrid"
+            except Exception:
+                return "hybrid"
+        return "hybrid"
+
+    def flow_apply(val: str) -> str:
+        from opencontext_core.config_sync import set_yaml_key
+
+        return f"OC Flow → {val}" if set_yaml_key("sdd.flow_mode", val) else "No opencontext.yaml"
+
     def opt_list(*vals: str) -> Callable[[], list[tuple[str, str]]]:
         return lambda: [(v, v) for v in vals]
 
@@ -106,12 +125,12 @@ def build_config_model() -> list[Category]:
 
     project_setup = Category(
         "project_setup",
-        "Project setup",
+        t("config.cat.project_setup"),
         "1",
         (
             Leaf(
                 "wizard",
-                "Full setup wizard",
+                t("config.leaf.wizard"),
                 "launch",
                 desc(
                     "Current: project-guided setup.",
@@ -124,7 +143,7 @@ def build_config_model() -> list[Category]:
             ),
             Leaf(
                 "agents",
-                "Agent integrations",
+                t("config.leaf.agents"),
                 "launch",
                 desc(
                     "Current: configured agents for this workspace.",
@@ -136,7 +155,7 @@ def build_config_model() -> list[Category]:
             ),
             Leaf(
                 "plugins",
-                "Plugins",
+                t("config.leaf.plugins"),
                 "launch",
                 desc(
                     "Current: installed OpenContext plugins.",
@@ -150,12 +169,12 @@ def build_config_model() -> list[Category]:
     )
     runtime = Category(
         "runtime",
-        "Runtime",
+        t("config.cat.runtime"),
         "2",
         (
             Leaf(
                 "security",
-                "Security & privacy",
+                t("config.leaf.security"),
                 "select",
                 desc(
                     "Current: selected security posture.",
@@ -170,7 +189,7 @@ def build_config_model() -> list[Category]:
             ),
             Leaf(
                 "features",
-                "Features",
+                t("config.leaf.features"),
                 "launch",
                 desc(
                     "Current: feature toggles.",
@@ -182,7 +201,7 @@ def build_config_model() -> list[Category]:
             ),
             Leaf(
                 "tokens",
-                "Token budgets",
+                t("config.leaf.tokens"),
                 "launch",
                 desc(
                     "Current: default token budget.",
@@ -194,7 +213,7 @@ def build_config_model() -> list[Category]:
             ),
             Leaf(
                 "models",
-                "Providers & models",
+                t("config.leaf.models"),
                 "launch",
                 desc(
                     "Current: default provider/model and phase routing.",
@@ -206,7 +225,7 @@ def build_config_model() -> list[Category]:
             ),
             Leaf(
                 "language",
-                "Language",
+                t("config.leaf.language"),
                 "select",
                 desc(
                     "Current: UI language.",
@@ -223,12 +242,12 @@ def build_config_model() -> list[Category]:
     )
     workflow = Category(
         "agentic_workflow",
-        "Agentic workflow",
+        t("config.cat.agentic_workflow"),
         "3",
         (
             Leaf(
                 "sdd_profile",
-                "SDD model profile",
+                t("config.leaf.sdd_profile"),
                 "select",
                 desc(
                     "Current: SDD model profile.",
@@ -243,7 +262,7 @@ def build_config_model() -> list[Category]:
             ),
             Leaf(
                 "tdd_mode",
-                "TDD mode",
+                t("config.leaf.tdd_mode"),
                 "select",
                 desc(
                     "Current: TDD enforcement.",
@@ -256,16 +275,40 @@ def build_config_model() -> list[Category]:
                 current=tdd_cur,
                 apply=tdd_apply,
             ),
+            Leaf(
+                "oc_flow",
+                t("config.leaf.oc_flow"),
+                "select",
+                desc(
+                    "Current: OC Flow execution policy for agentic runs.",
+                    "Effect: how the OC Flow harness pauses and executes — automatic "
+                    "(no pauses), stepwise (pause every phase), hybrid (pause only at "
+                    "risky gates), or observe / engram / openspec-only.",
+                    "Recommended: hybrid for human-in-the-loop; automatic for CI.",
+                    "Risk / note: automatic runs phases without pausing for approval.",
+                    "CLI: opencontext config set sdd.flow_mode <mode>",
+                ),
+                options=opt_list(
+                    "automatic",
+                    "stepwise",
+                    "hybrid",
+                    "engram_only",
+                    "openspec_only",
+                    "observe_only",
+                ),
+                current=flow_cur,
+                apply=flow_apply,
+            ),
         ),
     )
     memory = Category(
         "memory",
-        "Memory",
+        t("config.cat.memory"),
         "4",
         (
             Leaf(
                 "memory",
-                "Memory backend",
+                t("config.leaf.memory"),
                 "launch",
                 desc(
                     "Current: local / engram / auto.",
@@ -279,12 +322,12 @@ def build_config_model() -> list[Category]:
     )
     maintenance = Category(
         "maintenance",
-        "Maintenance",
+        t("config.cat.maintenance"),
         "5",
         (
             Leaf(
                 "show",
-                "Show current config",
+                t("config.leaf.show"),
                 "launch",
                 desc(
                     "Current: resolved config view.",
@@ -297,7 +340,7 @@ def build_config_model() -> list[Category]:
             ),
             Leaf(
                 "reset",
-                "Reset to defaults",
+                t("config.leaf.reset"),
                 "launch",
                 desc(
                     "Current: reset action.",
@@ -308,7 +351,7 @@ def build_config_model() -> list[Category]:
                 ),
                 run=wizard.reset_config,
             ),
-            Leaf("quit", "Quit", "quit", "Leave configuration."),
+            Leaf("quit", t("config.leaf.quit"), "quit", "Leave configuration."),
         ),
     )
     return [project_setup, runtime, workflow, memory, maintenance]

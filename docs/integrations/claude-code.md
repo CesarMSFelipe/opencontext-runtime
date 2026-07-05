@@ -43,7 +43,7 @@ opencontext config reconfigure plugins
 opencontext config backup
 ```
 
-## MCP Tools (all 14)
+## MCP Tools
 
 | Tool | Purpose |
 |------|---------|

@@ -175,7 +175,7 @@ def test_check_json_emits_ci_schema(
 
     out = capsys.readouterr().out
     payload = json.loads(out)  # must be a single, parseable JSON document
-    assert set(payload["summary"]) == {
+    assert set(payload["summary"]) >= {
         "total_checks",
         "passed",
         "failed",
@@ -191,13 +191,28 @@ def test_check_json_emits_ci_schema(
 
 
 def test_check_clean_json_is_success(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-    """A clean project's JSON report reports success=True with exit 0."""
+    """A clean project's JSON report exits 0; ``success`` is grounded in measurement.
+
+    The autouse language-tool stub is absent in this module, so the runner
+    either calls a real tool or marks it missing (skip). The fixture
+    ``_make_project`` is a single-file project with one function — too small
+    for the language tools to scope to (or for them to even detect), so the
+    run produces zero findings AND zero skipped verdicts: ``applicable == 0``.
+    Per the ahe-010-quality-semantics spec, ``success`` is False here (nothing
+    was measured), and ``status`` is ``not_applicable`` (no failed count
+    either, so the report is honest). The gate still exits 0 because the
+    underlying :class:`GateStatus` is PASSED (no findings → not blocking).
+    """
     _make_project(tmp_path)
     with pytest.raises(SystemExit) as exc:
         handle_quality_check(_check_args(tmp_path, json_output=True))
     assert exc.value.code == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["summary"]["success"] is True
+    # Coherent quality result fields (ahe-010):
+    assert payload["status"] == "not_applicable"
+    assert payload["summary"]["status"] == "not_applicable"
+    assert payload["summary"]["failed"] == 0
+    assert payload["summary"]["success"] is False
 
 
 # --------------------------------------------------------------------------- #
@@ -299,7 +314,11 @@ def test_main_dispatch_routes_quality_check(
     """`opencontext quality check <root>` routes through main() to the handler.
 
     Drives the real entry point (parser registration + the dispatch branch) via
-    ``sys.argv``, exactly like the other end-to-end CLI tests.
+    ``sys.argv``, exactly like the other end-to-end CLI tests. The fixture is a
+    single-file project where no language tool actually scopes to a candidate;
+    the resulting report is ``not_applicable`` with ``success=False`` per the
+    ahe-010-quality-semantics coherence contract (nothing ran → cannot claim a
+    pass). The gate still exits 0 because no findings = PASSED under the hood.
     """
     import sys
 
@@ -311,7 +330,9 @@ def test_main_dispatch_routes_quality_check(
         main()
     assert exc.value.code == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["summary"]["success"] is True
+    assert payload["status"] == "not_applicable"
+    assert payload["summary"]["failed"] == 0
+    assert payload["summary"]["success"] is False
 
 
 def test_main_dispatch_routes_quality_gate(

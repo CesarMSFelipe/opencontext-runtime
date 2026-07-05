@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from conftest import create_sample_project, write_config
 from opencontext_cli.main import _inspect, _provider_simulate, _security, _tokens, _trace
 from opencontext_core.config import OpenContextConfig, default_config_data
 from opencontext_core.context.packing import sanitize_context_pack
@@ -12,6 +11,7 @@ from opencontext_core.retrieval.ranking import RetrievalScorer
 from opencontext_core.runtime import OpenContextRuntime
 from opencontext_core.safety.firewall import ContextFirewall
 from opencontext_core.safety.secrets import SecretScanner
+from tests.core.conftest import create_sample_project, write_config
 
 
 def test_secret_findings_are_fingerprint_only() -> None:

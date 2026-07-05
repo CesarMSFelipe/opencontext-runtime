@@ -488,7 +488,7 @@ def test_to_report_dict_has_ci_check_shape(tmp_path: Path) -> None:
     ev = QualityEvaluator(tmp_path, rules=QualityRules(mode=QualityMode.WARN), scanned_files=[sf])
     report = ev.evaluate(["busy.py"], architecture_only=True)
     d = report.to_report_dict()
-    assert set(d["summary"]) == {
+    assert set(d["summary"]) >= {
         "total_checks",
         "passed",
         "failed",

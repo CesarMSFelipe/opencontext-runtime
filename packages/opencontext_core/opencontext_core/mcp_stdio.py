@@ -88,6 +88,24 @@ def _join_lines(lines: list[str], trailing_newline: bool) -> str:
     return text
 
 
+def _sdd_run_metadata(legacy: Any, workflow: str) -> dict[str, Any]:
+    """Small MCP-only phase summary for SDD harness runs."""
+
+    events = getattr(legacy, "events", []) or []
+    phase_status: dict[str, str] = {}
+    for event in events:
+        if getattr(event, "action", None) == "run_phase":
+            phase_status[str(getattr(event, "phase", ""))] = str(getattr(event, "status", ""))
+    return {
+        "selected_workflow": workflow,
+        "phases": list(phase_status),
+        "phase_status": phase_status,
+        "verified_by": None,
+        "verification_outcome": phase_status.get("verify"),
+        "reason": getattr(legacy, "summary", "") or "",
+    }
+
+
 _IMPORT_LINE_RE = re.compile(r"^\s*(?:from\s+\S+\s+import|import)\b")
 
 
@@ -237,6 +255,21 @@ _TOOL_SUCCESS_KEYS: dict[str, tuple[str, ...]] = {
     "opencontext_memory_judge": ("id", "relation", "ok"),
 }
 
+# Workflow tools unlocked by the ``allow_workflow_tools`` opt-in (the
+# ``opencontext mcp --workflow-tools`` flag configured agents launch with).
+# These drive OC Flow / SDD runs and the agent_execute follow-up; they write
+# session state and run receipts, never source files directly — the
+# symbol-write tools stay behind their own explicit policy opt-in.
+WORKFLOW_TOOL_NAMES: tuple[str, ...] = (
+    "opencontext_run",
+    "opencontext_session_start",
+    "opencontext_session_next",
+    "opencontext_session_observe",
+    "opencontext_session_apply",
+    "opencontext_session_resume",
+    "opencontext_session_archive",
+)
+
 
 def _tool_output_schema(name: str) -> dict[str, Any]:
     """Permissive per-tool output schema for ``tools/list`` (C3).
@@ -268,6 +301,46 @@ _JUDGE_RELATIONS: tuple[str, ...] = ("reinforce", "contradict")
 
 # Default layer for a save when the caller omits ``layer`` (RD3).
 _DEFAULT_MEMORY_LAYER_VALUE = "episodic"
+
+# Spec scenario 7.2 — the wording agents parse off the unavailable response.
+# Centralized here so every memory handler emits the same exact string and the
+# docs/tests can pin it verbatim.
+_MEMORY_UNAVAILABLE_REASON = "memory backend unavailable; start the runtime-backed MCP server"
+
+
+def _memory_unavailable_envelope() -> dict[str, Any]:
+    """The structured ``available=false`` response every memory handler
+    returns when the runtime is not attached (or the memory store is None).
+
+    Centralized so the shape stays stable: ``available=False``, the actionable
+    ``reason`` string, and a backwards-compatible ``error`` key with the same
+    text so older callers (and the test in
+    ``test_mcp_safe_defaults.py``) that grep ``error`` keep working.
+    """
+
+    return {
+        "error": _MEMORY_UNAVAILABLE_REASON,
+        "available": False,
+        "reason": _MEMORY_UNAVAILABLE_REASON,
+    }
+
+
+def _is_composite_store(store: Any) -> bool:
+    """True when ``store`` is a ``CompositeMemoryStore`` (has an engram leg).
+
+    Used by the status probe to surface composite routing to agents without
+    coupling the test surface to the class identity directly.
+    """
+
+    return hasattr(store, "_engram") and hasattr(store, "_local")
+
+
+def _local_layer_values() -> set[str]:
+    """Layer values routed to the local store (single source of truth)."""
+
+    from opencontext_core.memory.composite import _LOCAL_LAYERS
+
+    return {layer.value for layer in _LOCAL_LAYERS}
 
 
 def _make_memory_record(params: dict[str, Any]) -> Any:
@@ -389,6 +462,7 @@ class MCPServer:
         policy: ToolPermissionPolicy | None = None,
         runtime: OpenContextRuntime | None = None,
         project_root: str | Path | None = None,
+        allow_workflow_tools: bool = False,
     ) -> None:
         # When a runtime is provided, context/impact route through the verified
         # pipeline (gates/trust/trace). Without it, the legacy raw behavior is kept
@@ -404,14 +478,24 @@ class MCPServer:
         self.context_builder = ContextBuilder(db_path=db_path)
         self.kg = KnowledgeGraph(db_path=db_path)
         # Permission gate: every tool call goes through ``policy.allows()``
-        # before the handler runs. Default policy allowlists every tool the
-        # server exposes; callers can tighten it via the constructor.
-        self.policy: ToolPermissionPolicy = policy or ToolPermissionPolicy(
-            allowed_tools=set(self._default_tool_names())
-        )
+        # before the handler runs. The safe default allowlists read + memory
+        # tools only; ``allow_workflow_tools=True`` (the ``opencontext mcp
+        # --workflow-tools`` opt-in every configured agent is registered with)
+        # additionally unlocks ``opencontext_run`` and the session step tools —
+        # NEVER the symbol-write tools. An explicit ``policy`` always wins.
+        if policy is None:
+            allowed = set(self._default_tool_names())
+            if allow_workflow_tools:
+                allowed.update(WORKFLOW_TOOL_NAMES)
+            policy = ToolPermissionPolicy(allowed_tools=allowed)
+        self.policy: ToolPermissionPolicy = policy
         # Raw stdin line buffer (see _next_line): we manage line splitting ourselves
         # so select() can't strand a buffered line on a batched write.
         self._inbuf: str = ""
+        # Whether the connected client declared the MCP ``sampling`` capability at
+        # initialize. Until initialize arrives, assume it cannot sample (safe: no
+        # sampler is registered either way before initialize).
+        self.client_supports_sampling: bool = False
 
         # Tool definitions
         self.tools: dict[str, dict[str, Any]] = {
@@ -653,10 +737,52 @@ class MCPServer:
                 },
             },
             "opencontext_session_apply": {
-                "description": "Record a mutation intent on a session (governed).",
+                "description": (
+                    "Record a mutation on a session (governed). With kind='agent_edits' "
+                    "it is the agent-execute follow-up: pass payload.changed_files "
+                    "(files the agent edited itself) and OpenContext verifies them, "
+                    "records receipts, and completes the linked run."
+                ),
                 "parameters": {
                     "session_id": {"type": "string"},
                     "kind": {"type": "string", "default": "edit"},
+                    # NOTE: the nested properties MUST be declared. Strict hosts
+                    # serialize an object parameter with no declared properties as
+                    # {} (observed live: OpenCode + MiniMax sent payload={} on
+                    # every call), which strands agent_execute follow-ups.
+                    "payload": {
+                        "type": "object",
+                        "description": (
+                            "Mutation payload. For kind='agent_edits': "
+                            "{changed_files: [paths], oc_flow?: {session_id, run_id}, "
+                            "test_command?: [argv]}"
+                        ),
+                        "properties": {
+                            "changed_files": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": ("Relative paths of every file the agent edited"),
+                            },
+                            "oc_flow": {
+                                "type": "object",
+                                "description": (
+                                    "Linked OC Flow run to complete (from the handoff)"
+                                ),
+                                "properties": {
+                                    "session_id": {"type": "string"},
+                                    "run_id": {"type": "string"},
+                                },
+                                "additionalProperties": True,
+                            },
+                            "test_command": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": ("Optional argv to run for verification evidence"),
+                            },
+                        },
+                        "additionalProperties": True,
+                    },
+                    "root": {"type": "string", "description": "Project root (optional)"},
                 },
             },
             "opencontext_session_inspect": {
@@ -792,15 +918,23 @@ class MCPServer:
             return
 
         if method == "initialize":
+            from opencontext_core.llm.sampling_gateway import register_host_sampler
+
             server_caps: dict[str, Any] = {"tools": {}}
             client_caps = params.get("capabilities", {})
-            # If the client can sample, route the agentic loop's gateway through
-            # its selected model (MCP sampling) — zero provider config needed.
-            if isinstance(client_caps, dict) and "sampling" in client_caps:
-                from opencontext_core.llm.sampling_gateway import register_host_sampler
-
+            # Record the client's declared sampling capability. If the client can
+            # sample, route the agentic loop's gateway through its selected model
+            # (MCP sampling) — zero provider config needed. If it can NOT, clear
+            # any stale sampler: sending sampling/createMessage to a client that
+            # never answers would stall runs for the full sampling timeout.
+            self.client_supports_sampling = (
+                isinstance(client_caps, dict) and "sampling" in client_caps
+            )
+            if self.client_supports_sampling:
                 register_host_sampler(self._request_sampling)
                 server_caps["sampling"] = {}
+            else:
+                register_host_sampler(None)
             self._send_response(
                 request_id,
                 {
@@ -1029,6 +1163,18 @@ class MCPServer:
         profile = str(params.get("profile", "balanced")) or "balanced"
         root = Path(params.get("root") or Path.cwd()).resolve()
 
+        from opencontext_core.mcp.run_dispatcher import dispatch_mcp_run
+
+        dispatched = dispatch_mcp_run(
+            task=task,
+            workflow=workflow,
+            root=root,
+            profile=profile,
+            lane=str(params.get("lane", "fast") or "fast"),
+        )
+        if dispatched is not None:
+            return dispatched
+
         resolved = self._resolve_config(root)
         api = RuntimeApi(root=root, config=resolved.config)
         ref = api.start_session(StartSessionRequest(task=task, root=str(root), profile=profile))
@@ -1056,7 +1202,41 @@ class MCPServer:
             legacy=result.legacy,
             host_model_used=get_host_sampler() is not None,
         )
-        return contract.model_dump()
+        out = contract.model_dump()
+        out.update(_sdd_run_metadata(result.legacy, workflow))
+        if any(
+            getattr(gate, "id", "") == "phase_contract"
+            and str(getattr(getattr(gate, "status", None), "value", getattr(gate, "status", "")))
+            == "failed"
+            for gate in (getattr(result.legacy, "gates", []) or [])
+        ):
+            out["status"] = "blocked"
+
+        # No sampler (client cannot sample) + no configured provider: the harness
+        # just ran WITHOUT an executor, so a failed/blocked verdict is a dead end
+        # the caller can never fix by retrying. Upgrade it to the agent-execute
+        # handoff: the client agent does the work itself and completes this same
+        # session via opencontext_session_apply (kind="agent_edits").
+        from opencontext_core.mcp.agent_handoff import (
+            build_workflow_agent_handoff,
+            provider_is_mock,
+        )
+
+        if (
+            out.get("status") in ("failed", "blocked", "scaffolded")
+            and get_host_sampler() is None
+            and provider_is_mock(resolved.config)
+        ):
+            out.update(
+                build_workflow_agent_handoff(
+                    root=root,
+                    task=task,
+                    workflow=workflow,
+                    session_id=ref.session_id,
+                    prior_status=str(out.get("status")),
+                )
+            )
+        return out
 
     # ------------------------------------------------------------------ #
     # Runtime-API-backed session + meta tools (PR-013, SPEC-CLI-013-16). #
@@ -1254,6 +1434,41 @@ class MCPServer:
             return None
         return getattr(runtime, "_v2_memory_store", None)
 
+    def _memory_status(self) -> dict[str, Any]:
+        """Snapshot of the live memory backend for the ``opencontext_status`` probe.
+
+        Mirrors PR-AHE-007 task 7.3 — agents can detect availability from the
+        status tool without first issuing a save and getting an error. The shape
+        is small and additive so existing callers keep working.
+
+        Returns a dict with at minimum ``available`` (bool), ``backend`` (one
+        of ``local``/``composite``), and ``reason`` (actionable text when
+        ``available`` is False; empty when it is True).
+        """
+
+        store = self._memory_store()
+        if store is None:
+            return {
+                "available": False,
+                "backend": "none",
+                "reason": _MEMORY_UNAVAILABLE_REASON,
+            }
+        if _is_composite_store(store):
+            return {
+                "available": True,
+                "backend": "composite",
+                "engram_layers": sorted(_engram_layer_values()),
+                "local_layers": sorted(_local_layer_values()),
+                "live_engram": _store_has_live_engram(store),
+                "reason": "",
+            }
+        # Plain LocalMemoryStore (no engram leg at all).
+        return {
+            "available": True,
+            "backend": "local",
+            "reason": "",
+        }
+
     @staticmethod
     def _serialize_record(record: Any) -> dict[str, Any]:
         """Project a ``MemoryRecord`` to a JSON-safe result dict."""
@@ -1280,7 +1495,7 @@ class MCPServer:
 
         store = self._memory_store()
         if store is None:
-            return {"error": "memory store unavailable", "available": False}
+            return _memory_unavailable_envelope()
 
         try:
             record = _make_memory_record(params)
@@ -1309,7 +1524,7 @@ class MCPServer:
 
         store = self._memory_store()
         if store is None:
-            return {"error": "memory store unavailable", "available": False}
+            return _memory_unavailable_envelope()
 
         from opencontext_core.models.agent_memory import MemoryLayer
 
@@ -1332,7 +1547,7 @@ class MCPServer:
 
         store = self._memory_store()
         if store is None:
-            return {"error": "memory store unavailable", "available": False}
+            return _memory_unavailable_envelope()
 
         query = str(params.get("query", ""))
         records = store.search(query, scope=None, limit=10)
@@ -1348,7 +1563,7 @@ class MCPServer:
 
         store = self._memory_store()
         if store is None:
-            return {"error": "memory store unavailable", "available": False}
+            return _memory_unavailable_envelope()
 
         memory_id = str(params.get("memory_id", ""))
         relation = str(params.get("relation", ""))
@@ -1665,7 +1880,13 @@ class MCPServer:
         return {"files": files}
 
     def _handle_status(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle status tool."""
+        """Handle status tool.
+
+        Returns the live KG snapshot plus a ``memory`` section so an agent can
+        detect memory availability without first issuing a save (PR-AHE-007
+        task 7.3). The memory section is keyed off the same ``_v2_memory_store``
+        the memory handlers reach, so it always reflects the live wiring.
+        """
 
         stats = self.db.get_stats()
         return {
@@ -1673,6 +1894,7 @@ class MCPServer:
             "nodes": stats.get("nodes", 0),
             "edges": stats.get("edges", 0),
             "files": stats.get("files", 0),
+            "memory": self._memory_status(),
         }
 
     def _handle_quality(self, params: dict[str, Any]) -> dict[str, Any]:

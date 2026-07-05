@@ -46,7 +46,13 @@ class VerificationReport:
 
     @property
     def is_healthy(self) -> bool:
-        return self.failures == 0
+        # A Knowledge Graph warning indicates the KG is degraded (not indexed,
+        # stale, or unreadable). This degrades the healthy status because
+        # most OC features depend on the KG. Advisory warnings (Python version,
+        # no config yet) remain non-degrading — they do not block OC workflows.
+        return self.failures == 0 and not any(
+            r.name == "Knowledge Graph" and r.status == "warning" for r in self.results
+        )
 
 
 # ── Individual Checks ──────────────────────────────────────────────────────
@@ -87,7 +93,9 @@ def check_knowledge_graph() -> CheckResult:
     if not prefs.features.knowledge_graph:
         return CheckResult("Knowledge Graph", "skipped", "Not enabled")
 
-    db_path = Path(prefs.custom_storage_path) / "context_graph.db"
+    from opencontext_core.config_resolver import resolve_active_storage_path
+
+    db_path = resolve_active_storage_path(Path.cwd()) / "context_graph.db"
     if not db_path.exists():
         return CheckResult(
             "Knowledge Graph",
@@ -143,7 +151,11 @@ def check_mcp_config() -> CheckResult:
             "warning",
             f"MCP config present without opencontext entry: {agents}",
         )
-    return CheckResult("MCP Server", "warning", "Not configured — use 'opencontext install'")
+    return CheckResult(
+        "MCP Server",
+        "warning",
+        "Not wired into any agent config — run 'opencontext install' to configure",
+    )
 
 
 def check_plugins() -> CheckResult:
@@ -407,7 +419,15 @@ def collect_savings(storage_path: str | Path | None = None) -> dict[str, Any]:
         from opencontext_core.learning.learning_orchestrator import LearningOrchestrator
 
         if storage_path is None:
-            base = Path(UserConfigStore().load().custom_storage_path)
+            # Honor a genuinely customized (deprecated) pref; otherwise resolve
+            # through the active storage mode with a legacy in-repo fallback.
+            _pref = UserConfigStore().load().custom_storage_path
+            if _pref != ".storage/opencontext":
+                base = Path(_pref)
+            else:
+                from opencontext_core.config_resolver import resolve_active_storage_file
+
+                base = resolve_active_storage_file(Path.cwd(), "context_graph.db").parent
         else:
             base = Path(storage_path)
         learning_path = base / "learning"

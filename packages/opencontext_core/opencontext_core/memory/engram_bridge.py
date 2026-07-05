@@ -56,11 +56,42 @@ def _engram_db_path() -> Path:
 
 
 def engram_project() -> str:
-    """Project key matching Engram's convention (slugified working-dir name)."""
+    """Project key matching Engram's convention (slugified working-dir name).
+
+    .. deprecated:: 2.0
+        Use :func:`engram_project_full` for the 5-case detector with
+        ambiguity surfacing and recovery-token flow.
+    """
+    import warnings
+
+    warnings.warn(
+        "engram_project() is deprecated since 2.0; use engram_project_full() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     override = os.environ.get("OPENCONTEXT_ENGRAM_PROJECT")
     if override:
         return override
     return Path.cwd().name.strip().lower().replace(" ", "-")
+
+
+def engram_project_full(cwd: Path | None = None) -> Any:
+    """Full 5-case project detection via :mod:`opencontext_memory.project`.
+
+    PR2.d additive extension: returns a
+    :class:`opencontext_memory.project.DetectionResult` so callers can
+    inspect ``source``, ``warning`` and (for ambiguous projects)
+    ``available_projects`` + ``recovery_token``.
+
+    The legacy ``engram_project()`` string-shaped function stays put for
+    back-compat with the existing ``backends/factory.py`` wiring; the
+    new full detector is the canonical path for any host that wants
+    ambiguity-surfacing + ``git_child`` auto-promotion.
+    """
+    from opencontext_memory.project import DetectProjectFull
+
+    resolved = Path(cwd).resolve() if cwd is not None else Path.cwd()
+    return DetectProjectFull(resolved)
 
 
 def detect_engram() -> bool:

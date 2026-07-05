@@ -18,6 +18,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
 from opencontext_core.harness.run_store import RunStore
 
 
@@ -29,19 +31,74 @@ def _runs_dir(root: Path) -> Path:
     return root / ".opencontext" / "runs"
 
 
+def _sessions_run_dirs(root: Path) -> list[Path]:
+    """All run directories under the sessions layout.
+
+    Covers ``.opencontext/sessions/<session_id>/runs/<run_id>/`` — the path
+    used by OCFlowRunner and RuntimeApi._durable_apply.
+    """
+    sessions_dir = root / ".opencontext" / "sessions"
+    if not sessions_dir.is_dir():
+        return []
+    dirs: list[Path] = []
+    for session_dir in sorted(sessions_dir.iterdir()):
+        if not session_dir.is_dir():
+            continue
+        runs_subdir = session_dir / "runs"
+        if runs_subdir.is_dir():
+            dirs.extend(d for d in sorted(runs_subdir.iterdir()) if d.is_dir())
+    return dirs
+
+
 def _list_run_ids(root: Path) -> list[str]:
-    """Run ids from the RunStore index, unioned with on-disk run dirs."""
+    """Run IDs from the RunStore index, unioned with both on-disk run layouts."""
     ids: set[str] = set(RunStore(root).list_run_ids())
+    # Legacy harness layout: .opencontext/runs/<run_id>/run.json
     runs_dir = _runs_dir(root)
     if runs_dir.is_dir():
         for child in runs_dir.iterdir():
             if child.is_dir() and (child / "run.json").exists():
                 ids.add(child.name)
+    # OC Flow / durable-apply sessions layout: .opencontext/sessions/*/runs/*/
+    for run_dir in _sessions_run_dirs(root):
+        # Accept dirs that contain either run.json (RuntimeApi) or state.json (oc_flow).
+        if (run_dir / "run.json").exists() or (run_dir / "state.json").exists():
+            ids.add(run_dir.name)
     return sorted(ids)
 
 
+def _find_run_dir(root: Path, run_id: str) -> Path:
+    """Locate a run directory by run_id, checking both legacy and sessions layouts.
+
+    Returns the first matching directory. Preference order:
+    1. Legacy ``.opencontext/runs/<run_id>/``
+    2. Sessions ``.opencontext/sessions/*/runs/<run_id>/``
+
+    If neither exists, returns the legacy path (callers check ``is_dir()``/
+    ``run.json`` existence and handle the not-found case themselves).
+    """
+    legacy = _runs_dir(root) / run_id
+    if legacy.is_dir():
+        return legacy
+    for run_dir in _sessions_run_dirs(root):
+        if run_dir.name == run_id:
+            return run_dir
+    # Not found in either layout — return the legacy path for consistent
+    # "not found" error handling in callers.
+    return legacy
+
+
 def _run_dir(root: Path, run_id: str) -> Path:
-    return _runs_dir(root) / run_id
+    return _find_run_dir(root, run_id)
+
+
+def _read_run_json(run_dir: Path) -> dict[str, Any] | None:
+    """Read run metadata from run.json (harness) or state.json (oc_flow), in that order."""
+    data = _read_json(run_dir / "run.json")
+    if data is not None:
+        return data  # type: ignore[no-any-return]
+    # OC Flow writes state.json with the same surface fields (run_id, workflow, task, status).
+    return _read_json(run_dir / "state.json")  # type: ignore[no-any-return]
 
 
 def _read_json(path: Path) -> Any:
@@ -71,8 +128,11 @@ def add_run_exec_parser(subparsers: Any) -> None:
     run_parser.add_argument(
         "--workflow",
         default="oc-flow",
-        choices=["oc-flow", "auto"],
-        help="Workflow to run (default: oc-flow; 'auto' selects oc-flow/sdd by task).",
+        choices=["oc-flow", "auto", "sdd"],
+        help=(
+            "Workflow to run (default: oc-flow; 'sdd' runs the full SDD phase harness "
+            "explore→archive; 'auto' selects oc-flow/sdd by task)."
+        ),
     )
     run_parser.add_argument(
         "--lane",
@@ -84,6 +144,17 @@ def add_run_exec_parser(subparsers: Any) -> None:
         "--profile", default="balanced", help="Execution profile (default: balanced)."
     )
     run_parser.add_argument("--resume", default=None, help="Resume a run: <session_id>/<run_id>.")
+    run_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip the interactive preflight and run immediately.",
+    )
+    run_parser.add_argument(
+        "--non-interactive",
+        dest="non_interactive",
+        action="store_true",
+        help="Never prompt (same as --yes; also implied by --json or a non-TTY).",
+    )
     run_parser.add_argument("--root", default=None, help="Project root (default: cwd).")
     run_parser.add_argument(
         "--config",
@@ -93,11 +164,18 @@ def add_run_exec_parser(subparsers: Any) -> None:
     run_parser.add_argument("--json", action="store_true", help="JSON output.")
 
 
-def handle_run_exec(args: Any) -> None:
-    """Dispatch the ``run`` execution command to the OC Flow runner (FLOW-16)."""
-    from opencontext_core.config import load_config_or_defaults
+def handle_run_exec(args: Any) -> int:
+    """Dispatch the ``run`` execution command via RuntimeApi (C15 spine flip).
+
+    Routes through :class:`~opencontext_core.runtime.api.RuntimeApi`:
+    ``start_session()`` then ``run()``.  NEVER ``run_workflow`` (amendment A1).
+
+    Rollback: revert ``state=MigrationState.migrated`` to ``state=MigrationState.legacy``
+    for rt-spine and mcp-runtime in ``compat/migration.py`` and restore the legacy
+    branch below.
+    """
     from opencontext_core.config_resolver import missing_config_hint, resolve_config_path
-    from opencontext_core.oc_flow.cli import run_oc_flow_cli
+    from opencontext_core.runtime.api import RunRequest, RuntimeApi, StartSessionRequest
 
     root = _root(args)
     # B2 / ADR-A2: read the SAME path install writes (<root>/opencontext.yaml),
@@ -109,28 +187,151 @@ def handle_run_exec(args: Any) -> None:
         # This diagnostic always goes to STDERR so STDOUT carries only the run
         # summary — in --json mode that is ONLY the JSON object, keeping
         # `json.load(stdout)` clean.
+        # NOTE: intentionally a bare stderr print, NOT eprint(). eprint routes
+        # through a width-80 rich console that soft-wraps the embedded absolute
+        # config path mid-token, breaking the copy-pasteable path this actionable
+        # hint promises. Keep it unwrapped.
         print(missing_config_hint(root), file=sys.stderr)
-    enabled = True
-    try:
-        config = load_config_or_defaults(config_path, auto_detect=False)
-        enabled = bool(getattr(config.runtime, "oc_flow_enabled", False))
-    except Exception:  # config is advisory for the gate; default-on for the explicit CLI
-        enabled = True
 
-    summary = run_oc_flow_cli(
-        getattr(args, "task", None),
-        root=root,
-        workflow=getattr(args, "workflow", "oc-flow"),
-        lane=getattr(args, "lane", "fast"),
-        profile=getattr(args, "profile", "balanced"),
-        resume=getattr(args, "resume", None),
-        enabled=enabled,
-        as_json=getattr(args, "json", False),
-    )
+    # Spine path (commit-007 / C15): start_session -> run. NO run_workflow.
+    task = getattr(args, "task", None) or ""
+    # Redact secrets in the task BEFORE it enters the session/run. A token pasted
+    # into the task string was otherwise persisted raw into session/run artifacts
+    # and the provider-bound context envelope — "Context redaction is applied
+    # automatically" must hold for the task itself, not only provider errors.
+    if task:
+        from opencontext_core.safety.secrets import SecretScanner
+
+        task = SecretScanner().redact(task)
+    workflow = getattr(args, "workflow", "oc-flow")
+    lane = getattr(args, "lane", "fast")
+    profile = getattr(args, "profile", "balanced")
+
+    # Guided preflight (TTY only; --json/--yes/--non-interactive skip it): brief
+    # the user on the plan, artifacts, gates, cost, and subsystems, then ask.
+    # Non-TTY sessions never reach this branch — scripts keep today's behavior.
+    from opencontext_cli.flow_preflight import is_interactive, run_preflight
+
+    if is_interactive(args):
+        decision = run_preflight(
+            task=task, workflow=workflow, lane=lane, profile=profile, root=root
+        )
+        if not decision.proceed:
+            console.warning("Run cancelled — nothing was executed.")
+            return 0
+        workflow = decision.workflow
+        lane = decision.lane
+
+    # R2: pre-run cost estimate hint — one stderr line, never blocks, silent on failure.
+    try:
+        from opencontext_core.runtime_intelligence.cost import CostEngine
+
+        _est = CostEngine().estimate(task, workflow, lane, root=root)
+        print(
+            f"[oc] estimate: ~{_est.estimated_input_tokens} tokens"
+            f", ~{_est.estimated_duration_s}s ({workflow}, {lane} lane)",
+            file=sys.stderr,
+        )
+    except Exception:
+        pass  # estimate failure is a silent skip per honesty rules
+
+    api = RuntimeApi(root)
+
+    # --resume <session_id>/<run_id>: restore and report the prior run instead of
+    # silently starting a new one.
+    resume = getattr(args, "resume", None)
+    if resume:
+        sess_id, sep, run_id = resume.partition("/")
+        if not sep or not sess_id or not run_id:
+            eprint("--resume expects <session_id>/<run_id>")
+            sys.exit(2)
+        try:
+            from opencontext_core.oc_flow.runner import OCFlowRunner
+
+            resumed = OCFlowRunner(root=root).resume(sess_id, run_id)
+        except Exception as exc:
+            eprint(f"resume failed: {exc}")
+            sys.exit(1)
+        receipts = getattr(resumed, "apply_receipts", {}) or {}
+        changed = [r.get("path") for r in receipts.get("receipts", [])]
+        out = {
+            "status": "resumed",
+            "session_id": getattr(resumed, "session_id", sess_id),
+            "run_id": getattr(resumed, "run_id", run_id),
+            "changed_files": changed,
+        }
+        if getattr(args, "json", False):
+            print(json.dumps(out))
+        else:
+            console.success(
+                f"Resumed {out['session_id']}/{out['run_id']} ({len(out['changed_files'])} edits)"
+            )
+        return 0
+
+    session = api.start_session(StartSessionRequest(task=task, root=str(root), profile=profile))
+    result = api.run(RunRequest(session_id=session.session_id, workflow_id=workflow, task=task))
+    # B1 / PROD-004: result.status is _legacy_status(legacy) which preserves
+    # OC Flow terminal vocabulary ("completed", "needs_executor", etc.) and
+    # translates harness GateStatus values.  Use it directly.
+    oc_status = result.status
+    leg = result.legacy
+    # Resolve the workflow actually executed (e.g. "auto" → "oc-flow"/"sdd").  For
+    # OCFlowRunResult the workflow_selection receipt carries the resolved name; for
+    # the SDD harness path the legacy result's own ``workflow`` field is the resolved
+    # engine (the RuntimeApi resolves ``auto`` before dispatch), so the reported label
+    # matches the engine that actually ran rather than the raw "auto" arg.
+    sel = getattr(leg, "workflow_selection", None) or {}
+    resolved_workflow = sel.get("workflow") or getattr(leg, "workflow", None) or workflow
+    # B1 / shape-parity: expose the full OCFlowRunResult vocabulary so --json
+    # consumers (tests, automation) that relied on run_oc_flow_cli fields
+    # (artifacts_dir, selection_reason, final_node, session_id, run_id) keep
+    # working.  For non-OC-Flow legacy results, only the 4 core fields are
+    # emitted.
+    ocflow_session_id = getattr(leg, "session_id", None) or session.session_id
+    ocflow_run_id = getattr(leg, "run_id", None) or result.run_id
+    artifacts_dir = getattr(leg, "artifacts_dir", None)
+    summary: dict[str, object] = {
+        "status": oc_status,
+        "session_id": ocflow_session_id,
+        "run_id": ocflow_run_id,
+        "workflow": resolved_workflow,
+    }
+    if artifacts_dir is not None:
+        summary["artifacts_dir"] = str(artifacts_dir)
+    for _field in (
+        "final_node",
+        "visited",
+        "total_tokens",
+        "diagnosis_attempts",
+        "escalated",
+        "graph_status",
+        "completion_reason",
+        "mutation_required",
+        "verified_by",
+        "verification_outcome",
+    ):
+        _v = getattr(leg, _field, None)
+        if _v is not None:
+            summary[_field] = _v
+    if sel.get("reason"):
+        summary["selection_reason"] = sel["reason"]
+    if getattr(args, "json", False):
+        print(json.dumps(summary, indent=2, default=str))
+    else:
+        console.table(
+            "OC Flow",
+            ["Field", "Value"],
+            [
+                ["status", str(summary.get("status"))],
+                ["workflow", str(summary.get("workflow"))],
+                ["session_id", str(summary.get("session_id"))],
+                ["run_id", str(summary.get("run_id"))],
+            ],
+        )
     # B1 / PROD-004: a mutation that found no executor/provider is reported honestly
-    # as needs_executor/needs_provider. Print an actionable next step naming at least
-    # one concrete remedy. STDERR keeps the --json STDOUT payload pure JSON.
-    if isinstance(summary, dict) and summary.get("status") in {"needs_executor", "needs_provider"}:
+    # as needs_executor / needs_provider. Print an actionable next step naming at
+    # least one concrete remedy. STDERR keeps the --json STDOUT payload pure JSON.
+    if oc_status in {"needs_executor", "needs_provider"}:
         print(
             "Hint: enable mutation by configuring a provider "
             "(export ANTHROPIC_API_KEY=... / OPENAI_API_KEY=...), an MCP sampler, or "
@@ -138,6 +339,12 @@ def handle_run_exec(args: Any) -> None:
             "`opencontext doctor`.",
             file=sys.stderr,
         )
+    # Exit code: a genuine FAILURE (a failed run or a gate-blocked run) is nonzero so
+    # CI/scripts can detect it. Honest degraded outcomes (needs_executor/needs_provider,
+    # not_applied) stay 0 — the command did its job; the status is in --json. Returned
+    # (not sys.exit'd) so the ~6 in-process test callers never raise SystemExit; the
+    # dispatcher raises on the returned code.
+    return 1 if oc_status in {"failed", "blocked"} else 0
 
 
 def add_simulate_parser(subparsers: Any) -> None:
@@ -175,7 +382,7 @@ def handle_simulate(args: Any) -> None:
 
     task = getattr(args, "task", None)
     if not task:
-        print('Usage: opencontext simulate "<task>"', file=sys.stderr)
+        eprint('Usage: opencontext simulate "<task>"')
         sys.exit(2)
     root = getattr(args, "root", ".")
 
@@ -215,25 +422,84 @@ def handle_simulate(args: Any) -> None:
     }
 
     def _human(d: dict[str, Any]) -> None:
-        print(f"Task          : {d['task']}")
-        print(f"Workflow      : {d['workflow']} (lane: {d['lane']})")
-        print(f"Confidence    : {d['confidence']}")
+        console.header("Simulate")
+        rows: list[list[str]] = [
+            ["Task", str(d["task"])],
+            ["Workflow", f"{d['workflow']} (lane: {d['lane']})"],
+            ["Confidence", str(d["confidence"])],
+        ]
         if d["risk_flags"]:
-            print(f"Risk          : {', '.join(d['risk_flags'])}")
+            rows.append(["Risk", ", ".join(d["risk_flags"])])
         if d["estimated_cost"]:
             c = d["estimated_cost"]
-            print(
-                f"Est. cost     : ~{c.get('estimated_input_tokens', 0)} in / "
-                f"{c.get('estimated_output_tokens', 0)} out tokens, "
-                f"{c.get('estimated_duration_s', 0)}s"
+            rows.append(
+                [
+                    "Est. cost",
+                    f"~{c.get('estimated_input_tokens', 0)} in / "
+                    f"{c.get('estimated_output_tokens', 0)} out tokens, "
+                    f"{c.get('estimated_duration_s', 0)}s",
+                ]
             )
-        print(f"Recommendation: {d['recommendation']}")
-        print("Policy preview:")
-        for dec in d["policy_decisions"]:
-            print(f"  [{dec['decision']}] {dec['tool']} ({dec['reason']})")
-        print("No files were changed (dry run).")
+        rows.append(["Recommendation", str(d["recommendation"])])
+        console.table("Preview", ["Field", "Value"], rows)
+        console.table(
+            "Policy preview",
+            ["Decision", "Tool", "Reason"],
+            [[dec["decision"], dec["tool"], dec["reason"]] for dec in d["policy_decisions"]],
+        )
+        console.print("No files were changed (dry run).")
 
     emit(data, resolve_output_mode(args), _human)
+
+
+def _print_profile(run_dir: Path) -> None:
+    """Print per-component timing profile from trace.json (R3).
+
+    Reads ``timings_ms`` from ``run_dir/trace.json``.  When the file is absent
+    or has no timing data, prints an honest "no trace recorded" line and returns
+    — never crashes or raises.
+    """
+    trace_path = run_dir / "trace.json"
+    if not trace_path.exists():
+        console.info("Profile: no trace recorded for this run.")
+        return
+    try:
+        raw = _read_json(trace_path)
+        if not isinstance(raw, dict):
+            console.info("Profile: no trace recorded for this run.")
+            return
+        timings = raw.get("timings_ms") or {}
+        if not timings:
+            console.info("Profile: no trace recorded for this run.")
+            return
+
+        from opencontext_core.runtime_intelligence.profiler import RuntimeProfiler
+
+        # Duck-typed proxy: RuntimeProfiler only needs .run_id and .timings_ms.
+        class _TraceProxy:
+            def __init__(self, run_id: str, timings_ms: dict[str, float]) -> None:
+                self.run_id = run_id
+                self.timings_ms = timings_ms
+
+        proxy = _TraceProxy(
+            run_id=raw.get("run_id", run_dir.name),
+            timings_ms={k: float(v) for k, v in timings.items()},
+        )
+        report = RuntimeProfiler().profile(proxy)  # type: ignore[arg-type]
+
+        console.section("Profile (per-component time share)")
+        rows: list[list[str]] = []
+        for component, share in sorted(
+            report.cost_by_component.items(), key=lambda kv: kv[1], reverse=True
+        ):
+            bar = "#" * max(1, int(share * 20))
+            rows.append([component, f"{share:.1%}", bar])
+        console.table("Time share", ["Component", "Share", ""], rows)
+        if report.recommendations:
+            console.info(f"Recommendation: {report.recommendations[0]}")
+    except Exception as exc:
+        # Profiler failure is non-fatal — honest degraded message.
+        console.warning(f"Profile: could not load trace ({exc}).")
 
 
 def add_run_parser(subparsers: Any) -> None:
@@ -248,6 +514,12 @@ def add_run_parser(subparsers: Any) -> None:
     show_p = runs_subs.add_parser("show", help="Show a run summary.")
     show_p.add_argument("run_id", help="Run ID.")
     show_p.add_argument("--json", action="store_true", help="JSON output.")
+    show_p.add_argument(
+        "--profile",
+        action="store_true",
+        default=False,
+        help="Show per-component timing profile from trace (if available).",
+    )
 
     art_p = runs_subs.add_parser("artifacts", help="List a run's artifact files.")
     art_p.add_argument("run_id", help="Run ID.")
@@ -271,12 +543,19 @@ def handle_run_inspect(args: Any) -> None:
 
     if action == "show":
         run_dir = _run_dir(root, args.run_id)
-        run_json = _read_json(run_dir / "run.json")
+        run_json = _read_run_json(run_dir)
         if run_json is None:
-            print(f"Run not found: {args.run_id}", file=sys.stderr)
+            eprint(f"Run not found: {args.run_id}")
             sys.exit(1)
-        gates = _read_json(run_dir / "gates.json") or {}
+        # Harness runs keep gates.json/artifacts.json at the run root; OC Flow keeps
+        # them under artifacts/oc-flow/. Count both so `runs show` is not blind to
+        # oc-flow runs (which previously reported gates:0, artifacts:0).
+        oc_art_dir = run_dir / "artifacts" / "oc-flow"
+        gates = _read_json(run_dir / "gates.json") or _read_json(oc_art_dir / "gates.json") or {}
         artifacts = _read_json(run_dir / "artifacts.json") or {}
+        artifact_count = len(artifacts.get("artifacts", []) if isinstance(artifacts, dict) else [])
+        if not artifact_count and (run_dir / "artifacts").is_dir():
+            artifact_count = sum(1 for p in (run_dir / "artifacts").rglob("*") if p.is_file())
         summary = {
             "run_id": run_json.get("run_id", args.run_id),
             "workflow": run_json.get("workflow"),
@@ -284,17 +563,27 @@ def handle_run_inspect(args: Any) -> None:
             "status": run_json.get("status"),
             "created_at": run_json.get("created_at"),
             "gates": len(gates.get("gates", []) if isinstance(gates, dict) else []),
-            "artifacts": len(artifacts.get("artifacts", []) if isinstance(artifacts, dict) else []),
+            "artifacts": artifact_count,
         }
         print(json.dumps(summary, indent=2))
+
+        # R3: per-component profiler surface (--profile flag).
+        if getattr(args, "profile", False):
+            _print_profile(run_dir)
+
         return
 
     if action == "artifacts":
         run_dir = _run_dir(root, args.run_id)
         if not run_dir.is_dir():
-            print(f"Run not found: {args.run_id}", file=sys.stderr)
+            eprint(f"Run not found: {args.run_id}")
             sys.exit(1)
-        names = sorted(p.name for p in run_dir.iterdir() if p.is_file())
+        # Include the nested OC Flow artifact tree (artifacts/oc-flow/…), not just
+        # top-level files — otherwise oc-flow runs looked empty. Paths are relative
+        # to the run dir so the harness (flat) and oc-flow (nested) layouts read alike.
+        # .as_posix() so the relative paths use '/' on every platform (Windows
+        # would otherwise emit backslashes, breaking the stable list/JSON contract).
+        names = sorted(p.relative_to(run_dir).as_posix() for p in run_dir.rglob("*") if p.is_file())
         if getattr(args, "json", False):
             print(json.dumps(names, indent=2))
         else:
@@ -302,5 +591,5 @@ def handle_run_inspect(args: Any) -> None:
                 print(name)
         return
 
-    print("Usage: opencontext runs [list|show|artifacts]")
+    eprint("Usage: opencontext runs [list|show|artifacts]")
     sys.exit(1)

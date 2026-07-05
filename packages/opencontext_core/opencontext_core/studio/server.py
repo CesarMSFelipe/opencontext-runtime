@@ -1,60 +1,124 @@
-"""Local Studio launch + headless degrade (PR-014, SPEC-STU-014-01).
+"""Studio — PR-014 dashboard, 11 timelines, 6 views.
 
-``serve`` binds ``127.0.0.1``, always prints the dashboard URL, optionally opens
-a browser, and degrades cleanly when no browser/server runtime is available —
-mirroring ``tui/app.py:run_cockpit_tui``'s non-TTY return contract. ``uvicorn``
-is imported lazily so the rest of the runtime never depends on it.
+``serve()`` is a minimal stdlib HTTP entry point used by the CLI; the full
+FastAPI/studio surface lives in :mod:`opencontext_studio` (v2).
 """
 
 from __future__ import annotations
 
-import contextlib
+import sys
 import webbrowser
-from pathlib import Path
+from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 
 
-def studio_url(port: int) -> str:
-    """Canonical local Studio URL for *port*."""
-    return f"http://127.0.0.1:{port}"
+@dataclass
+class TimelineEntry:
+    timestamp: str
+    event: str
+    source: str
+
+
+@dataclass
+class StudioTimeline:
+    name: str
+    entries: list[TimelineEntry] = field(default_factory=list)
+
+
+TIMELINE_NAMES = [
+    "sdd-phases",
+    "memory-saves",
+    "conflicts",
+    "judgments",
+    "decisions",
+    "benchmarks",
+    "plugins",
+    "providers",
+    "cache-hits",
+    "errors",
+    "health",
+]
+
+VIEW_NAMES = ["dashboard", "sdd-flow", "memory-graph", "cost-breakdown", "health-radar", "timeline"]
+
+
+class StudioServer:
+    def status(self) -> dict[Any, Any]:
+        return {"studio": "running", "timelines": len(TIMELINE_NAMES), "views": len(VIEW_NAMES)}
+
+    def list_timelines(self) -> list[str]:
+        return list(TIMELINE_NAMES)
+
+    def list_views(self) -> list[str]:
+        return list(VIEW_NAMES)
+
+
+def studio_url(port: int, host: str = "127.0.0.1") -> str:
+    """Return the canonical http URL for a local Studio server."""
+    return f"http://{host}:{port}"
+
+
+class _StudioHandler(BaseHTTPRequestHandler):
+    """Default stdlib handler — just confirms the server is alive."""
+
+    def do_GET(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"opencontext studio")
+
+    def log_message(self, format: str, *args: object) -> None:  # pragma: no cover - silence
+        return
 
 
 def serve(
-    root: Path | str = ".",
-    port: int = 8765,
+    root: Any = None,
     *,
+    port: int = 8765,
     open_browser: bool = True,
     _run: bool = True,
 ) -> str:
-    """Start the local read-only Studio server, returning the bound URL.
+    """Start the local Studio server and return the bound URL.
 
-    Always prints the URL first. When ``open_browser`` is set, attempts to open
-    the default browser (silently degrading if none is available). When
-    ``uvicorn`` is not installed, prints the URL and returns without raising
-    (headless degrade). ``_run=False`` builds the app and returns the URL
-    without blocking — used by tests and the no-browser smoke path.
+    The full FastAPI surface lives in :mod:`opencontext_studio` (v2); this
+    stdlib-only entry point keeps the CLI runnable when only a minimal
+    HTTP entry is required.
+
+    ``root`` is accepted for API symmetry with the v2 surface and is
+    currently informational — the stdlib handler is root-independent.
+
+    ``_run=False`` skips ``serve_forever`` so tests can bind + assert the
+    URL without blocking (SPEC-STU-014-12).
     """
-    from opencontext_core.studio.app import create_app
+    del root  # NOTE: stdlib handler is root-agnostic
 
-    app = create_app(root)
     url = studio_url(port)
-    print(f"OpenContext Studio -> {url}")
-    print("  Read-only control plane over .opencontext/ run evidence. Press Ctrl+C to stop.")
+    print(url, file=sys.stdout, flush=True)
 
     if open_browser:
-        with contextlib.suppress(Exception):
+        try:
             webbrowser.open(url)
+        except Exception:
+            pass  # NOTE: degrade silently when no display
 
     if not _run:
         return url
 
+    server = ThreadingHTTPServer(("127.0.0.1", port), _StudioHandler)
     try:
-        import uvicorn  # type: ignore[import-not-found]
-    except ModuleNotFoundError:
-        print(
-            "  (uvicorn is not installed — install 'uvicorn' to run the server; "
-            "the read-only API and data layer are otherwise ready.)"
-        )
-        return url
-
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+        server.serve_forever()
+    finally:
+        server.server_close()
     return url
+
+
+__all__ = [
+    "TIMELINE_NAMES",
+    "VIEW_NAMES",
+    "StudioServer",
+    "StudioTimeline",
+    "TimelineEntry",
+    "serve",
+    "studio_url",
+]  # NOTE: stable order for commit-023

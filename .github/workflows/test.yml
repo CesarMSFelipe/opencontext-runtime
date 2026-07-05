@@ -37,8 +37,13 @@ jobs:
           # Pinned toolchain — single source of truth shared with `make ci` so
           # local and CI are identical and a dependency update can't break CI.
           python -m pip install -r requirements-ci.txt
+          # Install every first-party dependency as editable BEFORE opencontext_cli:
+          # cli requires opencontext-memory/opencontext-sdd, which are not on PyPI
+          # until a release publishes them, so pip must resolve them locally.
           python -m pip install -e packages/opencontext_core
           python -m pip install -e packages/opencontext_profiles
+          python -m pip install -e packages/opencontext_memory
+          python -m pip install -e packages/opencontext_sdd
           python -m pip install -e packages/opencontext_cli
           python -m pip install -e packages/opencontext_api
       - name: Lint
@@ -50,8 +55,30 @@ jobs:
       - name: Test
         run: pytest
       - name: Build distributions
+        # Mirrors the publish.yml matrix so a packaging break in any published
+        # package fails here, before a release is attempted.
         run: |
           python -m build packages/opencontext_core
           python -m build packages/opencontext_profiles
+          python -m build packages/opencontext_memory
+          python -m build packages/opencontext_sdd
+          python -m build packages/opencontext_studio
           python -m build packages/opencontext_cli
           python -m build packages/opencontext_api
+
+  clean-install-acceptance:
+    # Proves the product works the way a real user gets it: a FRESH venv install
+    # from the packages (no editable, no PYTHONPATH) driven through the full
+    # post-install journey. Catches missing package-data / broken entry points
+    # that the source-tree test job cannot see. Runs on Linux only.
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Clean-install user journey
+        run: bash scripts/clean_install_acceptance.sh

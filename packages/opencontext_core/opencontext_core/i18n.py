@@ -29,6 +29,28 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "onboarding.agent_detected": "Detected: {agents}. Configuring...",
         "onboarding.agent_none": "No supported AI coding tools detected. You can run 'opencontext setup <agent>' later.",  # noqa: E501
         "onboarding.done": "Done! OpenContext is ready.",
+        # Configuration menu — categories
+        "config.cat.project_setup": "Project setup",
+        "config.cat.runtime": "Runtime",
+        "config.cat.agentic_workflow": "Agentic workflow",
+        "config.cat.memory": "Memory",
+        "config.cat.maintenance": "Maintenance",
+        # Configuration menu — settings
+        "config.leaf.wizard": "Full setup wizard",
+        "config.leaf.agents": "Agent integrations",
+        "config.leaf.plugins": "Plugins",
+        "config.leaf.security": "Security & privacy",
+        "config.leaf.features": "Features",
+        "config.leaf.tokens": "Token budgets",
+        "config.leaf.models": "Providers & models",
+        "config.leaf.language": "Language",
+        "config.leaf.sdd_profile": "SDD model profile",
+        "config.leaf.tdd_mode": "TDD mode",
+        "config.leaf.oc_flow": "OC Flow mode",
+        "config.leaf.memory": "Memory backend",
+        "config.leaf.show": "Show current config",
+        "config.leaf.reset": "Reset to defaults",
+        "config.leaf.quit": "Quit",
     },
     "es": {
         "install.complete": "Configuración completa.",
@@ -54,6 +76,28 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "onboarding.agent_detected": "Detectado: {agents}. Configurando...",
         "onboarding.agent_none": "No se detectaron herramientas de IA compatibles. Podés ejecutar 'opencontext setup <agente>' después.",  # noqa: E501
         "onboarding.done": "¡Listo! OpenContext está configurado.",
+        # Menú de configuración — categorías
+        "config.cat.project_setup": "Configuración del proyecto",
+        "config.cat.runtime": "Runtime",
+        "config.cat.agentic_workflow": "Flujo agéntico",
+        "config.cat.memory": "Memoria",
+        "config.cat.maintenance": "Mantenimiento",
+        # Menú de configuración — ajustes
+        "config.leaf.wizard": "Asistente de configuración completo",
+        "config.leaf.agents": "Integraciones de agentes",
+        "config.leaf.plugins": "Plugins",
+        "config.leaf.security": "Seguridad y privacidad",
+        "config.leaf.features": "Funcionalidades",
+        "config.leaf.tokens": "Presupuestos de tokens",
+        "config.leaf.models": "Proveedores y modelos",
+        "config.leaf.language": "Idioma",
+        "config.leaf.sdd_profile": "Perfil de modelos SDD",
+        "config.leaf.tdd_mode": "Modo TDD",
+        "config.leaf.oc_flow": "Modo OC Flow",
+        "config.leaf.memory": "Backend de memoria",
+        "config.leaf.show": "Ver configuración actual",
+        "config.leaf.reset": "Restablecer valores por defecto",
+        "config.leaf.quit": "Salir",
     },
 }
 

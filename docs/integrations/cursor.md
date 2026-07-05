@@ -40,7 +40,7 @@ opencontext config reconfigure plugins
 
 Cursor supports MCP via its config. Run `opencontext setup cursor` to write
 `~/.cursor/mcp.json` (plus project `AGENTS.md` and `.cursorignore`), then use
-the 14 MCP tools directly. (`--setup-mcp` on `onboard` is OpenCode-specific.)
+the configured MCP tools directly. (`--setup-mcp` on `onboard` is OpenCode-specific.)
 
 ## Related Commands
 

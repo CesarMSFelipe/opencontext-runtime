@@ -1,8 +1,8 @@
 # OpenCode & Kilo Code
 
 ## Purpose
-OpenCode and Kilo Code share a compatible config format. OpenContext
-generates MCP config, SDD orchestrator profile, and AGENTS.md instructions.
+OpenContext generates MCP config, persona files, and AGENTS.md instructions for
+OpenCode and Kilo Code.
 
 ## Setup
 
@@ -14,14 +14,14 @@ opencontext setup kilo-code
 
 For OpenCode (`--scope global`) this creates:
 - `~/.config/opencode/mcp.json` — MCP server config
-- `~/.config/opencode/agents/sdd-orchestrator.json` — SDD orchestrator profile (plus oc-*.md agent profiles)
+- `~/.config/opencode/agents/oc-*.md` — OpenContext persona profiles
 - `AGENTS.md` (project root) — Instructions
 
 For Kilo Code (`--scope global`):
 - `~/.config/kilo/mcp.json` — MCP server config
 - `AGENTS.md` (project root) — Instructions
 
-With the default `--scope local`, mcp.json/agents are written under the project instead of `~/.config`; AGENTS.md is always project-root.
+With the default `--scope local`, project instructions are written to `AGENTS.md`. OpenCode MCP/persona config may still be home-scoped when the host requires it; JSON setup output must report those global writes explicitly.
 
 ## Available Commands
 
@@ -32,7 +32,7 @@ opencontext index .
 opencontext inspect repomap
 
 # SDD workflow
-opencontext init        # Initialize SDD context
+opencontext install     # Initialize project config and SDD context
 # Then in the agent: /oc-new <change>
 
 # Health & updates
@@ -56,10 +56,9 @@ opencontext config restore <id>
 
 ## SDD Orchestrator Profile
 
-The installed `sdd-orchestrator` agent profile gives OpenCode access to
-the full SDD lifecycle via the knowledge graph MCP tools.
+The installed OpenCode agent profile gives access to the SDD lifecycle through the configured OpenContext MCP tools.
 
-## MCP Tools (all 14)
+## MCP Tools
 
 | Tool | Purpose |
 |------|---------|

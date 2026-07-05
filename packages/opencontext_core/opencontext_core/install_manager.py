@@ -25,6 +25,7 @@ from typing import Any, ClassVar
 
 from opencontext_core.agent_installer import AgentInstaller, AgentTarget
 from opencontext_core.backup import BackupManager
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 
 # Installed-skill dir names left behind by the pre-rename SDD skill set. A project
 # installed before the ``sdd-*`` -> ``oc-*`` migration keeps these on disk; the
@@ -560,7 +561,7 @@ class InstallationManager:
         so callers can assert real on-disk installation.
         """
         templates_dir = Path(__file__).resolve().parent / "skills" / "templates"
-        dest_root = project_root / ".opencontext" / "skills"
+        dest_root = resolve_workspace_path(project_root, StorageMode.local) / "skills"
         dest_root.mkdir(parents=True, exist_ok=True)
 
         # Prune the migrated-away ``sdd-*`` skill dirs left by a pre-rename install.

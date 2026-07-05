@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencontext-core"
-version = "1.5.0"
+version = "1.6.0"
 description = "Core context engineering runtime for OpenContext Runtime"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -24,12 +24,16 @@ dependencies = [
   "pydantic>=2.6",
   "PyYAML>=6.0",
   "tree-sitter>=0.24",
+  "tree-sitter-javascript>=0.23",
   "tree-sitter-python>=0.25",
+  "tree-sitter-typescript>=0.23",
   "watchdog>=6.0",
   "rich>=13.0",
   # prompts.py drives every interactive selector through InquirerPy; it pulls
   # prompt-toolkit transitively, so core degrades to arrow keys, not just Rich.
   "InquirerPy>=0.3.4",
+  # XDG / %LOCALAPPDATA% path resolution for user-mode storage (PR user-dir-storage).
+  "platformdirs>=4.0",
 ]
 
 [project.urls]
@@ -44,7 +48,18 @@ include = ["opencontext_core*"]
 exclude = []
 
 [tool.setuptools.package-data]
-opencontext_core = ["studio/static/*"]
+# Runtime data files loaded from within the package: builtin workflow/harness/
+# persona/skill YAML, host-instruction profiles (configurator/profiles/*.md),
+# and all SDD skill templates + builtin skill markdown. These are read at runtime
+# via the package path, so they MUST ship in the wheel — a partial list silently
+# drops the host profiles and skill templates on a real install. Recursive globs
+# so a new builtin never needs a packaging edit.
+opencontext_core = [
+  "studio/static/*",
+  "**/*.yaml",
+  "**/*.yml",
+  "**/*.md",
+]
 
 [project.optional-dependencies]
 dev = ["types-PyYAML", "types-requests"]

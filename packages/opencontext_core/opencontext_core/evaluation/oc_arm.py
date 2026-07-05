@@ -17,6 +17,7 @@ from pathlib import Path
 from opencontext_core.evaluation.models import ContextBenchCase
 from opencontext_core.evaluation.multi_arm import ArmResult, CapabilityMatrix
 from opencontext_core.harness.phases import SURGICAL_EXPLORE_BUDGET
+from opencontext_core.paths import StorageMode, resolve_storage_path
 
 # The broad/regression budget: the old explore default before surgical-first landed.
 BROAD_EXPLORE_BUDGET = 6000
@@ -64,7 +65,7 @@ def semantic_layer_enabled(repo: str) -> bool:
     is off."""
     from opencontext_core.runtime import OpenContextRuntime
 
-    runtime = OpenContextRuntime(storage_path=Path(repo) / ".storage" / "opencontext")
+    runtime = OpenContextRuntime(storage_path=resolve_storage_path(Path(repo), StorageMode.local))
     return bool(getattr(getattr(runtime.config, "embedding", None), "enabled", False))
 
 
@@ -75,7 +76,7 @@ def run_oc_arms(
     broad regression baseline. Indexed under the repo's own ``.storage`` (portable)."""
     from opencontext_core.runtime import OpenContextRuntime
 
-    runtime = OpenContextRuntime(storage_path=Path(repo) / ".storage" / "opencontext")
+    runtime = OpenContextRuntime(storage_path=resolve_storage_path(Path(repo), StorageMode.local))
     runtime.index_project(Path(repo))
 
     arms: list[ArmResult] = []

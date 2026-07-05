@@ -41,14 +41,28 @@ class GateStatus(StrEnum):
     WARNING = "warning"
     FAILED = "failed"
     SKIPPED = "skipped"
+    # Set on the HarnessRunResult when the apply phase ran with no edits AND
+    # no productive executor was configured. Distinct from WARNING (which is
+    # reserved for genuine advisories on runs that did real work) and from
+    # PASSED (which would imply edits were written). Mirrors OC Flow's
+    # ``needs_executor`` vocabulary so the two surfaces stay consistent.
+    NOT_APPLIED = "not_applied"
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}.{self.name}>"
 
     @property
     def is_ok(self) -> bool:
-        """True if status is PASSED or SKIPPED (not blocking)."""
-        return self in (GateStatus.PASSED, GateStatus.SKIPPED)
+        """True if status is non-blocking (PASSED, SKIPPED, or NOT_APPLIED).
+
+        ``NOT_APPLIED`` means no executor was configured and nothing was written
+        — it is NOT a failure.  ``boundary.py`` already maps it to
+        ``success=True``; ``is_ok`` must agree so ``QualityReport.exit_code``
+        returns 0 and no consumer misbehaves.
+        ``WARNING`` and ``FAILED`` are intentionally excluded: WARNING is an
+        advisory on a run that did real work, FAILED is a hard gate failure.
+        """
+        return self in (GateStatus.PASSED, GateStatus.SKIPPED, GateStatus.NOT_APPLIED)
 
 
 class GateSeverity(StrEnum):

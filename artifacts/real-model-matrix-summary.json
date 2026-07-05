@@ -1,0 +1,25 @@
+{
+  "proof": "real-model OUTCOME matrix \u2014 a real model drives an OpenContext flow to fix a bug and pass its test",
+  "method": "scripts/real_model_outcome.sh: isolated HOME+project (buggy add + failing test) -> opencontext setup <host> -> host drives opencontext_run(<workflow>) -> agent_execute -> session_apply -> verify fix landed AND pytest passes",
+  "hosts": {
+    "opencode": {
+      "model": "opencode/deepseek-v4-flash-free (free)",
+      "result": "4/4 full flow + fix (sdd+/-tdd, oc-flow+/-tdd)"
+    },
+    "codex": {
+      "model": "gpt-5.5 (ChatGPT-account default; nano/mini/codex rejected by that account)",
+      "result": "4/4 full flow + fix",
+      "note": "needed --dangerously-bypass-approvals-and-sandbox: this box's bubblewrap cannot create user namespaces"
+    },
+    "claude": {
+      "models": [
+        "haiku",
+        "sonnet"
+      ],
+      "result": "4/4 with the right model",
+      "note": "SDD +/- TDD pass with haiku (cheapest). OC Flow needs a capable model: haiku engaged the flow but did not land the fix; sonnet passes oc-flow strict+off full flow + fix."
+    }
+  },
+  "verdict": "SDD (with and without TDD) proven end-to-end on all three real hosts with real models. OC Flow proven on all three too (claude needs sonnet, not haiku). Every host x flow x tdd combo passes with an adequately capable model; reliability scales with model capability, not the product plumbing.",
+  "raw": "artifacts/real-model-matrix.jsonl"
+}

@@ -158,6 +158,10 @@ def test_core_python_sources_do_not_contain_first_party_profile_logic() -> None:
         # dependency, not technology-profile-detection logic (the concern this guard protects).
         "studio/app.py",
         "studio/__init__.py",
+        # server.py is the stdlib HTTP entry point; its docstring references FastAPI only
+        # to explain that the full FastAPI surface lives in the external opencontext_studio
+        # package — not technology-profile-detection logic.
+        "studio/server.py",
     }
     offenders: list[str] = []
     for path in core_root.rglob("*.py"):

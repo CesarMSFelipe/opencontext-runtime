@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from opencontext_core.config import SecurityMode, load_config
-from opencontext_core.onboarding.wizard import OnboardingWizard
+from opencontext_core.onboarding.wizard import InteractiveOnboardingWizard
 from opencontext_core.user_prefs import UserConfigStore
 
 
@@ -16,7 +16,7 @@ class TestOnboardingWizard:
 
     def test_wizard_completes_with_defaults(self, tmp_path: Path) -> None:
         """Wizard should complete in non-interactive mode with defaults."""
-        wizard = OnboardingWizard(root=tmp_path)
+        wizard = InteractiveOnboardingWizard(root=tmp_path)
         # Force non-interactive
         result = wizard.run(non_interactive=True)
         assert result.root == str(tmp_path.resolve())
@@ -25,7 +25,7 @@ class TestOnboardingWizard:
 
     def test_wizard_accepts_template_override(self, tmp_path: Path) -> None:
         """Template override should be respected."""
-        wizard = OnboardingWizard(root=tmp_path)
+        wizard = InteractiveOnboardingWizard(root=tmp_path)
         wizard.run(
             non_interactive=True,
             template="enterprise",
@@ -40,7 +40,7 @@ class TestOnboardingWizard:
 
     def test_wizard_accepts_tdd_override(self, tmp_path: Path) -> None:
         """TDD mode override should be respected."""
-        wizard = OnboardingWizard(root=tmp_path)
+        wizard = InteractiveOnboardingWizard(root=tmp_path)
         wizard.run(
             non_interactive=True,
             tdd="strict",
@@ -58,7 +58,9 @@ class TestOnboardingWizard:
     )
     def test_wizard_persists_valid_security_mode(self, tmp_path: Path, requested: str) -> None:
         """A valid (or legacy-hyphenated) mode is written to config AND prefs."""
-        OnboardingWizard(root=tmp_path).run(non_interactive=True, security_mode=requested)
+        InteractiveOnboardingWizard(root=tmp_path).run(
+            non_interactive=True, security_mode=requested
+        )
 
         config = load_config(tmp_path / "opencontext.yaml")  # must not raise
         expected = SecurityMode(requested.replace("-", "_"))
@@ -72,7 +74,7 @@ class TestOnboardingWizard:
         Regression for the split where the config was coerced to a valid value
         but user prefs kept the raw invalid string, leaving the two disagreeing.
         """
-        OnboardingWizard(root=tmp_path).run(non_interactive=True, security_mode=bogus)
+        InteractiveOnboardingWizard(root=tmp_path).run(non_interactive=True, security_mode=bogus)
 
         config = load_config(tmp_path / "opencontext.yaml")  # must not raise
         valid = {m.value for m in SecurityMode}
@@ -83,7 +85,7 @@ class TestOnboardingWizard:
 
     def test_wizard_accepts_agents_override(self, tmp_path: Path) -> None:
         """Agent list override should be respected."""
-        wizard = OnboardingWizard(root=tmp_path)
+        wizard = InteractiveOnboardingWizard(root=tmp_path)
         wizard.run(
             non_interactive=True,
             agents=["opencode", "cursor"],
@@ -93,7 +95,7 @@ class TestOnboardingWizard:
         self, tmp_path: Path
     ) -> None:
         """With no agent CLI on the (isolated) host, the default selection is opencode."""
-        result = OnboardingWizard(root=tmp_path).run(non_interactive=True)
+        result = InteractiveOnboardingWizard(root=tmp_path).run(non_interactive=True)
         assert result.active_clients == ["opencode"]
 
     def test_wizard_non_interactive_configures_claude_code_when_present(
@@ -105,7 +107,7 @@ class TestOnboardingWizard:
 
         (Path.home() / ".claude").mkdir(parents=True, exist_ok=True)
 
-        result = OnboardingWizard(root=tmp_path).run(non_interactive=True)
+        result = InteractiveOnboardingWizard(root=tmp_path).run(non_interactive=True)
 
         assert "claude-code" in result.active_clients
         servers = json.loads((tmp_path / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
@@ -113,35 +115,35 @@ class TestOnboardingWizard:
 
     def test_wizard_non_interactive_detection(self) -> None:
         """In a test environment, is_interactive should return False."""
-        wizard = OnboardingWizard(root=".")
+        wizard = InteractiveOnboardingWizard(root=".")
         # Non-interactive detection depends on CI and TTY; in pytest
         # stdout is captured so isatty() returns False
         assert wizard.is_interactive() is False
 
     def test_wizard_creates_config(self, tmp_path: Path) -> None:
         """Wizard should create opencontext.yaml."""
-        wizard = OnboardingWizard(root=tmp_path)
+        wizard = InteractiveOnboardingWizard(root=tmp_path)
         wizard.run(non_interactive=True)
         config = tmp_path / "opencontext.yaml"
         assert config.exists()
 
     def test_wizard_creates_sdd_context(self, tmp_path: Path) -> None:
         """Wizard should create SDD context."""
-        wizard = OnboardingWizard(root=tmp_path)
+        wizard = InteractiveOnboardingWizard(root=tmp_path)
         wizard.run(non_interactive=True)
         sdd = tmp_path / ".opencontext" / "sdd" / "context.json"
         assert sdd.exists()
 
     def test_wizard_creates_harness(self, tmp_path: Path) -> None:
         """Wizard should create harness.yaml."""
-        wizard = OnboardingWizard(root=tmp_path)
+        wizard = InteractiveOnboardingWizard(root=tmp_path)
         wizard.run(non_interactive=True)
         harness = tmp_path / ".opencontext" / "harness.yaml"
         assert harness.exists()
 
     def test_wizard_creates_opencontext_directory(self, tmp_path: Path) -> None:
         """Wizard should create .opencontext directory."""
-        wizard = OnboardingWizard(root=tmp_path)
+        wizard = InteractiveOnboardingWizard(root=tmp_path)
         wizard.run(non_interactive=True)
         oc_dir = tmp_path / ".opencontext"
         assert oc_dir.exists()

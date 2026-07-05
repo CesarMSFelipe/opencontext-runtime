@@ -19,7 +19,7 @@ muted `#9DA6B0` · teal `#2DC4A4` · blue `#35ADE5` · amber `#D4A840` · purple
 
 Rules:
 - Every meaningful SVG has `role="img"` + an accurate `aria-label`. Decorative
-  assets (`divider.svg`, `logo.svg`) use empty `alt=""` in the README instead.
+  assets (`logo.svg`) use empty `alt=""` in the README instead.
 - Every visual claim is mirrored in nearby text. No claim lives only in an image.
 - Static SVG for diagrams; GIF/WebM only for real CLI/process demos.
 - Keep assets < ~150 KB; the rendered README must stay < 500 KiB (GitHub truncates).
@@ -37,9 +37,9 @@ Rules:
 
 | Asset | Status | Notes |
 |-------|--------|-------|
-| `logo.svg`, `divider.svg`, `runtime-strip.svg` | exists | strip alt corrected to "claims tested" |
+| `logo.svg`, `runtime-strip.svg` | exists | strip alt corrected to "claims tested" |
 | `pipeline.svg` | exists | base for an optional `pipeline-animated.svg` (decorative motion only) |
-| `local-code-graph.svg`, `mcp-tools.svg`, `sdd-phases.svg`, `tdd-phases.svg`, benchmark cards, `security-defaults.svg`, `difference-card.svg`, `before-after.svg` | exists | keep |
+| `local-code-graph.svg`, `mcp-tools.svg`, `runtime-boundary.svg`, `oc-flow.svg`, `sdd-phases.svg`, `tdd-phases.svg`, `benchmark-numbers.svg`, `security-defaults.svg`, `difference-card.svg` | exists | keep |
 | `hero-runtime.svg` | created | agent → runtime → verified pack, four lanes (graph/budget/gates/pack); wired into the hero |
 | `install-path.svg` | skipped | duplicates existing `quickstart-flow.svg` (install → demo → editor → ready) |
 | `offline-model-matrix.svg` | created | visualizes the offline-vs-model table (4 cards); wired below that table |
@@ -54,11 +54,11 @@ Rules:
 - `install.sh` / `install.ps1` version 1.2.0 → 1.5.0.
 - Offline-vs-model table split: MCP read/quality/memory tools are offline; only
   `opencontext_run` uses the host model via sampling.
-- Agentic Harness "Requires an LLM provider" → host-model / provider / honest
-  planned-only wording.
+- Agentic Harness "Requires an LLM provider" → generative executor, host-model /
+  provider / honest planned-only wording, plus OC Flow diagram.
 - `runtime-strip` alt "2300+ tests" → "claims tested".
-- Install simplified to pipx-first; the full method matrix moved to
-  `docs/getting-started/installation.md`.
+- Install shows script-first Linux/macOS + Windows commands; pipx/pip remain visible
+  Python-native options, with the full method matrix in `docs/getting-started/installation.md`.
 - Hygiene: README < 500 KiB, all asset links resolve, meaningful SVGs carry
   `role`/`aria-label`.
 

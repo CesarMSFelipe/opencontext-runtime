@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from conftest import _PACKAGE_DIRS, _subprocess_env  # type: ignore[import-not-found]
+from tests.e2e.conftest import _PACKAGE_DIRS, _subprocess_env  # type: ignore[import-not-found]
 
 
 def test_subprocess_env_resolves_relative_pythonpath_to_absolute(

@@ -360,6 +360,9 @@ def _plugin_init(args: Any) -> None:
 def _plugin_install(args: Any) -> None:
     """Install a plugin."""
 
+    # Same brand chrome as every other plugin surface (list/search/info).
+    console.header("Install Plugin")
+
     if getattr(args, "marketplace", ""):
         _plugin_install_marketplace(args)
         return
@@ -444,6 +447,7 @@ def _plugin_publish(args: Any) -> None:
 def _plugin_remove(args: Any) -> None:
     """Remove a plugin."""
 
+    console.header("Remove Plugin")
     registry = PluginRegistry()
 
     info = registry.get_info(args.name)

@@ -16,6 +16,7 @@ Layering (doc 58): L9 composing L1 ids, L2 stores, L8 brain (via port), L6 regis
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,6 +38,7 @@ from opencontext_core.oc_flow.completion import (
     completion_reason,
     mutation_required,
     resolve_completion,
+    verification_required,
 )
 from opencontext_core.oc_flow.definition import oc_flow_definition, resolve_next_node
 from opencontext_core.oc_flow.models import (
@@ -55,6 +57,7 @@ from opencontext_core.oc_flow.nodes import (
     can_exit,
 )
 from opencontext_core.oc_flow.personas import persona_id_for_oc_flow_node
+from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.runtime.brain import NullRuntimeBrain, RuntimeBrainPort
 from opencontext_core.runtime.decisions import (
     DecisionLog,
@@ -92,6 +95,8 @@ class OCFlowRunResult:
     completion_reason: str = ""
     mutation_required: bool = False
     workflow_selection: dict[str, Any] = field(default_factory=dict)
+    verified_by: list[str] = field(default_factory=list)
+    verification_outcome: str = "not_run"
 
 
 # --------------------------------------------------------------------- workflow selector
@@ -114,6 +119,20 @@ def should_escalate_to_sdd(contract: TaskContract, *, max_changed_areas: int = 5
     return bool(risk & high_risk)
 
 
+def _discover_test_command(root: Path) -> list[str] | None:
+    """Small pytest discovery for test-fix tasks."""
+    tests = sorted(
+        p.relative_to(root)
+        for pattern in ("test_*.py", "*_test.py")
+        for p in root.rglob(pattern)
+        if ".opencontext" not in p.parts
+    )
+    if not tests:
+        return None
+    # NOTE: caps at 10 to avoid running the full suite; pass explicit test_command for large repos.
+    return [sys.executable, "-m", "pytest", "-q", *[str(p) for p in tests[:10]]]
+
+
 # ------------------------------------------------------------------------------- runner
 class OCFlowRunner:
     """Executes the OC Flow workflow definition under Runtime governance."""
@@ -128,6 +147,7 @@ class OCFlowRunner:
         enabled: bool = True,
         context_engine_enabled: bool | None = None,
         kg_v2_enabled: bool | None = None,
+        memory_store: Any | None = None,
     ) -> None:
         self.root = Path(root)
         self.definition = oc_flow_definition()
@@ -150,9 +170,46 @@ class OCFlowRunner:
                 kg_v2_enabled = bool(getattr(runtime_cfg, "kg_v2_enabled", False))
         self._context_engine_enabled = bool(context_engine_enabled)
         self._kg_v2_enabled = bool(kg_v2_enabled)
-        # kg_v2 consults the KG index before broad file reads; locate it under root
-        # only when the flag is on (None on an unindexed project = honest fallback).
-        self._graph_db_path = self._resolve_graph_db_path() if self._kg_v2_enabled else None
+        # Always locate the KG index regardless of the kg_v2_enabled flag. When the
+        # index is present and no seed paths are given, node_gather_context uses the
+        # path for opportunistic KG grounding even without kg_v2_enabled=True. On an
+        # unindexed project _resolve_graph_db_path() returns None so no seeding occurs.
+        self._graph_db_path = self._resolve_graph_db_path()
+        # Memory + compression parity (SDD harness/context substrate): resolve the
+        # agent memory store and the compression config from the project config so
+        # gather_context reads memory / compresses oversized content and
+        # consolidation persists the memory delta through the harvester/harness.
+        # An injected store (tests/hosts) wins over config resolution.
+        self._memory_enabled = False
+        self._memory_harvest_enabled = False
+        self._memory_v2_enabled = False
+        self._memory_store: Any | None = memory_store
+        self._compression_enabled = False
+        self._compression_config: Any | None = None
+        self._resolve_memory_and_compression()
+        self._tdd_mode = self._resolve_tdd_mode()
+
+    def _resolve_tdd_mode(self) -> str:
+        """Resolve the strict-TDD posture for this run root.
+
+        Mirrors the harness resolution: OPENCONTEXT_TDD_MODE env wins, else the
+        opencontext.yaml ``harness.tdd_mode``. Defaults to ``ask`` so the RED-first
+        pre-check stays off unless explicitly opted into strict TDD.
+        """
+        import os
+
+        env = os.environ.get("OPENCONTEXT_TDD_MODE")
+        if env in ("strict", "ask", "off"):
+            return env
+        try:
+            from opencontext_core.config import load_config_or_defaults
+
+            cfg = load_config_or_defaults(self.root / "opencontext.yaml", auto_detect=False)
+            harness_cfg = getattr(cfg, "harness", None)
+            mode = getattr(harness_cfg, "tdd_mode", "ask") if harness_cfg is not None else "ask"
+            return str(mode) if mode in ("strict", "ask", "off") else "ask"
+        except Exception:
+            return "ask"
 
     # -- config / kg resolution ----------------------------------------------
     def _load_runtime_config(self) -> Any:
@@ -171,22 +228,68 @@ class OCFlowRunner:
         except Exception:  # pragma: no cover - config is advisory; default to legacy.
             return None
 
+    def _resolve_memory_and_compression(self) -> None:
+        """Resolve memory flags/store + compression config from the project config.
+
+        Mirrors the SDD harness runner: the store MUST resolve to the same DB
+        (path + provider) the runtime's recall path reads, so it comes from
+        ``BackendFactory.create_memory_store`` honoring ``memory.provider`` and the
+        storage mode. Best-effort: any failure degrades to no-memory /
+        no-compression and the nodes record the omission or no-op reason honestly.
+        """
+        try:
+            from opencontext_core.config import load_config_or_defaults
+            from opencontext_core.config_resolver import resolve_config_path
+
+            config = load_config_or_defaults(resolve_config_path(self.root), auto_detect=False)
+        except Exception:  # config is advisory; run without memory/compression
+            return
+        memory_cfg = getattr(config, "memory", None)
+        self._memory_enabled = bool(getattr(memory_cfg, "enabled", False))
+        self._memory_harvest_enabled = bool(getattr(memory_cfg, "harvest_after_run", False))
+        self._memory_v2_enabled = bool(
+            getattr(getattr(config, "runtime", None), "memory_v2_enabled", False)
+        )
+        compression_cfg = getattr(getattr(config, "context", None), "compression", None)
+        self._compression_enabled = bool(getattr(compression_cfg, "enabled", False))
+        self._compression_config = compression_cfg
+        if self._memory_store is None and self._memory_enabled:
+            try:
+                from opencontext_core.backends.factory import BackendFactory
+
+                storage_path = resolve_storage_path(
+                    self.root,
+                    config.storage.mode,
+                    getattr(config.storage, "custom_path", None),
+                )
+                storage_path.mkdir(parents=True, exist_ok=True)
+                self._memory_store = BackendFactory.create_memory_store(config, storage_path)
+            except Exception:  # store is optional — gather/consolidation degrade
+                self._memory_store = None
+
     def _resolve_graph_db_path(self) -> Path | None:
         """Locate the project's KG v2 index under ``root``, or None when unindexed.
 
         ``kg_first_subgraph`` returns None for a missing DB, so kg_v2 stays active but
         non-fatal on an unindexed project (the gather falls back to the legacy path).
         """
-        storage = self.root / ".storage" / "opencontext"
+        from opencontext_core.config_resolver import resolve_active_storage_file
+
         for name in ("context_graph.db", "codegraph.db"):
-            candidate = storage / name
+            candidate = resolve_active_storage_file(self.root, name)
             if candidate.exists():
                 return candidate
         return None
 
     # -- paths ----------------------------------------------------------------
     def _run_dir(self, session_id: str, run_id: str) -> Path:
-        return self.root / ".opencontext" / "sessions" / session_id / "runs" / run_id
+        return (
+            resolve_workspace_path(self.root, StorageMode.local)
+            / "sessions"
+            / session_id
+            / "runs"
+            / run_id
+        )
 
     def _artifacts_dir(self, session_id: str, run_id: str) -> Path:
         return self._run_dir(session_id, run_id) / "artifacts" / "oc-flow"
@@ -209,6 +312,14 @@ class OCFlowRunner:
         if not self.enabled:
             raise OCFlowError("OC Flow is disabled (set runtime.oc_flow_enabled=true)")
 
+        # Defense in depth: redact secrets in the task at the flow boundary so any
+        # caller (MCP, API, direct) that did not pre-redact still never persists a
+        # raw token into run artifacts or the provider-bound context envelope.
+        if task:
+            from opencontext_core.safety.secrets import SecretScanner
+
+            task = SecretScanner().redact(task)
+
         lane_enum = Lane(str(lane))
         session_id = session_id or new_session_id()
         run_id = run_id or new_run_id()
@@ -224,6 +335,12 @@ class OCFlowRunner:
         # B1 / AVH-011: classify whether this task implies a mutation; threaded into
         # the inspection scope gate and the post-graph completion gate.
         mut_required = mutation_required(task)
+        verify_required = verification_required(task)
+        if verify_required and test_command is None:
+            test_command = _discover_test_command(self.root)
+        run_external_inspection = run_external_inspection or bool(test_command)
+        # C16: compute once, use for both ctx and the retry_policy decision below.
+        _max_attempts_resolved = resolve_max_attempts(profile=profile, lane=lane_enum)
         ctx = OCFlowContext(
             root=self.root,
             artifacts_dir=artifacts_dir,
@@ -231,7 +348,7 @@ class OCFlowRunner:
             lane=lane_enum,
             profile=profile,
             executor=executor,
-            max_attempts=resolve_max_attempts(profile=profile, lane=lane_enum),
+            max_attempts=_max_attempts_resolved,
             seed_paths=seed_paths or [],
             cache=self.cache,
             run_external_inspection=run_external_inspection,
@@ -242,6 +359,17 @@ class OCFlowRunner:
             context_engine_enabled=self._context_engine_enabled,
             kg_v2_enabled=self._kg_v2_enabled,
             graph_db_path=self._graph_db_path,
+            # Memory + compression parity: gather_context folds memory recall and
+            # compresses oversized content; consolidation persists the memory delta
+            # through the harvester/harness with this run's provenance.
+            memory_enabled=self._memory_enabled,
+            memory_store=self._memory_store,
+            memory_harvest_enabled=self._memory_harvest_enabled,
+            memory_v2_enabled=self._memory_v2_enabled,
+            tdd_mode=self._tdd_mode,
+            run_id=run_id,
+            compression_enabled=self._compression_enabled,
+            compression_config=self._compression_config,
         )
 
         # B6 / AVH-013: the explainable workflow-selection receipt (same shared
@@ -269,6 +397,97 @@ class OCFlowRunner:
             },
         )
 
+        # C16 (product-closure-r13): emit RuntimeDecision records for the real
+        # selection points made by this run.  Only record decisions for selection
+        # points that ACTUALLY EXIST in OC Flow today (book §Brain restrictions):
+        #   workflow, context_strategy, provider, execution_profile, retry_policy.
+        #   NOT emitted (no real selection): persona (deterministic lookup),
+        #   skill_bundle (not in OC Flow runner today).
+        decisions.append(
+            RuntimeDecision(
+                kind="workflow",
+                chosen=selection.workflow,
+                reason=selection.reason,
+                alternatives=["sdd"] if selection.workflow == "oc-flow" else ["oc-flow"],
+                confidence=0.9,
+                inputs={"signals": list(selection.signals), "lane": lane_enum.value},
+            )
+        )
+        _context_strategy = (
+            "context_engine"
+            if self._context_engine_enabled
+            else ("kg_v2" if self._kg_v2_enabled else "legacy")
+        )
+        decisions.append(
+            RuntimeDecision(
+                kind="context_strategy",
+                chosen=_context_strategy,
+                reason=(
+                    "context_engine_enabled flag"
+                    if self._context_engine_enabled
+                    else ("kg_v2_enabled flag" if self._kg_v2_enabled else "default legacy gather")
+                ),
+                alternatives=(
+                    ["kg_v2", "legacy"]
+                    if self._context_engine_enabled
+                    else (
+                        ["context_engine", "legacy"]
+                        if self._kg_v2_enabled
+                        else ["context_engine", "kg_v2"]
+                    )
+                ),
+                confidence=1.0,
+                inputs={
+                    "context_engine_enabled": self._context_engine_enabled,
+                    "kg_v2_enabled": self._kg_v2_enabled,
+                },
+            )
+        )
+        _provider_chosen = (
+            "deterministic" if not bool(getattr(executor, "provider_available", False)) else "model"
+        )
+        decisions.append(
+            RuntimeDecision(
+                kind="provider",
+                chosen=_provider_chosen,
+                reason=(
+                    "no model provider configured; deterministic executor active"
+                    if _provider_chosen == "deterministic"
+                    else "model provider available"
+                ),
+                alternatives=(
+                    ["model"] if _provider_chosen == "deterministic" else ["deterministic"]
+                ),
+                confidence=1.0,
+                inputs={"provider_available": _provider_chosen != "deterministic"},
+            )
+        )
+        decisions.append(
+            RuntimeDecision(
+                kind="execution_profile",
+                chosen=profile or "balanced",
+                reason=f"profile='{profile or 'balanced'}' passed by caller",
+                confidence=1.0,
+                inputs={"lane": lane_enum.value},
+            )
+        )
+        decisions.append(
+            RuntimeDecision(
+                kind="retry_policy",
+                chosen=str(_max_attempts_resolved),
+                reason=(
+                    f"resolve_max_attempts(profile={profile!r}, lane={lane_enum.value!r})"
+                    f" → {_max_attempts_resolved}"
+                ),
+                confidence=1.0,
+                inputs={
+                    "profile": profile,
+                    "lane": lane_enum.value,
+                    "max_attempts": _max_attempts_resolved,
+                },
+            )
+        )
+
         while node not in self.definition.terminal_nodes:
             steps += 1
             if steps > _MAX_STEPS:
@@ -288,6 +507,28 @@ class OCFlowRunner:
                 node,
                 {"outcome": result.outcome.value, "tokens": result.llm_tokens},
             )
+
+            # C16: after consolidation, emit the memory_promotion decision so
+            # decisions.json captures the PromotionPolicyV2 verdict.
+            if node == "consolidation":
+                verdict_str = str(result.outputs.get("promotion_verdict", "not_promoted"))
+                decisions.append(
+                    RuntimeDecision(
+                        kind="memory_promotion",
+                        chosen=verdict_str,
+                        reason=(
+                            "PromotionPolicyV2 evaluated composite score from run signals "
+                            "(inspection outcome + changed-file count)"
+                        ),
+                        confidence=0.8,
+                        inputs={
+                            "changed_files": len(ctx.changed_files),
+                            "inspection_outcome": (
+                                ctx.inspection.outcome if ctx.inspection else "not_run"
+                            ),
+                        },
+                    )
+                )
 
             # Exit-condition guard (book §7-§11): refuse to advance until met.
             if not can_exit(node, ctx):
@@ -312,6 +553,7 @@ class OCFlowRunner:
             ctx,
             mutation_required=mut_required,
             provider_available=provider_available,
+            verification_required=verify_required,
         )
         status = completion.value
         reason = (
@@ -319,6 +561,48 @@ class OCFlowRunner:
             if completion is not CompletionStatus.completed and ctx.block_reason
             else completion_reason(completion, mutation_required=mut_required)
         )
+
+        # R4: post-run confidence report — emit as a RuntimeDecision so
+        # decisions.json captures the ConfidenceEngine evaluation.  Real signals
+        # come from the completed run context; absent signals fall back to the
+        # conservative default (ConfidenceSignals default = None → disclosed).
+        try:
+            from opencontext_core.runtime_intelligence.confidence import (
+                ConfidenceEngine,
+                ConfidenceSignals,
+            )
+
+            _inspection = ctx.inspection
+            _signals = ConfidenceSignals(
+                inspection_confidence=(
+                    1.0
+                    if (_inspection and _inspection.outcome == "passed")
+                    else 0.0
+                    if _inspection is not None
+                    else None
+                ),
+            )
+            _cr = ConfidenceEngine().report(
+                session_id=session_id,
+                run_id=run_id,
+                workflow="oc-flow",
+                signals=_signals,
+            )
+            decisions.append(
+                RuntimeDecision(
+                    kind="confidence_report",
+                    chosen=str(round(_cr.overall, 4)),
+                    reason=(
+                        f"ConfidenceEngine post-run report: overall={_cr.overall:.4f}, "
+                        f"action={_cr.recommended_action}"
+                    ),
+                    confidence=_cr.overall,
+                    inputs=dict(_cr.dimensions),
+                )
+            )
+        except Exception:
+            pass  # confidence emission is advisory; never interrupts the run
+
         self._persist(
             session_id,
             run_id,
@@ -348,6 +632,10 @@ class OCFlowRunner:
             graph_status=graph_status,
             completion_reason=reason,
             mutation_required=mut_required,
+            verified_by=list(ctx.inspection.verified_by) if ctx.inspection else [],
+            verification_outcome=(
+                ctx.inspection.verification_outcome if ctx.inspection else "not_run"
+            ),
             workflow_selection={
                 "workflow": selection.workflow,
                 "reason": selection.reason,
@@ -464,6 +752,10 @@ class OCFlowRunner:
             "graph_status": graph_status,
             "completion_reason": completion_reason,
             "mutation_required": mutation_required,
+            "verified_by": list(ctx.inspection.verified_by) if ctx.inspection else [],
+            "verification_outcome": (
+                ctx.inspection.verification_outcome if ctx.inspection else "not_run"
+            ),
             "workflow_selection": (
                 {
                     "workflow": selection.workflow,

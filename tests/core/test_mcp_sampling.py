@@ -193,6 +193,35 @@ def test_initialize_without_sampling_does_not_register(server: MCPServer) -> Non
     assert get_host_sampler() is None
 
 
+def test_initialize_without_sampling_clears_stale_sampler(server: MCPServer) -> None:
+    # A leftover sampler (e.g. from a prior in-process initialize) must be cleared
+    # when the connected client does NOT support sampling — otherwise a run would
+    # send sampling/createMessage to a client that can never answer and stall for
+    # the full timeout window.
+    register_host_sampler(lambda *a: "stale")
+    server._handle_request(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}}
+    )
+    assert get_host_sampler() is None
+
+
+def test_initialize_records_client_sampling_capability(server: MCPServer) -> None:
+    assert server.client_supports_sampling is False
+    server._handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"capabilities": {"sampling": {}}},
+        }
+    )
+    assert server.client_supports_sampling is True
+    server._handle_request(
+        {"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {"capabilities": {}}}
+    )
+    assert server.client_supports_sampling is False
+
+
 def test_read_message_before_handles_batched_writes(
     server: MCPServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:

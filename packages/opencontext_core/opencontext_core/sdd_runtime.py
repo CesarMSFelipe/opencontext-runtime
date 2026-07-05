@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Local SDD/TDD runtime helpers.
 
 This module is deliberately provider-neutral. It detects local verification
@@ -5,12 +7,14 @@ capabilities and writes small project artifacts that agents can consume without
 reading the whole repository.
 """
 
-from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 
 
 class TestCapability(BaseModel):
@@ -220,7 +224,7 @@ def write_sdd_context(
         execution_mode=execution_mode,
         artifact_mode=artifact_mode,
     )
-    out_dir = base / ".opencontext" / "sdd"
+    out_dir = resolve_workspace_path(base, StorageMode.local) / "sdd"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     context_path = out_dir / "context.json"
@@ -275,6 +279,26 @@ def _dedupe_capabilities(items: list[TestCapability]) -> list[TestCapability]:
             seen.add(key)
             unique.append(item)
     return unique
+
+
+# ---------------------------------------------------------------------------
+# PR4.a: optional Resolve delegation when sdd_runner_v2 is active
+# ---------------------------------------------------------------------------
+
+
+def resolve_v2(change: str, cwd: str | None = None) -> dict[Any, Any]:
+    """Resolve SDD status via opencontext_sdd when sdd_runner_v2 is active.
+
+    Falls back to a minimal empty status when the v2 package is not
+    installed — keeps the legacy path clean.
+    """
+    try:
+        from opencontext_sdd.status import Resolve
+
+        status = Resolve(change, cwd=cwd or ".")
+        return status.model_dump(mode="json", exclude_none=True)
+    except ImportError:
+        return {"schemaName": "opencontext.sdd-status", "changeName": change}
 
 
 def _render_testing_markdown(context: SDDContext) -> str:

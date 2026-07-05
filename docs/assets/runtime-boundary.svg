@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 260" width="720" height="260" role="img" aria-label="OpenContext is an engineering runtime. Offline deterministic work includes indexing, knowledge graph, context packs, search, memory, and policy. Generative work includes writing code, designs, specs, ApplyEdit, reviews, and patches, and requires a generative executor such as MCP sampling, Claude or GPT, Ollama, or another provider.">
+  <rect width="720" height="260" rx="14" fill="#0B0F14"/>
+  <rect x="1" y="1" width="718" height="258" rx="13" fill="none" stroke="rgba(0,201,167,0.14)"/>
+
+  <rect x="250" y="18" width="220" height="54" rx="10" fill="#111821" stroke="rgba(0,201,167,0.42)"/>
+  <text x="360" y="40" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="15" font-weight="700" fill="#E6EDF3">OpenContext</text>
+  <text x="360" y="58" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11" fill="#9DA6B0">Engineering Runtime</text>
+
+  <path d="M360 72 V94" stroke="#2F3742" stroke-width="2"/>
+  <path d="M184 94 H536" stroke="#2F3742" stroke-width="2"/>
+  <path d="M184 94 V112" stroke="#2F3742" stroke-width="2"/>
+  <path d="M536 94 V112" stroke="#2F3742" stroke-width="2"/>
+
+  <rect x="40" y="112" width="288" height="102" rx="10" fill="#0D2220" stroke="rgba(0,201,167,0.35)"/>
+  <text x="184" y="136" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="14" font-weight="700" fill="#2DC4A4">Offline / deterministic</text>
+  <text x="70" y="158" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11" fill="#E6EDF3">• Index repository</text>
+  <text x="70" y="176" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11" fill="#E6EDF3">• Knowledge Graph</text>
+  <text x="70" y="194" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11" fill="#E6EDF3">• Context packs · search · memory · policy</text>
+
+  <rect x="392" y="112" width="288" height="102" rx="10" fill="#151826" stroke="rgba(132,92,194,0.42)"/>
+  <text x="536" y="136" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="14" font-weight="700" fill="#C9B6FF">Generative work</text>
+  <text x="422" y="158" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11" fill="#E6EDF3">• Write code · produce patches</text>
+  <text x="422" y="176" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11" fill="#E6EDF3">• Design features · draft specs</text>
+  <text x="422" y="194" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="11" fill="#E6EDF3">• Generate ApplyEdit · review text</text>
+
+  <path d="M536 214 V230" stroke="#2F3742" stroke-width="2"/>
+  <text x="536" y="229" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="10" fill="#9DA6B0">Requires a generative executor (LLM or MCP host)</text>
+
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="10" font-weight="600">
+    <rect x="338" y="238" width="86" height="16" rx="8" fill="#111821" stroke="#21262D"/>
+    <text x="381" y="250" text-anchor="middle" fill="#7BD9FF">MCP Sampling</text>
+    <rect x="432" y="238" width="76" height="16" rx="8" fill="#111821" stroke="#21262D"/>
+    <text x="470" y="250" text-anchor="middle" fill="#E6EDF3">Claude/GPT</text>
+    <rect x="516" y="238" width="58" height="16" rx="8" fill="#111821" stroke="#21262D"/>
+    <text x="545" y="250" text-anchor="middle" fill="#E6EDF3">Ollama</text>
+    <rect x="582" y="238" width="98" height="16" rx="8" fill="#111821" stroke="#21262D"/>
+    <text x="631" y="250" text-anchor="middle" fill="#E6EDF3">Other provider</text>
+  </g>
+</svg>

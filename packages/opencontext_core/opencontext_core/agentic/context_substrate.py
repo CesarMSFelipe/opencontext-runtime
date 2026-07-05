@@ -13,6 +13,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from opencontext_core.config import load_config_or_defaults
+from opencontext_core.config_resolver import (
+    resolve_active_storage_path,
+    resolve_active_workspace_path,
+    resolve_config_path,
+)
+
 
 class ContextSubstrateReport(BaseModel, extra="forbid"):
     """Summary of the context substrate built for one conductor phase."""
@@ -66,7 +73,7 @@ class ContextSubstrateBuilder:
             )
             no_kg_reason = "knowledge_graph.json not found"
         else:
-            kg_file = self.root / ".opencontext" / "knowledge_graph.json"
+            kg_file = resolve_active_workspace_path(self.root) / "knowledge_graph.json"
             if kg_file.exists():
                 try:
                     kg_data = json.loads(kg_file.read_text(encoding="utf-8"))
@@ -99,7 +106,7 @@ class ContextSubstrateBuilder:
             else:
                 # NOTE: SQLite index present but no JSON KG — derive hash + tokens
                 # from the GraphDatabase nodes table using the same reader as graph.py.
-                sqlite_db = self.root / ".storage" / "opencontext" / "context_graph.db"
+                sqlite_db = resolve_active_storage_path(self.root) / "context_graph.db"
                 try:
                     from opencontext_core.indexing.graph_db import GraphDatabase
 
@@ -123,39 +130,96 @@ class ContextSubstrateBuilder:
         baseline_tokens = 0
         selected_tokens = 0
         compressed_tokens = 0
+        raw_kg_content: str = ""
         if context_pack_hash is not None:
             if sqlite_tokens:
                 selected_tokens = sqlite_tokens
             else:
                 try:
-                    raw_content = (self.root / ".opencontext" / "knowledge_graph.json").read_text(
-                        encoding="utf-8"
-                    )
-                    selected_tokens = int(len(raw_content.split()) * 1.3)
+                    raw_kg_content = (
+                        resolve_active_workspace_path(self.root) / "knowledge_graph.json"
+                    ).read_text(encoding="utf-8")
+                    selected_tokens = int(len(raw_kg_content.split()) * 1.3)
                 except Exception:
                     selected_tokens = 0
-            # ponytail: no real pack object here; use conservative no-compression metrics
-            # until ContextPackBuilder is wired into this adapter.
             baseline_tokens = selected_tokens
             compressed_tokens = selected_tokens
 
+        # G2: wire CompressionEngine when KG content is available.
+        # Use compress_item() directly to measure compression savings on the full
+        # KG payload regardless of budget.  pack() is budget-management; here we
+        # want raw stats: "how much would the engine shrink this content?".
+        #
+        # NOTE (SUGGESTION-6): SQLite/JSON asymmetry — when the project uses a
+        # SQLite-backed KG (no knowledge_graph.json), raw_kg_content is empty.
+        # Compressing the synthetic {"note": "sqlite-backed kg"} placeholder
+        # would produce baseline/compressed counts (char-based estimate_tokens)
+        # that are inconsistent with selected_tokens (word-count x 1.3 from
+        # real SQLite content), breaking the invariant selected_tokens >= used_tokens.
+        # For the SQLite path we skip CompressionEngine entirely — all token fields
+        # remain anchored to the same sqlite_tokens estimate so the report is honest.
+        compression_enabled = False
+        compression_savings = 0
+        if context_pack_hash is not None and selected_tokens > 0 and raw_kg_content:
+            try:
+                from opencontext_core.context.budgeting import estimate_tokens
+                from opencontext_core.context.compression import CompressionEngine
+                from opencontext_core.models.context import (
+                    ContextItem,
+                    ContextPriority,
+                )
+
+                cfg = load_config_or_defaults(resolve_config_path(self.root), auto_detect=False)
+                engine = CompressionEngine(cfg.context.compression)
+
+                # Build a single ContextItem representing the KG text payload.
+                # Use estimate_tokens (char-based) for consistency with the engine.
+                kg_token_count = estimate_tokens(raw_kg_content)
+                kg_item = ContextItem(
+                    id="kg:context_substrate",
+                    content=raw_kg_content,
+                    source="knowledge_graph",
+                    source_type="file",
+                    priority=ContextPriority.P1,
+                    tokens=kg_token_count,
+                    score=1.0,
+                )
+                result = engine.compress_item(kg_item)
+                compressed_tokens = result.compressed_tokens
+                baseline_tokens = result.original_tokens
+                compression_savings = max(0, baseline_tokens - compressed_tokens)
+                compression_enabled = True
+            except Exception as exc:
+                substrate_warnings.append(f"CompressionEngine wiring skipped: {exc}")
+
         used_tokens = compressed_tokens
 
-        return ContextSubstrateReport(
+        report = ContextSubstrateReport(
             indexed=indexed,
             graph_status=graph_status,
             context_pack_hash=context_pack_hash,
             no_kg_reason=no_kg_reason,
             used_tokens=used_tokens,
             available_tokens=available,
-            compression_enabled=False,
-            compression_savings=0,
+            compression_enabled=compression_enabled,
+            compression_savings=compression_savings,
             omissions=[],
             warnings=substrate_warnings,
             baseline_tokens=baseline_tokens,
             selected_tokens=selected_tokens,
             compressed_tokens=compressed_tokens,
         )
+
+        # S2: persist the report so sync_state() can read the latest hash cheaply.
+        try:
+            storage_dir = resolve_active_storage_path(self.root)
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            report_path = storage_dir / "substrate_report.json"
+            report_path.write_text(json.dumps(report.model_dump(), indent=2), encoding="utf-8")
+        except Exception:
+            pass  # Persist is best-effort; never fail build_for_phase.
+
+        return report
 
     def _check_index(self) -> tuple[bool, str]:
         """Return (is_indexed, status_message) by probing the .opencontext directory.
@@ -164,11 +228,11 @@ class ContextSubstrateBuilder:
         that the current indexer writes to .storage/opencontext/context_graph.db.
         """
         # Primary: SQLite KG written by the current indexer.
-        sqlite_db = self.root / ".storage" / "opencontext" / "context_graph.db"
+        sqlite_db = resolve_active_storage_path(self.root) / "context_graph.db"
         if sqlite_db.exists():
             return True, "indexed"
         # Fallback: legacy JSON snapshot.
-        oc_dir = self.root / ".opencontext"
+        oc_dir = resolve_active_workspace_path(self.root)
         if not oc_dir.exists():
             return False, "not_indexed"
         kg_file = oc_dir / "knowledge_graph.json"

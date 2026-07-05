@@ -160,8 +160,14 @@ class QualityEvaluator:
 
     @property
     def db_path(self) -> Path:
-        """Path to this project's persisted knowledge graph DB."""
-        return self.root / ".storage" / "opencontext" / "context_graph.db"
+        """Path to this project's persisted knowledge graph DB.
+
+        Resolved via the active storage mode (the same resolver the indexer
+        uses), with a legacy in-repo fallback for unmigrated projects.
+        """
+        from opencontext_core.config_resolver import resolve_active_storage_file
+
+        return resolve_active_storage_file(self.root, "context_graph.db")
 
     def _scanned(self) -> list[ScannedFile]:
         """Return the scanned source, scanning lazily + caching on first use."""

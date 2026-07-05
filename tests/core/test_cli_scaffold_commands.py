@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from conftest import write_config
 from opencontext_cli.main import (
     _agent_context,
     _checkpoint,
@@ -18,6 +17,7 @@ from opencontext_cli.main import (
     _workflows,
 )
 from opencontext_core.runtime import OpenContextRuntime
+from tests.core.conftest import write_config
 
 
 def test_check_deprecation() -> None:

@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from opencontext_core.paths import StorageMode, resolve_workspace_path
+
 try:
     import yaml as _yaml
 except ImportError:
@@ -98,11 +100,11 @@ def find_presets(root: str | Path = ".") -> list[Preset]:
     presets: dict[str, Preset] = {}
 
     search_dirs: list[Path] = [
-        Path(root) / ".opencontext" / "presets",
+        resolve_workspace_path(root, StorageMode.local) / "presets",
     ]
 
     # Include presets from every installed extension
-    extensions_base = Path(root) / ".opencontext" / "extensions"
+    extensions_base = resolve_workspace_path(root, StorageMode.local) / "extensions"
     if extensions_base.exists():
         for ext_dir in sorted(extensions_base.iterdir()):
             ext_presets = ext_dir / "presets"

@@ -190,8 +190,8 @@ CLIENT_ORCHESTRATOR_PROFILES: dict[str, ClientOrchestratorProfile] = {
         phase_instructions=_opencontext_instructions(),
         kg_lookup_first=True,
         delegation_hint=(
-            "OpenCode consumes the OpenContext profile. Use `opencode.json` to reference "
-            "AGENTS.md and compact context packs; keep OpenContext rules authoritative."
+            "OpenCode consumes AGENTS.md plus MCP configuration; keep OpenContext "
+            "rules authoritative and use compact context packs."
         ),
         tdd_integration=(
             "OpenContext TDD rules apply. In ask mode, prompt before apply; "
@@ -204,8 +204,8 @@ CLIENT_ORCHESTRATOR_PROFILES: dict[str, ClientOrchestratorProfile] = {
         phase_instructions=_opencontext_instructions(),
         kg_lookup_first=True,
         delegation_hint=(
-            "Kilo Code shares the OpenCode instruction format. "
-            "Uses AGENTS.md + opencode.json with OpenContext rules."
+            "Kilo Code shares the OpenCode instruction style. "
+            "Uses AGENTS.md plus MCP configuration with OpenContext rules."
         ),
         tdd_integration=(
             "OpenContext TDD rules apply. Kilo Code asks per-change in ask mode "

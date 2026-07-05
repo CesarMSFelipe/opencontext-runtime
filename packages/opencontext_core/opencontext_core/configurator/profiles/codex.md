@@ -4,20 +4,30 @@ OpenContext gives you a semantic knowledge graph + verified context for this pro
 
 ## How Codex uses OpenContext
 
-Codex receives context via the instructions file — MCP tools are not called directly
-by Codex. Instead, use the CLI to generate verified context and paste it into Codex.
+Setup registers the OpenContext MCP server in `~/.codex/config.toml`
+(`[mcp_servers.opencontext]`), so Codex calls the MCP tools directly:
+`opencontext_context`, `opencontext_search`, `opencontext_impact`,
+`opencontext_node`, `opencontext_status`, and the session tools.
 
 ## Recommended workflow
 
-1. Generate context: `opencontext pack . --query 'your task' --copy`
-2. Paste the copied context into Codex as part of your prompt
-3. For impact analysis: `opencontext_impact <symbol>` in your terminal first
+1. For context: call `opencontext_context` with your task description
+2. Before any edit: call `opencontext_impact` on the symbol you're about to change
+3. Without MCP, fall back to the CLI: `opencontext pack . --query 'your task' --copy`
 
-## CLI tools
+## Running workflows (`opencontext_run`)
 
-- `opencontext pack . --query 'your task' --copy` — get verified context, copy to clipboard
-- `opencontext search <symbol>` — find symbols by name
-- `opencontext index .` — rebuild the knowledge graph after large changes
+Codex does not support MCP sampling, so OpenContext cannot execute with your
+model. With no provider configured, a mutation run returns
+`status: "agent_execute"` — a working handoff, not a dead end:
+
+1. Read the returned `task_contract` and `context.items`.
+2. Make the edits yourself with your own tools.
+3. Call `opencontext_session_apply` with `kind="agent_edits"` and
+   `payload.changed_files` (add `payload.test_command` when a test proves the
+   change), exactly as given in the response's `follow_up`. OpenContext then
+   verifies the edits, records receipts, and completes the run.
+4. If it reports `inspection_failed` or `needs_verification`, fix and re-call.
 
 ## Keep the index fresh
 

@@ -170,7 +170,15 @@ def test_agent_handoff_budget_is_handoff_budget() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_context_substrate_hash_not_none_when_kg_exists(tmp_path: Path) -> None:
+def test_context_substrate_hash_not_none_when_kg_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Use local mode so resolve_active_workspace_path finds the JSON KG at
+    # .opencontext/knowledge_graph.json (C1 migration: resolver now uses
+    # config-driven path, not the hardcoded local path). Same pattern as
+    # commit 038d392.
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
+
     oc = tmp_path / ".opencontext"
     oc.mkdir()
     (oc / "knowledge_graph.json").write_text(

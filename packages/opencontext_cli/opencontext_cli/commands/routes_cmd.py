@@ -47,7 +47,7 @@ def handle_routes(args: Any) -> None:
 
 
 def _handle_scan(root: str, framework: str | None = None, output_json: bool = False) -> None:
-    with console.status("[bold green]Scanning for routes..."):
+    with console.status("Scanning for routes..."):
         router = FrameworkRouter()
         routes = router.scan(root)
     if framework:

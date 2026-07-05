@@ -209,7 +209,17 @@ def _sync_kg(prefs: Any, dry_run: bool) -> dict[str, Any]:
         result["message"] = "Knowledge Graph not enabled"
         return result
 
-    expected_db = Path(".storage/opencontext/context_graph.db")
+    try:
+        from opencontext_core.config import load_config_or_defaults
+        from opencontext_core.paths import resolve_storage_path
+
+        _cfg = load_config_or_defaults()
+        _storage = resolve_storage_path(
+            Path(_cfg.project_index.root), _cfg.storage.mode, _cfg.storage.custom_path
+        )
+        expected_db = _storage / "context_graph.db"
+    except Exception:
+        expected_db = Path(".storage/opencontext/context_graph.db")
     if not expected_db.exists():
         result["status"] = "warning"
         result["message"] = f"Database not found: {expected_db}"

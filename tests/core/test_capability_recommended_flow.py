@@ -28,7 +28,10 @@ def test_opencode_recommended_flow():
     cap = matrix.get("opencode")
     assert cap is not None
     assert cap.recommended_flow == "mcp_run"
-    assert cap.supports_sampling is True
+    # opencode 1.17.12 does not advertise `sampling` at MCP initialize;
+    # runtime capability detection upgrades automatically if that changes.
+    assert cap.supports_sampling is False
+    assert cap.supports_slash_commands is False
 
 
 def test_codex_recommended_flow():

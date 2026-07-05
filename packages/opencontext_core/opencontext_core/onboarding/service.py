@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from opencontext_core.paths import StorageMode, resolve_workspace_path
+
 # Used only as the fallback when no agent CLI is detected on the host. Detection
 # (below) is preferred — we configure what is actually present, not a fixed list.
 _FALLBACK_CLIENTS: tuple[str, ...] = ("opencode",)
@@ -159,10 +161,28 @@ class OnboardingService:
             config_path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
         result.config_path = str(config_path)
 
-        # 2b. Keep the local index/memory out of git. This was setup-only, so a
-        # project onboarded via `opencontext install` could commit its binary
-        # graph. Managed block, best-effort — never fail onboarding over it.
-        self._write_gitignore_storage_block(root)
+        # 2b. Keep the local index/memory out of git. Only write the .gitignore
+        # block when storage.mode=local (in-repo layout) or legacy in-repo dirs
+        # are detected (upgrading an existing repo). In user mode (default XDG),
+        # no in-repo state is written so the .gitignore block is unnecessary.
+        # Best-effort — never fail onboarding over it.
+        try:
+            from opencontext_core.config import load_config_or_defaults
+            from opencontext_core.paths import detect_legacy
+
+            _oc = load_config_or_defaults(config_path)
+            # Write .gitignore block only when in-repo state will be written:
+            # mode=local explicitly, or legacy dirs already exist in the repo.
+            # mode=user (default): state goes to XDG, so no .gitignore entry needed.
+            _write_gitignore = (
+                _oc.storage.mode == StorageMode.local or detect_legacy(root) is not None
+            )
+        except Exception:
+            _write_gitignore = True  # safe default: write block when uncertain
+        if _write_gitignore:
+            self._write_gitignore_storage_block(root)
+        # NOTE: In mode=user the .storage/ and .opencontext/ dirs are NOT created
+        # in the project repo; the runtime writes to XDG state dirs instead.
 
         # 3. Save user preferences
         store = UserConfigStore()
@@ -197,7 +217,6 @@ class OnboardingService:
 
             runtime = OpenContextRuntime(
                 config_path=config_path,
-                storage_path=root / ".storage" / "opencontext",
             )
             manifest = runtime.index_project(root)
             result.indexed_files = len(manifest.files)
@@ -249,7 +268,7 @@ class OnboardingService:
                     result.generated_agent_files.append(f"{entry['agent']}: {path}")
 
         # 7. Generate .opencontext/agents/<client>.md contract files
-        agents_dir = root / ".opencontext" / "agents"
+        agents_dir = resolve_workspace_path(root, StorageMode.local) / "agents"
         agents_dir.mkdir(parents=True, exist_ok=True)
         for client in options.active_clients:
             agent_path = agents_dir / f"{client}.md"
@@ -262,7 +281,7 @@ class OnboardingService:
             result.generated_agent_files.append(str(agent_path))
 
         # 8. Generate harness.yaml
-        harness_path = root / ".opencontext" / "harness.yaml"
+        harness_path = resolve_workspace_path(root, StorageMode.local) / "harness.yaml"
         self._write_harness_yaml(harness_path, options, sdd_token_budget)
         result.harness_config_path = str(harness_path)
 
@@ -369,6 +388,7 @@ class OnboardingService:
             "workflow_defaults": {
                 "budget_mode": "warn",
                 "artifact_root": ".opencontext/runs",
+                "tdd_mode": options.tdd_mode,
             },
             "phases": {
                 "explore": {
@@ -404,11 +424,12 @@ class OnboardingService:
                 },
                 "archive": {
                     "budget_tokens": max(token_budget // 2, 500),
-                    "gates": [
-                        "trace_persisted",
-                        "memory_delta_created",
-                        "graph_delta_created",
-                    ],
+                    # No gates declared: the archive phase persists trace/memory/graph
+                    # deltas via its executor, but no dispatch-bound gate evaluates
+                    # them — declaring trace_persisted/memory_delta_created/
+                    # graph_delta_created here only produced inert, never-evaluated
+                    # gates (an honesty gap). Leave empty until real gates exist.
+                    "gates": [],
                 },
             },
             "agents": {
@@ -444,7 +465,7 @@ def is_first_run(root: str | Path) -> bool:
     """
     root_path = Path(root)
     config_path = root_path / "opencontext.yaml"
-    workspace_marker = root_path / ".opencontext" / "sdd" / "context.json"
+    workspace_marker = resolve_workspace_path(root_path, StorageMode.local) / "sdd" / "context.json"
 
     # Neither config nor workspace marker → first run
     if not config_path.exists() and not workspace_marker.exists():

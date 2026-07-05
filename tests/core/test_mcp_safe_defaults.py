@@ -86,3 +86,62 @@ def test_memory_write_tools_in_default_allowlist(tmp_path: Path) -> None:
     assert "opencontext_memory_save" in defaults
     assert "opencontext_memory_judge" in defaults
     server.close()
+
+
+_WORKFLOW_TOOLS = {
+    "opencontext_run",
+    "opencontext_session_start",
+    "opencontext_session_next",
+    "opencontext_session_observe",
+    "opencontext_session_apply",
+    "opencontext_session_resume",
+    "opencontext_session_archive",
+}
+
+_CODE_WRITE_TOOLS = {
+    "opencontext_replace_symbol_body",
+    "opencontext_insert_before_symbol",
+    "opencontext_insert_after_symbol",
+    "opencontext_rename_symbol",
+}
+
+
+def test_workflow_opt_in_allows_run_and_session_tools(tmp_path: Path) -> None:
+    """``allow_workflow_tools=True`` is the user-accessible opt-in for the documented flow.
+
+    Regression: the rendered client instructions tell every agent to call
+    ``opencontext_run`` and complete the agent_execute handoff via
+    ``opencontext_session_apply``, but there was no non-programmatic way to
+    allowlist those tools — every real client dead-ended in
+    ``tool_not_allowlisted``.
+    """
+    server = MCPServer(db_path=tmp_path / "test.db", allow_workflow_tools=True)
+    for tool in _WORKFLOW_TOOLS:
+        assert server.policy.allows(tool), f"{tool} must be allowed with workflow opt-in"
+    server.close()
+
+
+def test_workflow_opt_in_still_denies_code_write_tools(tmp_path: Path) -> None:
+    """The workflow opt-in must NOT silently unlock symbol-write tools."""
+    server = MCPServer(db_path=tmp_path / "test.db", allow_workflow_tools=True)
+    for tool in _CODE_WRITE_TOOLS:
+        assert not server.policy.allows(tool), f"{tool} must stay opt-in"
+    server.close()
+
+
+def test_workflow_tools_denied_without_opt_in(tmp_path: Path) -> None:
+    """Vanilla server keeps the safe default: run/session tools stay denied."""
+    server = MCPServer(db_path=tmp_path / "test.db")
+    for tool in _WORKFLOW_TOOLS:
+        assert not server.policy.allows(tool), f"{tool} must stay denied by default"
+    server.close()
+
+
+def test_explicit_policy_wins_over_workflow_opt_in(tmp_path: Path) -> None:
+    """A caller-provided policy is authoritative; the flag never widens it."""
+    from opencontext_core.tools.policy import ToolPermissionPolicy
+
+    policy = ToolPermissionPolicy(allowed_tools={"opencontext_status"})
+    server = MCPServer(db_path=tmp_path / "test.db", policy=policy, allow_workflow_tools=True)
+    assert not server.policy.allows("opencontext_run")
+    server.close()

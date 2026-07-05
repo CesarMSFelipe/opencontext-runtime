@@ -11,6 +11,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from opencontext_core.compat import UTC
+from opencontext_core.paths import StorageMode, resolve_workspace_path
 
 
 class ApprovalDecision(BaseModel):
@@ -157,7 +158,7 @@ class PersistentApprovalInbox:
 
     def __init__(self, root: Path | str = ".") -> None:
         self.root = Path(root)
-        self.base_path = self.root / ".opencontext" / "approvals"
+        self.base_path = resolve_workspace_path(self.root, StorageMode.local) / "approvals"
         self.base_path.mkdir(parents=True, exist_ok=True)
 
     def add(self, decision: ApprovalDecision) -> ApprovalDecision:
