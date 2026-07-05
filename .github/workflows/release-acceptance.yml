@@ -41,7 +41,7 @@ jobs:
           opencontext index tests/golden/oc_flow_bugfix_python
           opencontext run "Fix failing test" --workflow auto \
             --root tests/golden/oc_flow_bugfix_python --json
-          pytest tests/golden/oc_flow_bugfix_python -q
+          pytest tests/golden/oc_flow_bugfix_python -q --noconftest
       - name: B+D + e2e-dod evidence — run the real DoD journey, write evidence artifacts
         # VDM-006/007: writes .opencontext/e2e/dod-proof.json + release-evidence.json
         # at the repo root from a genuine journey; `release acceptance` reads them.
