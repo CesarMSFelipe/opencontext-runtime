@@ -128,9 +128,16 @@ def resolve_storage_path(
         return Path(custom)
     effective = _effective_mode(mode)
     if effective == StorageMode.user:
-        return (
-            Path(platformdirs.user_state_path("opencontext")) / "projects" / project_id(root_path)
-        )
+        # Honor XDG_STATE_HOME cross-platform so tests + tooling get the
+        # same XDG semantics on Linux, macOS and Windows. platformdirs
+        # only honors XDG_STATE_HOME on POSIX; on Windows it falls back
+        # to %LOCALAPPDATA% which breaks isolated test fixtures.
+        xdg_state = os.environ.get("XDG_STATE_HOME", "").strip()
+        if xdg_state:
+            base = Path(xdg_state) / "opencontext"
+        else:
+            base = Path(platformdirs.user_state_path("opencontext"))
+        return base / "projects" / project_id(root_path)
     # local mode — in-repo legacy layout
     return root_path.resolve() / ".storage" / "opencontext"
 

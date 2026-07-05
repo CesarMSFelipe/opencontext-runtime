@@ -14,11 +14,19 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from opencontext_core.paths import StorageMode, project_id, resolve_storage_path
 
 
-def test_resolve_storage_windows_mock(tmp_path: Path) -> None:
+def test_resolve_storage_windows_mock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """resolver returns a path under the simulated Windows LOCALAPPDATA dir."""
+    # Wipe XDG_STATE_HOME so the platformdirs fallback wins (the resolver
+    # honors XDG_STATE_HOME cross-platform, but this test is exercising the
+    # Windows platformdirs code path specifically).
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
     fake_localappdata = tmp_path / "AppData" / "Local" / "opencontext"
 
     with patch(
@@ -31,8 +39,11 @@ def test_resolve_storage_windows_mock(tmp_path: Path) -> None:
     assert path == expected_prefix, f"Expected {expected_prefix}, got {path}"
 
 
-def test_resolve_storage_windows_mock_different_roots(tmp_path: Path) -> None:
+def test_resolve_storage_windows_mock_different_roots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Different project roots produce different paths even under mocked Windows dir."""
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
     fake_localappdata = tmp_path / "AppData" / "Local" / "opencontext"
 
     root_a = tmp_path / "project_a"
