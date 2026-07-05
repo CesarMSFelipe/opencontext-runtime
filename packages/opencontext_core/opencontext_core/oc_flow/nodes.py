@@ -1176,7 +1176,13 @@ def node_mutate(ctx: OCFlowContext) -> NodeResult:
         patch_parts = ["# no edits proposed (honest no-op mutation)\n"]
     patch_name = ctx.artifacts_dir / "patch.diff"
     patch_name.parent.mkdir(parents=True, exist_ok=True)
-    patch_name.write_text("".join(patch_parts), encoding="utf-8")
+    # Write as bytes: unified-diff line endings must be preserved exactly so
+    # ``git apply --check`` works on Windows where text-mode write_text would
+    # double-CR the CRLF lines already present in the diff payload.
+    # Normalise CRLF → LF so the patch stays portable across platforms
+    # (works against either LF or CRLF working trees after git checkout).
+    patch_text = "".join(patch_parts).replace("\r\n", "\n").replace("\r", "\n")
+    patch_name.write_bytes(patch_text.encode("utf-8", errors="replace"))
     rec_name = _write_json(
         ctx.artifacts_dir / "apply-receipts.json",
         {"checkpoint_id": ctx.checkpoint_id, "receipts": receipts},

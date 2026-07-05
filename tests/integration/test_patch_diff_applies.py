@@ -58,8 +58,18 @@ def git_repo(tmp_path: Path) -> Path:
         check=True,
         capture_output=True,
     )
+    # Force LF-only line endings so the patch (written as raw bytes) applies
+    # cleanly on Windows where autocrlf would otherwise inject CRLF.
+    subprocess.run(
+        ["git", "config", "core.autocrlf", "false"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
     src = tmp_path / "src.py"
-    src.write_text("# original\nVALUE = 1\nEND = True\n", encoding="utf-8")
+    # Write raw LF bytes — Path.write_text would translate to CRLF on
+    # Windows in text mode and create a mismatch with the patch.
+    src.write_bytes(b"# original\nVALUE = 1\nEND = True\n")
     subprocess.run(["git", "add", "src.py"], cwd=tmp_path, check=True, capture_output=True)
     subprocess.run(
         ["git", "commit", "-m", "init"],
