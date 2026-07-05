@@ -581,7 +581,9 @@ def handle_run_inspect(args: Any) -> None:
         # Include the nested OC Flow artifact tree (artifacts/oc-flow/…), not just
         # top-level files — otherwise oc-flow runs looked empty. Paths are relative
         # to the run dir so the harness (flat) and oc-flow (nested) layouts read alike.
-        names = sorted(str(p.relative_to(run_dir)) for p in run_dir.rglob("*") if p.is_file())
+        # .as_posix() so the relative paths use '/' on every platform (Windows
+        # would otherwise emit backslashes, breaking the stable list/JSON contract).
+        names = sorted(p.relative_to(run_dir).as_posix() for p in run_dir.rglob("*") if p.is_file())
         if getattr(args, "json", False):
             print(json.dumps(names, indent=2))
         else:

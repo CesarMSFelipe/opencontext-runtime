@@ -261,7 +261,7 @@ def direct_legacy_importers(
         except (SyntaxError, UnicodeDecodeError, OSError):
             continue
         if _imports_symbol(tree, dotted, legacy_symbol):
-            importers.append(str(path.relative_to(root)))
+            importers.append(path.relative_to(root).as_posix())
 
     return importers
 

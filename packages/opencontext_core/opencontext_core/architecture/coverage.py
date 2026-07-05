@@ -201,7 +201,7 @@ def _missing_annotation_modules(core_root: Path) -> list[str]:
     missing: list[str] = []
     for init in iter_v2_modules(core_root):
         if _read_capability_id(init) is None:
-            missing.append(str(init.relative_to(core_root.parent)))
+            missing.append(init.relative_to(core_root.parent).as_posix())
     return missing
 
 
