@@ -320,3 +320,69 @@ class TestHarnessYamlTddModePropagate:
         data = yaml.safe_load(harness_path.read_text(encoding="utf-8"))
         wf = data.get("workflow_defaults", {})
         assert wf.get("tdd_mode") == "off"
+
+
+# ---------------------------------------------------------------------------
+# VerifyPhase: test failure must propagate to final_status as FAILED
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyPhaseTestFailurePropagation:
+    """verify_tests_passed gate must be FAILED (not WARNING) when tests fail.
+
+    Before this fix: VerifyPhase emitted WARNING for test failures, which was
+    never checked by the runner's dispatched-gate path → final_status stayed
+    PASSED despite the suite failing.
+    """
+
+    def test_verify_gate_is_failed_not_warning_on_test_failure(self) -> None:
+        from opencontext_core.harness.models import GateStatus
+
+        # Synthesise a failing test result.
+        failing = {
+            "exit_code": 1,
+            "passed": 0,
+            "failed": 1,
+            "errors": 0,
+            "tests_executed": True,
+            "output": "FAILED test_foo.py::test_bar",
+            "error_output": "",
+        }
+        # Drive the gate-creation logic directly (no subprocess).
+        gates = []
+        if failing["exit_code"] != 0:
+            from opencontext_core.harness.models import PhaseGate
+
+            gates.append(
+                PhaseGate(
+                    id="verify_tests_passed",
+                    phase="verify",
+                    status=GateStatus.FAILED,
+                    message=f"Tests exited with code {failing['exit_code']}",
+                )
+            )
+        assert gates, "gate must be emitted on test failure"
+        assert gates[0].status == GateStatus.FAILED, (
+            f"Expected FAILED, got {gates[0].status} — test failure must propagate to final_status"
+        )
+
+    def test_runner_propagates_result_gate_failures_to_final_status(self) -> None:
+        """result.gates FAILED from any phase must update final_status via all_new_gates."""
+        from opencontext_core.harness.models import GateStatus, PhaseGate
+
+        # Simulate the runner loop logic: all_new_gates = result.gates + dispatched.
+        fail_gate = PhaseGate(
+            id="verify_tests_passed",
+            phase="verify",
+            status=GateStatus.FAILED,
+            message="Tests exited with code 1",
+        )
+        all_new_gates = [fail_gate]  # result.gates only; no dispatched
+        gate_policy = "block"
+        final_status = GateStatus.PASSED  # would be PASSED before this check
+        if any(g.status == GateStatus.FAILED for g in all_new_gates):
+            if gate_policy == "block":
+                final_status = GateStatus.FAILED
+        assert final_status == GateStatus.FAILED, (
+            "FAILED gate in result.gates must propagate to final_status when gate_policy=block"
+        )

@@ -2277,14 +2277,16 @@ class VerifyPhase(HarnessPhase):
             budget_mode=self.budget_mode,
         )
 
-        # If tests failed, mark as WARNING (not FAILED, since verify is about
-        # reporting — FAILED is reserved for budget/gate violations)
+        # Test failure is a real verification failure — FAILED so the runner
+        # propagates it to final_status and triggers fix loops when a delegate
+        # is wired. WARNING is not strong enough: it never updates final_status,
+        # so a failing test suite would silently report the run as passed.
         if test_result["exit_code"] != 0:
             gates.append(
                 PhaseGate(
                     id="verify_tests_passed",
                     phase="verify",
-                    status=GateStatus.WARNING,
+                    status=GateStatus.FAILED,
                     message=f"Tests exited with code {test_result['exit_code']}",
                 )
             )

@@ -917,7 +917,11 @@ class HarnessRunner:
             # no_high_risk_exports, provider_policy_passed).
             dispatched = self._dispatch_declared_gates(state, phase_id, phase_config, result)
             state.gates.extend(dispatched)
-            if any(g.status == GateStatus.FAILED for g in dispatched):
+            # Propagate FAILED from both the phase's own gates AND config-dispatched gates.
+            # result.gates covers phase self-evaluation (e.g. verify_tests_passed);
+            # dispatched covers config-declared gates. Both can independently block.
+            all_new_gates = list(result.gates) + dispatched
+            if any(g.status == GateStatus.FAILED for g in all_new_gates):
                 # Block-by-default: a FAILED verify-phase gate is fatal regardless
                 # of budget_mode when gate_policy is "block" (the default). "warn"
                 # keeps the historical posture (FAILED blocks only under STRICT).
