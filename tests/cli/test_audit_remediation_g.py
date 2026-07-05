@@ -204,7 +204,7 @@ class TestTestsPassGateInBuiltinYaml:
 
         gate = TestsPassGate()
         result = gate.evaluate(
-            cmd=["python", "-m", "pytest", str(test_file), "-q", "--tb=no"],
+            cmd=[sys.executable, "-m", "pytest", str(test_file), "-q", "--tb=no"],
             cwd=tmp_path,
             tdd_mode="strict",
         )
