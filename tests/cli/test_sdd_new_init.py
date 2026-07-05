@@ -25,10 +25,10 @@ def test_sdd_new_creates_change_folder_with_proposal(tmp_path: Path, capsys) -> 
 
     handle_sdd(_args(sdd_command="new", change="add-multiply", cwd=str(tmp_path)))
     change_dir = tmp_path / "openspec" / "changes" / "add-multiply"
-    assert (change_dir / "proposal.md").is_file()
+    assert (change_dir / "propose.md").is_file()
     report = json.loads(capsys.readouterr().out)
     assert report["status"] == "created"
-    assert "proposal.md" in report["artifacts"]
+    assert "propose.md" in report["artifacts"]
 
 
 def test_sdd_new_without_name_exits_2(tmp_path: Path) -> None:

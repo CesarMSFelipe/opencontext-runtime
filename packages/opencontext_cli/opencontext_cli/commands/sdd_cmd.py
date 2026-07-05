@@ -245,7 +245,8 @@ def _handle_new(change: str | None, cwd: Path, verbose: bool) -> None:
         _print_json({"status": "exists", "change": change, "path": str(change_dir)}, verbose)
         return
     change_dir.mkdir(parents=True, exist_ok=True)
-    (change_dir / "proposal.md").write_text(
+    # NOTE: filename matches the phase name so _detect_current_phase finds it.
+    (change_dir / "propose.md").write_text(
         f"# Proposal: {change}\n\n- **Status:** draft\n\n"
         "## Intent\n\n<why this change>\n\n## Scope\n\n<what changes>\n",
         encoding="utf-8",
@@ -255,7 +256,7 @@ def _handle_new(change: str | None, cwd: Path, verbose: bool) -> None:
             "status": "created",
             "change": change,
             "path": str(change_dir),
-            "artifacts": ["proposal.md"],
+            "artifacts": ["propose.md"],
             "next_recommended": "spec",
         },
         verbose,
