@@ -67,7 +67,8 @@ def add_models_parser(subparsers: Any) -> None:
         ),
     )
     sub = parser.add_subparsers(dest="models_command", required=True)
-    sub.add_parser("show", help="Show the default, per-persona, and per-role model map.")
+    show_p = sub.add_parser("show", help="Show the default, per-persona, and per-role model map.")
+    show_p.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
     set_persona = sub.add_parser(
         "set-persona", help="Set the model for an SDD persona (recommended)."
     )
@@ -83,14 +84,23 @@ def add_models_parser(subparsers: Any) -> None:
 def handle_models(args: Any) -> int:
     """Dispatch a ``models`` subcommand. Returns a process exit code."""
     cfg_path = _find_config()
-    console.header("Models")
+    as_json = getattr(args, "json", False)
+    if not as_json:
+        console.header("Models")
     if cfg_path is None:
-        console.error("No opencontext.yaml found. Run 'opencontext init' first.")
+        if as_json:
+            import json as _json
+
+            print(
+                _json.dumps({"error": "No opencontext.yaml found. Run 'opencontext init' first."})
+            )
+        else:
+            console.error("No opencontext.yaml found. Run 'opencontext init' first.")
         return 1
 
     command = args.models_command
     if command == "show":
-        return _show(cfg_path)
+        return _show(cfg_path, as_json=as_json)
     if command == "set-persona":
         return _set_persona(cfg_path, args.persona, args.model)
     if command == "set-role":
@@ -108,14 +118,32 @@ def _save(cfg_path: Path, data: dict[str, Any]) -> None:
     cfg_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 
 
-def _show(cfg_path: Path) -> int:
+def _show(cfg_path: Path, as_json: bool = False) -> int:
+    import json as _json
+
     data = _load(cfg_path)
     models = data.get("models", {}) or {}
-    default = (models.get("default", {}) or {}).get("model", "—")
+    default = (models.get("default", {}) or {}).get("model", None)
     persona_models = (data.get("sdd", {}) or {}).get("persona_models", {}) or {}
+    roles = models.get("roles", {}) or {}
 
-    console.print(f"[bold]default[/] (your client's model): {default}")
+    if as_json:
+        payload = {
+            "default": default,
+            "personas": {
+                name: {
+                    "persona_id": persona_id,
+                    "phases": phases,
+                    "model": persona_models.get(persona_id),
+                }
+                for name, (persona_id, phases) in PERSONAS.items()
+            },
+            "roles": {role: (roles.get(role) or {}).get("model") for role in ROLES},
+        }
+        print(_json.dumps(payload, indent=2))
+        return 0
 
+    console.print(f"[bold]default[/] (your client's model): {default or '—'}")
     console.table(
         "Per-Persona Models (recommended) — SDD phase routing",
         ["Persona", "SDD phase(s)", "Model"],
@@ -124,8 +152,6 @@ def _show(cfg_path: Path) -> int:
             for name, (persona_id, phases) in PERSONAS.items()
         ],
     )
-
-    roles = models.get("roles", {}) or {}
     if any((roles.get(r) or {}).get("model") for r in ROLES):
         console.table(
             "Per-Role Models (advanced fallback)",

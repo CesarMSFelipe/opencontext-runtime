@@ -46,6 +46,7 @@ def add_stack_parser(subparsers: Any) -> None:
         action="store_true",
         help="Write the standards into AGENTS.md as a managed block (idempotent).",
     )
+    parser.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
 
 
 _PRUNE_DIRS = {
@@ -166,8 +167,24 @@ def handle_stack(args: Any) -> int:
         eprint("Stack standards require the opencontext-profiles package.")
         return 1
 
+    json_out = getattr(args, "json", False)
+
     if not args.write:
         chosen, dropped = _select_stacks(_detect_profiles(root), KNOWN_PROFILES)
+        if json_out:
+            import json as _json
+
+            print(
+                _json.dumps(
+                    {
+                        "detected": chosen,
+                        "dropped": dropped,
+                        "standards": render_stack_standards(chosen),
+                    },
+                    indent=2,
+                )
+            )
+            return 0
         console.header("Stack Standards")
         if chosen:
             console.info(f"Detected stack: {', '.join(chosen)}")
@@ -188,6 +205,15 @@ def handle_stack(args: Any) -> int:
 
     detected = ", ".join(chosen) if chosen else "generic"
     agents_file = root / "AGENTS.md"
+    if json_out:
+        import json as _json
+
+        print(
+            _json.dumps(
+                {"changed": changed, "detected": chosen, "agents_file": str(agents_file)}, indent=2
+            )
+        )
+        return 0
     console.header("Stack Standards")
     if changed:
         console.success(f"Updated {agents_file} with stack standards ({detected}).")
