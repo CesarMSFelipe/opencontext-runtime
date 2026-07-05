@@ -339,12 +339,15 @@ def handle_run_exec(args: Any) -> int:
             "`opencontext doctor`.",
             file=sys.stderr,
         )
-    # Exit code: a genuine FAILURE (a failed run or a gate-blocked run) is nonzero so
-    # CI/scripts can detect it. Honest degraded outcomes (needs_executor/needs_provider,
-    # not_applied) stay 0 — the command did its job; the status is in --json. Returned
-    # (not sys.exit'd) so the ~6 in-process test callers never raise SystemExit; the
-    # dispatcher raises on the returned code.
-    return 1 if oc_status in {"failed", "blocked"} else 0
+    # Exit code: a genuine FAILURE is nonzero so CI/scripts can detect it.
+    # Honest degraded outcomes (needs_executor/needs_provider, not_applied) stay 0.
+    # Also fail when the flow finished but verification outcome was "failed" —
+    # the flow ran successfully but the edits didn't pass inspection.
+    # "escalated" alone is not a failure (the flow retried), but if it's paired
+    # with a failed verification outcome we still exit 1.
+    # Returned (not sys.exit'd) so in-process test callers never raise SystemExit.
+    _verification_outcome = getattr(leg, "n", None)
+    return 1 if oc_status in {"failed", "blocked"} or _verification_outcome == "failed" else 0
 
 
 def add_simulate_parser(subparsers: Any) -> None:
