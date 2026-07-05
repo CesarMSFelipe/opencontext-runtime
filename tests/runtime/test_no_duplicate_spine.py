@@ -37,7 +37,7 @@ def test_single_runtime_api_class() -> None:
             continue
         text = path.read_text(encoding="utf-8")
         if "class RuntimeApi" in text:
-                owners.append(path.relative_to(runtime_dir.parent).as_posix())
+            owners.append(path.relative_to(runtime_dir.parent).as_posix())
 
     assert owners == ["runtime/api.py"], (
         f"RuntimeApi must live in exactly one file under runtime/; "

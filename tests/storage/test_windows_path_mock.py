@@ -19,9 +19,7 @@ import pytest
 from opencontext_core.paths import StorageMode, project_id, resolve_storage_path
 
 
-def test_resolve_storage_windows_mock(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_storage_windows_mock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """resolver returns a path under the simulated Windows LOCALAPPDATA dir."""
     # Wipe XDG_STATE_HOME so the platformdirs fallback wins (the resolver
     # honors XDG_STATE_HOME cross-platform, but this test is exercising the
