@@ -2257,8 +2257,8 @@ def _install_wizard(args: Any, console: Any) -> None:
                 _INSTALL_WIZARD_STEPS["provider"].with_current("no provider detected"),
                 _status,
             )
-            _c.print("[bold]No LLM provider detected.[/bold]")
-            _c.print("Agentic phases (loop, spec, design) need a real LLM provider.")
+            # The frame's info-pane card already states the effect/risk; no raw
+            # interstitial lines here — keep step 4 a clean single frame like 1-3.
             _PROVIDERS = [
                 ("ANTHROPIC_API_KEY", "Anthropic (Claude)"),
                 ("OPENAI_API_KEY", "OpenAI (GPT-4)"),
@@ -2276,7 +2276,7 @@ def _install_wizard(args: Any, console: Any) -> None:
                     import os
 
                     os.environ[pkey] = api_key.strip()
-                    _c.print(f"[green]✓[/] {pkey} set for this session.")
+                    _c.success(f"{pkey} set for this session.")
                     _c.print(
                         "[dim]To persist it, add it to your shell profile (e.g. ~/.zshrc).[/dim]"
                     )
@@ -2652,16 +2652,19 @@ def _install(args: argparse.Namespace) -> None:
     )
     has_package_json = (root / "package.json").exists()
 
-    console.print(f"  [bold]Project:[/]  {root.name or '.'}")
-    console.print(f"  [bold]Config:[/]   {'exists' if has_config else 'not yet created'}")
-    console.print(f"  [bold]Git:[/]     {'yes' if has_git else 'no'}")
     detected = []
     if has_pytest:
         detected.append("Python (pytest)")
     if has_package_json:
         detected.append("Node.js")
+    _detected_rows = [
+        f"  [bold]Project:[/]  {root.name or '.'}",
+        f"  [bold]Config:[/]   {'exists' if has_config else 'not yet created'}",
+        f"  [bold]Git:[/]      {'yes' if has_git else 'no'}",
+    ]
     if detected:
-        console.print(f"  [bold]Stack:[/]   {', '.join(detected)}")
+        _detected_rows.append(f"  [bold]Stack:[/]    {', '.join(detected)}")
+    console.panel("\n".join(_detected_rows), title="Detected", fit=True)
     console.print()
 
     tdd = getattr(args, "tdd", None) or ("strict" if has_pytest else "ask")
@@ -2797,9 +2800,15 @@ def _install(args: argparse.Namespace) -> None:
 
     # ── Summary ────────────────────────────────────────────────────────
     console.print()
-    console.rule("[bold]Install Complete[/]", style="green")
-    for line in summary:
-        console.print(f"  [{'green' if line.startswith('✓') else 'yellow'}]{line}[/]")
+    _summary_body = "\n".join(
+        f"  [{'green' if line.startswith('✓') else 'yellow'}]{line}[/]" for line in summary
+    )
+    console.panel(
+        _summary_body,
+        title="[bold green]Install Complete[/bold green]",
+        style="success",
+        fit=True,
+    )
 
     # Capability-aware next-step
     try:

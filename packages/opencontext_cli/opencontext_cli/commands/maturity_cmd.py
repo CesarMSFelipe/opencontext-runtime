@@ -160,9 +160,11 @@ def handle_maturity(args: Any) -> None:
             console.header("Command maturity")
             for level in ("stable", "preview", "internal"):
                 names = d["by_level"][level]
-                print(f"{level} ({len(names)}):")
-                for name in names:
-                    print(f"  {name}")
+                console.table(
+                    f"{level} ({len(names)})",
+                    ["Command"],
+                    [[name] for name in names],
+                )
 
         emit(data, resolve_output_mode(args), _human_cmds)
         return
@@ -171,10 +173,19 @@ def handle_maturity(args: Any) -> None:
 
     def _human(d: dict[str, Any]) -> None:
         console.header("Maturity")
-        print(f"Maturity: {d['overall_level']} ({d['overall_score']})")
-        for dim in d["dimensions"]:
-            mark = "x" if dim["level"] == _READY else " "
-            print(f"  [{mark}] {dim['dimension']:<16} {dim['level']}")
-        print(f"Next: {d['next_action']}")
+        console.print(f"Maturity: {d['overall_level']} ({d['overall_score']})")
+        console.table(
+            "Maturity",
+            ["Dimension", "Level", "Status"],
+            [
+                [
+                    dim["dimension"],
+                    dim["level"],
+                    "ready" if dim["level"] == _READY else "pending",
+                ]
+                for dim in d["dimensions"]
+            ],
+        )
+        console.print(f"Next: {d['next_action']}")
 
     emit(data, resolve_output_mode(args), _human)

@@ -18,6 +18,9 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from opencontext_cli.output import eprint
+from opencontext_core.dx.console_styles import console
+
 if TYPE_CHECKING:
     # opencontext_sdd is an optional package not installed in all environments
     # (e.g. the bare CLI pyz on a clean machine may lack it until sdd verbs are
@@ -201,21 +204,30 @@ def _handle_ff(change: str | None, cwd: Path, verbose: bool) -> None:
 
 def _handle_onboard(cwd: Path, verbose: bool) -> None:
     """Walk user through the SDD cycle."""
-    print(f"SDD onboarding at {cwd}.")
-    print("Run `opencontext sdd init` to bootstrap SDD context, then use the phase")
-    print("verbs (new, explore, propose, spec, design, tasks, apply, verify, archive)")
-    print("to advance through the full lifecycle.")
+    console.header("SDD")
+    console.print(f"SDD onboarding at {cwd}.")
+    console.panel(
+        "Run `opencontext sdd init` to bootstrap SDD context, then use the phase "
+        "verbs (new, explore, propose, spec, design, tasks, apply, verify, archive) "
+        "to advance through the full lifecycle.",
+        title="Getting started",
+    )
 
 
 def _handle_list(cwd: Path, verbose: bool) -> None:
     """List active changes."""
+    console.section("Active changes")
     changes_dir = cwd / "openspec" / "changes"
-    if changes_dir.is_dir():
-        for child in sorted(changes_dir.iterdir()):
-            if child.is_dir():
-                print(f"  {child.name}")
+    names = (
+        [child.name for child in sorted(changes_dir.iterdir()) if child.is_dir()]
+        if changes_dir.is_dir()
+        else []
+    )
+    if names:
+        for name in names:
+            console.dim(f"  {name}")
     else:
-        print("  (no active changes)")
+        console.dim("  (no active changes)")
 
 
 def _handle_new(change: str | None, cwd: Path, verbose: bool) -> None:
@@ -226,7 +238,7 @@ def _handle_new(change: str | None, cwd: Path, verbose: bool) -> None:
     verb promises: make the change directory and a ``proposal.md`` stub.
     """
     if not change:
-        print("Usage: opencontext sdd new <change-name>", file=sys.stderr)
+        eprint("Usage: opencontext sdd new <change-name>")
         sys.exit(2)
     change_dir = cwd / "openspec" / "changes" / change
     if change_dir.exists():

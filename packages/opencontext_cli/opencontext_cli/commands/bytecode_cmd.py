@@ -44,6 +44,18 @@ def add_bytecode_commands(subparsers: argparse._SubParsersAction[Any]) -> None:
     dp.add_argument("--json", dest="as_json", action="store_true")
 
 
+def _cell(value: str) -> str:
+    """Escape rich markup in literal payloads (queries, sources, instruction
+    args may contain ``[...]``) so the brand console renders them verbatim
+    instead of parsing them as style tags. No-op when rich is unavailable — the
+    plain-text table fallback does not interpret markup."""
+    if console.available:
+        from rich.markup import escape
+
+        return escape(value)
+    return value
+
+
 def handle_bytecode(args: argparse.Namespace) -> int:
     cmd = args.bytecode_command
     if cmd == "compile":
@@ -219,10 +231,11 @@ def _inspect(args: argparse.Namespace) -> int:
         for w in report.warnings:
             console.warning(w)
 
-    console.section("Instructions")
-    for instr in bc.instructions:
-        # Instruction args are literal data (may contain markup chars) — raw print.
-        print(f"  {instr.op:<8} {' '.join(instr.args)}")
+    console.table(
+        "Instructions",
+        ["Op", "Args"],
+        [[_cell(instr.op), _cell(" ".join(instr.args))] for instr in bc.instructions],
+    )
 
     return 0 if report.passed else 1
 
@@ -244,24 +257,30 @@ def _decode(args: argparse.Namespace) -> int:
         print(plan.model_dump_json(indent=2))
         return 0
 
-    console.header("Bytecode Decode")
+    console.header("AICX Plan")
     # Decoded fields are literal data (queries/IDs/sources may contain markup
-    # characters) — keep them on raw stdout so the payload is not corrupted.
-    print(f"Query     : {plan.request.query}")
-    print(f"Surface   : {plan.request.surface.value}")
-    print(f"Risk      : {plan.request.risk_level}")
-    print(f"Budget    : {plan.request.max_tokens}")
-    print(f"Trust     : {plan.trust_decision.status} — {plan.trust_decision.reason}")
-    print(f"Evidence  : {len(plan.evidence)} items (content lazy — not expanded)")
-    for item in plan.evidence:
-        print(
-            f"  [{item.id[:6]}] {item.source}  conf:{item.confidence:.2f}"
-            f"  fresh:{item.freshness.value}"
-        )
+    # characters) — escape each cell via _cell so the brand table renders the
+    # payload verbatim instead of parsing it as rich markup.
+    rows: list[list[str]] = [
+        ["Query", _cell(plan.request.query)],
+        ["Surface", _cell(plan.request.surface.value)],
+        ["Risk", _cell(plan.request.risk_level)],
+        ["Budget", str(plan.request.max_tokens)],
+        ["Trust", _cell(f"{plan.trust_decision.status} — {plan.trust_decision.reason}")],
+        ["Evidence", f"{len(plan.evidence)} items (content lazy — not expanded)"],
+    ]
     if plan.omissions:
-        print(f"Omissions : {', '.join(plan.omissions)}")
+        rows.append(["Omissions", _cell(", ".join(plan.omissions))])
     if plan.fallback_actions:
-        print(f"Fallbacks : {', '.join(plan.fallback_actions)}")
+        rows.append(["Fallbacks", _cell(", ".join(plan.fallback_actions))])
+    console.table("Plan", ["Field", "Value"], rows)
+    for item in plan.evidence:
+        console.print(
+            _cell(
+                f"  [{item.id[:6]}] {item.source}  conf:{item.confidence:.2f}"
+                f"  fresh:{item.freshness.value}"
+            )
+        )
     return 0
 
 

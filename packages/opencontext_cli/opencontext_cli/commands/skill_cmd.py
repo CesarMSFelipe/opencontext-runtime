@@ -16,6 +16,17 @@ FRONTMATTER_RE = re.compile(
     re.DOTALL | re.MULTILINE,
 )
 
+# Bracket-free severity labels. Rendering severities as `[error]`/`[ERROR]`
+# lets rich parse them as (nonexistent) style tags and strip/mangle the output;
+# these plain labels keep both lint and audit severity rendering safe.
+_SEVERITY_LABELS = {
+    "error": "✗ error",
+    "warning": "⚠ warning",
+    "info": "i info",
+    "ERROR": "✗ ERROR",
+    "WARN": "⚠ WARN",
+}
+
 
 def add_skill_parser(subparsers: Any) -> None:
     """Add skill command parsers."""
@@ -269,11 +280,13 @@ def _handle_lint(args: Any) -> None:
         console.success(f"No issues — {report.path}")
         raise SystemExit(0)
 
-    _labels = {"error": "✗ error", "warning": "⚠ warning", "info": "i info"}
     console.table(
         str(report.path),
         ["Severity", "Code", "Message"],
-        [[_labels.get(f.severity, f.severity), f.code, f.message] for f in report.findings],
+        [
+            [_SEVERITY_LABELS.get(f.severity, f.severity), f.code, f.message]
+            for f in report.findings
+        ],
     )
     raise SystemExit(0 if report.ok() else 1)
 
@@ -294,7 +307,8 @@ def _handle_audit(args: Any) -> None:
             console.success(f"No issues found in {root}")
         else:
             for finding in report.findings:
-                console.print(f"[{finding.severity}] {finding.code}: {finding.message}")
+                label = _SEVERITY_LABELS.get(finding.severity, finding.severity)
+                console.print(f"{label} {finding.code}: {finding.message}")
 
     if report.errors:
         raise SystemExit(1)

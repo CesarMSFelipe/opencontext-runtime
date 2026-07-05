@@ -438,7 +438,7 @@ def _config_get(key: str) -> None:
         _target_type, _description = CONFIG_PATHS[key]
         resolved = _resolve_config_path(prefs, key)
         if resolved is None:
-            print(f"Error: Cannot resolve path '{key}'")
+            err_console.error(f"Cannot resolve path '{key}'")
             return
         parent, attr = resolved
         value = getattr(parent, attr, "<not set>")

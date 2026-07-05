@@ -11,6 +11,8 @@ import json
 import sys
 from typing import Any
 
+from rich.markup import escape
+
 from opencontext_cli.output import eprint
 from opencontext_core.configurator.capability import build_capability_matrix
 from opencontext_core.dx.console_styles import console
@@ -38,10 +40,13 @@ def handle_capabilities(args: Any) -> None:
             print(json.dumps(client.model_dump(), indent=2))
         else:
             console.header(f"Client: {agent_id}")
-            for k, v in client.model_dump().items():
-                # Values can be list/str reprs containing brackets — keep them on
-                # raw stdout so rich markup parsing never mangles them.
-                print(f"{k}: {v}")
+            # Values can be list/str reprs containing brackets — escape them so
+            # rich markup parsing never mangles them while staying on the brand console.
+            console.table(
+                "",
+                ["Field", "Value"],
+                [[str(k), escape(str(v))] for k, v in client.model_dump().items()],
+            )
         return
 
     if json_out:

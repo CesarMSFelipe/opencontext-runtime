@@ -119,7 +119,7 @@ def handle_kg(args: Any) -> None:
 
         raise SystemExit(handle_migrate("kg", args))
     if command == "rebuild":
-        print("KG rebuild: run `opencontext index .` to rebuild the graph from source.")
+        console.info("KG rebuild: run `opencontext index .` to rebuild the graph from source.")
         return
     query = getattr(args, "query", "")
     symbol = getattr(args, "symbol", "")
