@@ -22,14 +22,9 @@ def test_plan_install_returns_install_plan() -> None:
 
 
 def test_no_pm_degrades_gracefully() -> None:
-    """When no package manager is available, install_command=None and no exception."""
+    """Engram has no automated install; plan_install returns None command with guidance."""
     provisioner = EngramProvisioner()
-    with (
-        patch.object(provisioner, "detect", return_value=False),
-        patch(
-            "opencontext_core.memory.engram_provisioning._probe_package_managers", return_value=None
-        ),
-    ):
+    with patch.object(provisioner, "detect", return_value=False):
         plan = provisioner.plan_install()
     assert plan.install_command is None
     assert plan.detected is False
@@ -45,30 +40,19 @@ def test_already_detected_returns_detected_plan() -> None:
     assert "already" in plan.message.lower()
 
 
-def test_install_raises_when_not_detected_and_yes_false() -> None:
+def test_install_when_not_detected_returns_plan_with_guidance() -> None:
+    """install() with no automated command returns a plan with a helpful message."""
     provisioner = EngramProvisioner()
-    with (
-        patch.object(provisioner, "detect", return_value=False),
-        patch(
-            "opencontext_core.memory.engram_provisioning._probe_package_managers",
-            return_value=["brew", "install", "engram"],
-        ),
-    ):
-        try:
-            provisioner.install(yes=False)
-            raise AssertionError("Expected RuntimeError")
-        except RuntimeError:
-            pass
+    with patch.object(provisioner, "detect", return_value=False):
+        plan = provisioner.install(yes=False)
+    assert plan.install_command is None
+    assert plan.detected is False
+    assert "plugin" in plan.message.lower() or "install" in plan.message.lower()
 
 
-def test_install_plan_with_brew_has_command() -> None:
+def test_install_plan_has_no_automated_command() -> None:
+    """No automated install path exists; users install via Claude Code plugin mechanism."""
     provisioner = EngramProvisioner()
-    with (
-        patch.object(provisioner, "detect", return_value=False),
-        patch(
-            "opencontext_core.memory.engram_provisioning._probe_package_managers",
-            return_value=["brew", "install", "engram"],
-        ),
-    ):
+    with patch.object(provisioner, "detect", return_value=False):
         plan = provisioner.plan_install()
-    assert plan.install_command == ["brew", "install", "engram"]
+    assert plan.install_command is None

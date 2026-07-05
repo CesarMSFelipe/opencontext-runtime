@@ -10,9 +10,7 @@ Design decisions:
 
 from __future__ import annotations
 
-import shutil
 import subprocess
-import sys
 from dataclasses import dataclass
 
 # NOTE: Map of known agent names to their engram setup sub-command argument.
@@ -37,18 +35,11 @@ class EngramInstallPlan:
     message: str
 
 
-def _probe_package_managers() -> list[str] | None:
-    """Probe for a usable package manager and return its install command, or None."""
-    if shutil.which("pipx"):
-        return ["pipx", "install", "engram"]
-    if sys.platform == "win32" and shutil.which("scoop"):
-        return ["scoop", "install", "engram"]
-    return None
-
-
 def _install_command() -> list[str] | None:
-    """Return the first usable install command or None if none found."""
-    return _probe_package_managers()
+    # NOTE: Engram is distributed as a Claude Code plugin, not a PyPI/pipx package.
+    # There is no automated install command; users install it via their agent's
+    # plugin mechanism (e.g. `claude plugin install plugin:engram:engram`).
+    return None
 
 
 def _setup_command(agent: str | None) -> list[str] | None:
@@ -88,9 +79,9 @@ class EngramProvisioner:
                 install_command=None,
                 setup_command=None,
                 message=(
-                    "No supported package manager found (pipx/scoop). "
-                    "Install Engram manually: pipx install engram  "
-                    "(see https://pypi.org/project/engram/)"
+                    "Engram not detected. Engram is a Claude Code plugin — install it "
+                    "via your agent's plugin mechanism (e.g. `claude plugin install "
+                    "plugin:engram:engram`) then re-run this command."
                 ),
             )
         return EngramInstallPlan(
@@ -110,8 +101,7 @@ class EngramProvisioner:
         if plan.detected:
             return plan
         if plan.install_command is None:
-            if yes:
-                raise RuntimeError(plan.message)
+            # No automated install available; return the plan (with actionable message).
             return plan
         if not yes:
             raise RuntimeError(
