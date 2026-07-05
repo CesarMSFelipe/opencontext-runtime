@@ -41,10 +41,11 @@ def test_setup_claude_code_local_emits_local_and_global_split(home: Path, projec
     # Project-local: the canonical AGENTS.md-honoring file does not apply to
     # claude-code (it uses CLAUDE.md, not project AGENTS.md), but the
     # project-root .mcp.json is a per-repo MCP file claude-code needs.
-    assert any(p.endswith(".mcp.json") for p in result["local_files_written"])
+    assert any(Path(p).name == ".mcp.json" for p in result["local_files_written"])
     # Global: claude-code writes CLAUDE.md and settings.json under ~/.claude.
-    assert any(".claude/CLAUDE.md" in p for p in result["global_files_written"])
-    assert any(".claude/settings.json" in p for p in result["global_files_written"])
+    global_posix = {Path(p).as_posix() for p in result["global_files_written"]}
+    assert any(".claude/CLAUDE.md" in p for p in global_posix)
+    assert any(".claude/settings.json" in p for p in global_posix)
     # The report MUST explain the global writes (Host-Constrained Local).
     assert result["global_write_reason"].startswith("Host-constrained local setup")
     # backup_id is present (real run, not dry-run).
@@ -122,8 +123,11 @@ def test_setup_codex_local_writes_project_agents_md(home: Path, project: Path) -
     report = Configurator(project_root=project).configure(["codex"], scope="local")
     result = report["results"][0]
 
-    assert str(project / "AGENTS.md") in result["local_files_written"]
-    assert any(".codex/config.toml" in p for p in result["global_files_written"])
+    assert (project / "AGENTS.md").as_posix() in [
+        Path(p).as_posix() for p in result["local_files_written"]
+    ]
+    global_posix = {Path(p).as_posix() for p in result["global_files_written"]}
+    assert any(".codex/config.toml" in p for p in global_posix)
     assert result["global_write_reason"].startswith("Host-constrained local setup")
 
 
@@ -171,13 +175,16 @@ def test_setup_opencode_local_writes_project_agents_md(home: Path, project: Path
     report = Configurator(project_root=project).configure(["opencode"], scope="local")
     result = report["results"][0]
 
-    assert str(project / "AGENTS.md") in result["local_files_written"]
-    assert any(p.endswith(".config/opencode/opencode.json") for p in result["global_files_written"])
+    assert (project / "AGENTS.md").as_posix() in [
+        Path(p).as_posix() for p in result["local_files_written"]
+    ]
+    global_posix = {Path(p).as_posix() for p in result["global_files_written"]}
+    assert any(p.endswith(".config/opencode/opencode.json") for p in global_posix)
     # Global personas live under ~/.config/opencode/agents/.
-    assert any(".config/opencode/agents" in p for p in result["global_files_written"])
+    assert any(".config/opencode/agents" in p for p in global_posix)
     assert result["global_write_reason"].startswith("Host-constrained local setup")
     # Spec 8.14: the dead sdd-orchestrator.json must not be written.
-    assert not any(p.endswith("sdd-orchestrator.json") for p in result["global_files_written"])
+    assert not any(p.endswith("sdd-orchestrator.json") for p in global_posix)
 
 
 def test_setup_opencode_dry_run_matches_real_run(

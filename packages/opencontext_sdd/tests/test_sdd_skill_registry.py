@@ -115,8 +115,9 @@ def test_REQ_OSR_002_project_beats_user_on_collision(tmp_path: Path) -> None:
     # Project entry's path is the only `chained-pr` row
     assert "project version" in registry
     assert "user version" not in registry
-    # And its path resolves under the project root
-    assert str(project_skill.relative_to(tmp_path)) in registry
+    # And its path resolves under the project root (POSIX form so the
+    # comparison works on Windows where Path.__str__ uses backslashes).
+    assert project_skill.relative_to(tmp_path).as_posix() in registry
 
 
 # ---------------------------------------------------------------------------
