@@ -337,3 +337,153 @@ def test_global_state_roots_respect_env(tmp_path: Path, monkeypatch: pytest.Monk
 def test_manifest_fields_json_serializable(tmp_path: Path) -> None:
     manifest = _install_and_manifest(tmp_path)
     json.dumps(manifest)  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Product (HOME) manifest — INST-001 / INST-MANIFEST-FIELDS
+# ---------------------------------------------------------------------------
+
+
+def _fake_product_install(home: Path) -> None:
+    """Simulate what install.sh creates at HOME level."""
+    venv_bin = home / ".opencontext" / "venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    (venv_bin / "opencontext").write_text("#!/bin/sh\n", encoding="utf-8")
+    (home / ".config" / "opencontext").mkdir(parents=True)
+    (home / ".bashrc").write_text(
+        f"alias ll='ls -la'\n\n# OpenContext Runtime\nexport PATH=\"{venv_bin}:$PATH\"\n",
+        encoding="utf-8",
+    )
+    local_bin = home / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    (local_bin / "opencontext").symlink_to(venv_bin / "opencontext")
+
+
+def _isolate_home(monkeypatch: pytest.MonkeyPatch, home: Path) -> None:
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(home / ".config"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(home / ".local" / "state"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(home / ".cache"))
+
+
+def test_product_manifest_records_all_contract_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """INST-MANIFEST-FIELDS: the product manifest records schema_version, install_id,
+    install_method, product_version, created_paths, modified_files,
+    shell_profile_blocks, symlinks, env_vars, agent_configs, state_paths."""
+    from opencontext_core.paths.install_manifest import build_product_manifest_fields
+
+    home = tmp_path / "home"
+    _isolate_home(monkeypatch, home)
+    _fake_product_install(home)
+
+    fields = build_product_manifest_fields(home)
+
+    assert fields["schema_version"] == MANIFEST_SCHEMA_VERSION
+    assert fields["install_id"]
+    assert fields["install_method"]
+    assert fields["product_version"]
+    assert str(home / ".opencontext" / "venv") in fields["created_paths"]
+    assert fields["modified_files"] == []
+    blocks = {entry["path"] for entry in fields["shell_profile_blocks"]}
+    assert str(home / ".bashrc") in blocks
+    assert all(e["marker"] == "# OpenContext Runtime" for e in fields["shell_profile_blocks"])
+    links = {entry["path"] for entry in fields["symlinks"]}
+    assert str(home / ".local" / "bin" / "opencontext") in links
+    assert fields["env_vars"] == []
+    assert fields["agent_configs"] == []
+    state = set(fields["state_paths"])
+    assert str(home / ".opencontext") in state
+    assert str(home / ".config" / "opencontext") in state
+    assert fields["timestamp"]
+    json.dumps(fields)  # must not raise
+
+
+def test_product_manifest_ignores_foreign_local_bin_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """INST-MANIFEST-FIELDS: a ~/.local/bin/opencontext symlink NOT pointing into
+    ~/.opencontext belongs to another tool and is never recorded as managed."""
+    from opencontext_core.paths.install_manifest import build_product_manifest_fields
+
+    home = tmp_path / "home"
+    _isolate_home(monkeypatch, home)
+    other = tmp_path / "elsewhere" / "opencontext"
+    other.parent.mkdir(parents=True)
+    other.write_text("#!/bin/sh\n", encoding="utf-8")
+    local_bin = home / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    (local_bin / "opencontext").symlink_to(other)
+
+    fields = build_product_manifest_fields(home)
+
+    assert fields["symlinks"] == []
+
+
+def test_product_manifest_reinstall_is_idempotent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """INST-003: a product reinstall merges with the existing manifest — the
+    install_id stays stable and no entry is duplicated or dropped."""
+    from opencontext_core.paths.install_manifest import build_product_manifest_fields
+
+    home = tmp_path / "home"
+    _isolate_home(monkeypatch, home)
+    _fake_product_install(home)
+
+    first = build_product_manifest_fields(home)
+    second = build_product_manifest_fields(home, existing=first)
+
+    assert second["install_id"] == first["install_id"]
+    assert second["created_paths"] == first["created_paths"]
+    assert len(second["created_paths"]) == len(set(second["created_paths"]))
+    assert second["shell_profile_blocks"] == first["shell_profile_blocks"]
+    assert second["symlinks"] == first["symlinks"]
+    assert second["state_paths"] == first["state_paths"]
+
+
+def test_write_product_manifest_persists_under_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """INST-001: write_product_manifest registers the product-scope manifest at
+    ~/.opencontext/oc-manifest.json and read_manifest roundtrips it."""
+    from opencontext_core.paths.install_manifest import write_product_manifest
+
+    home = tmp_path / "home"
+    _isolate_home(monkeypatch, home)
+    _fake_product_install(home)
+
+    write_product_manifest()
+
+    data = read_manifest(home / ".opencontext")
+    assert data is not None
+    assert data["app"] == "opencontext"  # v1 ownership fields kept
+    assert data["schema_version"] == MANIFEST_SCHEMA_VERSION
+    assert data["install_id"]
+    assert any(e["path"] == str(home / ".bashrc") for e in data["shell_profile_blocks"])
+
+    before = data["install_id"]
+    write_product_manifest()  # re-register: idempotent, id preserved
+    again = read_manifest(home / ".opencontext")
+    assert again is not None
+    assert again["install_id"] == before
+
+
+def test_workspace_manifest_carries_install_id_and_shell_fields(tmp_path: Path) -> None:
+    """INST-MANIFEST-FIELDS: the workspace manifest also records install_id (stable
+    across reinstalls) plus shell_profile_blocks/symlinks — empty for the
+    workspace scope, which never writes shell blocks or symlinks."""
+    snap = snapshot_workspace(tmp_path)
+    _fake_install(tmp_path)
+    first = build_manifest_fields(tmp_path, snap, agent_configs=[])
+
+    assert first["install_id"]
+    assert first["shell_profile_blocks"] == []
+    assert first["symlinks"] == []
+
+    snap2 = snapshot_workspace(tmp_path)
+    second = build_manifest_fields(tmp_path, snap2, agent_configs=[], existing=first)
+    assert second["install_id"] == first["install_id"]

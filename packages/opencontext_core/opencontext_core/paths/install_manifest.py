@@ -186,6 +186,15 @@ def _ordered_union(first: list[str], second: list[str]) -> list[str]:
     return out
 
 
+def _stable_install_id(existing: dict[str, Any] | None) -> str:
+    """Keep the existing install_id across reinstalls; mint one on first install."""
+    import uuid
+
+    if existing and existing.get("install_id"):
+        return str(existing["install_id"])
+    return str(uuid.uuid4())
+
+
 def build_manifest_fields(
     root: Path,
     snapshot: WorkspaceSnapshot,
@@ -236,12 +245,17 @@ def build_manifest_fields(
 
     return {
         "schema_version": MANIFEST_SCHEMA_VERSION,
+        "install_id": _stable_install_id(existing),
         "install_method": existing.get("install_method") or detect_install_method(),
         "product_version": product_version,
         "created_paths": _ordered_union(
             list(existing.get("created_paths") or []), changes["created_paths"]
         ),
         "modified_files": list(modified_by_path.values()),
+        # Contract schema completeness: the workspace scope never writes shell
+        # profile blocks or symlinks, so these stay empty (preserved on merge).
+        "shell_profile_blocks": list(existing.get("shell_profile_blocks") or []),
+        "symlinks": list(existing.get("symlinks") or []),
         "agent_configs": _ordered_union(list(existing.get("agent_configs") or []), agent_configs),
         "state_paths": _ordered_union(list(existing.get("state_paths") or []), state_paths),
         "timestamp": datetime.now(tz=UTC).isoformat(),
@@ -497,3 +511,146 @@ def global_state_roots() -> list[Path]:
         cache_base / "opencontext",
     ]
     return list(dict.fromkeys(roots))
+
+
+# ---------------------------------------------------------------------------
+# Product (HOME) manifest — INST-001 / INST-MANIFEST-FIELDS
+# ---------------------------------------------------------------------------
+
+# Shell rc files _add_venv_to_path in install.sh may write the PATH block into.
+_SHELL_PROFILE_NAMES = (".bashrc", ".zshrc", ".profile")
+
+# Exact comment line install.sh writes before the PATH export.
+_SHELL_PROFILE_MARKER = "# OpenContext Runtime"
+
+
+def _detect_shell_profile_blocks(home: Path) -> list[dict[str, Any]]:
+    """Shell rc files that contain the managed PATH block written by install.sh."""
+    blocks: list[dict[str, Any]] = []
+    for name in _SHELL_PROFILE_NAMES:
+        rc = home / name
+        if not rc.is_file():
+            continue
+        try:
+            text = rc.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if _SHELL_PROFILE_MARKER in text:
+            blocks.append({"path": str(rc), "marker": _SHELL_PROFILE_MARKER})
+    return blocks
+
+
+def _detect_product_symlinks(home: Path) -> list[dict[str, Any]]:
+    """Managed symlinks: ~/.local/bin/opencontext only when it points into
+    ~/.opencontext (same guard as the uninstall side — a foreign tool's entry
+    is never claimed as ours)."""
+    out: list[dict[str, Any]] = []
+    candidate = home / ".local" / "bin" / "opencontext"
+    if not candidate.is_symlink():
+        return out
+    try:
+        resolved = candidate.resolve()
+        resolved.relative_to((home / ".opencontext").resolve())
+    except (OSError, ValueError):
+        return out
+    out.append({"path": str(candidate), "target": str(resolved)})
+    return out
+
+
+def _product_state_roots(home: Path) -> list[Path]:
+    """HOME-level state roots the product install owns (mirrors
+    ``global_state_roots`` but anchored to an explicit *home*)."""
+    config_env = os.environ.get("XDG_CONFIG_HOME", "").strip()
+    state_env = os.environ.get("XDG_STATE_HOME", "").strip()
+    cache_env = os.environ.get("XDG_CACHE_HOME", "").strip()
+    config_base = Path(config_env) if config_env else home / ".config"
+    cache_base = Path(cache_env) if cache_env else home / ".cache"
+    state_dir = (
+        Path(state_env) / "opencontext" if state_env else home / ".local" / "state" / "opencontext"
+    )
+    roots = [
+        config_base / "opencontext",
+        home / ".config" / "opencontext",
+        home / ".opencontext",
+        state_dir,
+        cache_base / "opencontext",
+    ]
+    return list(dict.fromkeys(roots))
+
+
+def _merge_entries_by_path(
+    existing: list[Any] | None, new: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Merge dict entries keyed by 'path': new detections refresh, old ones stay."""
+    by_path: dict[str, dict[str, Any]] = {
+        str(entry.get("path")): dict(entry) for entry in existing or [] if isinstance(entry, dict)
+    }
+    for entry in new:
+        by_path[str(entry["path"])] = entry
+    return list(by_path.values())
+
+
+def build_product_manifest_fields(
+    home: Path | None = None,
+    *,
+    product_version: str | None = None,
+    existing: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the product-scope manifest fields (INSTALL_UNINSTALL_CONTRACT
+    product schema): what the product install owns at HOME level — the
+    installer venv, state roots, shell profile PATH blocks and the managed
+    symlink. Merging with *existing* keeps reinstalls idempotent (INST-003)
+    and the install_id stable."""
+    home = Path(home) if home is not None else Path.home()
+    existing = existing or {}
+
+    created: list[str] = []
+    venv_dir = home / ".opencontext" / "venv"
+    if venv_dir.is_dir():
+        created.append(str(venv_dir))
+
+    state_paths = [str(root) for root in _product_state_roots(home) if root.is_dir()]
+
+    if product_version is None:
+        try:
+            from importlib.metadata import version as _pkg_version
+
+            product_version = _pkg_version("opencontext-cli")
+        except Exception:
+            product_version = "unknown"
+
+    return {
+        "schema_version": MANIFEST_SCHEMA_VERSION,
+        "install_id": _stable_install_id(existing),
+        "install_method": existing.get("install_method") or detect_install_method(),
+        "product_version": product_version,
+        "created_paths": _ordered_union(list(existing.get("created_paths") or []), created),
+        "modified_files": list(existing.get("modified_files") or []),
+        "shell_profile_blocks": _merge_entries_by_path(
+            existing.get("shell_profile_blocks"), _detect_shell_profile_blocks(home)
+        ),
+        "symlinks": _merge_entries_by_path(
+            existing.get("symlinks"), _detect_product_symlinks(home)
+        ),
+        # The install writes PATH via shell profile blocks, never standalone
+        # env vars — recorded honestly as empty until an installer sets one.
+        "env_vars": list(existing.get("env_vars") or []),
+        "agent_configs": list(existing.get("agent_configs") or []),
+        "state_paths": _ordered_union(list(existing.get("state_paths") or []), state_paths),
+        "timestamp": datetime.now(tz=UTC).isoformat(),
+    }
+
+
+def write_product_manifest(
+    home: Path | None = None, *, product_version: str | None = None
+) -> dict[str, Any]:
+    """Register the product-scope manifest at ``~/.opencontext/oc-manifest.json``
+    (INST-001). Idempotent: merges with any prior manifest before writing."""
+    from opencontext_core.paths import read_manifest, write_manifest
+
+    home = Path(home) if home is not None else Path.home()
+    state = home / ".opencontext"
+    existing = read_manifest(state)
+    fields = build_product_manifest_fields(home, product_version=product_version, existing=existing)
+    write_manifest(state, home, fields["product_version"], extra=fields)
+    return fields

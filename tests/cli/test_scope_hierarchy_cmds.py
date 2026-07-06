@@ -98,7 +98,7 @@ def test_product_status_json_surfaces_existing_manifest(
     assert out["manifest"]["app"] == "opencontext"
 
 
-def test_product_install_json_is_guidance_not_mutation(
+def test_product_install_json_keeps_package_manager_guidance(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     _isolate_home(monkeypatch, tmp_path / "home")
@@ -108,6 +108,40 @@ def test_product_install_json_is_guidance_not_mutation(
     assert out["status"] == "passed"
     assert out["guidance"], "must point at the package-manager install commands"
     assert isinstance(out["install_methods"], list)
+
+
+def test_product_install_registers_manifest_and_status_surfaces_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """INST-001: `product install` registers the product-scope manifest under
+    ~/.opencontext and `product status` reads it back."""
+    home = tmp_path / "home"
+    _isolate_home(monkeypatch, home)
+
+    handle_product(_parse(["product", "install", "--json"]))
+    out = json.loads(capsys.readouterr().out)
+    assert out["manifest_registered"] is True
+    assert (home / ".opencontext" / "oc-manifest.json").is_file()
+
+    handle_product(_parse(["product", "status", "--json"]))
+    status = json.loads(capsys.readouterr().out)
+    assert status["manifest_present"] is True
+    manifest = status["manifest"]
+    for key in (
+        "schema_version",
+        "install_id",
+        "install_method",
+        "product_version",
+        "created_paths",
+        "modified_files",
+        "shell_profile_blocks",
+        "symlinks",
+        "env_vars",
+        "agent_configs",
+        "state_paths",
+        "timestamp",
+    ):
+        assert key in manifest, f"product manifest is missing contract field '{key}'"
 
 
 def test_product_uninstall_delegates_to_global_scope(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -202,6 +202,23 @@ install_from_source() {
     echo "✓ Installed from source"
 }
 
+register_product_manifest() {
+    # Register the product-scope manifest (created paths, shell PATH blocks,
+    # symlinks) so `product status` and manifest-driven uninstall can see this
+    # install. Best-effort: never fails the installer.
+    local oc_bin=""
+    if [ -f "$VENV_DIR/bin/opencontext" ]; then
+        oc_bin="$VENV_DIR/bin/opencontext"
+    elif [ -f "$VENV_DIR/Scripts/opencontext.exe" ]; then
+        oc_bin="$VENV_DIR/Scripts/opencontext.exe"
+    elif command -v opencontext &>/dev/null; then
+        oc_bin="opencontext"
+    fi
+    if [ -n "$oc_bin" ]; then
+        "$oc_bin" product install --json >/dev/null 2>&1 || true
+    fi
+}
+
 verify_install() {
     # Prefer venv binary over whatever is in PATH (avoids reporting a stale system install)
     local oc_bin=""
@@ -342,6 +359,7 @@ install_opencontext() {
         echo ""
     fi
 
+    register_product_manifest
     verify_install
     show_finish
 }

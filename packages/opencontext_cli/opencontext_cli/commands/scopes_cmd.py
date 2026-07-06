@@ -7,8 +7,8 @@ flat command uses — no scope logic is duplicated here.
 
 | Scope       | install            | status                 | uninstall                     |
 |-------------|--------------------|------------------------|-------------------------------|
-| `product`   | guidance (package  | global manifest +      | `uninstall --scope global`    |
-|             | manager owns it)   | version, report-only   |                               |
+| `product`   | register HOME      | global manifest +      | `uninstall --scope global`    |
+|             | manifest + guidance| version, report-only   |                               |
 | `workspace` | `install <root>`   | `status <root>`        | `uninstall --scope workspace` |
 | `agents`    | `setup [AGENT...]` | `capabilities`         | `uninstall [AGENT...]`        |
 """
@@ -61,12 +61,15 @@ def add_product_parser(subparsers: Any) -> None:
         help="Product scope: the OpenContext installation itself (preview).",
         description=(
             "Manage the product scope from INSTALL_UNINSTALL_CONTRACT: the OpenContext "
-            "binary plus HOME state. install/status are report-only (the package manager "
-            "owns the distribution); uninstall delegates to `uninstall --scope global`."
+            "binary plus HOME state. install registers the product manifest under HOME "
+            "(the package manager owns the distribution itself); status is report-only; "
+            "uninstall delegates to `uninstall --scope global`."
         ),
     )
     sub = parser.add_subparsers(dest="product_command", required=True)
-    install = sub.add_parser("install", help="How the product is installed / how to install it.")
+    install = sub.add_parser(
+        "install", help="Register the product manifest + how to (re)install the package."
+    )
     install.add_argument("--json", action="store_true", help="Emit JSON.")
     status = sub.add_parser("status", help="Product install status: global manifest + version.")
     status.add_argument("--json", action="store_true", help="Emit JSON.")
@@ -92,8 +95,20 @@ def handle_product(args: Any) -> None:
 
     install_methods = _detect_install_methods()
     if verb == "install":
-        # Report-only: a machine running this code IS installed; installing or
-        # reinstalling the distribution is the package manager's job.
+        # A machine running this code IS installed; installing or reinstalling
+        # the distribution stays the package manager's job (guidance below).
+        # What this command DOES own is registering the product-scope manifest
+        # under HOME (INST-001) so status/uninstall are manifest-driven.
+        manifest_path = Path.home() / ".opencontext" / "oc-manifest.json"
+        manifest_registered = False
+        manifest_error: str | None = None
+        try:
+            from opencontext_core.paths.install_manifest import write_product_manifest
+
+            write_product_manifest(product_version=__version__)
+            manifest_registered = True
+        except Exception as exc:
+            manifest_error = str(exc)
         payload = envelope(
             "product.install.v1",
             {
@@ -102,6 +117,9 @@ def handle_product(args: Any) -> None:
                 "version": __version__,
                 "install_methods": install_methods,
                 "guidance": list(_PRODUCT_GUIDANCE),
+                "manifest_registered": manifest_registered,
+                "manifest_path": str(manifest_path),
+                "manifest_error": manifest_error,
             },
         )
         if getattr(args, "json", False):
@@ -111,6 +129,10 @@ def handle_product(args: Any) -> None:
         console.success(f"OpenContext {__version__} is installed.")
         for method in install_methods:
             console.dim(f"  {method['method']}: {method['location']}")
+        if manifest_registered:
+            console.print(f"Registered product manifest: {manifest_path}")
+        else:
+            console.dim(f"  product manifest not registered: {manifest_error}")
         console.print("To (re)install or upgrade, use the package manager:")
         for hint in _PRODUCT_GUIDANCE:
             console.dim(f"  {hint}")

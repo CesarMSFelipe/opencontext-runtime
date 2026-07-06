@@ -27,13 +27,14 @@ Verified by: AC-003, AC-022, AC-023, INST-001..INST-009, SMOKE-003, SMOKE-010.
 
 ```json
 {
-  "schema_version": 1,
-  "install_method": "pipx|pip|venv|installer|manual",
+  "schema_version": 2,
+  "install_id": "uuid4, stable across reinstalls",
+  "install_method": "pipx|pip|venv|editable|installer|manual",
   "product_version": "1.7.0",
   "created_paths": [],
   "modified_files": [],
-  "shell_profile_blocks": [],
-  "symlinks": [],
+  "shell_profile_blocks": [{"path": "~/.bashrc", "marker": "# OpenContext Runtime"}],
+  "symlinks": [{"path": "~/.local/bin/opencontext", "target": "~/.opencontext/venv/bin/opencontext"}],
   "env_vars": [],
   "agent_configs": [],
   "state_paths": [],
@@ -45,21 +46,26 @@ Verified by: AC-003, AC-022, AC-023, INST-001..INST-009, SMOKE-003, SMOKE-010.
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "install_id": "uuid4, stable across reinstalls",
   "product_version": "1.7.0",
   "install_method": "init|install",
   "created_paths": [".opencontext", "opencontext.yaml"],
   "modified_files": [],
+  "shell_profile_blocks": [],
+  "symlinks": [],
   "state_paths": [".opencontext/runs", ".opencontext/context-repository", ".opencontext/sdd"],
   "agent_configs": [],
   "timestamp": "2026-07-06T00:00:00Z"
 }
 ```
 
-> Current → Target: today `.opencontext/oc-manifest.json` exists but only records
-> `app, project_root, project_id, created_by, version, created_at`. The uninstall ledger tracks
-> some created files separately. Target: one manifest per scope with the fields above, written
-> at install time and treated as the single source of truth for uninstall.
+> Implemented (INST-001/INST-002/INST-MANIFEST-FIELDS): both scopes write these
+> fields on top of the v1 ownership fields (`app, project_root, project_id, created_by,
+> version, created_at`) in `oc-manifest.json` — the workspace scope at `<root>/.opencontext/`
+> via `install`, the product scope at `~/.opencontext/` via `product install`, the full
+> `install` global step, and install.sh/install.ps1. The workspace scope never writes
+> shell profile blocks, symlinks, or env vars, so those stay `[]` there.
 
 ## Uninstall algorithm
 

@@ -2890,6 +2890,16 @@ def _install(args: argparse.Namespace) -> None:
             except Exception as exc:
                 summary.append(f"⚠ Global integration: {exc}")
 
+        # Product-scope manifest (INST-001): register the HOME-level manifest so
+        # `product status` and the global uninstall are manifest-driven.
+        try:
+            from opencontext_core.paths.install_manifest import write_product_manifest
+
+            write_product_manifest()
+            summary.append("✓ Product manifest (HOME state map)")
+        except Exception as exc:
+            summary.append(f"⚠ Product manifest: {exc}")
+
     try:
         from opencontext_core.doctor.checks import run_doctor
         from opencontext_core.runtime import OpenContextRuntime

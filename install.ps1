@@ -107,6 +107,11 @@ function Install-OpenContext {
         Write-Host "You may need to add Python scripts directory to your PATH." -ForegroundColor Yellow
         Write-Host ""
     }
+    else {
+        # Register the product-scope manifest so `product status` and
+        # manifest-driven uninstall can see this install. Best-effort.
+        try { & opencontext product install --json *> $null } catch { }
+    }
 
     Write-Host ""
     Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
