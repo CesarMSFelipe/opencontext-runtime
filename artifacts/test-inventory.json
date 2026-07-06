@@ -1,15 +1,15 @@
 {
-  "total_files": 776,
-  "total_tests": 4984,
+  "total_files": 793,
+  "total_tests": 5135,
   "classification_totals": {
     "KEEP_ACCEPTANCE": 11,
-    "KEEP_INTEGRATION_BOUNDARY": 441,
-    "KEEP_UNIT_CRITICAL": 268,
-    "KEEP_REGRESSION": 37,
+    "KEEP_INTEGRATION_BOUNDARY": 454,
+    "KEEP_UNIT_CRITICAL": 269,
+    "KEEP_REGRESSION": 40,
     "DELETE": 6,
     "KEEP_CONTRACT": 9,
-    "QUARANTINE": 1,
-    "MERGE": 3
+    "MERGE": 3,
+    "QUARANTINE": 1
   },
   "files": [
     {
@@ -522,6 +522,20 @@
       ]
     },
     {
+      "path": "tests/architecture/test_unique_test_module_basenames.py",
+      "suite": "architecture",
+      "test_count": 1,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": false,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_UNIT_CRITICAL",
+      "reasons": [
+        "rule 8: pure logic (no mock/fs/subprocess)"
+      ]
+    },
+    {
       "path": "tests/behavioral/test_context_sufficiency.py",
       "suite": "behavioral",
       "test_count": 13,
@@ -960,7 +974,7 @@
     {
       "path": "tests/cli/test_config_explain_cmd.py",
       "suite": "cli",
-      "test_count": 5,
+      "test_count": 8,
       "markers": [],
       "uses_mock": false,
       "uses_filesystem": true,
@@ -1247,6 +1261,20 @@
       ]
     },
     {
+      "path": "tests/cli/test_kg_prune_cmd.py",
+      "suite": "cli",
+      "test_count": 3,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
+      ]
+    },
+    {
       "path": "tests/cli/test_loop_cli.py",
       "suite": "cli",
       "test_count": 3,
@@ -1305,7 +1333,7 @@
     {
       "path": "tests/cli/test_memory_cli_guard.py",
       "suite": "cli",
-      "test_count": 4,
+      "test_count": 5,
       "markers": [],
       "uses_mock": false,
       "uses_filesystem": true,
@@ -1569,6 +1597,20 @@
       ]
     },
     {
+      "path": "tests/cli/test_run_list_executors.py",
+      "suite": "cli",
+      "test_count": 2,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
+      ]
+    },
+    {
       "path": "tests/cli/test_run_preflight.py",
       "suite": "cli",
       "test_count": 8,
@@ -1639,6 +1681,20 @@
       ]
     },
     {
+      "path": "tests/cli/test_scope_hierarchy_cmds.py",
+      "suite": "cli",
+      "test_count": 14,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
+      ]
+    },
+    {
       "path": "tests/cli/test_sdd_cmd.py",
       "suite": "cli",
       "test_count": 21,
@@ -1656,6 +1712,20 @@
       "path": "tests/cli/test_sdd_new_init.py",
       "suite": "cli",
       "test_count": 4,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
+      ]
+    },
+    {
+      "path": "tests/cli/test_sdd_review_cmd.py",
+      "suite": "cli",
+      "test_count": 5,
       "markers": [],
       "uses_mock": false,
       "uses_filesystem": true,
@@ -1858,6 +1928,20 @@
       ]
     },
     {
+      "path": "tests/cli/test_tui_memory_lifecycle.py",
+      "suite": "cli",
+      "test_count": 7,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
+      ]
+    },
+    {
       "path": "tests/cli/test_tui_screen_reachability.py",
       "suite": "cli",
       "test_count": 2,
@@ -1869,6 +1953,20 @@
       "classification": "KEEP_UNIT_CRITICAL",
       "reasons": [
         "rule 8: pure logic (no mock/fs/subprocess)"
+      ]
+    },
+    {
+      "path": "tests/cli/test_tui_tdd_gates.py",
+      "suite": "cli",
+      "test_count": 5,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
       ]
     },
     {
@@ -3252,7 +3350,7 @@
     {
       "path": "tests/core/test_config_explain.py",
       "suite": "core",
-      "test_count": 7,
+      "test_count": 9,
       "markers": [],
       "uses_mock": false,
       "uses_filesystem": true,
@@ -3280,7 +3378,7 @@
     {
       "path": "tests/core/test_config_resolution.py",
       "suite": "core",
-      "test_count": 12,
+      "test_count": 21,
       "markers": [],
       "uses_mock": false,
       "uses_filesystem": true,
@@ -4620,6 +4718,20 @@
       ]
     },
     {
+      "path": "tests/core/test_kg_prune.py",
+      "suite": "core",
+      "test_count": 4,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
+      ]
+    },
+    {
       "path": "tests/core/test_kg_schema_extension.py",
       "suite": "core",
       "test_count": 5,
@@ -4631,6 +4743,20 @@
       "classification": "KEEP_UNIT_CRITICAL",
       "reasons": [
         "rule 8: pure logic (no mock/fs/subprocess)"
+      ]
+    },
+    {
+      "path": "tests/core/test_kg_tests_edges.py",
+      "suite": "core",
+      "test_count": 5,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
       ]
     },
     {
@@ -6555,7 +6681,7 @@
     {
       "path": "tests/core/test_related_tests.py",
       "suite": "core",
-      "test_count": 7,
+      "test_count": 9,
       "markers": [],
       "uses_mock": false,
       "uses_filesystem": true,
@@ -7797,20 +7923,6 @@
       ]
     },
     {
-      "path": "tests/done_in_v1/test_validation_runner.py",
-      "suite": "done_in_v1",
-      "test_count": 2,
-      "markers": [],
-      "uses_mock": false,
-      "uses_filesystem": false,
-      "uses_subprocess": false,
-      "requirement_ids": [],
-      "classification": "QUARANTINE",
-      "reasons": [
-        "rule 3: archived suite 'done_in_v1'"
-      ]
-    },
-    {
       "path": "tests/e2e/test_developer_journey.py",
       "suite": "e2e",
       "test_count": 2,
@@ -7970,6 +8082,34 @@
       "markers": [
         "parametrize"
       ],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
+      ]
+    },
+    {
+      "path": "tests/executors/test_executor_registry.py",
+      "suite": "executors",
+      "test_count": 13,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
+      ]
+    },
+    {
+      "path": "tests/executors/test_patch_executor.py",
+      "suite": "executors",
+      "test_count": 15,
+      "markers": [],
       "uses_mock": false,
       "uses_filesystem": true,
       "uses_subprocess": false,
@@ -8600,6 +8740,20 @@
       ]
     },
     {
+      "path": "tests/harness/test_runner_source_evidence.py",
+      "suite": "harness",
+      "test_count": 1,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
+      ]
+    },
+    {
       "path": "tests/harness/test_runner_v2.py",
       "suite": "harness",
       "test_count": 3,
@@ -8658,7 +8812,7 @@
     {
       "path": "tests/harness/test_tdd_gates_strict.py",
       "suite": "harness",
-      "test_count": 22,
+      "test_count": 25,
       "markers": [
         "parametrize"
       ],
@@ -9154,6 +9308,20 @@
       ]
     },
     {
+      "path": "tests/oc_flow/test_cancelled_state.py",
+      "suite": "oc_flow",
+      "test_count": 6,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": true,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
+      ]
+    },
+    {
       "path": "tests/oc_flow/test_observations_recall_bridge.py",
       "suite": "oc_flow",
       "test_count": 1,
@@ -9184,7 +9352,7 @@
     {
       "path": "tests/oc_flow/test_red_first_posture.py",
       "suite": "oc_flow",
-      "test_count": 3,
+      "test_count": 5,
       "markers": [],
       "uses_mock": false,
       "uses_filesystem": true,
@@ -9258,7 +9426,7 @@
     {
       "path": "tests/oc_flow/test_tdd_red_green.py",
       "suite": "oc_flow",
-      "test_count": 13,
+      "test_count": 25,
       "markers": [],
       "uses_mock": false,
       "uses_filesystem": true,
@@ -9270,6 +9438,20 @@
       "classification": "KEEP_REGRESSION",
       "reasons": [
         "rule 7: requirement/bug ID or regression filename"
+      ]
+    },
+    {
+      "path": "tests/oc_flow/test_test_env_resolution.py",
+      "suite": "oc_flow",
+      "test_count": 8,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "KEEP_INTEGRATION_BOUNDARY",
+      "reasons": [
+        "rule 9: touches real fs/subprocess"
       ]
     },
     {
@@ -9813,6 +9995,23 @@
       ]
     },
     {
+      "path": "tests/quarantine/test_done_in_v1_validation_runner.py",
+      "suite": "quarantine",
+      "test_count": 2,
+      "markers": [
+        "quarantine",
+        "skip"
+      ],
+      "uses_mock": false,
+      "uses_filesystem": false,
+      "uses_subprocess": false,
+      "requirement_ids": [],
+      "classification": "QUARANTINE",
+      "reasons": [
+        "rule 3: archived/quarantined suite 'quarantine'"
+      ]
+    },
+    {
       "path": "tests/registries/test_harness_registry.py",
       "suite": "registries",
       "test_count": 19,
@@ -10022,6 +10221,23 @@
       "classification": "KEEP_UNIT_CRITICAL",
       "reasons": [
         "rule 8: pure logic (no mock/fs/subprocess)"
+      ]
+    },
+    {
+      "path": "tests/release/test_publish_gated_on_acceptance.py",
+      "suite": "release",
+      "test_count": 4,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": false,
+      "uses_subprocess": false,
+      "requirement_ids": [
+        "AC-029",
+        "AC-030"
+      ],
+      "classification": "KEEP_REGRESSION",
+      "reasons": [
+        "rule 7: requirement/bug ID or regression filename"
       ]
     },
     {
@@ -10663,6 +10879,22 @@
       ]
     },
     {
+      "path": "tests/unit/test_audit_release_artifacts.py",
+      "suite": "unit",
+      "test_count": 12,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [
+        "AC-029"
+      ],
+      "classification": "KEEP_REGRESSION",
+      "reasons": [
+        "rule 7: requirement/bug ID or regression filename"
+      ]
+    },
+    {
       "path": "tests/unit/test_decisions_explain_root.py",
       "suite": "unit",
       "test_count": 5,
@@ -10674,6 +10906,26 @@
       "classification": "KEEP_INTEGRATION_BOUNDARY",
       "reasons": [
         "rule 9: touches real fs/subprocess"
+      ]
+    },
+    {
+      "path": "tests/unit/test_release_report.py",
+      "suite": "unit",
+      "test_count": 11,
+      "markers": [],
+      "uses_mock": false,
+      "uses_filesystem": true,
+      "uses_subprocess": false,
+      "requirement_ids": [
+        "GAP-10",
+        "GAP-101",
+        "GAP-207",
+        "GAP-3",
+        "GAP-9"
+      ],
+      "classification": "KEEP_REGRESSION",
+      "reasons": [
+        "rule 7: requirement/bug ID or regression filename"
       ]
     },
     {
@@ -10735,7 +10987,7 @@
     {
       "path": "tests/unit/test_test_inventory.py",
       "suite": "unit",
-      "test_count": 24,
+      "test_count": 25,
       "markers": [
         "acceptance",
         "smoke",

@@ -1,12 +1,12 @@
 {
   "schema_version": "1.0",
-  "git_head": "1159c54f2f5da1c3de2a40ef934ce26400475d3b",
-  "git_status": "M artifacts/environment-proof.json\n M artifacts/phase0-baseline.txt",
+  "git_head": "15665bd528a1e79e08e150bd0ea4b0917e947cc3",
+  "git_status": "M artifacts/environment-proof.json\n M artifacts/phase0-baseline.txt\n M artifacts/test-inventory.json\n M artifacts/test-inventory.md\n?? artifacts/test-reduction-report.md",
   "python_version": "3.12.3",
   "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.39",
-  "runner_sha256": "6654fd3a62709da1b1b45392e9966cf917c50f2339490cf5fa97f02e26d673f2",
+  "runner_sha256": "9d6b5a1154771a4f69f1773cab75557715c23ad829beae2d5120e6d62c2a6cc4",
   "runner_py_compile_ok": true,
   "compileall_ok": true,
-  "created_at": "2026-07-06T06:11:31.798140+00:00",
+  "created_at": "2026-07-06T19:27:12.905628+00:00",
   "notes": []
 }
