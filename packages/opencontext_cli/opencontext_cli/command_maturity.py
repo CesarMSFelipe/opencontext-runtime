@@ -56,6 +56,7 @@ COMMAND_MATURITY: Final[dict[str, Maturity]] = {
     "status": "stable",
     "sync": "stable",
     "tokens": "stable",
+    "tui": "stable",
     "uninstall": "stable",
     "update": "stable",
     "upgrade": "stable",

@@ -26,6 +26,9 @@ class Leaf:
     options: Callable[[], list[tuple[str, str]]] | None = None
     current: Callable[[], str] | None = None
     apply: Callable[[str], str] | None = None
+    # Dotted key in the resolved OpenContextConfig — lets the TUI show the
+    # source layer (defaults/global/project/env/...) next to the setting.
+    config_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -186,6 +189,7 @@ def build_config_model() -> list[Category]:
                 options=sec_opts,
                 current=sec_cur,
                 apply=sec_apply,
+                config_key="security.mode",
             ),
             Leaf(
                 "features",
@@ -237,6 +241,7 @@ def build_config_model() -> list[Category]:
                 options=lang_opts,
                 current=lang_cur,
                 apply=lang_apply,
+                config_key="ui_language",
             ),
         ),
     )
@@ -274,6 +279,7 @@ def build_config_model() -> list[Category]:
                 options=opt_list("ask", "strict", "off"),
                 current=tdd_cur,
                 apply=tdd_apply,
+                config_key="sdd.tdd_mode",
             ),
             Leaf(
                 "oc_flow",
@@ -298,6 +304,7 @@ def build_config_model() -> list[Category]:
                 ),
                 current=flow_cur,
                 apply=flow_apply,
+                config_key="sdd.flow_mode",
             ),
         ),
     )
@@ -317,6 +324,7 @@ def build_config_model() -> list[Category]:
                     "Risk / note: Engram is external; local is project-scoped.",
                     "CLI: opencontext config set memory.provider auto",
                 ),
+                config_key="memory.provider",
             ),
         ),
     )

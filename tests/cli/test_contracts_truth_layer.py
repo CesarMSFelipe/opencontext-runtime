@@ -214,10 +214,9 @@ def test_every_registered_command_is_classified() -> None:
     assert not missing, f"commands missing a contracts classification: {missing}"
 
 
-def test_stable_commands_are_registered_or_planned() -> None:
-    # "tui" is contract-stable but ships in a later sprint.
+def test_stable_commands_are_registered() -> None:
     registered = _registered_commands()
-    unregistered = STABLE_COMMANDS - registered - {"tui"}
+    unregistered = STABLE_COMMANDS - registered
     assert not unregistered, f"stable commands not registered in the parser: {unregistered}"
 
 

@@ -31,7 +31,7 @@ COMMAND_MATURITY: Final[dict[str, Maturity]] = {
     "runs": "stable",
     "sdd": "stable",
     "status": "stable",
-    "tui": "stable",  # contract-stable; the command ships in a later sprint
+    "tui": "stable",
     "uninstall": "stable",
     "version": "stable",
     # --- preview: functional but evolving ---

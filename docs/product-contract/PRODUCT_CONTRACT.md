@@ -26,9 +26,9 @@ Rules: no `stable` command without a JSON contract; no `stable` command that pri
 All other top-level commands (e.g. `loop`, `studio`, `simulate`, `benchmark`, `evolve`,
 `mutation`, `persona`, ...) are `preview` or `internal` until explicitly promoted.
 
-> Current → Target: `tui` does not exist yet as a top-level command. Closest current surfaces:
-> `knowledge-graph view` (keyboard graph explorer) and `studio` (read-only web control plane).
-> The stable list above is the freeze target; the release gate must verify each entry exists.
+> `tui` ships as a top-level command: `opencontext tui [root] [--smoke]` opens the home
+> dashboard (runs, SDD workspace, doctor, config inspector, uninstall preview); `--smoke`
+> is the headless CI boot check. The release gate must verify each entry in the list exists.
 
 ## Mandatory flows
 

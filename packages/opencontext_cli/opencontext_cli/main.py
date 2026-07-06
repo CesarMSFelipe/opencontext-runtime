@@ -80,6 +80,7 @@ from opencontext_cli.commands.stack_cmd import add_stack_parser, handle_stack
 from opencontext_cli.commands.studio_cmd import add_studio_parser, handle_studio
 from opencontext_cli.commands.sync_cmd import add_sync_parser, handle_sync
 from opencontext_cli.commands.telemetry_cmd import add_telemetry_parser, handle_telemetry
+from opencontext_cli.commands.tui_cmd import add_tui_parser, handle_tui
 from opencontext_cli.commands.uninstall_cmd import add_uninstall_parser, handle_uninstall
 from opencontext_cli.commands.update_cmd import (
     add_update_parser,
@@ -1012,6 +1013,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_receipt_parser(subparsers)
     add_run_exec_parser(subparsers)
     add_run_parser(subparsers)
+    add_tui_parser(subparsers)
     add_simulate_parser(subparsers)
     add_session_parser(subparsers)
     add_maturity_parser(subparsers)
@@ -1789,6 +1791,8 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command == "runs":
         handle_run_inspect(args)
         return
+    if command == "tui":
+        sys.exit(handle_tui(args))
     if command == "simulate":
         handle_simulate(args)
         return

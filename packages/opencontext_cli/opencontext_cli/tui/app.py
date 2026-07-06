@@ -41,6 +41,14 @@ class ConfigScreen(Screen[None]):
         self.model = build_config_model()
         self.cat_idx = 0
         self.set_idx = 0
+        self._sources = _config_sources()
+
+    def _source_of(self, leaf: Any) -> str:
+        """Winning resolver layer for a leaf's config key ('' when unmapped)."""
+        key = getattr(leaf, "config_key", None)
+        if not key or not self._sources:
+            return ""
+        return self._sources.get(key, "defaults")
 
     def compose(self) -> ComposeResult:
         yield BrandBar()
@@ -68,7 +76,11 @@ class ConfigScreen(Screen[None]):
         sv = self.query_one("#settings", ListView)
         await sv.clear()  # async — must complete before re-appending
         for leaf in self.model[self.cat_idx].leaves:
-            sv.append(ListItem(Label(leaf.label)))
+            label = leaf.label
+            source = self._source_of(leaf)
+            if source:
+                label = f"{label}  [{_DIM}]({source})[/]"
+            sv.append(ListItem(Label(label)))
         sv.index = 0
         self.set_idx = 0
         await self._refresh_options()
@@ -82,12 +94,14 @@ class ConfigScreen(Screen[None]):
             info.update("")
             return
         current = leaf.current() if leaf.current else ""
+        source = self._source_of(leaf)
+        source_line = f"\n[{_DIM}]source: {source}[/]" if source else ""
         if leaf.kind == "select" and leaf.options:
             for val, label in leaf.options():
                 mark = "  ✓" if val == current else ""
                 ov.append(ListItem(Label(label + mark)))
             ov.index = 0
-            info.update(leaf.description)
+            info.update(leaf.description + source_line)
         else:
             from opencontext_cli.tui.sub_screens import NATIVE_SCREENS
 
@@ -96,6 +110,7 @@ class ConfigScreen(Screen[None]):
                 text += f"\n[{_DIM}]current:[/] {current}"
             native = leaf.key in NATIVE_SCREENS
             hint = "Enter → configure" if native else "Enter → open guided setup"
+            text += source_line
             text += f"\n\n[{_DIM}]{hint}[/]"
             info.update(text)
 
@@ -246,10 +261,12 @@ class HomeScreen(Screen[None]):
     ]
     _ACTIONS: ClassVar[list[tuple[str, str]]] = [
         ("cockpit", "Main · Cockpit / active run"),
+        ("runs", "Main · Runs"),
         ("new_change", "Main · Start new change"),
         ("verified", "Main · Build verified context"),
         ("graph", "Main · Knowledge graph"),
         ("memory", "Main · Memory"),
+        ("sdd", "Main · SDD workspace"),
         ("harness", "Main · Harness & quality gates"),
         ("receipt", "Main · Receipts / audit trail"),
         ("install", "Setup · Install / reconfigure"),
@@ -257,6 +274,7 @@ class HomeScreen(Screen[None]):
         ("doctor", "Setup · Doctor"),
         ("benchmark", "Setup · Benchmark"),
         ("backups", "Setup · Backups"),
+        ("uninstall_preview", "Setup · Uninstall preview"),
         ("uninstall", "Setup · Uninstall"),
         ("quit", "Quit"),
     ]
@@ -333,6 +351,26 @@ class HomeScreen(Screen[None]):
 
             self.app.push_screen(GraphScreen(mode=GraphMode.KG, root=Path(".")))
             return
+        if key == "runs":
+            from opencontext_cli.tui.screens.runs import RunsScreen
+
+            self.app.push_screen(RunsScreen())
+            return
+        if key == "sdd":
+            from opencontext_cli.tui.screens.sdd import SddScreen
+
+            self.app.push_screen(SddScreen())
+            return
+        if key == "doctor":
+            from opencontext_cli.tui.screens.doctor import DoctorScreen
+
+            self.app.push_screen(DoctorScreen())
+            return
+        if key == "uninstall_preview":
+            from opencontext_cli.tui.screens.uninstall_preview import UninstallPreviewScreen
+
+            self.app.push_screen(UninstallPreviewScreen())
+            return
         if key in {"harness", "receipt"}:
             run_dir = _latest_run_dir()
             if key == "harness":
@@ -350,7 +388,6 @@ class HomeScreen(Screen[None]):
             "install": menu_cmd._run_install,
             "verified": menu_cmd._run_verified_context,
             "memory": menu_cmd._run_memory_tools,
-            "doctor": menu_cmd._run_doctor,
             "backups": menu_cmd._run_backups,
             "uninstall": menu_cmd._run_uninstall,
         }.get(key)
@@ -424,9 +461,10 @@ class OpenContextApp(App[None]):
         "home": HomeScreen,
     }
 
-    def __init__(self, start: str = "config") -> None:
+    def __init__(self, start: str = "config", root: str | Path = ".") -> None:
         super().__init__()
         self._start = start
+        self._root = Path(root)
 
     def on_mount(self) -> None:
         if self._start == "cockpit":
@@ -435,11 +473,28 @@ class OpenContextApp(App[None]):
             self.push_screen(CockpitScreen())
         elif self._start == "home":
             self.push_screen(HomeScreen())
+        elif self._start == "error":
+            from opencontext_cli.tui.screens.workspace_error import WorkspaceErrorScreen
+
+            self.push_screen(WorkspaceErrorScreen(root=self._root))
         else:
             self.push_screen(ConfigScreen())
 
 
 _DIM = "#6C757D"
+
+
+def _config_sources() -> dict[str, str]:
+    """Dotted config key → winning layer, from the seven-layer resolver.
+
+    Best-effort: an unresolvable config must never block the settings menu.
+    """
+    try:
+        from opencontext_core.config_resolver import resolve
+
+        return dict(resolve(".").provenance.by_dotted_key)
+    except Exception:
+        return {}
 
 
 def _latest_run_dir() -> Path | None:
