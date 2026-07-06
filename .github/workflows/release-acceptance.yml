@@ -76,3 +76,47 @@ jobs:
           PY
       - name: Release acceptance (RELEASE mode — NOT_MEASURED mandatory gate fails)
         run: opencontext release acceptance --root . --release
+      - name: Build release artifacts — wheels + sdists + pyz
+        run: |
+          for pkg in opencontext_core opencontext_profiles opencontext_memory opencontext_sdd opencontext_cli; do
+            rm -rf "packages/$pkg/dist"
+            python -m build "packages/$pkg" --outdir "packages/$pkg/dist"
+          done
+          python scripts/build_binary.py
+      - name: Artifact hygiene audit (RELEASE_CONTRACT, AC-029)
+        run: python scripts/audit_release_artifacts.py
+      - name: Fresh-venv acceptance against the installed wheels (AC-030)
+        # pytest goes into the venv because workflow verification currently
+        # resolves the test runner via the runtime interpreter (known limitation).
+        run: |
+          set -o pipefail
+          python -m venv /tmp/oc-release-venv
+          /tmp/oc-release-venv/bin/pip install -q packages/*/dist/*.whl pytest
+          python -m pytest tests/acceptance -p no:randomly -rxX \
+            --oc-bin /tmp/oc-release-venv/bin/opencontext | tee /tmp/oc-acceptance.log
+      - name: Uninstall-verify round-trip — install → purge → verify (RELEASE_CONTRACT rule 4)
+        run: |
+          OC=/tmp/oc-release-venv/bin/opencontext
+          WS="$(mktemp -d)"; H="$(mktemp -d)"
+          cp -r tests/acceptance/fixtures/py_bugfix_basic/. "$WS/"
+          (cd "$WS" && HOME="$H" "$OC" install . --yes --json >/dev/null)
+          (cd "$WS" && HOME="$H" "$OC" uninstall --scope workspace --purge --verify --yes --json --root .) \
+            > /tmp/oc-uninstall.json
+          python -c "import json,sys; d=json.load(open('/tmp/oc-uninstall.json')); sys.exit(0 if (d.get('verify') or {}).get('passed') is True else 1)"
+      - name: Generate release report
+        # Exit codes are 0 by construction here: any earlier stage failure stops the job.
+        run: |
+          VERSION="$(/tmp/oc-release-venv/bin/opencontext version --json | python -c 'import json,sys; print(json.load(sys.stdin)["opencontext"])')"
+          args=(--version "$VERSION" --hygiene-exit 0 --uninstall-exit 0
+                --acceptance-log /tmp/oc-acceptance.log
+                --acceptance-oc-bin /tmp/oc-release-venv/bin/opencontext)
+          for f in dist/opencontext.pyz packages/*/dist/*.whl packages/*/dist/*.tar.gz; do
+            args+=(--artifact "$f")
+          done
+          python scripts/release_report.py "${args[@]}"
+      - name: Upload release report
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-report
+          path: artifacts/release-report.json
+          if-no-files-found: error
