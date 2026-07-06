@@ -70,11 +70,6 @@ def test_run_without_executor_reports_needs_executor(no_executor_run) -> None:
     assert summary.get("mutation_required") is True, summary
 
 
-@pytest.mark.xfail(
-    reason="GAP-009: run exits 0 on needs_executor; RUN_STATE_CONTRACT requires "
-    "workflow commands to exit 5 so CI cannot mistake it for success",
-    strict=False,
-)
 def test_run_without_executor_exits_5(no_executor_run) -> None:
     """AC-009: a workflow `run` ending needs_executor must exit with code 5."""
     _ws, proc, summary = no_executor_run
@@ -100,11 +95,6 @@ def test_run_with_correct_executor_mutates_and_verifies(oc_bin, stub_run) -> Non
     assert summary.get("mutation_required") is True, summary
 
 
-@pytest.mark.xfail(
-    reason="GAP-010: run reports free-form 'completed' instead of the canonical "
-    "'passed' final state from RUN_STATE_CONTRACT",
-    strict=False,
-)
 def test_run_success_uses_canonical_passed_state(stub_run) -> None:
     """AC-010: a fully verified run reports the canonical `passed` state."""
     assert stub_run["summary"].get("status") == "passed", stub_run["summary"].get("status")
@@ -121,11 +111,6 @@ def test_run_with_wrong_executor_never_reports_success(wrong_executor_run) -> No
     assert summary.get("verification_outcome") == "failed", summary
 
 
-@pytest.mark.xfail(
-    reason="GAP-011: wrong-executor run reports 'escalated' with exit 0; "
-    "RUN_STATE_CONTRACT requires canonical 'failed' and a non-zero exit code",
-    strict=False,
-)
 def test_run_with_wrong_executor_exits_failed(wrong_executor_run) -> None:
     """AC-011: `run` with a wrong executor returns `failed` and a non-zero exit code."""
     _ws, proc, summary = wrong_executor_run

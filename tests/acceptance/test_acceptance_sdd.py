@@ -93,12 +93,6 @@ def test_sdd_new_creates_cycle_and_initial_artifacts(sdd_ws) -> None:
     assert artifacts, "the new change must contain at least one initial artifact"
 
 
-@pytest.mark.xfail(
-    reason="GAP-015: sdd new/status artifact naming mismatch — `sdd new` scaffolds "
-    "propose.md but the status resolver only recognizes proposal.md, so a fresh "
-    "change reports proposal=missing",
-    strict=False,
-)
 def test_sdd_status_recognizes_the_scaffolded_proposal(oc_bin, sdd_ws) -> None:
     """AC-015: the artifact `sdd new` scaffolds is recognized by `sdd status`."""
     proc, status = run_json(

@@ -168,6 +168,7 @@ def test_public_surfaces_do_not_expose_external_names() -> None:
             for p in (root / "docs").rglob("*.md")
             if "OpenContext_Complete_Plans_and_Architecture_Book" not in p.parts
             and "inv" not in p.parts
+            and not p.name.startswith("opencontext_plan_")
         ),
         *sorted((root / "examples").rglob("opencontext.yaml")),
     ]

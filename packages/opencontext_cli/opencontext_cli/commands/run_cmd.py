@@ -309,12 +309,47 @@ def handle_run_exec(args: Any) -> int:
         "mutation_required",
         "verified_by",
         "verification_outcome",
+        "tdd",
     ):
         _v = getattr(leg, _field, None)
         if _v is not None:
             summary[_field] = _v
     if sel.get("reason"):
         summary["selection_reason"] = sel["reason"]
+
+    # Canonical state + documented exit code (RUN_STATE_CONTRACT / CLI_CONTRACT):
+    # the JSON `status` carries the canonical final state; the raw workflow
+    # vocabulary stays available as `legacy_status` (additive fields only).
+    from opencontext_core.models.canonical_status import exit_code_for_run, to_canonical
+
+    _tdd_block = getattr(leg, "tdd", None)
+    _tdd_violation = str(oc_status) == "tdd_violation" or bool(
+        isinstance(_tdd_block, dict) and _tdd_block.get("violation")
+    )
+    _verification_failed = getattr(leg, "verification_outcome", None) == "failed"
+    canonical = to_canonical(str(oc_status)).value
+    exit_code = exit_code_for_run(
+        str(oc_status),
+        tdd_violation=_tdd_violation,
+        verification_failed=_verification_failed,
+    )
+    summary["status"] = canonical
+    summary["legacy_status"] = oc_status
+    summary["canonical_status"] = canonical
+    summary["exit_code"] = exit_code
+    if _tdd_violation:
+        _violation_code = (
+            _tdd_block.get("violation") if isinstance(_tdd_block, dict) else None
+        ) or "TDD_RED_NOT_PROVEN"
+        summary["error"] = {
+            "code": _violation_code,
+            "message": str(getattr(leg, "completion_reason", "") or "TDD strict violated."),
+            "hint": (
+                "Add or modify a relevant test, run it, and ensure it fails before "
+                "applying the fix (TDD_STRICT_CONTRACT)."
+            ),
+            "details": {"workflow": str(summary.get("workflow")), "phase": "mutate"},
+        }
     if getattr(args, "json", False):
         print(json.dumps(summary, indent=2, default=str))
     else:
@@ -339,15 +374,11 @@ def handle_run_exec(args: Any) -> int:
             "`opencontext doctor`.",
             file=sys.stderr,
         )
-    # Exit code: a genuine FAILURE is nonzero so CI/scripts can detect it.
-    # Honest degraded outcomes (needs_executor/needs_provider, not_applied) stay 0.
-    # Also fail when the flow finished but verification outcome was "failed" —
-    # the flow ran successfully but the edits didn't pass inspection.
-    # "escalated" alone is not a failure (the flow retried), but if it's paired
-    # with a failed verification outcome we still exit 1.
-    # Returned (not sys.exit'd) so in-process test callers never raise SystemExit.
-    _verification_outcome = getattr(leg, "n", None)
-    return 1 if oc_status in {"failed", "blocked"} or _verification_outcome == "failed" else 0
+    # Exit code (RUN_STATE_CONTRACT): the canonical mapping — needs_executor -> 5,
+    # verification failure -> 8, TDD strict violation -> 6, passed -> 0 — so CI can
+    # never mistake a degraded run for success. Returned (not sys.exit'd) so
+    # in-process test callers never raise SystemExit; main() raises SystemExit(rc).
+    return exit_code
 
 
 def add_simulate_parser(subparsers: Any) -> None:

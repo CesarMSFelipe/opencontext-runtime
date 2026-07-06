@@ -48,12 +48,6 @@ def test_report_bundle_contains_all_evidence(stub_run) -> None:
     assert (run_dir / "events.json").is_file() or (run_dir / "events.jsonl").is_file()
 
 
-@pytest.mark.xfail(
-    reason="GAP-025: run.json + gates.json manifest missing — OC Flow runs persist "
-    "state.json but not the run.json/gates.json bundle from SDD_CONTRACT's "
-    "harness layout",
-    strict=False,
-)
 def test_report_bundle_includes_run_manifest_and_gates(stub_run) -> None:
     """AC-025: the run directory persists run.json and gates.json (harness layout)."""
     ws = stub_run["ws"]

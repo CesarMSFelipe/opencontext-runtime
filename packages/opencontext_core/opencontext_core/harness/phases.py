@@ -2533,6 +2533,7 @@ class VerifyPhase(HarnessPhase):
                 "failed": failed,
                 "errors": errors,
                 "tests_executed": True,
+                "command": " ".join(args),
                 "output": result.stdout[-2000:],
                 "error_output": result.stderr[-1000:],
             }

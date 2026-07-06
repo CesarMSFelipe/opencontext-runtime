@@ -57,6 +57,11 @@ from opencontext_core.oc_flow.nodes import (
     can_exit,
 )
 from opencontext_core.oc_flow.personas import persona_id_for_oc_flow_node
+from opencontext_core.oc_flow.run_bundle import (
+    enforce_gates,
+    evaluate_oc_flow_gates,
+    write_run_bundle,
+)
 from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.runtime.brain import NullRuntimeBrain, RuntimeBrainPort
 from opencontext_core.runtime.decisions import (
@@ -65,6 +70,12 @@ from opencontext_core.runtime.decisions import (
     summarize_decision_log,
 )
 from opencontext_core.runtime.ids import new_run_id, new_session_id
+from opencontext_core.tdd.red_green import (
+    VIOLATION_REASONS,
+    TddEvidence,
+    capture_test_run,
+    evaluate_strict,
+)
 
 # Safety cap on total node steps (the diagnosis attempt budget already bounds the
 # loop; this guards against any pathological graph cycle).
@@ -97,6 +108,11 @@ class OCFlowRunResult:
     workflow_selection: dict[str, Any] = field(default_factory=dict)
     verified_by: list[str] = field(default_factory=list)
     verification_outcome: str = "not_run"
+    # Contract surface (RUN_STATE_CONTRACT / TDD_STRICT_CONTRACT): the canonical
+    # final state, its documented exit code, and the RED/GREEN evidence block.
+    canonical_status: str = ""
+    exit_code: int = 0
+    tdd: dict[str, Any] | None = None
 
 
 # --------------------------------------------------------------------- workflow selector
@@ -117,6 +133,29 @@ def should_escalate_to_sdd(contract: TaskContract, *, max_changed_areas: int = 5
     risk = {r.lower() for r in contract.risk_flags}
     high_risk = {"public_api", "schema", "architecture", "security", "migration", "breaking_change"}
     return bool(risk & high_risk)
+
+
+def _green_evidence_from_inspection(inspection: InspectionReport | None) -> Any:
+    """Project the inspection's targeted-tests gate onto GREEN test-run evidence.
+
+    Local inspection already executed the post-mutation test command and recorded
+    its command/exit_code/captured_at on the gate — no re-run needed.
+    """
+    from opencontext_core.tdd.red_green import TddRunEvidence
+
+    if inspection is None:
+        return None
+    for gate in inspection.gate_results:
+        if gate.get("id") == "targeted_tests" and "exit_code" in gate:
+            return TddRunEvidence(
+                command=str(gate.get("command", "")),
+                exit_code=int(gate["exit_code"]),
+                failure_summary=(
+                    str(gate.get("message", "")) if gate.get("exit_code") != 0 else ""
+                ),
+                captured_at=str(gate.get("captured_at", "")),
+            )
+    return None
 
 
 def _discover_test_command(root: Path) -> list[str] | None:
@@ -192,15 +231,29 @@ class OCFlowRunner:
     def _resolve_tdd_mode(self) -> str:
         """Resolve the strict-TDD posture for this run root.
 
-        Mirrors the harness resolution: OPENCONTEXT_TDD_MODE env wins, else the
-        opencontext.yaml ``harness.tdd_mode``. Defaults to ``ask`` so the RED-first
-        pre-check stays off unless explicitly opted into strict TDD.
+        Mirrors the harness resolution: OPENCONTEXT_TDD_MODE env wins, then the
+        installed ``.opencontext/harness.yaml`` (``workflow_defaults.tdd_mode`` —
+        the SAME file HarnessRunner reads), then the opencontext.yaml
+        ``harness.tdd_mode``. Defaults to ``ask`` so the RED-first pre-check stays
+        off unless explicitly opted into strict TDD.
         """
         import os
 
         env = os.environ.get("OPENCONTEXT_TDD_MODE")
         if env in ("strict", "ask", "off"):
             return env
+        try:
+            import yaml
+
+            harness_path = resolve_workspace_path(self.root, StorageMode.local) / "harness.yaml"
+            if harness_path.is_file():
+                data = yaml.safe_load(harness_path.read_text(encoding="utf-8")) or {}
+                if isinstance(data, dict):
+                    mode = (data.get("workflow_defaults") or {}).get("tdd_mode")
+                    if mode in ("strict", "ask", "off"):
+                        return str(mode)
+        except Exception:
+            pass  # harness.yaml is advisory here; fall through to opencontext.yaml
         try:
             from opencontext_core.config import load_config_or_defaults
 
@@ -332,13 +385,33 @@ class OCFlowRunner:
         if requested_edits is not None and isinstance(executor, DeterministicNodeExecutor):
             executor = DeterministicNodeExecutor(requested_edits=requested_edits)
 
+        started_at = datetime.now(tz=UTC).isoformat()
         # B1 / AVH-011: classify whether this task implies a mutation; threaded into
         # the inspection scope gate and the post-graph completion gate.
         mut_required = mutation_required(task)
         verify_required = verification_required(task)
+        strict_tdd = self._tdd_mode == "strict"
+        if strict_tdd and mut_required:
+            # TDD_STRICT_CONTRACT: a strict mutation run must execute tests, so
+            # verification is required regardless of the task wording.
+            verify_required = True
         if verify_required and test_command is None:
             test_command = _discover_test_command(self.root)
         run_external_inspection = run_external_inspection or bool(test_command)
+
+        # RED evidence (TDD_STRICT_CONTRACT): run the relevant tests BEFORE any
+        # mutation whenever a test command exists for a mutation task. Strict mode
+        # additionally enforces the contract table (no runner / already-green test
+        # -> violation); other modes capture evidence only.
+        tdd_evidence = TddEvidence(mode=self._tdd_mode)
+        if mut_required and test_command:
+            tdd_evidence.red = capture_test_run(test_command, self.root)
+        if strict_tdd:
+            tdd_evidence.violation = evaluate_strict(
+                mutation_required=mut_required,
+                has_test_command=bool(test_command),
+                red=tdd_evidence.red,
+            )
         # C16: compute once, use for both ctx and the retry_policy decision below.
         _max_attempts_resolved = resolve_max_attempts(profile=profile, lane=lane_enum)
         ctx = OCFlowContext(
@@ -367,6 +440,7 @@ class OCFlowRunner:
             memory_harvest_enabled=self._memory_harvest_enabled,
             memory_v2_enabled=self._memory_v2_enabled,
             tdd_mode=self._tdd_mode,
+            tdd_red_exit_code=(tdd_evidence.red.exit_code if tdd_evidence.red else None),
             run_id=run_id,
             compression_enabled=self._compression_enabled,
             compression_config=self._compression_config,
@@ -488,7 +562,18 @@ class OCFlowRunner:
             )
         )
 
-        while node not in self.definition.terminal_nodes:
+        # TDD strict violation: refuse BEFORE any node runs — the contract forbids
+        # mutating without proven RED, so the graph never walks (exit-6 path).
+        if tdd_evidence.violation is not None:
+            ctx.block_reason = VIOLATION_REASONS.get(tdd_evidence.violation, tdd_evidence.violation)
+            self._emit_event(
+                events,
+                "tdd.violation",
+                node,
+                {"violation": tdd_evidence.violation, "mode": self._tdd_mode},
+            )
+
+        while tdd_evidence.violation is None and node not in self.definition.terminal_nodes:
             steps += 1
             if steps > _MAX_STEPS:
                 status = "failed"
@@ -546,21 +631,64 @@ class OCFlowRunner:
         # mutation task was done — the completion gate (B1/ADR-A1) maps the raw graph
         # verdict onto an honest status; a no-op mutation can never report `completed`.
         final_node = node
-        graph_status = status
         provider_available = bool(getattr(executor, "provider_available", False))
-        completion = resolve_completion(
-            graph_status,
-            ctx,
-            mutation_required=mut_required,
-            provider_available=provider_available,
-            verification_required=verify_required,
+        if tdd_evidence.violation is not None:
+            # Strict-TDD refusal: the graph never walked; the honest terminal state
+            # is the dedicated violation marker (canonical `blocked`, exit 6).
+            graph_status = "not_run"
+            status = "tdd_violation"
+            reason = ctx.block_reason or tdd_evidence.violation
+        else:
+            graph_status = status
+            completion = resolve_completion(
+                graph_status,
+                ctx,
+                mutation_required=mut_required,
+                provider_available=provider_available,
+                verification_required=verify_required,
+            )
+            status = completion.value
+            reason = (
+                ctx.block_reason
+                if completion is not CompletionStatus.completed and ctx.block_reason
+                else completion_reason(completion, mutation_required=mut_required)
+            )
+
+        # GREEN evidence (TDD_STRICT_CONTRACT): the post-mutation targeted-tests run
+        # already executed inside local inspection — reuse its recorded command/exit.
+        green = _green_evidence_from_inspection(ctx.inspection)
+        if green is not None:
+            tdd_evidence.green = green
+
+        # Gate catalog + the ONE enforcement point: a run may not stay `completed`
+        # when a mandatory gate failed (RUN_STATE_CONTRACT rule 1).
+        verification_outcome = ctx.inspection.verification_outcome if ctx.inspection else "not_run"
+        short_circuited = tdd_evidence.violation is not None
+        gates = evaluate_oc_flow_gates(
+            workspace_valid=self.root.is_dir(),
+            config_valid=self._config_valid(),
+            context_pack_created=None if short_circuited else ctx.envelope is not None,
+            executor_available=(
+                None
+                if (short_circuited or not mut_required)
+                else status not in ("needs_executor", "needs_provider")
+            ),
+            tdd_red_proven_if_strict=(
+                tdd_evidence.red_proven if (strict_tdd and mut_required) else None
+            ),
+            mutation_performed_if_required=(
+                bool(ctx.changed_files) if (mut_required and not short_circuited) else None
+            ),
+            verification_executed=(
+                (verification_outcome != "not_run")
+                if (verify_required and not short_circuited)
+                else None
+            ),
+            verification_passed=(
+                (verification_outcome == "passed") if verification_outcome != "not_run" else None
+            ),
         )
-        status = completion.value
-        reason = (
-            ctx.block_reason
-            if completion is not CompletionStatus.completed and ctx.block_reason
-            else completion_reason(completion, mutation_required=mut_required)
-        )
+        status = enforce_gates(status, gates)
 
         # R4: post-run confidence report — emit as a RuntimeDecision so
         # decisions.json captures the ConfidenceEngine evaluation.  Real signals
@@ -603,6 +731,17 @@ class OCFlowRunner:
         except Exception:
             pass  # confidence emission is advisory; never interrupts the run
 
+        # Canonical state + exit code (RUN_STATE_CONTRACT): derived once, persisted
+        # in run.json and mirrored by the CLI process exit.
+        from opencontext_core.models.canonical_status import exit_code_for_run, to_canonical
+
+        canonical_status = to_canonical(status).value
+        exit_code = exit_code_for_run(
+            status,
+            tdd_violation=tdd_evidence.violation is not None,
+            verification_failed=verification_outcome == "failed",
+        )
+
         self._persist(
             session_id,
             run_id,
@@ -616,6 +755,11 @@ class OCFlowRunner:
             completion_reason=reason,
             mutation_required=mut_required,
             selection=selection,
+            gates=gates,
+            tdd=tdd_evidence.to_json(),
+            canonical_status=canonical_status,
+            exit_code=exit_code,
+            started_at=started_at,
         )
 
         return OCFlowRunResult(
@@ -633,14 +777,15 @@ class OCFlowRunner:
             completion_reason=reason,
             mutation_required=mut_required,
             verified_by=list(ctx.inspection.verified_by) if ctx.inspection else [],
-            verification_outcome=(
-                ctx.inspection.verification_outcome if ctx.inspection else "not_run"
-            ),
+            verification_outcome=verification_outcome,
             workflow_selection={
                 "workflow": selection.workflow,
                 "reason": selection.reason,
                 "signals": selection.signals,
             },
+            canonical_status=canonical_status,
+            exit_code=exit_code,
+            tdd=tdd_evidence.to_json(),
         )
 
     # -- transition + decision receipt ---------------------------------------
@@ -722,6 +867,17 @@ class OCFlowRunner:
             }
         )
 
+    def _config_valid(self) -> bool:
+        """True when the project config resolves cleanly (defaults count as valid)."""
+        try:
+            from opencontext_core.config import load_config_or_defaults
+            from opencontext_core.config_resolver import resolve_config_path
+
+            load_config_or_defaults(resolve_config_path(self.root), auto_detect=False)
+            return True
+        except Exception:
+            return False
+
     def _persist(
         self,
         session_id: str,
@@ -737,6 +893,11 @@ class OCFlowRunner:
         completion_reason: str = "",
         mutation_required: bool = False,
         selection: WorkflowSelection | None = None,
+        gates: list[dict[str, Any]] | None = None,
+        tdd: dict[str, Any] | None = None,
+        canonical_status: str = "",
+        exit_code: int = 0,
+        started_at: str = "",
     ) -> None:
         run_dir = self._run_dir(session_id, run_id)
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -776,6 +937,67 @@ class OCFlowRunner:
         _dump(run_dir / "state.json", state)
         _dump(run_dir / "events.json", {"events": events})
         _dump(run_dir / "decisions.json", {"decisions": summarize_decision_log(decisions)})
+
+        # Harness-layout evidence bundle (RUN_STATE_CONTRACT rule 1 / AC-025):
+        # run.json + gates.json + verification.json (+ mutations.diff) alongside
+        # the legacy state.json so both workflows persist the same manifest shape.
+        finished_at = datetime.now(tz=UTC).isoformat()
+        verification_outcome = str(state["verification_outcome"])
+        verified_by = list(state["verified_by"])  # type: ignore[arg-type]
+        verification = {
+            "executed": verification_outcome != "not_run",
+            "commands": verified_by,
+            "outcome": verification_outcome,
+            "passed": verification_outcome == "passed",
+        }
+        manifest = {
+            "schema_version": "opencontext.oc_flow.run_manifest.v1",
+            "run_id": run_id,
+            "session_id": session_id,
+            "workflow": "oc-flow",
+            "task": ctx.task,
+            "status": status,
+            "canonical_status": canonical_status,
+            "exit_code": exit_code,
+            "created_at": started_at or finished_at,
+            "started_at": started_at or finished_at,
+            "finished_at": finished_at,
+            "completion_reason": completion_reason,
+            "mutation_required": mutation_required,
+            "changed_files": list(ctx.changed_files),
+            "verification": verification,
+            "tdd": tdd,
+            "context": {
+                "context_engine_enabled": ctx.context_engine_enabled,
+                "kg_v2_enabled": ctx.kg_v2_enabled,
+                "memory_enabled": ctx.memory_enabled,
+                "compression_enabled": ctx.compression_enabled,
+            },
+        }
+        green_evidence = (tdd or {}).get("green") or {}
+        verification_report = {
+            "run_id": run_id,
+            "commands": verified_by,
+            "outcome": verification_outcome,
+            "exit_code": green_evidence.get("exit_code"),
+            "summary": (
+                ctx.inspection.failure_summary
+                if ctx.inspection and ctx.inspection.failure_summary
+                else verification_outcome
+            ),
+        }
+        patch_text: str | None = None
+        if ctx.changed_files:
+            patch_path = self._artifacts_dir(session_id, run_id) / "patch.diff"
+            if patch_path.is_file():
+                patch_text = patch_path.read_text(encoding="utf-8")
+        write_run_bundle(
+            run_dir,
+            manifest=manifest,
+            gates=gates or [],
+            verification=verification_report,
+            patch_text=patch_text,
+        )
 
     # -- resume ---------------------------------------------------------------
     def resume(self, session_id: str, run_id: str) -> ResumedRun:

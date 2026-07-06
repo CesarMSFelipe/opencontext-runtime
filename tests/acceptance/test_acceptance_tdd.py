@@ -22,12 +22,6 @@ pytestmark = pytest.mark.acceptance
 
 
 @pytest.mark.smoke
-@pytest.mark.xfail(
-    reason="GAP-012: TDD strict RED gate missing — a strict-mode mutation run over a "
-    "test-less project completes with verification_outcome=not_run instead of "
-    "refusing (exit 6, TDD_RED_NOT_PROVEN)",
-    strict=False,
-)
 def test_tdd_strict_fails_without_red_test(oc_bin, workspace) -> None:
     """AC-012: TDD strict fails when there is no RED test."""
     ws = workspace("py_bugfix_no_tests")
@@ -67,11 +61,6 @@ def test_tdd_red_green_demonstrated_externally(stub_run) -> None:
     assert green.returncode == 0, f"GREEN not reached after the run: {green.stdout[-800:]}"
 
 
-@pytest.mark.xfail(
-    reason="GAP-013: TDD red/green evidence missing — run.json/state.json persists no "
-    "tdd block (mode, red_proven, green_proven, red/green command evidence)",
-    strict=False,
-)
 def test_run_report_records_red_green_evidence(stub_run) -> None:
     """AC-013: the run report records machine-verified RED and GREEN evidence."""
     ws = stub_run["ws"]

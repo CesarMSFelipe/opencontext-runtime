@@ -134,7 +134,9 @@ def test_preflight_skipped_for_json(tmp_path: Path, capsys: Any) -> None:
     out = capsys.readouterr().out
     assert not sel.called, "--json must skip the preflight prompt"
     payload = json.loads(out)
-    assert payload["status"] == "completed"
+    # Canonical status surfaces in `status`; the raw vocabulary stays additive.
+    assert payload["status"] == "passed"
+    assert payload["legacy_status"] == "completed"
     assert len(recorder.run_calls) == 1
 
 

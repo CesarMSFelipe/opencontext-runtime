@@ -1278,6 +1278,7 @@ class RuntimeApi:
             "needs_verification",
             "needs_user_edit",
             "escalated",
+            "tdd_violation",
         }
         if text in _OC_FLOW_TERMINAL:
             return text

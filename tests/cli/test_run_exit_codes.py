@@ -1,8 +1,8 @@
-"""`opencontext run` exit codes: genuine failures are nonzero, honest states are 0.
+"""`opencontext run` exit codes follow the RUN_STATE_CONTRACT mapping.
 
-Regression: run always returned exit 0, so CI/scripts could not detect a failed or
-gate-blocked run. A failed/blocked run now returns 1; honest degraded outcomes
-(needs_executor/needs_provider) stay 0 so provider-free journeys are unaffected.
+A workflow run must exit with the code of its canonical final state so CI can
+never mistake a degraded run for success: needs_executor -> 5, failed/blocked
+-> 1 (verification failure -> 8), passed -> 0.
 """
 
 from __future__ import annotations
@@ -28,12 +28,12 @@ def _args(tmp_path: Path, task: str, workflow: str) -> SimpleNamespace:
     )
 
 
-def test_needs_executor_run_exits_zero(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_needs_executor_run_exits_five(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
     (tmp_path / "calc.py").write_text("def add(a, b):\n    return a - b\n", encoding="utf-8")
     rc = handle_run_exec(_args(tmp_path, "fix the bug in add", "oc-flow"))
     capsys.readouterr()
-    assert rc == 0, "an honest needs_executor run must exit 0"
+    assert rc == 5, "a needs_executor workflow run must exit 5 (RUN_STATE_CONTRACT)"
 
 
 def test_failed_run_exits_nonzero(tmp_path: Path, monkeypatch, capsys) -> None:

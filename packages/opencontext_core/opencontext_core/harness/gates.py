@@ -678,9 +678,10 @@ class FailingTestExistsGate:
 
         Only the single matched file is run — never the full suite.
         """
+        red_cmd = ["pytest", test_path, "-x", "-q", "--no-header", "--tb=no"]
         try:
             proc = subprocess.run(
-                ["pytest", test_path, "-x", "-q", "--no-header", "--tb=no"],
+                red_cmd,
                 cwd=str(root),
                 capture_output=True,
                 text=True,
@@ -710,6 +711,7 @@ class FailingTestExistsGate:
                     "test_files": all_matches,
                     "task": task,
                     "exit_code": proc.returncode,
+                    "command": " ".join(red_cmd),
                 },
             )
 
@@ -723,7 +725,12 @@ class FailingTestExistsGate:
                 "The test must be RED (failing) before apply. "
                 "Write a failing test that captures the missing behavior."
             ),
-            metadata={"task": task, "test_path": test_path, "exit_code": 0},
+            metadata={
+                "task": task,
+                "test_path": test_path,
+                "exit_code": 0,
+                "command": " ".join(red_cmd),
+            },
         )
 
     def _fuzzy_suggest(self, task: str, root: Path) -> str | None:
@@ -853,7 +860,7 @@ class TestsPassGate:
                 phase="verify",
                 status=GateStatus.PASSED,
                 message="TestsPassGate: all tests pass (GREEN confirmed).",
-                metadata={"exit_code": 0},
+                metadata={"exit_code": 0, "command": " ".join(str(c) for c in cmd)},
             )
 
         return PhaseGate(
@@ -864,5 +871,5 @@ class TestsPassGate:
                 f"TestsPassGate: tests failed (exit {proc.returncode}). "
                 "Fix failing tests before completing the verify phase."
             ),
-            metadata={"exit_code": proc.returncode},
+            metadata={"exit_code": proc.returncode, "command": " ".join(str(c) for c in cmd)},
         )

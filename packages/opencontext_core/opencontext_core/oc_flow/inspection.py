@@ -68,7 +68,15 @@ def _check_secrets(path: Path, scanner: SecretScanner) -> dict[str, object] | No
 
 
 def _run_command(label: str, command: list[str], root: Path) -> dict[str, object]:
-    """Run an external check; a non-zero exit is a recoverable failure."""
+    """Run an external check; a non-zero exit is a recoverable failure.
+
+    The executed command, its exit code and the capture time are recorded on the
+    gate (additive keys) so the run report can persist real GREEN evidence.
+    """
+    from datetime import UTC, datetime
+
+    command_text = " ".join(str(part) for part in command)
+    captured_at = datetime.now(tz=UTC).isoformat()
     try:
         proc = subprocess.run(
             command,
@@ -79,11 +87,18 @@ def _run_command(label: str, command: list[str], root: Path) -> dict[str, object
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return _gate(label, _RECOVERABLE, f"{label} could not run: {exc}")
+        gate = _gate(label, _RECOVERABLE, f"{label} could not run: {exc}")
+        gate["command"] = command_text
+        return gate
     if proc.returncode != 0:
         tail = (proc.stdout + proc.stderr).strip().splitlines()[-1:] or [""]
-        return _gate(label, _RECOVERABLE, f"{label} failed: {tail[0][:200]}")
-    return _gate(label, _PASSED, f"{label} passed")
+        gate = _gate(label, _RECOVERABLE, f"{label} failed: {tail[0][:200]}")
+    else:
+        gate = _gate(label, _PASSED, f"{label} passed")
+    gate["command"] = command_text
+    gate["exit_code"] = proc.returncode
+    gate["captured_at"] = captured_at
+    return gate
 
 
 def _worst(gates: list[dict[str, object]]) -> str:

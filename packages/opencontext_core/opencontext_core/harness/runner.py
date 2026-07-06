@@ -2223,6 +2223,10 @@ class HarnessRunner:
                         message=(
                             f"Tests exited with code {test_result['exit_code']} (fix-loop reverify)"
                         ),
+                        metadata={
+                            "exit_code": test_result.get("exit_code"),
+                            "command": str(test_result.get("command", "")),
+                        },
                     )
                 )
         except Exception:
@@ -2475,6 +2479,49 @@ class HarnessRunner:
             # Never fail due to KG check failures
             pass
 
+    def _tdd_block_from_gates(
+        self, gates: list[PhaseGate], *, created_at: str
+    ) -> dict[str, Any] | None:
+        """Derive the run.json ``tdd`` block from the RED/GREEN gates that ran.
+
+        RED comes from ``failing_test_exists`` (strict mode executes the test and
+        records its exit code); GREEN from ``tests_pass`` / the fix-loop
+        ``verify_tests_passed`` reverify. Proof requires a REAL recorded exit code
+        — gate existence alone never claims evidence.
+        """
+        red_gate = next((g for g in gates if getattr(g, "id", "") == "failing_test_exists"), None)
+        green_gate = next(
+            (g for g in gates if getattr(g, "id", "") in ("tests_pass", "verify_tests_passed")),
+            None,
+        )
+        if red_gate is None and green_gate is None:
+            return None
+
+        def _evidence(gate: PhaseGate | None) -> dict[str, Any] | None:
+            if gate is None:
+                return None
+            meta = getattr(gate, "metadata", None) or {}
+            exit_code = meta.get("exit_code")
+            if exit_code is None:
+                return None
+            return {
+                "command": str(meta.get("command", "")),
+                "exit_code": int(exit_code),
+                "failure_summary": gate.message if int(exit_code) != 0 else "",
+                "captured_at": created_at,
+            }
+
+        red = _evidence(red_gate)
+        green = _evidence(green_gate)
+        return {
+            "mode": self.config.tdd_mode,
+            "red": red,
+            "green": green,
+            "regression": None,
+            "red_proven": bool(red and red["exit_code"] != 0),
+            "green_proven": bool(green and green["exit_code"] == 0),
+        }
+
     def persist_run(self, state: HarnessState, result: HarnessRunResult) -> Path:
         """Persist run artifacts to .opencontext/runs/<run_id>/."""
         run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
@@ -2508,14 +2555,23 @@ class HarnessRunner:
                 "broad_tokens": int(getattr(state, "explore_broad_tokens", 0) or 0),
                 "kg_available": bool(getattr(state, "explore_kg_available", False)),
             }
+        _status_text = (
+            result.status.value if hasattr(result.status, "value") else str(result.status)
+        )
+        # Canonical state + exit code + TDD evidence (RUN_STATE / TDD_STRICT
+        # contracts) — additive fields alongside the legacy status string.
+        from opencontext_core.models.canonical_status import exit_code_for_run, to_canonical
+
+        _tdd_block = self._tdd_block_from_gates(result.gates, created_at=result.created_at)
         files = {
             "run.json": {
                 "run_id": result.run_id,
                 "workflow": result.workflow,
                 "task": result.task,
-                "status": (
-                    result.status.value if hasattr(result.status, "value") else str(result.status)
-                ),
+                "status": _status_text,
+                "canonical_status": to_canonical(_status_text).value,
+                "exit_code": exit_code_for_run(_status_text),
+                "tdd": _tdd_block,
                 "created_at": result.created_at,
                 "metadata": {
                     "explore": explore_meta,

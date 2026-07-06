@@ -171,6 +171,9 @@ class Orchestrator:
             marker = change_root / f"{phase}.md"
             if marker.is_file():
                 return phase
+            # proposal.md is the canonical propose-phase artifact (sdd new / status).
+            if phase == "propose" and (change_root / "proposal.md").is_file():
+                return phase
         return None
 
     def _next_after(self, current: str) -> str:

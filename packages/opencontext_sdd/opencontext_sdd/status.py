@@ -119,6 +119,9 @@ def _scan_artifacts(
     blocked: list[str] = []
 
     proposal = change_root / "proposal.md"
+    if not proposal.exists() and (change_root / "propose.md").exists():
+        # Back-compat: older `sdd new` scaffolds named the artifact propose.md.
+        proposal = change_root / "propose.md"
     if proposal.exists():
         paths["proposal"] = proposal.relative_to(cwd).as_posix()
         states["proposal"] = "done"
