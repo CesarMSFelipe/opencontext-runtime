@@ -30,7 +30,8 @@ def _args(command: str, **kwargs) -> Namespace:
 
 def test_config_explain_json_emits_contract_payload(tmp_path: Path, capsys, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))  # hermetic: no real global config
-    _write(tmp_path, "version: 2\nproject:\n  name: demo\nharness:\n  tdd_mode: strict\n")
+    monkeypatch.delenv("OPENCONTEXT_ORG_CONFIG", raising=False)
+    _write(tmp_path, "version: 2\nproject:\n  name: demo\nmemory:\n  provider: local\n")
     handle_config(_args("explain", root=str(tmp_path), json=True))
     payload = json.loads(capsys.readouterr().out)
     for field in (
@@ -43,7 +44,7 @@ def test_config_explain_json_emits_contract_payload(tmp_path: Path, capsys, monk
     ):
         assert field in payload, f"missing contract field: {field}"
     assert payload["validation"]["status"] == "passed"
-    assert payload["sources"]["harness.tdd_mode"]["source"] == "project"
+    assert payload["sources"]["memory.provider"]["source"] == "project"
 
 
 def test_config_explain_invalid_yaml_raises_config_invalid(tmp_path: Path) -> None:

@@ -485,7 +485,7 @@ _DIM = "#6C757D"
 
 
 def _config_sources() -> dict[str, str]:
-    """Dotted config key → winning layer, from the seven-layer resolver.
+    """Dotted config key → winning layer, from the layered resolver.
 
     Best-effort: an unresolvable config must never block the settings menu.
     """

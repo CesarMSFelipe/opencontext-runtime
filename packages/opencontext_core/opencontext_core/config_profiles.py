@@ -2,7 +2,7 @@
 
 Named *configuration* profiles — ``balanced`` (default), ``low-cost``,
 ``enterprise``, ``research`` and ``performance`` — each a partial-config overlay
-applied as the second layer of the seven-level resolver
+applied above the workspace (project) layer of the layered resolver
 (``config_resolver.resolve``). They set security/policy/provider/harness/
 runtime-intelligence defaults appropriate to a posture. Three runtime-mode
 profiles (plan §6) complete the set: ``ci`` (non-interactive, JSON-first),

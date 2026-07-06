@@ -1256,7 +1256,7 @@ class MCPServer:
 
     @staticmethod
     def _resolve_config(root: Path) -> Any:
-        """Resolve the seven-layer config (always returns a config + provenance)."""
+        """Resolve the layered config (always returns a config + provenance)."""
         from opencontext_core.config_resolver import resolve
 
         return resolve(root)

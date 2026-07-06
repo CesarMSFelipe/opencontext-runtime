@@ -1,15 +1,18 @@
-"""Seven-level configuration resolver (PR-013, SPEC-CLI-013-03).
+"""Layered configuration resolver (PR-013, SPEC-CLI-013-03; plan §6 order).
 
 Resolves the effective :class:`OpenContextConfig` by layering, in order (later
 wins):
 
 1. built-in defaults        (``default_config_data``)
-2. profile defaults         (``config_profiles.get_profile``)
-3. global user config        (``~/.opencontext/config.yaml``, if present)
+2. global user config        (``~/.opencontext/config.yaml``, if present)
+3. org/team config           (``$OPENCONTEXT_ORG_CONFIG`` or the global
+   ``org_config_path`` key; missing → empty layer)
 4. project config            (the project ``opencontext.yaml``)
-5. environment variables     (``OPENCONTEXT_*``)
-6. CLI / MCP request overrides
-7. runtime policy decisions
+5. profile overlay           (``config_profiles.get_profile``; only the keys
+   the selected profile defines)
+6. environment variables     (``OPENCONTEXT_*``)
+7. CLI / MCP request overrides
+8. runtime policy decisions (internal; always topmost)
 
 Returns ``(config, provenance)`` where ``provenance`` records, per top-level
 key, which layer last set it — so a run can explain *why* a value is what it is
@@ -44,13 +47,17 @@ from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_wo
 # assert ordering without hard-coding strings.
 LAYERS: tuple[str, ...] = (
     "defaults",
-    "profile",
     "global",
+    "org",
     "project",
+    "profile",
     "env",
     "overrides",
     "policy",
 )
+
+# Explicit path to the org/team config file (highest-preference org source).
+_ORG_CONFIG_ENV = "OPENCONTEXT_ORG_CONFIG"
 
 # Environment-variable → dotted-config-path mapping. Kept small and explicit;
 # the most load-bearing knob is the profile selector. TDD/storage mode also
@@ -148,6 +155,22 @@ def _global_config_path() -> Path:
     return resolve_workspace_path(Path.home(), StorageMode.local) / "config.yaml"
 
 
+def resolve_org_config_file(env: dict[str, str], global_config: dict[str, Any]) -> Path | None:
+    """Locate the org/team config file, or ``None`` when not configured.
+
+    Preference order: the explicit ``$OPENCONTEXT_ORG_CONFIG`` path, then the
+    ``org_config_path`` key in the global config. Never scans parent
+    directories; a missing file resolves to an empty layer.
+    """
+    explicit = env.get(_ORG_CONFIG_ENV, "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+    candidate = global_config.get("org_config_path")
+    if isinstance(candidate, str) and candidate.strip():
+        return Path(candidate).expanduser()
+    return None
+
+
 def _pick_profile(layers: list[tuple[str, dict[str, Any]]]) -> tuple[str, str]:
     """Return ``(profile_name, winning_layer)`` from the non-profile layers.
 
@@ -184,11 +207,13 @@ def resolve(
     policy: dict[str, Any] | None = None,
     global_config: dict[str, Any] | None = None,
     project_config: dict[str, Any] | None = None,
+    org_config: dict[str, Any] | None = None,
 ) -> ResolvedConfig:
-    """Resolve the effective config over the seven documented layers.
+    """Resolve the effective config over the documented layers (``LAYERS``).
 
-    ``project_config`` injects pre-loaded project data (bypassing the file
-    read); ``config explain`` uses it to resolve with unknown keys filtered.
+    ``project_config``/``org_config`` inject pre-loaded data (bypassing the
+    file read); ``config explain`` uses them to resolve with unknown keys
+    filtered.
     """
     env = dict(os.environ if env is None else env)
     cli_overrides = dict(cli_overrides or {})
@@ -201,12 +226,17 @@ def resolve(
     else:
         project_raw = _normalize_legacy_config(_load_yaml(project_file))
     global_raw = global_config if global_config is not None else _load_yaml(_global_config_path())
+    if org_config is not None:
+        org_raw = _normalize_legacy_config(dict(org_config))
+    else:
+        org_raw = _normalize_legacy_config(_load_yaml(resolve_org_config_file(env, global_raw)))
     env_raw = _env_overrides(env)
 
     # First pass (without profile) to determine the effective profile selection,
     # honouring precedence (overrides/policy/env beat project).
     selection_layers: list[tuple[str, dict[str, Any]]] = [
         ("global", global_raw),
+        ("org", org_raw),
         ("project", project_raw),
         ("env", env_raw),
         ("overrides", cli_overrides),
@@ -223,12 +253,14 @@ def resolve(
         profile_overlay = get_profile(profile_name)
 
     # ``profile`` is a real OpenContextConfig field, so the effective profile name
-    # is carried into the merged config (the selected overlay is layer 2).
+    # is carried into the merged config. The selected overlay sits above the
+    # workspace (project) layer per the plan order; env/overrides still beat it.
     ordered: list[tuple[str, dict[str, Any]]] = [
         ("defaults", {**default_config_data(), "profile": profile_name}),
-        ("profile", profile_overlay),
         ("global", global_raw),
+        ("org", org_raw),
         ("project", project_raw),
+        ("profile", profile_overlay),
         ("env", env_raw),
         ("overrides", cli_overrides),
         ("policy", policy),

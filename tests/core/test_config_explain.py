@@ -22,19 +22,31 @@ def _write(root: Path, body: str) -> Path:
 def test_sources_report_layer_path_and_line(tmp_path: Path) -> None:
     path = _write(
         tmp_path,
-        "version: 2\nproject:\n  name: demo\nharness:\n  tdd_mode: strict\n",
+        "version: 2\nproject:\n  name: demo\nmemory:\n  provider: local\n",
     )
     payload = explain(tmp_path, env={}, global_config={})
-    source = payload["sources"]["harness.tdd_mode"]
-    assert source["value"] == "strict"
+    source = payload["sources"]["memory.provider"]
+    assert source["value"] == "local"
     assert source["source"] == "project"
     assert source["path"] == str(path)
-    assert source["line"] == 5  # "  tdd_mode: strict" is line 5
+    assert source["line"] == 5  # "  provider: local" is line 5
     # Untouched keys resolve to defaults with no file origin.
     default_source = payload["sources"]["harness.strict_tdd"]
     assert default_source["source"] == "defaults"
     assert default_source["path"] is None
     assert default_source["line"] is None
+
+
+def test_sources_report_org_layer_with_path_and_line(tmp_path: Path) -> None:
+    _write(tmp_path, "version: 2\nproject:\n  name: demo\n")
+    org = tmp_path / "org.yaml"
+    org.write_text("ui_language: fr\n", encoding="utf-8")
+    payload = explain(tmp_path, env={"OPENCONTEXT_ORG_CONFIG": str(org)}, global_config={})
+    source = payload["sources"]["ui_language"]
+    assert source["value"] == "fr"
+    assert source["source"] == "org"
+    assert source["path"] == str(org)
+    assert source["line"] == 1
 
 
 def test_effective_config_and_validation_passed(tmp_path: Path) -> None:
@@ -55,6 +67,20 @@ def test_conflicts_report_losing_layers(tmp_path: Path) -> None:
     conflict = next(c for c in payload["conflicts"] if c["key"] == "ui_language")
     assert conflict["winner"] == "project"
     assert "global" in conflict["losers"]
+
+
+def test_conflicts_include_org_layer_in_merge_order(tmp_path: Path) -> None:
+    _write(tmp_path, "version: 2\nproject:\n  name: demo\nui_language: es\n")
+    org = tmp_path / "org.yaml"
+    org.write_text("ui_language: fr\n", encoding="utf-8")
+    payload = explain(
+        tmp_path,
+        env={"OPENCONTEXT_ORG_CONFIG": str(org)},
+        global_config={"ui_language": "en"},
+    )
+    conflict = next(c for c in payload["conflicts"] if c["key"] == "ui_language")
+    assert conflict["winner"] == "project"
+    assert conflict["losers"] == ["global", "org"]
 
 
 # ── CFG-005: unknown key warns (reported, does not crash resolution) ────────

@@ -503,7 +503,7 @@ def show_config(root: Path | None = None) -> None:
             else:
                 console.print("    models.roles: (not set)")
 
-            # --- Provenance section (7-layer resolution) ----------------------
+            # --- Provenance section (layered resolution) ----------------------
             _label("Provenance")
             try:
                 from opencontext_core.config_resolver import resolve as _resolve

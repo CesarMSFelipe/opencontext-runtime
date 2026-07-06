@@ -1,7 +1,7 @@
 """Effective-config explanation behind ``opencontext config explain`` (plan §6).
 
 Builds the machine-readable payload ``{effective_config, sources, conflicts,
-deprecated_keys, unknown_keys, validation}`` on top of the seven-level resolver
+deprecated_keys, unknown_keys, validation}`` on top of the layered resolver
 (:mod:`opencontext_core.config_resolver`). Per dotted key, ``sources`` names the
 winning layer, the file that supplied it (when file-based) and a best-effort
 line number. Secret-looking values are masked before anything is returned.
@@ -9,6 +9,7 @@ line number. Secret-looking values are masked before anything is returned.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ from opencontext_core.config_resolver import (
     _global_config_path,
     dotted_leaves,
     resolve,
+    resolve_org_config_file,
     resolve_project_config_file,
 )
 from opencontext_core.errors import ConfigurationError
@@ -177,6 +179,15 @@ def explain(
         raw_global = dict(global_config)
     global_known = {k: v for k, v in raw_global.items() if k in known}
 
+    effective_env = dict(os.environ if env is None else env)
+    org_path = resolve_org_config_file(effective_env, raw_global)
+    org_lines: list[str] = []
+    raw_org: dict[str, Any] = {}
+    if org_path is not None and org_path.exists():
+        org_lines = org_path.read_text(encoding="utf-8").splitlines()
+        raw_org = _load_yaml_strict(org_path)
+    org_known = {k: v for k, v in raw_org.items() if k in known}
+
     try:
         resolved = resolve(
             project_path,
@@ -185,6 +196,7 @@ def explain(
             policy=policy,
             global_config=global_known,
             project_config=known_only,
+            org_config=org_known,
         )
     except ConfigurationError:
         raise
@@ -203,6 +215,9 @@ def explain(
         elif layer == "global" and global_lines:
             entry["path"] = str(global_path)
             entry["line"] = _line_of_key(global_lines, dotted)
+        elif layer == "org" and org_lines:
+            entry["path"] = str(org_path)
+            entry["line"] = _line_of_key(org_lines, dotted)
         sources[dotted] = entry
 
     conflicts: list[dict[str, Any]] = []

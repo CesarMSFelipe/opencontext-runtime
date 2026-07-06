@@ -57,6 +57,21 @@ final state. Full semantics: see `RUN_STATE_CONTRACT.md`.
 - `report` artifacts and `run.json` must tell the same story (same status, same changed files).
 - TDD strict runs additionally require RED and GREEN evidence (`TDD_STRICT_CONTRACT.md`).
 
+## Configuration layers
+
+Effective configuration resolves by layering, lowest precedence first (plan §6):
+
+`defaults` → `global` → `org` → `project` (workspace) → `profile` → `env` → CLI/run `overrides` → runtime `policy`.
+
+- `org` is an optional org/team config file located via `$OPENCONTEXT_ORG_CONFIG` or the
+  `org_config_path` key in the global config; when absent it is an empty layer. Parent
+  directories are never scanned.
+- The selected profile overlays only the keys it defines and beats workspace config;
+  env vars and CLI flags beat the profile.
+- `policy` is the topmost internal layer (runtime policy decisions), not user config.
+- `config explain` reports the winning layer per key as `source` (CFG-007), with file path
+  and line for the file-based layers (`global`, `org`, `project`).
+
 ## Definition of Done
 
 The product is done when all of the following hold, each proven by the listed test IDs:

@@ -1604,8 +1604,17 @@ class OpenContextConfig(BaseModel):
 
     # Selected built-in configuration profile (PR-013, SPEC-CLI-013-02). One of
     # balanced/low-cost/enterprise/research/performance. Resolved against the
-    # seven-level resolver (``config_resolver``); ``balanced`` is the default.
+    # layered resolver (``config_resolver``); ``balanced`` is the default.
     profile: str = Field(default="balanced", description="Active configuration profile.")
+
+    # Optional org/team config file, overlaid between the global and project
+    # layers by ``config_resolver``. Meaningful in the global config (the
+    # OPENCONTEXT_ORG_CONFIG env var takes preference); never inferred by
+    # scanning parent directories.
+    org_config_path: str | None = Field(
+        default=None,
+        description="Path to an org/team config overlaid between global and project layers.",
+    )
 
     # Test/dev provider override for deterministic OC Flow mutation without live
     # credentials (PROD-002). When ``provider == "test_stub"`` and ``edits_file``
