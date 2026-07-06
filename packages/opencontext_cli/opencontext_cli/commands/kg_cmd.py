@@ -78,6 +78,15 @@ def add_kg_parser(subparsers: Any) -> None:
     kg_related.add_argument("--root", default=".", help="Project root (default: cwd).")
     kg_related.add_argument("--json", action="store_true")
 
+    kg_prune = kg_sub.add_parser(
+        "prune", help="Remove graph entries whose source files no longer exist."
+    )
+    kg_prune.add_argument(
+        "--dry-run", action="store_true", help="Report what would be removed without deleting."
+    )
+    kg_prune.add_argument("--root", default=".", help="Project root (default: cwd).")
+    kg_prune.add_argument("--json", action="store_true")
+
     kg_explain_pack = kg_sub.add_parser(
         "explain-pack", help="Explain what a persisted run's context pack selected and why."
     )
@@ -316,6 +325,21 @@ def handle_kg(args: Any) -> None:
                     f"  [bold]{entry['test']}[/] ({entry['via']} -> {entry['connected_to']})"
                 )
                 console.print(f"    [dim]{entry['file_path']}:{entry['line']}[/]")
+
+    elif command == "prune":
+        from opencontext_core.graph.prune import prune_knowledge_graph
+
+        report = prune_knowledge_graph(kg.db, Path(root), dry_run=getattr(args, "dry_run", False))
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            label = "Would remove" if report["dry_run"] else "Removed"
+            console.header("Knowledge Graph Prune" + (" (dry run)" if report["dry_run"] else ""))
+            console.print(
+                f"  {label} [bold]{report['nodes_removed']}[/] nodes, "
+                f"[bold]{report['edges_removed']}[/] edges "
+                f"({report['files_removed']} missing files)"
+            )
 
     elif command == "status":
         stats = kg.get_stats()

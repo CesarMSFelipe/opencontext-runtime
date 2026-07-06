@@ -101,3 +101,19 @@ class TestFindRelatedTests:
         db.insert_edge(_edge(test_id, symbol_id, "calls", "tests/test_calculator.py"))
         report = find_related_tests(db, "multiply_values")
         assert len(report["related_tests"]) == 1
+
+    def test_prefers_dedicated_tests_edge_over_calls_heuristic(self, db: GraphDatabase) -> None:
+        symbol_id, test_id = _seed(db, "tests")
+        db.insert_edge(_edge(test_id, symbol_id, "calls", "tests/test_calculator.py"))
+        report = find_related_tests(db, "multiply_values")
+        assert [t["via"] for t in report["related_tests"]] == ["tests"]
+
+    def test_calls_heuristic_skipped_when_real_edges_exist(self, db: GraphDatabase) -> None:
+        # With dedicated edges present, calls edges are not consulted at all —
+        # the indexer emits a tests edge for every test->symbol call, so a
+        # calls-only link means the edge predates real emission.
+        symbol_id, _test_id = _seed(db, "tests")
+        other_test = db.insert_node(_node("test_other", "tests/test_other.py", line=2))
+        db.insert_edge(_edge(other_test, symbol_id, "calls", "tests/test_other.py"))
+        report = find_related_tests(db, "multiply_values")
+        assert [t["via"] for t in report["related_tests"]] == ["tests"]
