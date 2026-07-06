@@ -24,6 +24,38 @@ from opencontext_core.config import (
 from opencontext_core.config_profiles import BUILTIN_PROFILES
 from opencontext_core.doctor.deep import DeepDiagnostic
 
+# Deprecated config keys → canonical replacement (dotted paths). Both
+# `config doctor` and `config explain` report these with a migration hint.
+# The legacy compression key is spelled via concatenation for the same reason
+# `_normalize_legacy_config` does: product source must not carry the old name.
+DEPRECATED_KEYS: dict[str, str] = {
+    "context.compression." + "cave" + "man_intensity": "context.compression.terse_intensity",
+}
+
+
+def _has_dotted(data: dict[str, Any], dotted: str) -> bool:
+    node: Any = data
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return False
+        node = node[part]
+    return True
+
+
+def find_deprecated_keys(raw: dict[str, Any]) -> list[dict[str, str]]:
+    """Report deprecated keys present in the raw (pre-normalization) config."""
+    findings: list[dict[str, str]] = []
+    for old, new in DEPRECATED_KEYS.items():
+        if _has_dotted(raw, old):
+            findings.append(
+                {
+                    "key": old,
+                    "replacement": new,
+                    "hint": f"Rename '{old}' to '{new}' in opencontext.yaml.",
+                }
+            )
+    return findings
+
 
 def _load_raw(path: Path | None) -> dict[str, Any]:
     if path is None or not path.exists():
@@ -98,6 +130,19 @@ def validate(root: str | Path = ".") -> list[DeepDiagnostic]:
                     f"Remove '{key}' or move it under a valid section. "
                     "Run 'opencontext config show' for the valid schema."
                 ),
+            )
+        )
+
+    # 2b. Deprecated keys (still load — normalization migrates them — but the
+    # config should move to the canonical spelling).
+    for finding in find_deprecated_keys(raw):
+        diags.append(
+            DeepDiagnostic(
+                name=f"config.deprecated_key.{finding['key']}",
+                status="warning",
+                message=f"Deprecated key: '{finding['key']}'",
+                details=f"Location: {config_file}",
+                recommendation=finding["hint"],
             )
         )
 

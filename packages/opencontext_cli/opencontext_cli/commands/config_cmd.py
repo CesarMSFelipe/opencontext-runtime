@@ -55,6 +55,18 @@ def add_config_parser(subparsers: Any) -> None:
     )
     show_p.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
 
+    # Explain — effective config with per-key source layer/file/line (plan §6).
+    explain_p = config_sub.add_parser(
+        "explain",
+        help="Explain the effective config: value, source layer, file and line per key.",
+    )
+    explain_p.add_argument(
+        "--root",
+        default=None,
+        help="Project root for resolving opencontext.yaml (default: cwd).",
+    )
+    explain_p.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
+
     config_sub.add_parser("reset", help="Reset to factory defaults.")
 
     reconf_parser = config_sub.add_parser("reconfigure", help="Reconfigure a specific section.")
@@ -136,10 +148,14 @@ def handle_config(args: Any) -> None:
     elif command == "show":
         from pathlib import Path
 
+        root = Path(getattr(args, "root", None) or ".").resolve()
+        _require_parseable_project_yaml(root / "opencontext.yaml")
         if getattr(args, "json", False):
-            _config_show_json(root=Path(getattr(args, "root", None) or ".").resolve())
+            _config_show_json(root=root)
         else:
-            show_config(root=Path(getattr(args, "root", None) or ".").resolve())
+            show_config(root=root)
+    elif command == "explain":
+        _config_explain(args)
     elif command == "reset":
         reset_config()
     elif command == "reconfigure":
@@ -229,11 +245,101 @@ def _config_show_json(root: Path | None = None) -> None:
     print(json.dumps(payload, indent=2, default=str))
 
 
+def _require_parseable_project_yaml(yaml_path: Path) -> None:
+    """Raise the CONFIG_INVALID contract error when *yaml_path* is unparseable.
+
+    Missing files are fine (zero-config defaults); a file that exists but does
+    not parse must fail with the structured envelope, exit code 3 (GAP-024).
+    """
+    if not yaml_path.is_file():
+        return
+    import yaml as _yaml
+
+    from opencontext_cli.contracts import CliContractError
+
+    try:
+        _yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    except _yaml.YAMLError as exc:
+        raise CliContractError(
+            "CONFIG_INVALID",
+            f"Invalid YAML in {yaml_path}: {exc}",
+            hint=(
+                "Fix the YAML syntax in opencontext.yaml, restore a backup with "
+                "'opencontext config restore', or re-create it with 'opencontext init'."
+            ),
+            status="needs_configuration",
+        ) from exc
+
+
+def _config_explain(args: Any) -> None:
+    """Explain the effective config: value + source layer/file/line per key."""
+    from opencontext_cli.contracts import CliContractError
+    from opencontext_core.config_explain import explain
+    from opencontext_core.errors import ConfigurationError
+
+    root = Path(getattr(args, "root", None) or ".").resolve()
+    try:
+        payload = explain(root)
+    except ConfigurationError as exc:
+        raise CliContractError(
+            "CONFIG_INVALID",
+            str(exc),
+            hint=(
+                "Fix opencontext.yaml (run 'opencontext config doctor' for the "
+                "failing keys), or pass --config <path> to use another file."
+            ),
+            status="needs_configuration",
+        ) from exc
+
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, default=str))
+        return
+
+    console.header("Config Explain")
+    console.print(f"  Profile: {payload['profile']}")
+    console.print(f"  Validation: {payload['validation']['status']}")
+    non_default = {
+        key: entry for key, entry in payload["sources"].items() if entry["source"] != "defaults"
+    }
+    if non_default:
+        console.table(
+            "Overridden keys",
+            ["Key", "Value", "Source", "Location"],
+            [
+                [
+                    key,
+                    str(entry["value"]),
+                    entry["source"],
+                    f"{entry['path']}:{entry['line']}" if entry["path"] else "—",
+                ]
+                for key, entry in sorted(non_default.items())
+            ],
+        )
+    else:
+        console.dim("  All keys at built-in defaults.")
+    for conflict in payload["conflicts"]:
+        console.warning(
+            f"  conflict: {conflict['key']} won by '{conflict['winner']}' "
+            f"over {', '.join(conflict['losers'])}"
+        )
+    for entry in payload["deprecated_keys"]:
+        console.warning(f"  deprecated: {entry['key']} → {entry['hint']}")
+    for key in payload["unknown_keys"]:
+        console.warning(f"  unknown key: {key}")
+
+
 def _config_doctor(args: Any) -> None:
     """Validate the project's opencontext.yaml and report each finding."""
     import json as _json
 
+    from opencontext_core.config import find_config
     from opencontext_core.config_doctor import validate
+
+    doctor_root = Path(getattr(args, "root", "."))
+    doctor_file = doctor_root / "opencontext.yaml"
+    if not doctor_file.exists():
+        doctor_file = find_config(doctor_root) or doctor_file
+    _require_parseable_project_yaml(doctor_file)
 
     diags = validate(getattr(args, "root", "."))
     failed = sum(1 for d in diags if d.status in ("failed", "error"))
@@ -244,6 +350,11 @@ def _config_doctor(args: Any) -> None:
                 {
                     "ok": failed == 0,
                     "failed": failed,
+                    "deprecated_keys": [
+                        d.name.removeprefix("config.deprecated_key.")
+                        for d in diags
+                        if d.name.startswith("config.deprecated_key.")
+                    ],
                     "findings": [
                         {
                             "name": d.name,

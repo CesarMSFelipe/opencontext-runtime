@@ -1471,6 +1471,29 @@ class HarnessSettingsConfig(BaseModel):
     )
 
 
+class InterfaceConfig(BaseModel):
+    """Runtime-mode interface settings (plan §6 ci/local/agent profiles).
+
+    Drive whether the CLI may prompt, launch the TUI, or default to JSON
+    output. The ``ci``/``local`` built-in profiles overlay these.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    interactive: bool = Field(
+        default=True,
+        description="Allow interactive prompts (False for CI/agent runs).",
+    )
+    tui: bool = Field(
+        default=True,
+        description="Allow launching TUI screens (False for CI/agent runs).",
+    )
+    json_default: bool = Field(
+        default=False,
+        description="Default to machine-readable JSON output when supported.",
+    )
+
+
 class RuntimeBrainConfig(BaseModel):
     """Advisory Runtime Brain controls (PR-000.1).
 
@@ -1661,6 +1684,10 @@ class OpenContextConfig(BaseModel):
     harness: HarnessSettingsConfig = Field(
         default_factory=HarnessSettingsConfig,
         description="Agentic harness governance settings (TDD / approval pre-gates).",
+    )
+    interface: InterfaceConfig = Field(
+        default_factory=InterfaceConfig,
+        description="Interactive/TUI/JSON-default interface settings (ci/local profiles).",
     )
     runtime_brain: RuntimeBrainConfig = Field(
         default_factory=RuntimeBrainConfig,

@@ -53,26 +53,40 @@ LAYERS: tuple[str, ...] = (
 )
 
 # Environment-variable → dotted-config-path mapping. Kept small and explicit;
-# the most load-bearing knob is the profile selector.
+# the most load-bearing knob is the profile selector. TDD/storage mode also
+# have direct readers (harness runner / paths); this map makes them visible to
+# the resolver and `config explain` without breaking those readers.
 _ENV_MAP: dict[str, str] = {
     "OPENCONTEXT_PROFILE": "profile",
     "OPENCONTEXT_SECURITY_MODE": "security.mode",
     "OPENCONTEXT_PROVIDER_STRATEGY": "providers.strategy",
     "OPENCONTEXT_UI_LANGUAGE": "ui_language",
+    "OPENCONTEXT_TDD_MODE": "harness.tdd_mode",
+    "OPENCONTEXT_STORAGE_MODE": "storage.mode",
 }
 
 
 @dataclass
 class ResolutionProvenance:
-    """Records which layer set each top-level config key, plus profile origin."""
+    """Records which layer set each top-level config key, plus profile origin.
+
+    ``by_dotted_key``/``dotted_key_layers`` extend the top-level tracking to
+    nested dotted keys (additive; ``config explain`` consumes them).
+    """
 
     by_key: dict[str, str] = field(default_factory=dict)
     profile: str = DEFAULT_PROFILE
     profile_layer: str = "defaults"
+    by_dotted_key: dict[str, str] = field(default_factory=dict)
+    dotted_key_layers: dict[str, list[str]] = field(default_factory=dict)
 
     def layer_of(self, key: str) -> str:
         """Return the winning layer for *key* (``"defaults"`` if unseen)."""
         return self.by_key.get(key, "defaults")
+
+    def dotted_layer_of(self, dotted: str) -> str:
+        """Return the winning layer for nested *dotted* key (``"defaults"`` if unseen)."""
+        return self.by_dotted_key.get(dotted, "defaults")
 
 
 @dataclass
@@ -83,6 +97,21 @@ class ResolvedConfig:
     provenance: ResolutionProvenance
     profile: str
     data: dict[str, Any]
+
+
+def dotted_leaves(data: dict[str, Any], prefix: str = "") -> list[tuple[str, Any]]:
+    """Return ``(dotted_key, value)`` for every leaf of a nested mapping.
+
+    A leaf is any non-dict value or an empty dict.
+    """
+    leaves: list[tuple[str, Any]] = []
+    for key, value in data.items():
+        dotted = f"{prefix}{key}"
+        if isinstance(value, dict) and value:
+            leaves.extend(dotted_leaves(value, f"{dotted}."))
+        else:
+            leaves.append((dotted, value))
+    return leaves
 
 
 def _set_dotted(target: dict[str, Any], dotted: str, value: Any) -> None:
@@ -134,6 +163,19 @@ def _pick_profile(layers: list[tuple[str, dict[str, Any]]]) -> tuple[str, str]:
     return DEFAULT_PROFILE, "defaults"
 
 
+def resolve_project_config_file(project_path: str | Path | None) -> Path | None:
+    """Locate the project config file *resolve* would load for *project_path*."""
+    if project_path is not None:
+        candidate = Path(project_path)
+        if candidate.is_dir():
+            project_file: Path | None = candidate / "opencontext.yaml"
+            if project_file is not None and not project_file.exists():
+                project_file = find_config(candidate)
+            return project_file
+        return candidate
+    return find_config(Path.cwd())
+
+
 def resolve(
     project_path: str | Path | None = None,
     *,
@@ -141,25 +183,23 @@ def resolve(
     cli_overrides: dict[str, Any] | None = None,
     policy: dict[str, Any] | None = None,
     global_config: dict[str, Any] | None = None,
+    project_config: dict[str, Any] | None = None,
 ) -> ResolvedConfig:
-    """Resolve the effective config over the seven documented layers."""
+    """Resolve the effective config over the seven documented layers.
+
+    ``project_config`` injects pre-loaded project data (bypassing the file
+    read); ``config explain`` uses it to resolve with unknown keys filtered.
+    """
     env = dict(os.environ if env is None else env)
     cli_overrides = dict(cli_overrides or {})
     policy = dict(policy or {})
 
-    project_file: Path | None = None
-    if project_path is not None:
-        candidate = Path(project_path)
-        if candidate.is_dir():
-            project_file = candidate / "opencontext.yaml"
-            if not project_file.exists():
-                project_file = find_config(candidate)
-        else:
-            project_file = candidate
-    else:
-        project_file = find_config(Path.cwd())
+    project_file = resolve_project_config_file(project_path)
 
-    project_raw = _normalize_legacy_config(_load_yaml(project_file))
+    if project_config is not None:
+        project_raw = _normalize_legacy_config(dict(project_config))
+    else:
+        project_raw = _normalize_legacy_config(_load_yaml(project_file))
     global_raw = global_config if global_config is not None else _load_yaml(_global_config_path())
     env_raw = _env_overrides(env)
 
@@ -201,6 +241,9 @@ def resolve(
             continue
         for key in data:
             provenance.by_key[key] = layer_name
+        for dotted, _value in dotted_leaves(data):
+            provenance.by_dotted_key[dotted] = layer_name
+            provenance.dotted_key_layers.setdefault(dotted, []).append(layer_name)
         merged = _deep_merge(merged, data)
 
     config = OpenContextConfig.model_validate(merged)

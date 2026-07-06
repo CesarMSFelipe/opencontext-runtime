@@ -56,10 +56,11 @@ def test_common_errors_are_actionable(oc_bin, workspace) -> None:
 
     # pack on a root that cannot be indexed → non-zero exit + an actionable
     # corrective command on stderr (never a stack trace, never stdout garbage).
+    # Human mode: JSON mode emits the error envelope instead (envelope test below).
     missing_root = ws.root / "does-not-exist"
     proc = run(
         oc_bin,
-        ["pack", str(missing_root), "--query", "explain this project", "--format", "json"],
+        ["pack", str(missing_root), "--query", "explain this project"],
         cwd=ws.root,
         env=ws.env,
     )
@@ -73,11 +74,6 @@ def test_common_errors_are_actionable(oc_bin, workspace) -> None:
     )
 
 
-@pytest.mark.xfail(
-    reason="GAP-024: stable JSON error envelope not emitted by failing commands "
-    "(contracts module exists but no command raises CliContractError yet)",
-    strict=False,
-)
 def test_json_failures_return_stable_error_envelope(oc_bin, workspace) -> None:
     """AC-024: failing commands in JSON mode return the stable error envelope."""
     ws = workspace("py_bugfix_basic")

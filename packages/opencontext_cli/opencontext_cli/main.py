@@ -100,7 +100,7 @@ from opencontext_core.dx.instructions import import_instructions
 from opencontext_core.dx.security_reports import scan_project
 from opencontext_core.dx.tokens import build_token_report
 from opencontext_core.dx.wizard_frame import WizardStep
-from opencontext_core.errors import OpenContextError
+from opencontext_core.errors import ConfigurationError, OpenContextError
 from opencontext_core.evaluation import (
     BasicEvaluator,
     ContextBenchEvaluator,
@@ -307,14 +307,22 @@ def main() -> None:
         except Exception:
             pass
     except CliContractError as exc:
-        if getattr(args, "json", False):
-            json.dump(exc.to_envelope(), sys.stdout)
-            sys.stdout.write("\n")
-        else:
-            eprint(f"Error: {exc.message}")
-            if exc.hint:
-                err_console.dim(f"  {exc.hint}")
+        _render_contract_error(exc, args)
         raise SystemExit(exc.exit_code) from exc
+    except ConfigurationError as exc:
+        # Invalid/unparseable config is a contract failure: structured envelope
+        # in JSON mode, needs_configuration exit code 3 (CLI_CONTRACT.md).
+        contract = CliContractError(
+            "CONFIG_INVALID",
+            str(exc),
+            hint=(
+                "Fix opencontext.yaml (run 'opencontext config doctor' for the "
+                "failing keys), or pass --config <path> to use another file."
+            ),
+            status="needs_configuration",
+        )
+        _render_contract_error(contract, args)
+        raise SystemExit(contract.exit_code) from exc
     except OpenContextError as exc:
         eprint(f"Error: {exc}")
         _print_suggestion(args.command if hasattr(args, "command") else "")
@@ -339,6 +347,20 @@ def main() -> None:
             "OPENCONTEXT_DEBUG=1 for the full traceback."
         )
         raise SystemExit(1) from exc
+
+
+def _render_contract_error(exc: CliContractError, args: argparse.Namespace) -> None:
+    """Render a contract error: pure JSON envelope on stdout in machine mode.
+
+    Machine mode is ``--json`` or (for commands like ``pack``) ``--format json``.
+    """
+    if getattr(args, "json", False) or getattr(args, "format", None) == "json":
+        json.dump(exc.to_envelope(), sys.stdout)
+        sys.stdout.write("\n")
+    else:
+        eprint(f"Error: {exc.message}")
+        if exc.hint:
+            err_console.dim(f"  {exc.hint}")
 
 
 def _print_suggestion(command: str) -> None:
@@ -1859,6 +1881,24 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command == "learn":
         handle_learn(args)
         return
+    # GAP-024: `pack` with an explicit --query against a nonexistent root is a
+    # contract failure (structured envelope), never a silent cwd pack. A bare
+    # `pack <text>` without --query keeps treating the positional as the query.
+    if (
+        command == "pack"
+        and args.root != "diff"
+        and getattr(args, "query", "")
+        and not Path(args.root).exists()
+    ):
+        raise CliContractError(
+            "ROOT_NOT_FOUND",
+            f"Project root does not exist: {args.root}",
+            hint=(
+                "Check the path, then run 'opencontext index <root>' on an "
+                "existing project directory and retry the pack."
+            ),
+            details={"root": args.root},
+        )
     # `index` persists the graph/manifest under the *root* argument, so it needs a
     # runtime whose storage is anchored there rather than to cwd (BUG: graph wrote
     # to cwd/.storage when index ran from outside the project).

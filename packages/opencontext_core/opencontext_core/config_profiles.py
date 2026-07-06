@@ -1,10 +1,13 @@
 """Built-in configuration profiles (PR-013, SPEC-CLI-013-02).
 
-Five named *configuration* profiles — ``balanced`` (default), ``low-cost``,
+Named *configuration* profiles — ``balanced`` (default), ``low-cost``,
 ``enterprise``, ``research`` and ``performance`` — each a partial-config overlay
 applied as the second layer of the seven-level resolver
 (``config_resolver.resolve``). They set security/policy/provider/harness/
-runtime-intelligence defaults appropriate to a posture.
+runtime-intelligence defaults appropriate to a posture. Three runtime-mode
+profiles (plan §6) complete the set: ``ci`` (non-interactive, JSON-first),
+``local`` (interactive, TUI on) and ``agent`` (approval-gated writes, bounded
+context budget).
 
 These are DISTINCT from the per-phase model-assignment profiles in
 ``sdd_profiles.py`` (``default``/``cheap``/``hybrid``/``premium``): config
@@ -96,6 +99,32 @@ BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
             "providers": {"strategy": "fastest", "fallback": True},
             "harness": {"approval_required_for_writes": False},
             "runtime_intelligence_enabled": False,
+        },
+    },
+    # Runtime-mode profiles (plan §6): posture for WHERE the CLI runs rather
+    # than governance strictness. They map onto existing config fields only.
+    "ci": {
+        "description": (
+            "Non-interactive CI runs: no prompts, no TUI, machine-readable JSON output by default."
+        ),
+        "overlay": {
+            "interface": {"interactive": False, "tui": False, "json_default": True},
+        },
+    },
+    "local": {
+        "description": "Interactive local development: prompts and TUI screens enabled.",
+        "overlay": {
+            "interface": {"interactive": True, "tui": True},
+        },
+    },
+    "agent": {
+        "description": (
+            "Agent-driven runs: every write requires approval and the context "
+            "budget is bounded to 24000 tokens."
+        ),
+        "overlay": {
+            "harness": {"approval_required_for_writes": True},
+            "context": {"max_input_tokens": 24000},
         },
     },
 }
