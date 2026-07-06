@@ -198,6 +198,33 @@ def test_forbidden_commands_config_now_read_by_harness() -> None:
     assert CommandClassifier().is_forbidden("rm -rf /", cfg.forbidden_commands) is True
 
 
+# -- EXE-005: destructive-but-not-forbidden commands require approval ----------
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["git reset --hard HEAD~3", "drop table users", "dd if=/dev/zero of=/dev/sdb"],
+)
+def test_destructive_command_asks_for_approval_under_balanced(command: str) -> None:
+    """EXE-005: a destructive-but-not-forbidden command yields ask with
+    required_approval=True under balanced (posture.destructive_command)."""
+    decision = PolicyEngine(preset=PolicyPreset.BALANCED, ci_mode=False).evaluate(
+        PolicyOperation(kind="command", command=command)
+    )
+    assert decision.decision == "ask"
+    assert decision.reason == "command_destructive"
+    assert decision.required_approval is True
+
+
+def test_no_preset_allows_destructive_commands_unguarded() -> None:
+    """EXE-005: no preset maps the destructive category to unguarded allow —
+    balanced/permissive ask, restricted/air_gapped deny (PRESET_TABLE guard)."""
+    from opencontext_core.policy.presets import PRESET_TABLE
+
+    for preset, posture in PRESET_TABLE.items():
+        assert posture.destructive_command in ("ask", "deny"), preset.value
+
+
 # -- AUTO-1: risk-based auto-apply --------------------------------------------
 
 

@@ -6,7 +6,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from opencontext_core.agentic.config import BudgetMode, FlowMode, MemoryMode
 from opencontext_core.compat import StrEnum
@@ -1783,6 +1790,27 @@ class OpenContextConfig(BaseModel):
         default_factory=dict,
         description="v2 studio section — reserved for PR-014 (validates, no impl required).",
     )
+
+    @model_validator(mode="after")
+    def _apply_policies_overlay(self) -> OpenContextConfig:
+        """Wire the v2 ``policies:`` section onto its typed enforcement fields.
+
+        EXE-POLICIES: ``policies.writes.require_approval`` drives the field the
+        ApplyPhase approval pre-gate reads, and ``policies.shell.allow`` drives
+        the executors shell gate (EXE-002). The posture-mapped keys (network/
+        secrets/destructive/preset) are consumed by the PolicyEngine directly.
+        Absent keys change nothing.
+        """
+        if not self.policies:
+            return self
+        from opencontext_core.policy.overlay import PoliciesOverlay
+
+        overlay = PoliciesOverlay.from_mapping(self.policies)
+        if overlay.writes_require_approval is not None:
+            self.harness.approval_required_for_writes = overlay.writes_require_approval
+        if overlay.shell_allow is not None:
+            self.executors.allow_shell = overlay.shell_allow
+        return self
 
 
 def find_config(start_dir: str | Path = ".") -> Path | None:

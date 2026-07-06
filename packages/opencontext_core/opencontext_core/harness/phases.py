@@ -2520,6 +2520,27 @@ class VerifyPhase(HarnessPhase):
                 "error_output": "",
             }
         args = [sys.executable, "-m", "pytest", "-q", "--tb=short", *targets]
+        # EXE-002: ``policies: shell: allow: false`` in opencontext.yaml disables
+        # this command-execution path entirely — the command is refused before
+        # ``subprocess.run`` is ever reached. An absent key changes nothing.
+        from opencontext_core.config import load_config_or_defaults
+        from opencontext_core.policy.overlay import PoliciesOverlay
+
+        try:
+            _root_cfg = load_config_or_defaults(root / "opencontext.yaml", auto_detect=False)
+            _shell_allow = PoliciesOverlay.from_mapping(_root_cfg.policies).shell_allow
+        except Exception:
+            _shell_allow = None  # config is optional; absence means no shell gate
+        if _shell_allow is False:
+            return {
+                "exit_code": -3,
+                "passed": 0,
+                "failed": 0,
+                "errors": 1,
+                "tests_executed": False,
+                "output": "",
+                "error_output": "command blocked by policy: shell_disabled",
+            }
         # CMD-1: route the command through the policy deny-list before executing.
         # Until PR-005 ``forbidden_commands`` was loaded but read by no execution
         # path; this is the wiring that makes it actually enforce. The harness only
