@@ -105,6 +105,12 @@ class OCFlowContext:
     # MEMORY_CONTRACT rule 4: recall hits recorded by _fold_memory_recall and
     # persisted into run.json's memory block ({id, type, score, used_for}).
     memory_hits: list[dict[str, Any]] = field(default_factory=list)
+    # MEMORY_CONTRACT rule 4 (candidate accounting): how many memory candidates
+    # this run harvested (set by _persist_memory_delta) and whether the project
+    # config gates new memory behind approval (memory.approval_required,
+    # threaded by the runner). Both feed run.json's memory block additively.
+    memory_new_candidates: int = 0
+    memory_approval_required: bool = False
     # Strict-TDD posture threaded from the runner (config.harness.tdd_mode /
     # OPENCONTEXT_TDD_MODE). "strict" enables the RED-first pre-check in node_mutate;
     # "ask"/"off" (the default) leave the flow's behaviour byte-for-byte unchanged.
@@ -1394,10 +1400,14 @@ def _persist_memory_delta(ctx: OCFlowContext, memory_delta: dict[str, Any]) -> d
             "harvested_records": len(records),
             "via": "harness" if harness is not None else "harvester-legacy",
         }
+        # MEMORY_CONTRACT rule 4: the run report counts every candidate this
+        # run produced (harvested records + promoted durable notes below).
+        ctx.memory_new_candidates = len(records)
         durable_notes = memory_delta.get("durable_notes") or []
         if durable_notes:
             if harness is not None:
                 outcome["promoted_notes"] = _promote_durable_notes(harness, durable_notes, run_id)
+                ctx.memory_new_candidates += int(outcome["promoted_notes"])
             else:
                 # Honest skip: without the harness sole writer there is no
                 # sanctioned promotion path for free-form notes from here.

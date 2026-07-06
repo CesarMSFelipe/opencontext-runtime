@@ -307,6 +307,7 @@ class OCFlowRunner:
         self._memory_enabled = False
         self._memory_harvest_enabled = False
         self._memory_v2_enabled = False
+        self._memory_approval_required = False
         self._memory_store: Any | None = memory_store
         self._compression_enabled = False
         self._compression_config: Any | None = None
@@ -385,6 +386,9 @@ class OCFlowRunner:
         memory_cfg = getattr(config, "memory", None)
         self._memory_enabled = bool(getattr(memory_cfg, "enabled", False))
         self._memory_harvest_enabled = bool(getattr(memory_cfg, "harvest_after_run", False))
+        # MEMORY_CONTRACT rule 4: whether newly harvested memory awaits approval
+        # before use — reported per run as memory.requires_approval.
+        self._memory_approval_required = bool(getattr(memory_cfg, "approval_required", False))
         self._memory_v2_enabled = bool(
             getattr(getattr(config, "runtime", None), "memory_v2_enabled", False)
         )
@@ -634,6 +638,7 @@ class OCFlowRunner:
             memory_store=self._memory_store,
             memory_harvest_enabled=self._memory_harvest_enabled,
             memory_v2_enabled=self._memory_v2_enabled,
+            memory_approval_required=self._memory_approval_required,
             tdd_mode=self._tdd_mode,
             tdd_red_exit_code=(tdd_evidence.red.exit_code if tdd_evidence.red else None),
             run_id=run_id,
@@ -1216,8 +1221,15 @@ class OCFlowRunner:
                 "compression_enabled": ctx.compression_enabled,
             },
             # MEMORY_CONTRACT rule 4: every memory hit used by the run is
-            # recorded ({id, type, score, used_for}); additive field.
-            "memory": memory_block(ctx.memory_hits),
+            # recorded ({id, type, score, used_for}) together with the count of
+            # harvested candidates and their approval gate; additive fields.
+            "memory": memory_block(
+                ctx.memory_hits,
+                new_candidates=ctx.memory_new_candidates,
+                requires_approval=bool(
+                    ctx.memory_approval_required and ctx.memory_new_candidates > 0
+                ),
+            ),
         }
         green_evidence = (tdd or {}).get("green") or {}
         verification_report = {

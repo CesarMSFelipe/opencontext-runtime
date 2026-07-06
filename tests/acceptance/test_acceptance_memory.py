@@ -83,6 +83,83 @@ def test_second_run_reports_approved_memory_as_used(stub_run) -> None:
     assert block.get("hits"), "the retrieved memory must be listed with id/score/used_for"
 
 
+def test_run_memory_block_reports_candidates_and_approval(stub_run) -> None:
+    """MEM-HITS-SHAPE: run.json memory block carries new_candidates + requires_approval."""
+    ws = stub_run["ws"]
+    run_dir = find_run_dir(ws, stub_run["summary"]["run_id"])
+    report = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    block = report["memory"]
+    assert isinstance(block.get("new_candidates"), int), (
+        f"MEMORY_CONTRACT rule 4: memory.new_candidates must be an int count, got {block}"
+    )
+    assert isinstance(block.get("requires_approval"), bool), (
+        f"MEMORY_CONTRACT rule 4: memory.requires_approval must be a bool, got {block}"
+    )
+
+
+def test_memory_lifecycle_verbs_dispatch_end_to_end(oc_bin, workspace) -> None:
+    """MEM-CMDS: top-level `memory approve|reject|purge` dispatch works on the real binary.
+
+    Under `memory.approval_required: true` (MEM-002 live path) a v2 save lands
+    proposed and invisible to default search; `approve` flips it to active,
+    `reject` discards a second proposed row, and `purge --yes` wipes the store.
+    """
+    ws = workspace("memory_reuse_basic")
+    (ws.root / "opencontext.yaml").write_text(
+        "memory:\n  approval_required: true\n", encoding="utf-8"
+    )
+    install_workspace(oc_bin, ws)
+
+    def save(title: str, content: str) -> int:
+        proc, receipt = run_json(
+            oc_bin,
+            ["memory", "v2", "save", "--title", title, "--content", content],
+            cwd=ws.root,
+            env=ws.env,
+        )
+        assert proc.returncode == 0, proc.stderr[:400]
+        return int(receipt["receipt"]["id"])
+
+    kept_id = save("Deploy rule", "Deploys must run behind the release feature flag.")
+    proc, results = run_json(
+        oc_bin, ["memory", "v2", "search", "--query", "feature flag"], cwd=ws.root, env=ws.env
+    )
+    assert proc.returncode == 0, proc.stderr[:400]
+    assert all(r["id"] != kept_id for r in results), (
+        f"MEM-002: proposed memory must be excluded from default search: {results}"
+    )
+
+    proc, approved = run_json(oc_bin, ["memory", "approve", str(kept_id)], cwd=ws.root, env=ws.env)
+    assert proc.returncode == 0, proc.stderr[:400]
+    assert approved["lifecycle_state"] == "active"
+    proc, results = run_json(
+        oc_bin, ["memory", "v2", "search", "--query", "feature flag"], cwd=ws.root, env=ws.env
+    )
+    assert any(r["id"] == kept_id for r in results), (
+        f"approved memory must become retrievable: {results}"
+    )
+
+    dropped_id = save("Rejected rule", "Nightly jobs may bypass the review queue.")
+    proc, rejected = run_json(
+        oc_bin, ["memory", "reject", str(dropped_id)], cwd=ws.root, env=ws.env
+    )
+    assert proc.returncode == 0, proc.stderr[:400]
+    assert rejected["lifecycle_state"] == "rejected"
+    gone = run(oc_bin, ["memory", "v2", "get", "--id", str(dropped_id)], cwd=ws.root, env=ws.env)
+    assert gone.returncode == 2, "rejected memory must never be retrieved again"
+
+    refused = run(oc_bin, ["memory", "purge"], cwd=ws.root, env=ws.env)
+    assert refused.returncode == 2, "purge must refuse without --yes"
+    proc, purged = run_json(oc_bin, ["memory", "purge", "--yes"], cwd=ws.root, env=ws.env)
+    assert proc.returncode == 0, proc.stderr[:400]
+    assert purged["purged"] is True
+    assert purged["removed_files"], "purge must report the removed store files"
+    proc, results = run_json(
+        oc_bin, ["memory", "v2", "search", "--query", "feature flag"], cwd=ws.root, env=ws.env
+    )
+    assert results == [], "after purge nothing is retrievable"
+
+
 def test_memory_compact_preserves_protected_memory(oc_bin, workspace) -> None:
     """AC-019: `memory compact` reduces old entries without deleting protected memory.
 

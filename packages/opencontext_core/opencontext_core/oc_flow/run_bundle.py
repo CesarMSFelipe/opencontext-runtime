@@ -116,13 +116,26 @@ def enforce_gates(status: str, gates: list[dict[str, Any]]) -> str:
     return status
 
 
-def memory_block(hits: list[dict[str, Any]]) -> dict[str, Any]:
+def memory_block(
+    hits: list[dict[str, Any]],
+    *,
+    new_candidates: int = 0,
+    requires_approval: bool = False,
+) -> dict[str, Any]:
     """MEMORY_CONTRACT rule 4: the run.json memory block for recall hits.
 
     Each hit carries ``{id, type, score, used_for}``; ``used`` is True exactly
     when at least one memory record was folded into the run's context.
+    ``new_candidates`` counts the memory candidates this run harvested and
+    ``requires_approval`` reports whether they await approval before use
+    (``memory.approval_required``); both are additive fields.
     """
-    return {"used": bool(hits), "hits": list(hits)}
+    return {
+        "used": bool(hits),
+        "hits": list(hits),
+        "new_candidates": int(new_candidates),
+        "requires_approval": bool(requires_approval),
+    }
 
 
 def write_run_bundle(

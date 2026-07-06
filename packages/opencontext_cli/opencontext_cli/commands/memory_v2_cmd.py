@@ -569,6 +569,11 @@ def handle_memory_lifecycle(args: argparse.Namespace, command: str) -> None:
         from opencontext_memory import mem_compact
 
         result = mem_compact(_open_store(cwd))
+        # MEM-006: compaction generates a summary record. The summary lives in
+        # the context repository (`summaries/`) so it is retrievable via
+        # `memory list`/`memory search`; `summary` is an additive report field
+        # (null when nothing was compacted).
+        result["summary"] = _write_compact_summary(cwd, result)
         print(json.dumps(result, indent=2, default=str))
         return
 
@@ -586,15 +591,52 @@ def handle_memory_lifecycle(args: argparse.Namespace, command: str) -> None:
     raise SystemExit(f"unknown memory lifecycle command: {command}")
 
 
+def _write_compact_summary(cwd: Path, report: dict[str, Any]) -> dict[str, Any] | None:
+    """Generate the MEM-006 compaction summary record, or None on a no-op.
+
+    One `kind="summary"` item per compact invocation describes every compacted
+    cluster (keeper id + absorbed ids). Best-effort: a failing repository write
+    never blocks the compaction itself (the store update already happened).
+    """
+    clusters = [c for c in report.get("clusters") or [] if c.get("compacted_ids")]
+    if not clusters:
+        return None
+    lines = [
+        f"kept #{c['keeper_id']} ('{c['title']}') absorbing "
+        + ", ".join(f"#{i}" for i in c["compacted_ids"])
+        for c in clusters
+    ]
+    content = (
+        f"Memory compaction summary: {len(report['compacted_ids'])} duplicate "
+        f"observation(s) compacted into {len(clusters)} cluster(s): " + "; ".join(lines) + "."
+    )
+    try:
+        from opencontext_core.memory_usability.context_repository import ContextRepository
+
+        item = ContextRepository(cwd).store(
+            content,
+            kind="summary",
+            source="memory-compact",
+            collection="summaries",
+        )
+    except Exception:  # summary generation is additive — never block compact
+        return None
+    return {"id": item.id, "kind": item.kind, "content": item.content}
+
+
 def purge_memory_state(cwd: Path) -> dict[str, Any]:
     """Delete ALL managed memory state for *cwd*.
 
     Shared by ``memory purge --yes`` and the workspace uninstall purge, so
-    both paths perform the same uninstall-grade wipe.
+    both paths perform the same uninstall-grade wipe. MEM-007: "everything"
+    includes the markdown context repository (`memory init`'s layout), not
+    just the SQLite stores.
     """
+    import shutil
+
     from opencontext_memory import MemoryStore, mem_purge
 
-    from opencontext_core.paths import StorageMode, resolve_storage_path
+    from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 
     storage = resolve_storage_path(Path(cwd), StorageMode.local)
     report: dict[str, Any] = {
@@ -617,6 +659,13 @@ def purge_memory_state(cwd: Path) -> dict[str, Any]:
                 candidate.unlink()
                 removed_files.append(str(candidate))
     report["removed_files"] = removed_files
+    # MEM-007: the context repository is managed memory state too.
+    removed_dirs: list[str] = []
+    repo_dir = resolve_workspace_path(Path(cwd), StorageMode.local) / "context-repository"
+    if repo_dir.is_dir():
+        shutil.rmtree(repo_dir, ignore_errors=True)
+        removed_dirs.append(str(repo_dir))
+    report["removed_dirs"] = removed_dirs
     return report
 
 

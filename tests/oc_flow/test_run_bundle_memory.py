@@ -8,11 +8,21 @@ from opencontext_core.oc_flow.run_bundle import memory_block
 def test_memory_block_with_hits_reports_used() -> None:
     hits = [{"id": "7", "type": "project_context", "score": 0.5, "used_for": "context_pack"}]
     block = memory_block(hits)
-    assert block == {"used": True, "hits": hits}
+    assert block == {
+        "used": True,
+        "hits": hits,
+        "new_candidates": 0,
+        "requires_approval": False,
+    }
 
 
 def test_memory_block_without_hits_reports_unused() -> None:
-    assert memory_block([]) == {"used": False, "hits": []}
+    assert memory_block([]) == {
+        "used": False,
+        "hits": [],
+        "new_candidates": 0,
+        "requires_approval": False,
+    }
 
 
 def test_memory_block_copies_the_hits_list() -> None:

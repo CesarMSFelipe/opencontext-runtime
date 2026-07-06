@@ -15,26 +15,33 @@ from opencontext_memory.store.sqlite import _utcnow_iso
 
 
 def mem_compact(store: Any) -> dict[str, Any]:
-    """Compact duplicates; returns ``{before, after, compacted_ids}``."""
+    """Compact duplicates; returns ``{before, after, compacted_ids, clusters}``.
+
+    ``clusters`` (additive) describes each compacted duplicate cluster as
+    ``{keeper_id, title, compacted_ids}`` so callers (MEM-006: the CLI compact
+    verb) can generate a summary record of what was consolidated.
+    """
     now = _utcnow_iso()
     with store._connect() as conn:
         rows = conn.execute(
-            "SELECT id, content, project, pinned, lifecycle_state FROM observations "
+            "SELECT id, title, content, project, pinned, lifecycle_state FROM observations "
             "WHERE deleted_at IS NULL ORDER BY id"
         ).fetchall()
         before = len(rows)
-        seen: set[tuple[Any, str]] = set()
+        keepers: dict[tuple[Any, str], dict[str, Any]] = {}
         compacted_ids: list[int] = []
         for row in rows:
             digest = hashlib.sha256(str(row["content"]).encode("utf-8")).hexdigest()
             key = (row["project"], digest)
+            entry = {"keeper_id": int(row["id"]), "title": str(row["title"]), "compacted_ids": []}
             if bool(row["pinned"]) or str(row["lifecycle_state"]) == "proposed":
-                seen.add(key)
+                keepers.setdefault(key, entry)
                 continue
-            if key in seen:
+            if key in keepers:
                 compacted_ids.append(int(row["id"]))
+                keepers[key]["compacted_ids"].append(int(row["id"]))
             else:
-                seen.add(key)
+                keepers[key] = entry
         for compacted_id in compacted_ids:
             conn.execute(
                 "UPDATE observations SET deleted_at = ?, lifecycle_state = 'compacted', "
@@ -45,6 +52,7 @@ def mem_compact(store: Any) -> dict[str, Any]:
         "before": before,
         "after": before - len(compacted_ids),
         "compacted_ids": compacted_ids,
+        "clusters": [c for c in keepers.values() if c["compacted_ids"]],
     }
 
 

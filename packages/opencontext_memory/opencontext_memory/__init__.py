@@ -45,6 +45,11 @@ from opencontext_memory.project import DetectionResult, DetectProjectFull, avail
 from opencontext_memory.store.migrations import MIGRATIONS, migrate
 from opencontext_memory.store.sqlite import MemoryStore, Observation, ObservationWriteResult
 from opencontext_memory.store.write_queue import WriteQueue
+from opencontext_memory.taxonomy import (
+    CANONICAL_MEMORY_TYPES,
+    MEMORY_TYPE_ALIASES,
+    normalize_memory_type,
+)
 from opencontext_memory.tools.mem_approval import mem_approve, mem_reject
 from opencontext_memory.tools.mem_capture_passive import mem_capture_passive
 from opencontext_memory.tools.mem_compact import mem_compact
@@ -72,7 +77,9 @@ from opencontext_memory.tools.mem_unpin import mem_unpin
 from opencontext_memory.tools.mem_update import mem_update
 
 __all__ = [
+    "CANONICAL_MEMORY_TYPES",
     "DECAY_DAYS",
+    "MEMORY_TYPE_ALIASES",
     "MIGRATIONS",
     "ConflictEnvelope",
     "DetectProjectFull",
@@ -112,5 +119,6 @@ __all__ = [
     "mem_unpin",
     "mem_update",
     "migrate",
+    "normalize_memory_type",
     "state",
 ]

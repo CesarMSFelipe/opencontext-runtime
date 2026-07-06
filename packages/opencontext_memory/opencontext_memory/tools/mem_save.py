@@ -136,6 +136,12 @@ def mem_save(
     # the tool signature is stable across PRs.
     del capture_prompt
 
+    # 0a) MEMORY_CONTRACT `## Types`: plan-level aliases normalize onto the
+    #     canonical taxonomy; canonical and free-form types pass through.
+    from opencontext_memory.taxonomy import normalize_memory_type
+
+    type = normalize_memory_type(type)
+
     # 0) MEMORY_CONTRACT rule 1: redaction runs BEFORE save — secrets never
     #    reach the store or the echoed receipt.
     from opencontext_memory.redaction import redact_memory_text
