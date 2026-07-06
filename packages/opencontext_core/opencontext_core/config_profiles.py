@@ -103,6 +103,18 @@ BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
     },
     # Runtime-mode profiles (plan §6): posture for WHERE the CLI runs rather
     # than governance strictness. They map onto existing config fields only.
+    "default": {
+        "description": (
+            "Plan §6 'default' semantics: deterministic test_stub executor "
+            "preference and strict TDD. Note: the implicit profile when none is "
+            "selected remains 'balanced'; select 'default' explicitly for these "
+            "documented semantics."
+        ),
+        "overlay": {
+            "executors": {"default": "test_stub"},
+            "harness": {"tdd_mode": "strict"},
+        },
+    },
     "ci": {
         "description": (
             "Non-interactive CI runs: no prompts, no TUI, machine-readable JSON output by default."

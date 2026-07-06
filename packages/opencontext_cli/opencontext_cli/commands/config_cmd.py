@@ -36,6 +36,13 @@ def _stderr_console() -> BrandConsole:
 err_console = _stderr_console()
 
 
+def _interface_settings(root: Path | None = None) -> Any:
+    """Effective ``interface`` settings for CLI gating (CFG-004; fail-open defaults)."""
+    from opencontext_core.config_resolver import resolve_interface
+
+    return resolve_interface(root if root is not None else Path.cwd())
+
+
 def add_config_parser(subparsers: Any) -> None:
     """Add config command parsers."""
 
@@ -66,6 +73,33 @@ def add_config_parser(subparsers: Any) -> None:
         help="Project root for resolving opencontext.yaml (default: cwd).",
     )
     explain_p.add_argument("--json", action="store_true", help="Emit JSON (CI-friendly).")
+    # Runtime CLI-flag layer (plan §6 layer 7, CFG-003): these feed the layered
+    # resolver's `cli_overrides` and therefore beat OPENCONTEXT_* env vars.
+    from opencontext_core.config_profiles import profile_names
+
+    explain_p.add_argument(
+        "--profile",
+        choices=profile_names(),
+        default=None,
+        help="Override the active configuration profile for this invocation (beats env).",
+    )
+    explain_p.add_argument(
+        "--set",
+        dest="set_overrides",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Override a dotted config key for this invocation (beats env; repeatable).",
+    )
+    # Temporary run-override layer (plan §6 layer 8): beats CLI flags.
+    explain_p.add_argument(
+        "--run-override",
+        dest="run_overrides",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Temporary run override for a dotted config key (beats --set/--profile).",
+    )
 
     config_sub.add_parser("reset", help="Reset to factory defaults.")
 
@@ -126,9 +160,14 @@ def handle_config(args: Any) -> None:
 
     if command is None:
         # No subcommand — open the single configuration menu by default.
+        # CFG-004: under a non-interactive profile (ci/agent posture) the
+        # interactive menu is suppressed and the non-interactive wizard runs.
         from opencontext_cli.commands.menu_cmd import run_config_menu
         from opencontext_core.wizard import run_wizard
 
+        if not _interface_settings().interactive:
+            run_wizard(non_interactive=True)
+            return
         try:
             run_config_menu()
         except Exception:
@@ -136,7 +175,9 @@ def handle_config(args: Any) -> None:
         return
 
     if command == "wizard":
-        use_tui = not getattr(args, "non_interactive", False)
+        # CFG-004: the ci profile disables interactivity — the interactive
+        # menu never launches; the wizard falls back to non-interactive.
+        use_tui = not getattr(args, "non_interactive", False) and _interface_settings().interactive
         if use_tui:
             from opencontext_cli.commands.menu_cmd import run_config_menu
 
@@ -150,7 +191,9 @@ def handle_config(args: Any) -> None:
 
         root = Path(getattr(args, "root", None) or ".").resolve()
         _require_parseable_project_yaml(root / "opencontext.yaml")
-        if getattr(args, "json", False):
+        # CFG-004: interface.json_default (ci profile) makes JSON the default
+        # output; an explicit --json keeps working unchanged.
+        if getattr(args, "json", False) or _interface_settings(root).json_default:
             _config_show_json(root=root)
         else:
             show_config(root=root)
@@ -271,6 +314,43 @@ def _require_parseable_project_yaml(yaml_path: Path) -> None:
         ) from exc
 
 
+def _parse_kv_overrides(pairs: list[str], flag: str) -> dict[str, Any]:
+    """Parse repeatable ``KEY=VALUE`` pairs into a nested override mapping.
+
+    Keys use dot notation (``interface.json_default``); values are YAML-parsed
+    so ``true``/``2`` arrive typed. A pair without ``=`` fails with the
+    CONFIG_INVALID contract envelope naming the offending flag.
+    """
+    import yaml as _yaml
+
+    from opencontext_cli.contracts import CliContractError
+
+    out: dict[str, Any] = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep or not key.strip():
+            raise CliContractError(
+                "CONFIG_INVALID",
+                f"Invalid {flag} value: {pair!r} (expected KEY=VALUE).",
+                hint=f"Use dotted keys, e.g. {flag} ui_language=en",
+                status="needs_configuration",
+            )
+        try:
+            parsed = _yaml.safe_load(value)
+        except _yaml.YAMLError:
+            parsed = value
+        node = out
+        parts = key.strip().split(".")
+        for part in parts[:-1]:
+            child = node.get(part)
+            if not isinstance(child, dict):
+                child = {}
+                node[part] = child
+            node = child
+        node[parts[-1]] = parsed
+    return out
+
+
 def _config_explain(args: Any) -> None:
     """Explain the effective config: value + source layer/file/line per key."""
     from opencontext_cli.contracts import CliContractError
@@ -278,8 +358,16 @@ def _config_explain(args: Any) -> None:
     from opencontext_core.errors import ConfigurationError
 
     root = Path(getattr(args, "root", None) or ".").resolve()
+    # CFG-003 / plan §6 layers 7-8: real CLI flags feed the resolver's override
+    # layers, so a flag beats an OPENCONTEXT_* env var end-to-end.
+    cli_overrides = _parse_kv_overrides(list(getattr(args, "set_overrides", []) or []), "--set")
+    if getattr(args, "profile", None):
+        cli_overrides["profile"] = args.profile
+    run_overrides = _parse_kv_overrides(
+        list(getattr(args, "run_overrides", []) or []), "--run-override"
+    )
     try:
-        payload = explain(root)
+        payload = explain(root, cli_overrides=cli_overrides, run_overrides=run_overrides)
     except ConfigurationError as exc:
         # Never echo secret-shaped config values in the envelope (JSON stdout)
         # or the human stderr path — both render this message.

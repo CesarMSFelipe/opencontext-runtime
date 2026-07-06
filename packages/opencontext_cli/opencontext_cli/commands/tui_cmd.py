@@ -61,6 +61,20 @@ def handle_tui(args: Any) -> int:
         )
         return int(ExitCode.CONFIG_INVALID)
 
+    # CFG-004: the effective interface settings gate TUI launch. The ci profile
+    # (interface.tui=false) refuses the full-screen UI with a readable error;
+    # --smoke stays available above as the CI-safe headless boot check.
+    from opencontext_core.config_resolver import resolve_interface
+
+    interface = resolve_interface(root)
+    if not interface.tui:
+        eprint("The TUI is disabled by the active configuration profile (interface.tui=false).")
+        eprint(
+            "Select an interactive profile (e.g. 'profile: local' in opencontext.yaml) "
+            "or use the equivalent CLI commands instead."
+        )
+        return int(ExitCode.CONFIG_INVALID)
+
     from opencontext_cli.tui import run_home_tui
 
     if not run_home_tui():

@@ -1471,6 +1471,29 @@ class HarnessSettingsConfig(BaseModel):
     )
 
 
+class ExecutorsConfig(BaseModel):
+    """Executor selection settings (plan §6 canonical config ``executors:`` section).
+
+    ``default`` names the executor id the runtime prefers when no live provider
+    is detected (``test_stub`` per the plan's canonical config; the executor
+    still requires its own explicit opt-in inputs, e.g. ``edits_file``).
+    ``allow_shell`` is the forward-declared gate for shell-capable executors;
+    no built-in executor runs shell commands today, so ``False`` forbids
+    nothing yet but pins the documented default.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    default: str = Field(
+        default="test_stub",
+        description="Preferred executor id when no live provider is detected.",
+    )
+    allow_shell: bool = Field(
+        default=False,
+        description="Allow shell-capable executors (no built-in executor uses this yet).",
+    )
+
+
 class InterfaceConfig(BaseModel):
     """Runtime-mode interface settings (plan §6 ci/local/agent profiles).
 
@@ -1704,6 +1727,10 @@ class OpenContextConfig(BaseModel):
         default_factory=InterfaceConfig,
         description="Interactive/TUI/JSON-default interface settings (ci/local profiles).",
     )
+    executors: ExecutorsConfig = Field(
+        default_factory=ExecutorsConfig,
+        description="Executor selection settings (preferred executor id, shell gate).",
+    )
     runtime_brain: RuntimeBrainConfig = Field(
         default_factory=RuntimeBrainConfig,
         description="Advisory Runtime Brain decision-layer controls (default off).",
@@ -1778,6 +1805,62 @@ def find_config(start_dir: str | Path = ".") -> Path | None:
     return None
 
 
+class LegacyConfigWarning(UserWarning):
+    """A config file used a legacy shape that was auto-migrated at load time.
+
+    CFG-008: ordinary loads must not silently normalize old configs — the user
+    gets an explicit notice naming the legacy key and its replacement so the
+    file can be updated to the canonical spelling.
+    """
+
+
+# Deprecated config keys → canonical replacement (dotted paths). Single generic
+# registry: `load_config` warns on these at load time, and `config doctor` /
+# `config explain` (via `find_deprecated_keys`) report them with a hint. The
+# legacy compression key is spelled via concatenation for the same reason
+# `_normalize_legacy_config` does: product source must not carry the old name.
+DEPRECATED_CONFIG_KEYS: dict[str, str] = {
+    "context.compression." + "cave" + "man_intensity": "context.compression.terse_intensity",
+}
+
+
+def _has_dotted_key(data: dict[str, Any], dotted: str) -> bool:
+    node: Any = data
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return False
+        node = node[part]
+    return True
+
+
+def find_deprecated_keys(raw: dict[str, Any]) -> list[dict[str, str]]:
+    """Report deprecated keys present in the raw (pre-normalization) config."""
+    findings: list[dict[str, str]] = []
+    for old, new in DEPRECATED_CONFIG_KEYS.items():
+        if _has_dotted_key(raw, old):
+            findings.append(
+                {
+                    "key": old,
+                    "replacement": new,
+                    "hint": f"Rename '{old}' to '{new}' in opencontext.yaml.",
+                }
+            )
+    return findings
+
+
+def _warn_legacy_config(raw_data: dict[str, Any], config_path: Path) -> None:
+    """Emit a :class:`LegacyConfigWarning` per legacy key found in *raw_data* (CFG-008)."""
+    import warnings
+
+    for finding in find_deprecated_keys(raw_data):
+        warnings.warn(
+            f"Legacy config key '{finding['key']}' in {config_path} was auto-migrated "
+            f"to '{finding['replacement']}'. {finding['hint']}",
+            LegacyConfigWarning,
+            stacklevel=3,
+        )
+
+
 def load_config(path: str | Path = "configs/opencontext.yaml") -> OpenContextConfig:
     """Load and validate an OpenContext YAML configuration file.
 
@@ -1797,6 +1880,7 @@ def load_config(path: str | Path = "configs/opencontext.yaml") -> OpenContextCon
     if not isinstance(raw_data, dict):
         raise ConfigurationError(f"Configuration root must be a mapping: {config_path}")
 
+    _warn_legacy_config(raw_data, config_path)
     merged_data = _deep_merge(default_config_data(), _normalize_legacy_config(raw_data))
 
     try:

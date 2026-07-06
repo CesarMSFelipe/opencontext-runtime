@@ -14,6 +14,7 @@ def test_builtin_profiles_present_with_balanced_default() -> None:
         "enterprise",
         "research",
         "performance",
+        "default",
         "ci",
         "local",
         "agent",

@@ -145,6 +145,7 @@ def explain(
     *,
     env: dict[str, str] | None = None,
     cli_overrides: dict[str, Any] | None = None,
+    run_overrides: dict[str, Any] | None = None,
     policy: dict[str, Any] | None = None,
     global_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -193,6 +194,7 @@ def explain(
             project_path,
             env=env,
             cli_overrides=cli_overrides,
+            run_overrides=run_overrides,
             policy=policy,
             global_config=global_known,
             project_config=known_only,

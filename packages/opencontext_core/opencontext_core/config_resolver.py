@@ -11,8 +11,9 @@ wins):
 5. profile overlay           (``config_profiles.get_profile``; only the keys
    the selected profile defines)
 6. environment variables     (``OPENCONTEXT_*``)
-7. CLI / MCP request overrides
-8. runtime policy decisions (internal; always topmost)
+7. CLI / MCP request overrides (``overrides`` layer — plan §6 "flags CLI")
+8. temporary run overrides   (``run`` layer — plan §6 "overrides temporales de run")
+9. runtime policy decisions (internal; always topmost)
 
 Returns ``(config, provenance)`` where ``provenance`` records, per top-level
 key, which layer last set it — so a run can explain *why* a value is what it is
@@ -53,6 +54,7 @@ LAYERS: tuple[str, ...] = (
     "profile",
     "env",
     "overrides",
+    "run",
     "policy",
 )
 
@@ -204,6 +206,7 @@ def resolve(
     *,
     env: dict[str, str] | None = None,
     cli_overrides: dict[str, Any] | None = None,
+    run_overrides: dict[str, Any] | None = None,
     policy: dict[str, Any] | None = None,
     global_config: dict[str, Any] | None = None,
     project_config: dict[str, Any] | None = None,
@@ -211,12 +214,15 @@ def resolve(
 ) -> ResolvedConfig:
     """Resolve the effective config over the documented layers (``LAYERS``).
 
+    ``cli_overrides`` carries CLI flag values (plan §6 layer 7); ``run_overrides``
+    carries temporary per-run overrides (plan §6 layer 8) and beats CLI flags.
     ``project_config``/``org_config`` inject pre-loaded data (bypassing the
     file read); ``config explain`` uses them to resolve with unknown keys
     filtered.
     """
     env = dict(os.environ if env is None else env)
     cli_overrides = dict(cli_overrides or {})
+    run_overrides = dict(run_overrides or {})
     policy = dict(policy or {})
 
     project_file = resolve_project_config_file(project_path)
@@ -240,6 +246,7 @@ def resolve(
         ("project", project_raw),
         ("env", env_raw),
         ("overrides", cli_overrides),
+        ("run", run_overrides),
         ("policy", policy),
     ]
     profile_name, profile_layer = _pick_profile(selection_layers)
@@ -263,6 +270,7 @@ def resolve(
         ("profile", profile_overlay),
         ("env", env_raw),
         ("overrides", cli_overrides),
+        ("run", run_overrides),
         ("policy", policy),
     ]
 
@@ -280,6 +288,23 @@ def resolve(
 
     config = OpenContextConfig.model_validate(merged)
     return ResolvedConfig(config=config, provenance=provenance, profile=profile_name, data=merged)
+
+
+def resolve_interface(project_path: str | Path | None = None) -> Any:
+    """Resolve the effective ``interface`` settings for entry-point gating (CFG-004).
+
+    CLI/TUI entry points call this to decide whether prompts, TUI screens, or
+    human-first output are allowed (the ``ci``/``local`` profiles overlay these
+    values). Fails open to the permissive :class:`InterfaceConfig` defaults when
+    resolution errors so a broken config never blocks the error-reporting paths
+    themselves.
+    """
+    from opencontext_core.config import InterfaceConfig
+
+    try:
+        return resolve(project_path).config.interface
+    except Exception:
+        return InterfaceConfig()
 
 
 def resolve_config_path(root: str | Path, explicit: str | Path | None = None) -> Path:

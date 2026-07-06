@@ -22,6 +22,7 @@ def _write_org(root: Path, body: str, name: str = "org.yaml") -> Path:
 
 
 def test_layers_are_ordered() -> None:
+    """LAYERS-ORDER: doc layers 1-8 map to defaults..overrides(CLI flags)..run, policy topmost."""
     assert LAYERS == (
         "defaults",
         "global",
@@ -30,6 +31,7 @@ def test_layers_are_ordered() -> None:
         "profile",
         "env",
         "overrides",
+        "run",
         "policy",
     )
 
@@ -185,6 +187,50 @@ def test_cli_flag_beats_env(tmp_path: Path) -> None:
     )
     assert resolved.config.ui_language == "en"
     assert resolved.provenance.dotted_layer_of("ui_language") == "overrides"
+
+
+# ── LAYERS-ORDER: run overrides (doc layer 8) beat CLI flags (doc layer 7) ──
+
+
+def test_run_override_beats_cli_override(tmp_path: Path) -> None:
+    """LAYERS-ORDER: a temporary run override beats a CLI flag override for the same key."""
+    _write(tmp_path, "version: 2\nproject:\n  name: demo\n")
+    resolved = resolve(
+        tmp_path,
+        env={},
+        global_config={},
+        cli_overrides={"ui_language": "en"},
+        run_overrides={"ui_language": "fr"},
+    )
+    assert resolved.config.ui_language == "fr"
+    assert resolved.provenance.dotted_layer_of("ui_language") == "run"
+
+
+def test_run_override_beats_env(tmp_path: Path) -> None:
+    """LAYERS-ORDER: a run override (doc layer 8) beats an OPENCONTEXT_* env var (doc layer 6)."""
+    _write(tmp_path, "version: 2\nproject:\n  name: demo\n")
+    resolved = resolve(
+        tmp_path,
+        env={"OPENCONTEXT_UI_LANGUAGE": "es"},
+        global_config={},
+        run_overrides={"ui_language": "fr"},
+    )
+    assert resolved.config.ui_language == "fr"
+    assert resolved.provenance.dotted_layer_of("ui_language") == "run"
+
+
+def test_run_override_can_select_profile(tmp_path: Path) -> None:
+    """LAYERS-ORDER: a run-override profile selection beats a CLI-flag profile selection."""
+    _write(tmp_path, "version: 2\nprofile: balanced\nproject:\n  name: demo\n")
+    resolved = resolve(
+        tmp_path,
+        env={},
+        global_config={},
+        cli_overrides={"profile": "performance"},
+        run_overrides={"profile": "low-cost"},
+    )
+    assert resolved.profile == "low-cost"
+    assert resolved.provenance.profile_layer == "run"
 
 
 # ── Nested dotted-key provenance (config explain substrate) ────────────────

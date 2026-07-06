@@ -218,19 +218,38 @@ def _build_detected_provider_executor(
     )
 
 
+def _explicit_default_executor(raw: dict[str, Any]) -> str | None:
+    """Return the ``executors.default`` id ONLY when the file declares it explicitly.
+
+    Plan §6 (PROFILES-RUNTIME): the canonical config's ``executors:`` section is an
+    executor-selection knob the runtime honors. Deliberately raw-read — the typed
+    schema's default (``test_stub``) must never count as an explicit opt-in, so a
+    config without an ``executors:`` section behaves exactly as before (B2).
+    """
+    executors = raw.get("executors")
+    if not isinstance(executors, dict):
+        return None
+    default = executors.get("default")
+    return default if isinstance(default, str) and default else None
+
+
 def _resolve_test_stub_executor(root: Path) -> NodeExecutor | None:
     """Build a ``TestStubGateway``-backed executor IFF config explicitly opts in (B2).
 
     TEST-ONLY: returns a productive :class:`ProviderBackedNodeExecutor` ONLY when the
-    resolved ``opencontext.yaml`` declares ``provider: test_stub`` AND a resolvable
-    ``edits_file`` that exists under *root*. Any other state — no config, no
-    ``test_stub``, a missing / non-string ``edits_file``, a file that does not exist,
-    or one escaping *root* — returns ``None`` so the caller behaves EXACTLY as the
-    pre-change production path. This is never a production resolver fallback; the
-    no-fallthrough invariant is asserted in ``tests/oc_flow/test_test_stub_resolution.py``.
+    resolved ``opencontext.yaml`` declares ``provider: test_stub`` (or the plan §6
+    ``executors: {default: test_stub}`` section) AND a resolvable ``edits_file`` that
+    exists under *root*. Any other state — no config, no ``test_stub``, a missing /
+    non-string ``edits_file``, a file that does not exist, or one escaping *root* —
+    returns ``None`` so the caller behaves EXACTLY as the pre-change production path.
+    This is never a production resolver fallback; the no-fallthrough invariant is
+    asserted in ``tests/oc_flow/test_test_stub_resolution.py``.
     """
     raw = _read_yaml_mapping(resolve_config_path(root, None))
-    if raw.get("provider") != "test_stub":
+    opted_in = raw.get("provider") == "test_stub" or (
+        raw.get("provider") is None and _explicit_default_executor(raw) == "test_stub"
+    )
+    if not opted_in:
         return None
     edits_file = raw.get("edits_file")
     if not edits_file or not isinstance(edits_file, str):

@@ -15,46 +15,24 @@ from typing import Any
 import yaml
 
 from opencontext_core.config import (
+    DEPRECATED_CONFIG_KEYS,
     OpenContextConfig,
     _deep_merge,
     _normalize_legacy_config,
     default_config_data,
     find_config,
+    find_deprecated_keys,
 )
 from opencontext_core.config_profiles import BUILTIN_PROFILES
 from opencontext_core.doctor.deep import DeepDiagnostic
 
-# Deprecated config keys → canonical replacement (dotted paths). Both
-# `config doctor` and `config explain` report these with a migration hint.
-# The legacy compression key is spelled via concatenation for the same reason
-# `_normalize_legacy_config` does: product source must not carry the old name.
-DEPRECATED_KEYS: dict[str, str] = {
-    "context.compression." + "cave" + "man_intensity": "context.compression.terse_intensity",
-}
+# Deprecated config keys → canonical replacement. The registry lives in
+# ``config.py`` (CFG-008: `load_config` warns on these at load time); this
+# alias keeps the historical `config_doctor.DEPRECATED_KEYS` import path.
+# `find_deprecated_keys` is re-exported from `config` for the same reason.
+DEPRECATED_KEYS: dict[str, str] = DEPRECATED_CONFIG_KEYS
 
-
-def _has_dotted(data: dict[str, Any], dotted: str) -> bool:
-    node: Any = data
-    for part in dotted.split("."):
-        if not isinstance(node, dict) or part not in node:
-            return False
-        node = node[part]
-    return True
-
-
-def find_deprecated_keys(raw: dict[str, Any]) -> list[dict[str, str]]:
-    """Report deprecated keys present in the raw (pre-normalization) config."""
-    findings: list[dict[str, str]] = []
-    for old, new in DEPRECATED_KEYS.items():
-        if _has_dotted(raw, old):
-            findings.append(
-                {
-                    "key": old,
-                    "replacement": new,
-                    "hint": f"Rename '{old}' to '{new}' in opencontext.yaml.",
-                }
-            )
-    return findings
+__all__ = ["DEPRECATED_KEYS", "find_deprecated_keys", "validate"]
 
 
 def _load_raw(path: Path | None) -> dict[str, Any]:
