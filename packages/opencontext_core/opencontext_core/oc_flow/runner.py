@@ -60,6 +60,7 @@ from opencontext_core.oc_flow.personas import persona_id_for_oc_flow_node
 from opencontext_core.oc_flow.run_bundle import (
     enforce_gates,
     evaluate_oc_flow_gates,
+    memory_block,
     write_run_bundle,
 )
 from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
@@ -973,6 +974,9 @@ class OCFlowRunner:
                 "memory_enabled": ctx.memory_enabled,
                 "compression_enabled": ctx.compression_enabled,
             },
+            # MEMORY_CONTRACT rule 4: every memory hit used by the run is
+            # recorded ({id, type, score, used_for}); additive field.
+            "memory": memory_block(ctx.memory_hits),
         }
         green_evidence = (tdd or {}).get("green") or {}
         verification_report = {

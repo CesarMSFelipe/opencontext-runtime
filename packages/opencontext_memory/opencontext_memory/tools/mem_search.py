@@ -41,6 +41,7 @@ def mem_search(
     scope: str | None = None,
     type: str | None = None,
     match_mode: str = "all",
+    include_proposed: bool = False,
 ) -> list[dict[str, Any]]:
     """Return BM25-ranked observations matching ``query``.
 
@@ -62,6 +63,10 @@ def mem_search(
         FTS5 store always combines tokens with implicit AND, so ``match_mode``
         is accepted but ignored. Mismatches raise ``ValueError`` so silent
         contract drift is impossible.
+    include_proposed:
+        MEMORY_CONTRACT approval flow. ``proposed`` (unapproved) rows are
+        excluded from default results; pass ``True`` to surface them
+        explicitly (e.g. for a review queue).
     """
     if match_mode not in {"all", "any"}:
         raise ValueError(f"invalid_match_mode:{match_mode}")
@@ -72,6 +77,8 @@ def mem_search(
         return []
 
     hits = store.search(safe_query, limit=limit)
+    if not include_proposed:
+        hits = [h for h in hits if str(h.get("lifecycle_state") or "active") != "proposed"]
     if project is not None:
         hits = [h for h in hits if h.get("project") == project]
     if scope is not None:

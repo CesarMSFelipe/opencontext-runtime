@@ -64,11 +64,6 @@ def test_memory_save_search_get_roundtrip(oc_bin, workspace) -> None:
     assert observation["lifecycle_state"] == "active"
 
 
-@pytest.mark.xfail(
-    reason="GAP-018: memory hit reporting missing — the run report persists no "
-    "memory block (used/hits/used_for), so approved-memory reuse is not observable",
-    strict=False,
-)
 def test_second_run_reports_approved_memory_as_used(stub_run) -> None:
     """AC-018: a second run retrieves approved memory and reports it as used."""
     # A relevant memory existed BEFORE this run (saved in the stub_run fixture).
@@ -88,11 +83,6 @@ def test_second_run_reports_approved_memory_as_used(stub_run) -> None:
     assert block.get("hits"), "the retrieved memory must be listed with id/score/used_for"
 
 
-@pytest.mark.xfail(
-    reason="GAP-019: memory compact verb missing — only `memory maintain` exists; "
-    "the dedicated compaction surface from MEMORY_CONTRACT is not implemented",
-    strict=False,
-)
 def test_memory_compact_preserves_protected_memory(oc_bin, workspace) -> None:
     """AC-019: `memory compact` reduces old entries without deleting protected memory."""
     ws = workspace("memory_reuse_basic")

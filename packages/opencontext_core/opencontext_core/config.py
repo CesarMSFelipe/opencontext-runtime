@@ -857,6 +857,14 @@ class MemoryPolicyConfig(BaseModel):
         default=True, description="Harvest memory automatically after each run."
     )
     require_approval: bool = Field(default=True, description="Harvested memories require approval.")
+    approval_required: bool = Field(
+        default=False,
+        description=(
+            "MEMORY_CONTRACT approval flow: when true, new memory v2 saves land as "
+            "'proposed' and are excluded from recall/search until approved "
+            "(`opencontext memory approve <id>`). Default false keeps saves 'active'."
+        ),
+    )
     store_raw: bool = Field(default=False, description="Raw memory storage disabled.")
     default_classification: str = Field(default="internal", description="Default memory class.")
     retention_days: int = Field(default=90, ge=1, description="Default retention window.")

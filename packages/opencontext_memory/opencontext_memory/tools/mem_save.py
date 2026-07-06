@@ -59,6 +59,11 @@ class ReceiptRecord(BaseModel):
     upserted: bool = Field(
         default=False, description="True when an existing topic_key row was updated in place."
     )
+    deduplicated: bool = Field(
+        default=False,
+        description="True when an equal-content live row absorbed this save (id is the "
+        "existing row).",
+    )
     title: str = Field(description="Echoed from the save call.")
     content: str = Field(description="Echoed from the save call.")
     type: str = Field(default="mem_save", description="Echoed from the save call.")
@@ -86,6 +91,7 @@ def mem_save(
     topic_key: str | None = None,
     bm25_floor: float = BM25_FLOOR_DEFAULT,
     capture_prompt: bool = True,
+    proposed: bool = False,
 ) -> SaveReceipt:
     """Persist one observation and surface any BM25 conflict as candidates.
 
@@ -119,12 +125,42 @@ def mem_save(
         (``mem_capture_passive``, ``mem_session_summary``) flip it ``False``.
         The actual prompt capture lives in PR2.c when ``mem_save_prompt``
         lands; for now we only honour the parameter as a no-op.
+    proposed:
+        MEMORY_CONTRACT approval flow. ``True`` lands the row as
+        ``lifecycle_state='proposed'`` — excluded from default search/recall
+        until ``mem_approve`` promotes it to ``active`` (the approved default).
     """
     if not content:
         raise ValueError("content_required")
     # capture_prompt is recorded by the prompt layer (PR2.c); kept here so
     # the tool signature is stable across PRs.
     del capture_prompt
+
+    # 0) MEMORY_CONTRACT rule 1: redaction runs BEFORE save — secrets never
+    #    reach the store or the echoed receipt.
+    from opencontext_memory.redaction import redact_memory_text
+
+    title = redact_memory_text(title)
+    content = redact_memory_text(content)
+
+    # 0b) Dedupe by exact content (MEMORY_CONTRACT rule 6): an equal-content
+    #     live row in the same project absorbs the save — the existing id is
+    #     returned and no duplicate row or conflict envelope is produced.
+    existing_id = _absorb_equal_content(store, project=project, content=content)
+    if existing_id is not None:
+        return SaveReceipt(
+            receipt=ReceiptRecord(
+                id=existing_id,
+                upserted=False,
+                deduplicated=True,
+                title=title,
+                content=content,
+                type=type,
+                project=project,
+            ),
+            judgment_required=False,
+            candidates=[],
+        )
 
     # 1) Persist the observation first so the new row's id is known for the
     #    relation insert path.
@@ -136,6 +172,7 @@ def mem_save(
         content=content,
         obs_type=type,
         topic_key=topic_key,
+        lifecycle_state="proposed" if proposed else "active",
     )
 
     # 2) BM25 search against the live store. Filter self so the freshly
@@ -191,6 +228,31 @@ def mem_save(
     )
 
 
+def _absorb_equal_content(store: Any, *, project: str | None, content: str) -> int | None:
+    """Return the id of an equal-content live row in ``project``, bumping its
+    ``duplicate_count``; ``None`` when no duplicate exists."""
+    from opencontext_memory.store.sqlite import _utcnow_iso
+
+    with store._connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id FROM observations
+            WHERE content = ? AND deleted_at IS NULL
+              AND (project = ? OR (project IS NULL AND ? IS NULL))
+            ORDER BY id LIMIT 1
+            """,
+            (content, project, project),
+        ).fetchone()
+        if row is None:
+            return None
+        conn.execute(
+            "UPDATE observations SET duplicate_count = duplicate_count + 1, updated_at = ? "
+            "WHERE id = ?",
+            (_utcnow_iso(), int(row["id"])),
+        )
+        return int(row["id"])
+
+
 def _write_observation(
     store: Any,
     *,
@@ -200,6 +262,7 @@ def _write_observation(
     content: str,
     obs_type: str,
     topic_key: str | None,
+    lifecycle_state: str = "active",
 ) -> tuple[int, bool]:
     """Insert (or upsert) the observation and return ``(id, upserted)``.
 
@@ -215,6 +278,7 @@ def _write_observation(
         content=content,
         project=project,
         topic_key=topic_key,
+        lifecycle_state=lifecycle_state,
     )
     if topic_key is not None:
         # Probe the store to know whether this is an upsert. Cheap because

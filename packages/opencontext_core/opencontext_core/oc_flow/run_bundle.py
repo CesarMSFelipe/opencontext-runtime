@@ -109,6 +109,15 @@ def enforce_gates(status: str, gates: list[dict[str, Any]]) -> str:
     return status
 
 
+def memory_block(hits: list[dict[str, Any]]) -> dict[str, Any]:
+    """MEMORY_CONTRACT rule 4: the run.json memory block for recall hits.
+
+    Each hit carries ``{id, type, score, used_for}``; ``used`` is True exactly
+    when at least one memory record was folded into the run's context.
+    """
+    return {"used": bool(hits), "hits": list(hits)}
+
+
 def write_run_bundle(
     run_dir: Path,
     *,

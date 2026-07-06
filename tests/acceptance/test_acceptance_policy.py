@@ -49,11 +49,6 @@ def test_policy_blocks_dangerous_commands_by_default(oc_bin, workspace) -> None:
     )
 
 
-@pytest.mark.xfail(
-    reason="GAP-028: memory redaction-on-save missing — seeded AWS/API secrets are "
-    "stored and returned verbatim by memory v2 save/get",
-    strict=False,
-)
 def test_secret_redaction_strips_tokens_from_memory(oc_bin, workspace) -> None:
     """AC-028: secret redaction strips tokens/secrets from reports and memory."""
     ws = workspace("memory_reuse_basic")

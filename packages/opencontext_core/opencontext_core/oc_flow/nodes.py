@@ -102,6 +102,9 @@ class OCFlowContext:
     memory_enabled: bool = False
     memory_store: Any | None = None  # AgentMemoryStore (duck-typed port)
     memory_harvest_enabled: bool = False  # memory.harvest_after_run
+    # MEMORY_CONTRACT rule 4: recall hits recorded by _fold_memory_recall and
+    # persisted into run.json's memory block ({id, type, score, used_for}).
+    memory_hits: list[dict[str, Any]] = field(default_factory=list)
     # Strict-TDD posture threaded from the runner (config.harness.tdd_mode /
     # OPENCONTEXT_TDD_MODE). "strict" enables the RED-first pre-check in node_mutate;
     # "ask"/"off" (the default) leave the flow's behaviour byte-for-byte unchanged.
@@ -964,15 +967,25 @@ def _fold_memory_recall(ctx: OCFlowContext, envelope: ContextEnvelope) -> Contex
         if total + tokens > budget_cap:
             continue  # respect the existing envelope budget: never blow the cap
         confidence = min(max(float(getattr(record, "confidence", 0.0) or 0.0), 0.0), 1.0)
+        record_ref = str(getattr(record, "key", "") or getattr(record, "id", "memory"))
         items.append(
             ContextEnvelopeItem(
                 source="memory",
-                ref=str(getattr(record, "key", "") or getattr(record, "id", "memory")),
+                ref=record_ref,
                 summary=content[:_MEMORY_SUMMARY_MAX_CHARS],
                 tokens=tokens,
                 why_included=f"memory:score={confidence:.2f}",
                 confidence=confidence,
             )
+        )
+        record_layer = getattr(record, "layer", None)
+        ctx.memory_hits.append(
+            {
+                "id": record_ref,
+                "type": str(getattr(record_layer, "value", record_layer) or "memory"),
+                "score": confidence,
+                "used_for": "context_pack",
+            }
         )
         total += tokens
         added = True
@@ -1012,15 +1025,24 @@ def _fold_memory_recall(ctx: OCFlowContext, envelope: ContextEnvelope) -> Contex
                 tokens = estimate_tokens(content)
                 if total + tokens > budget_cap:
                     continue
+                obs_ref = str(row.get("id") or row.get("topic_key") or "observation")
                 items.append(
                     ContextEnvelopeItem(
                         source="memory",
-                        ref=str(row.get("id") or row.get("topic_key") or "observation"),
+                        ref=obs_ref,
                         summary=content[:_MEMORY_SUMMARY_MAX_CHARS],
                         tokens=tokens,
                         why_included="memory:observation",
                         confidence=0.5,
                     )
+                )
+                ctx.memory_hits.append(
+                    {
+                        "id": obs_ref,
+                        "type": str(row.get("type") or "observation"),
+                        "score": 0.5,
+                        "used_for": "context_pack",
+                    }
                 )
                 total += tokens
                 added = True

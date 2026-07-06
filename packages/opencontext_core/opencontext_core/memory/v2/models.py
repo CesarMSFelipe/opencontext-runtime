@@ -27,12 +27,24 @@ class MemoryKindV2(StrEnum):
 
 
 class MemoryStatusV2(StrEnum):
-    """Belief-validity axis for v2 records."""
+    """Belief-validity axis for v2 records.
+
+    MEMORY_CONTRACT approval-lifecycle mapping (additive):
+    ``ACTIVE`` is the approved default when approval is not required;
+    ``PROPOSED`` is a saved-but-unapproved candidate excluded from recall;
+    ``APPROVED`` is the explicit post-approval state (``ACTIVE`` today);
+    ``EXPIRED`` is aged out by retention (``STALE`` today);
+    ``COMPACTED`` is consolidated into a surviving record.
+    """
 
     ACTIVE = "active"
     STALE = "stale"
     SUPERSEDED = "superseded"
     REJECTED = "rejected"
+    PROPOSED = "proposed"
+    APPROVED = "approved"
+    EXPIRED = "expired"
+    COMPACTED = "compacted"
 
 
 class MemoryRecordV2(BaseModel):

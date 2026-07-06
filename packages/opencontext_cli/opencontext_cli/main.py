@@ -1376,6 +1376,21 @@ def _build_parser() -> argparse.ArgumentParser:
     memory_demote = memory_sub.add_parser("demote", help="Demote a memory to a lower tier.")
     memory_demote.add_argument("memory_id")
     memory_demote.add_argument("--to", default="archive")
+    memory_approve = memory_sub.add_parser(
+        "approve", help="Approve a proposed memory (proposed -> approved)."
+    )
+    memory_approve.add_argument("memory_id")
+    memory_reject = memory_sub.add_parser(
+        "reject", help="Reject a proposed memory; it is never retrieved again."
+    )
+    memory_reject.add_argument("memory_id")
+    memory_sub.add_parser(
+        "compact", help="Consolidate duplicate/old memories; pinned memories are preserved."
+    )
+    memory_purge = memory_sub.add_parser(
+        "purge", help="Delete ALL managed memory state for this workspace."
+    )
+    memory_purge.add_argument("--yes", action="store_true", help="Confirm the irreversible purge.")
     memory_sub.add_parser("prune", help="Remove archived and expired memories.")
     memory_gc = memory_sub.add_parser("gc", help="Garbage-collect expired and superseded memories.")
     memory_gc.add_argument(
@@ -5226,6 +5241,11 @@ def _memory(args: argparse.Namespace) -> None:
         raise SystemExit(_memory_audit(args))
     if command == "v2":
         handle_memory_v2(args)
+        return
+    if command in ("approve", "reject", "compact", "purge"):
+        from opencontext_cli.commands.memory_v2_cmd import handle_memory_lifecycle
+
+        handle_memory_lifecycle(args, command)
         return
     if command == "doctor":
         _memory_doctor()
