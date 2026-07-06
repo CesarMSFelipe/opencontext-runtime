@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.contracts.exit_codes import ExitCode
 from opencontext_cli.output import eprint
 from opencontext_core import prompts
 from opencontext_core.configurator import KNOWN_AGENTS, Configurator
@@ -844,6 +845,8 @@ def handle_uninstall(args: Any) -> None:
         # it never affects `passed` (the machine running this IS installed).
         install_methods = _detect_install_methods()
         passed = len(residue) == 0 and len(global_residue) == 0
+        # INSTALL_UNINSTALL_CONTRACT: managed residue exits 9 (INSTALL_INCOMPLETE).
+        exit_code = int(ExitCode.OK if passed else ExitCode.INSTALL_INCOMPLETE)
         if json_output:
             print(
                 json.dumps(
@@ -852,6 +855,7 @@ def handle_uninstall(args: Any) -> None:
                         "residue": residue,
                         "global_residue": global_residue,
                         "install_methods": install_methods,
+                        "exit_code": exit_code,
                     },
                     indent=2,
                 )
@@ -877,7 +881,7 @@ def handle_uninstall(args: Any) -> None:
                 )
                 for m in install_methods:
                     console.dim(f"  {m['method']}: {m['hint']}")
-        sys.exit(0 if passed else 1)
+        sys.exit(exit_code)
 
     # --full: complete trace removal
     if getattr(args, "full", False):
@@ -1090,10 +1094,14 @@ def handle_uninstall(args: Any) -> None:
             "unmanaged": sorted(dict.fromkeys(verify_unmanaged)),
         }
 
+    # INSTALL_UNINSTALL_CONTRACT: managed residue after purge/verify exits 9.
+    verify_failed = "verify" in report and not report["verify"]["passed"]
+    if verify_failed:
+        report["exit_code"] = int(ExitCode.INSTALL_INCOMPLETE)
     if json_output:
         print(json.dumps(report, indent=2))
-        if "verify" in report and not report["verify"]["passed"]:
-            sys.exit(1)
+        if verify_failed:
+            sys.exit(int(ExitCode.INSTALL_INCOMPLETE))
         return
     removed_n = report["agents_removed"]
     console.header("Uninstall OpenContext")
@@ -1125,7 +1133,7 @@ def handle_uninstall(args: Any) -> None:
                 "These are agent instruction files (kept because they may hold your own "
                 "content). Run 'opencontext uninstall --full --yes' to remove all traces."
             )
-            sys.exit(1)
+            sys.exit(int(ExitCode.INSTALL_INCOMPLETE))
 
 
 def _parse_agents(values: list[str] | None) -> list[str]:

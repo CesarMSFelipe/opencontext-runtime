@@ -148,7 +148,7 @@ def test_dry_run_plans_from_manifest_and_deletes_nothing(ws, monkeypatch, capsys
     assert "opencontext" in (ws / ".gitignore").read_text(encoding="utf-8")
 
 
-def test_verify_exit_1_when_managed_residue_remains(ws, monkeypatch, capsys) -> None:
+def test_verify_exit_9_when_managed_residue_remains(ws, monkeypatch, capsys) -> None:
     # Simulate a purge failure: a managed file the purge cannot see gets
     # re-created between purge and verify via a read-only trick is overkill;
     # instead verify against a manifest claiming a file that still exists.
@@ -167,7 +167,9 @@ def test_verify_exit_1_when_managed_residue_remains(ws, monkeypatch, capsys) -> 
     monkeypatch.setattr(mod, "_purge_workspace_with_manifest", purge_then_recreate)
     code, report = _run(monkeypatch, capsys, _args(ws))
 
-    assert code == 1
+    # INSTALL_UNINSTALL_CONTRACT: managed residue after purge/verify exits 9.
+    assert code == 9
+    assert report["exit_code"] == 9
     assert report["verify"]["passed"] is False
     assert any("opencontext.yaml" in p for p in report["verify"]["residue"])
 

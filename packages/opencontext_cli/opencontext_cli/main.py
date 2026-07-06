@@ -72,6 +72,14 @@ from opencontext_cli.commands.run_cmd import (
     handle_run_inspect,
     handle_simulate,
 )
+from opencontext_cli.commands.scopes_cmd import (
+    add_agents_parser,
+    add_product_parser,
+    add_workspace_parser,
+    handle_agents,
+    handle_product,
+    handle_workspace,
+)
 from opencontext_cli.commands.sdd_cmd import add_sdd_parser, handle_sdd
 from opencontext_cli.commands.session_cmd import add_session_parser, handle_session
 from opencontext_cli.commands.setup_cmd import add_setup_parser, handle_setup
@@ -1013,6 +1021,10 @@ def _build_parser() -> argparse.ArgumentParser:
     add_plugin_parser(subparsers)
     add_setup_parser(subparsers)
     add_uninstall_parser(subparsers)
+    # Scope hierarchy (preview): thin delegations to install/status/setup/uninstall.
+    add_product_parser(subparsers)
+    add_workspace_parser(subparsers)
+    add_agents_parser(subparsers)
     add_stack_parser(subparsers)
     add_profile_parser(subparsers)
     add_receipt_parser(subparsers)
@@ -1782,6 +1794,15 @@ def _dispatch(args: argparse.Namespace) -> None:
         return
     if command == "uninstall":
         handle_uninstall(args)
+        return
+    if command == "product":
+        handle_product(args)
+        return
+    if command == "workspace":
+        handle_workspace(args)
+        return
+    if command == "agents":
+        handle_agents(args)
         return
     if command == "profile":
         sys.exit(handle_profile(args))

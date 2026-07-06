@@ -69,6 +69,8 @@ COMMAND_MATURITY: Final[dict[str, Maturity]] = {
     # --- preview: functional but evolving subsystems ---
     "agent-context": "preview",
     "agent-harness": "preview",
+    # Scope hierarchy: preview aliases delegating to install/status/setup/uninstall.
+    "agents": "preview",
     "architecture": "preview",
     "bridges": "preview",
     "bytecode": "preview",
@@ -83,6 +85,7 @@ COMMAND_MATURITY: Final[dict[str, Maturity]] = {
     "oc-new": "preview",
     "policy": "preview",
     "preset": "preview",
+    "product": "preview",
     "profile": "preview",
     "review": "preview",
     "routes": "preview",
@@ -92,6 +95,7 @@ COMMAND_MATURITY: Final[dict[str, Maturity]] = {
     "storage": "preview",
     "studio": "preview",
     "telemetry": "preview",
+    "workspace": "preview",
     # --- internal: dev/debug/legacy plumbing ---
     "approvals": "internal",
     "ask": "internal",

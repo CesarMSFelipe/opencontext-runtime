@@ -26,6 +26,12 @@ Rules: no `stable` command without a JSON contract; no `stable` command that pri
 All other top-level commands (e.g. `loop`, `studio`, `simulate`, `benchmark`, `evolve`,
 `mutation`, `persona`, ...) are `preview` or `internal` until explicitly promoted.
 
+The scope hierarchy commands `product`, `workspace`, and `agents` (each with
+`install`/`status`/`uninstall` subcommands; `workspace` also accepts `init`) implement the
+plan's target hierarchy mapping from `INSTALL_UNINSTALL_CONTRACT.md`. They are `preview`
+aliases: thin delegations to the stable `install`/`status`/`setup`/`uninstall` handlers with
+no logic of their own, so the stable set above stays at 17 until they are promoted.
+
 > `tui` ships as a top-level command: `opencontext tui [root] [--smoke]` opens the home
 > dashboard (runs, SDD workspace, doctor, config inspector, uninstall preview); `--smoke`
 > is the headless CI boot check. The release gate must verify each entry in the list exists.

@@ -37,6 +37,9 @@ COMMAND_MATURITY: Final[dict[str, Maturity]] = {
     # --- preview: functional but evolving ---
     "agent": "preview",
     "agent-harness": "preview",
+    # Scope hierarchy: preview aliases delegating to install/status/setup/uninstall
+    # (INSTALL_UNINSTALL_CONTRACT scope mapping); stable set stays at 17.
+    "agents": "preview",
     "architecture": "preview",
     "benchmark": "preview",
     "bridges": "preview",
@@ -61,6 +64,7 @@ COMMAND_MATURITY: Final[dict[str, Maturity]] = {
     "policy": "preview",
     "preset": "preview",
     "privacy": "preview",
+    "product": "preview",
     "profile": "preview",
     "prompt": "preview",
     "receipt": "preview",
@@ -82,6 +86,7 @@ COMMAND_MATURITY: Final[dict[str, Maturity]] = {
     "upgrade": "preview",
     "verified-context": "preview",
     "verify": "preview",
+    "workspace": "preview",
     # --- internal: developer-facing diagnostics and plumbing ---
     "agent-context": "internal",
     "aicx": "internal",

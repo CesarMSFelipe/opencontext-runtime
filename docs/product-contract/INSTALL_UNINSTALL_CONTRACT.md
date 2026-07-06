@@ -13,11 +13,15 @@ Verified by: AC-003, AC-022, AC-023, INST-001..INST-009, SMOKE-003, SMOKE-010.
 | `workspace` | Per-repo state: `.opencontext/`, `opencontext.yaml`, indexes, runs, memory | `init` (wizard), `install` (quick setup); removal via `clean` or `uninstall --scope workspace --purge` |
 | `agents` | Agent client config: MCP entries, instruction blocks, generated agent files | `setup [AGENT...]`; removal via `uninstall [AGENT...]` |
 
-> Current → Target: there are no `product|workspace|agents` subcommands; the mapping above is
-> the compatibility statement. `uninstall --scope {workspace,global,all}` selects state scope
-> (`local` is a legacy alias for `workspace`); `--purge` deletes project artifacts; `--full`
-> sweeps ledger-tracked files; `--verify` scans for residue and reports pass/fail. Target: keep
-> these flags stable and document them as the scope selectors.
+> The `product|workspace|agents` top-level commands exist as preview aliases: each exposes
+> `install`/`status`/`uninstall` subcommands (`workspace` also accepts `init`) that delegate to
+> the flat commands above — `product uninstall` → `uninstall --scope global`, `workspace
+> init/status/uninstall` → `install <root>` / `status <root>` / `uninstall --scope workspace`,
+> `agents install/status/uninstall` → `setup` / `capabilities` / `uninstall [AGENT...]`.
+> `uninstall --scope {workspace,global,all}` selects state scope (`local` is a legacy alias for
+> `workspace`); `--purge` deletes project artifacts; `--full` sweeps ledger-tracked files;
+> `--verify` scans for residue and reports pass/fail. These flags stay stable as the scope
+> selectors.
 
 ## Product manifest schema
 
@@ -70,6 +74,8 @@ Verified by: AC-003, AC-022, AC-023, INST-001..INST-009, SMOKE-003, SMOKE-010.
 7. Report: removed paths, reverted blocks, and any UNMANAGED leftovers found (reported,
    never deleted).
 8. Exit: 0 when no managed residue remains; 9 when managed residue could not be removed.
+   Implemented: `--verify` exits 9 (`INSTALL_INCOMPLETE`) on managed residue and the `--json`
+   report carries an additive `exit_code` field mirroring the process exit code.
 
 ## Safety rules
 

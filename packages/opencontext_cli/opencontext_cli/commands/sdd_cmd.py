@@ -1,8 +1,8 @@
-"""SDD CLI commands: opencontext sdd {verb} namespace with 15 verbs.
+"""SDD CLI commands: opencontext sdd {verb} namespace with 16 verbs.
 
 Per openspec/changes/agentic-parity-engram-gentle/design/pr3-cli-fastapi.md:
 
-* ``add_sdd_parser(sub)`` registers the ``sdd`` subcommand with 15 verbs.
+* ``add_sdd_parser(sub)`` registers the ``sdd`` subcommand with 16 verbs.
 * ``handle_sdd(args)`` dispatches each verb to its handler — phase verbs
   delegate to :func:`opencontext_sdd.runner.run_phase` when available;
   ``status`` calls :func:`opencontext_sdd.status.Resolve` directly.
@@ -38,6 +38,7 @@ SUBCOMMANDS = [
     "tasks",
     "apply",
     "verify",
+    "review",
     "archive",
     "status",
     "continue",
@@ -63,7 +64,7 @@ _STATUS_VERBS = {"status", "continue", "ff", "onboard", "list"}
 
 
 def add_sdd_parser(subparsers: Any) -> argparse.ArgumentParser:
-    """Register the ``opencontext sdd`` subcommand with all 15 verbs.
+    """Register the ``opencontext sdd`` subcommand with all 16 verbs.
 
     Returns the sdd parser for test introspection.
     """
@@ -72,7 +73,7 @@ def add_sdd_parser(subparsers: Any) -> argparse.ArgumentParser:
         help="Spec-Driven Development workflow commands.",
         description=(
             "Manage SDD changes through the full lifecycle: init, new, explore, "
-            "propose, spec, design, tasks, apply, verify, archive, status, "
+            "propose, spec, design, tasks, apply, verify, review, archive, status, "
             "continue, ff (fast-forward), onboard, list."
         ),
     )
@@ -93,22 +94,29 @@ def add_sdd_parser(subparsers: Any) -> argparse.ArgumentParser:
             "tasks",
             "apply",
             "verify",
+            "review",
             "archive",
             "ff",
         }:
             p.add_argument("--change", default=None, help="Change name.")
-            if verb == "new":
-                p.add_argument("change", nargs="?", help="Change name (positional).")
+            if verb in {"new", "review"}:
+                # SUPPRESS: an absent positional must not overwrite --change.
+                p.add_argument(
+                    "change",
+                    nargs="?",
+                    default=argparse.SUPPRESS,
+                    help="Change name (positional).",
+                )
 
         if verb == "explore":
             p.add_argument("--topic", default=None, help="Exploration topic.")
 
-        if verb == "status":
+        if verb in {"status", "review"}:
             p.add_argument(
                 "--json",
                 action="store_true",
                 default=False,
-                help="Emit structured JSON output (status is always JSON; flag is explicit).",
+                help="Emit structured JSON output (output is always JSON; flag is explicit).",
             )
 
         if verb == "apply":
@@ -132,6 +140,11 @@ def handle_sdd(args: Any) -> None:
         return
     if verb == "init":
         _handle_init(cwd, verbose)
+        return
+
+    # review runs the honest structural review and persists its artifact.
+    if verb == "review":
+        _handle_review(change, cwd, verbose)
         return
 
     # Phase verbs delegate to the SDD runner via run_phase.
@@ -170,6 +183,51 @@ def _handle_status(change: str | None, cwd: Path, verbose: bool) -> None:
 
     status = Resolve(change or "", cwd=str(cwd))
     _print_json(status.model_dump(mode="json", exclude_none=True), verbose)
+
+
+def _handle_review(change: str | None, cwd: Path, verbose: bool) -> None:
+    """Run the structural review over the change's artifacts + diff.
+
+    Persists ``review-report.json`` (canonical) plus a ``review.md`` companion
+    rendered through the shared review machinery. Honest by design: without an
+    executor/model the report carries static checks only — never fabricated
+    model findings. A missing change exits 7 (SDD_ARTIFACTS_MISSING).
+    """
+    from opencontext_sdd.review import run_review
+
+    from opencontext_cli.contracts.exit_codes import ExitCode
+
+    envelope = run_review(change, cwd=str(cwd))
+    if envelope.status == "blocked":
+        payload = envelope.model_dump(mode="json", exclude_none=True)
+        payload["exit_code"] = int(ExitCode.SDD_ARTIFACTS_MISSING)
+        _print_json(payload, verbose)
+        sys.exit(int(ExitCode.SDD_ARTIFACTS_MISSING))
+
+    # Reuse the review machinery's merged-report renderer for the human artifact.
+    report_rel = envelope.artifacts.get("review-report")
+    if report_rel:
+        from opencontext_cli.commands.review_cmd import merge_reports
+
+        report_path = cwd / report_rel
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            merged = merge_reports(
+                [
+                    {
+                        "role": "structural",
+                        "findings": report.get("findings", []),
+                        "summary": envelope.executive_summary,
+                    }
+                ]
+            )
+            review_md = report_path.with_name("review.md")
+            review_md.write_text(merged + "\n", encoding="utf-8")
+            envelope.artifacts["review"] = review_md.relative_to(cwd).as_posix()
+        except (OSError, json.JSONDecodeError):
+            pass  # canonical JSON artifact already persisted; companion is best-effort
+
+    _print_json(envelope.model_dump(mode="json", exclude_none=True), verbose)
 
 
 def _handle_continue(change: str | None, cwd: Path, verbose: bool) -> None:
@@ -342,6 +400,7 @@ def _verb_help(verb: str) -> str:
         "tasks": "Break design into implementation tasks.",
         "apply": "Implement tasks from specs and design.",
         "verify": "Validate implementation against specs.",
+        "review": "Structural review of change artifacts + diff (honest, static).",
         "archive": "Archive a completed change.",
         "status": "Show structured status for the active change.",
         "continue": "Run the next dependency-ready phase.",

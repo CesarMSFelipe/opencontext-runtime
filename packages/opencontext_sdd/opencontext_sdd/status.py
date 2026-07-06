@@ -158,6 +158,13 @@ def _scan_artifacts(
         states["tasks"] = "missing"
         blocked.append("missing:tasks.md")
 
+    # Review report (additive): written by `sdd review`; presence-only state —
+    # it never blocks the phase decision tree.
+    review = change_root / "review-report.json"
+    if review.exists():
+        paths["review-report"] = review.relative_to(cwd).as_posix()
+        states["review-report"] = "done"
+
     verify = change_root / "verify-report.md"
     if verify.exists():
         paths["verify-report"] = verify.relative_to(cwd).as_posix()
