@@ -223,22 +223,24 @@ def handle_kg(args: Any) -> None:
             print(_render_pack_markdown(pack, query=task, mode="context"))
 
     elif command == "callers":
-        console.header(f"Callers: {symbol}")
         results = _find_callers(kg, symbol, depth)
         if json_output:
+            # JSON purity rule (CLI_CONTRACT): stdout carries only the document.
             print(json.dumps(results, indent=2))
         else:
+            console.header(f"Callers: {symbol}")
             if not results:
                 console.info("No callers found.")
             else:
                 _print_graph_results(results)
 
     elif command == "callees":
-        console.header(f"Callees: {symbol}")
         results = _find_callees(kg, symbol, depth)
         if json_output:
+            # JSON purity rule (CLI_CONTRACT): stdout carries only the document.
             print(json.dumps(results, indent=2))
         else:
+            console.header(f"Callees: {symbol}")
             if not results:
                 console.info("No callees found.")
             else:

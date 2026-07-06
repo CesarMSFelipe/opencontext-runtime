@@ -173,6 +173,21 @@ class ContextPackMetrics(BaseModel):
     kg_edges_used: int = Field(
         ge=0, description="KG edges behind the selected nodes (provenance + expansion hops)."
     )
+    test_nodes_included: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "KG-backed test nodes selected into the pack (plan kg block "
+            "`test_nodes_included`). Defaults to 0 so legacy persisted packs validate."
+        ),
+    )
+    kg_reason: str | None = Field(
+        default=None,
+        description=(
+            "Pack-level KG selection rationale (plan kg block `reason`). Null on "
+            "legacy persisted packs built before the field existed."
+        ),
+    )
     memory_hits: int = Field(ge=0, description="Memory-sourced items included in the pack.")
     protected_spans: int = Field(
         ge=0, description="Protected spans detected in selected candidates."

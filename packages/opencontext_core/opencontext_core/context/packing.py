@@ -175,6 +175,13 @@ def _is_memory_item(item: ContextItem) -> bool:
     return item.source_type == "memory" or item.metadata.get("retrieval_source") == "memory"
 
 
+def _is_test_item(item: ContextItem) -> bool:
+    """Source-path test heuristic (mirrors retrieval-side test detection)."""
+    source = item.source or ""
+    base = source.rsplit("/", 1)[-1].lower()
+    return base.startswith("test_") or base.endswith("_test.py") or "/tests/" in source.lower()
+
+
 def _kg_edges_for(item: ContextItem) -> int:
     """Edges justifying this item: provenance relationships, or one expansion hop."""
     provenance = item.metadata.get("graph_provenance")
@@ -214,7 +221,15 @@ def build_pack_metrics(
 
     kg_nodes = sum(1 for item in result.included if _is_kg_item(item))
     kg_edges = sum(_kg_edges_for(item) for item in result.included)
+    test_nodes = sum(1 for item in result.included if _is_kg_item(item) and _is_test_item(item))
     memory_hits = sum(1 for item in result.included if _is_memory_item(item))
+    if kg_nodes > 0:
+        kg_reason = (
+            f"{kg_nodes} knowledge-graph node(s) selected via {kg_edges} edge(s); "
+            f"{test_nodes} related test node(s) included"
+        )
+    else:
+        kg_reason = "no knowledge-graph candidates selected"
 
     detector = ProtectedSpanManager()
     original_by_id = {item.id: item for item in originals}
@@ -238,6 +253,8 @@ def build_pack_metrics(
         kg_used=kg_nodes > 0,
         kg_nodes_used=kg_nodes,
         kg_edges_used=kg_edges,
+        test_nodes_included=test_nodes,
+        kg_reason=kg_reason,
         memory_hits=memory_hits,
         protected_spans=protected_spans,
         protected_spans_kept=protected_spans_kept,

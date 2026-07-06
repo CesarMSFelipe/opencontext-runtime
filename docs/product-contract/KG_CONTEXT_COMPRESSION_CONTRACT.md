@@ -83,6 +83,8 @@ Every pack (and every run's `context-pack.json`) reports:
     "compression_ratio": 0.22,
     "kg_nodes_used": 12,
     "kg_edges_used": 18,
+    "test_nodes_included": 2,
+    "kg_reason": "12 knowledge-graph node(s) selected via 18 edge(s); 2 related test node(s) included",
     "memory_hits": 3,
     "protected_spans": 9,
     "protected_spans_kept": 9,
@@ -100,3 +102,11 @@ compresses and keeps protected spans intact (AC-021).
 > reports budget/usage but not the complete block (notably `protected_spans_kept` and
 > `kg_edges_used`), and `memory`/`run`/`decision`/`risk` node kinds are target additions to the
 > current code-centric node set.
+
+The plan's nested `kg` pack block maps onto this flat metrics block: `used` → `kg_used`,
+`nodes_selected` → `kg_nodes_used`, `edges_used` → `kg_edges_used`, `test_nodes_included` →
+`test_nodes_included`, `reason` → `kg_reason` (KG-PACK-CONTRACT). Both new fields are
+additive: legacy persisted packs without them stay valid (`test_nodes_included` defaults to 0,
+`kg_reason` to null). The plan's node/edge vocabularies are representable in the unified graph
+enums, including `spec` nodes and `documents`/`related_to` edges; live index emission of the
+non-code kinds remains a target per the note above.

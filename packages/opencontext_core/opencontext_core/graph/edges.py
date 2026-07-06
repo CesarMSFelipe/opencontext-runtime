@@ -70,3 +70,7 @@ class EdgeKind(StrEnum):
 
     # Engineering / SDD domain
     VERIFIED_BY = "verified_by"
+
+    # Documentation / generic association (plan minimum edge set)
+    DOCUMENTS = "documents"
+    RELATED_TO = "related_to"

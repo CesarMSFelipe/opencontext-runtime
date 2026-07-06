@@ -79,3 +79,4 @@ class NodeKind(StrEnum):
     REQUIREMENT = "requirement"
     TASK = "task"
     PHASE = "phase"
+    SPEC = "spec"
