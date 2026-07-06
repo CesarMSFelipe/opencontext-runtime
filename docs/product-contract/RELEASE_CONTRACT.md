@@ -21,6 +21,17 @@ clean checkout
 
 Any failing stage stops the pipeline; there is no manual override for stable commands.
 
+### CI wiring
+
+The gate is enforced in Actions: `publish.yml` calls `release-acceptance.yml` as a reusable
+workflow (`workflow_call`) inside the same workflow run, and the `build-and-publish` job
+declares `needs: release-acceptance`. No wheel is uploaded unless the DoD sequence, artifact
+hygiene audit (AC-029), fresh-venv install + acceptance against the installed wheels
+(AC-030), and uninstall-verify all pass on the exact ref being published — including
+tag-push publishes, which previously ran ungated. `release-acceptance.yml` stays usable
+standalone via `workflow_dispatch` and on release publication. Guarded by
+`tests/release/test_publish_gated_on_acceptance.py`.
+
 ## Artifact hygiene — forbidden in the published artifact
 
 ```
@@ -62,7 +73,7 @@ GitHub release):
 5. Publishing uses token authentication (`secrets.PYPI_API_TOKEN`) in `publish.yml`; a failed
    publish is re-triggered by re-tagging after the gate passes again.
 
-> Current → Target: pieces exist today (`docs/release-checklist.md`, CI build + fresh-venv
-> repro notes, gitleaks/security scans) but the single gated pipeline above — hygiene
-> inspector, external acceptance against the installed package, uninstall-verify stage, and
-> the machine-readable release report — is the freeze target for this contract.
+> Status: the single gated pipeline above — hygiene inspector, external acceptance against
+> the installed package, uninstall-verify stage, and the machine-readable release report —
+> is implemented in `release-acceptance.yml`, and `publish.yml` cannot upload without it
+> passing in the same run (see CI wiring above).

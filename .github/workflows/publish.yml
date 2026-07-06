@@ -21,7 +21,17 @@ permissions:
   contents: read
 
 jobs:
+  # RELEASE_CONTRACT gate: no publish unless the installed product passes.
+  # Runs the full release-acceptance workflow (DoD sequence, artifact hygiene
+  # audit, fresh-venv install + acceptance against the installed wheels, and
+  # uninstall-verify) on the same ref this run publishes.
+  release-acceptance:
+    uses: ./.github/workflows/release-acceptance.yml
+    permissions:
+      contents: read
+
   build-and-publish:
+    needs: release-acceptance
     runs-on: ubuntu-latest
     strategy:
       matrix:

@@ -11,6 +11,9 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+  # RELEASE_CONTRACT: publish.yml calls this workflow as its gate; the caller's
+  # ref/sha is inherited, so acceptance runs on the exact tag being published.
+  workflow_call:
 
 permissions:
   contents: read
