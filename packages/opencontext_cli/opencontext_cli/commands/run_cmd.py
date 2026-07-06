@@ -161,6 +161,12 @@ def add_run_exec_parser(subparsers: Any) -> None:
         default=None,
         help="Explicit config path (overrides <root>/opencontext.yaml).",
     )
+    run_parser.add_argument(
+        "--list-executors",
+        dest="list_executors",
+        action="store_true",
+        help="List the registered executors with their capabilities and exit.",
+    )
     run_parser.add_argument("--json", action="store_true", help="JSON output.")
 
 
@@ -178,6 +184,31 @@ def handle_run_exec(args: Any) -> int:
     from opencontext_core.runtime.api import RunRequest, RuntimeApi, StartSessionRequest
 
     root = _root(args)
+    # Executor registry visibility (EXE tests): list every registered executor
+    # with its honest capability declarations, then exit without running.
+    if getattr(args, "list_executors", False):
+        from opencontext_core.executors.registry import default_registry
+
+        specs = [spec.to_dict() for spec in default_registry().list()]
+        if getattr(args, "json", False):
+            print(json.dumps({"executors": specs}, indent=2))
+        else:
+            console.table(
+                "Executors",
+                ["ID", "Mutates", "Runs commands", "Network", "Approval", "Description"],
+                [
+                    [
+                        s["id"],
+                        "yes" if s["can_mutate"] else "no",
+                        "yes" if s["can_run_commands"] else "no",
+                        "yes" if s["requires_network"] else "no",
+                        "yes" if s["requires_approval"] else "no",
+                        s["description"],
+                    ]
+                    for s in specs
+                ],
+            )
+        return 0
     # B2 / ADR-A2: read the SAME path install writes (<root>/opencontext.yaml),
     # via the one shared resolver — never the old hardcoded configs/ subpath.
     config_path = resolve_config_path(root, getattr(args, "config", None))

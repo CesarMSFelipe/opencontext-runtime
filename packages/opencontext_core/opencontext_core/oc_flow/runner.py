@@ -160,18 +160,96 @@ def _green_evidence_from_inspection(inspection: InspectionReport | None) -> Any:
     return None
 
 
-def _discover_test_command(root: Path) -> list[str] | None:
-    """Small pytest discovery for test-fix tasks."""
+@dataclass(frozen=True)
+class ResolvedTestCommand:
+    """A verification command plus the source that chose it (evidence field)."""
+
+    command: list[str] | None
+    source: str  # "configured" | "project_venv" | "runtime"
+
+
+def _configured_test_command(root: Path) -> list[str] | None:
+    """The explicit ``workflow_defaults.test_command`` from harness.yaml, if any."""
+    try:
+        from opencontext_core.harness.config import HarnessConfig
+
+        harness_path = resolve_workspace_path(root, StorageMode.local) / "harness.yaml"
+        return HarnessConfig.from_yaml_file(harness_path).test_command
+    except Exception:
+        return None
+
+
+def _pytest_importable(venv: Path, python: Path) -> bool:
+    """Best-effort check that ``python`` (in ``venv``) can import pytest.
+
+    Structural markers first (cheap, and hermetic for fixture layouts), then a
+    real import probe as the honest fallback.
+    """
+    if (venv / "bin" / "pytest").is_file() or (venv / "Scripts" / "pytest.exe").is_file():
+        return True
+    if (venv / "Lib" / "site-packages" / "pytest" / "__init__.py").is_file():
+        return True
+    if any(venv.glob("lib/python*/site-packages/pytest/__init__.py")):
+        return True
+    import subprocess
+
+    try:
+        probe = subprocess.run(
+            [str(python), "-c", "import pytest"], capture_output=True, timeout=15
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return probe.returncode == 0
+
+
+def _project_venv_python(root: Path) -> Path | None:
+    """The project's own venv interpreter (with pytest importable), or ``None``."""
+    for venv_name in (".venv", "venv"):
+        venv = root / venv_name
+        for python in (venv / "bin" / "python", venv / "Scripts" / "python.exe"):
+            if python.is_file() and _pytest_importable(venv, python):
+                return python
+    return None
+
+
+def _discover_test_files(root: Path) -> list[str]:
     tests = sorted(
         p.relative_to(root)
         for pattern in ("test_*.py", "*_test.py")
         for p in root.rglob(pattern)
         if ".opencontext" not in p.parts
     )
-    if not tests:
-        return None
     # NOTE: caps at 10 to avoid running the full suite; pass explicit test_command for large repos.
-    return [sys.executable, "-m", "pytest", "-q", *[str(p) for p in tests[:10]]]
+    return [str(p) for p in tests[:10]]
+
+
+def resolve_test_command(root: Path) -> ResolvedTestCommand:
+    """Resolve the verification command for ``root`` with its provenance.
+
+    Order: (1) explicit ``workflow_defaults.test_command`` (harness.yaml) —
+    "configured"; (2) the PROJECT's own interpreter (``.venv``/``venv`` with
+    pytest importable) — "project_venv"; (3) the current ``sys.executable`` —
+    "runtime" (the existing ``runner_available`` preflight still applies).
+    """
+    configured = _configured_test_command(root)
+    if configured:
+        return ResolvedTestCommand(command=list(configured), source="configured")
+    tests = _discover_test_files(root)
+    if not tests:
+        return ResolvedTestCommand(command=None, source="runtime")
+    venv_python = _project_venv_python(root)
+    if venv_python is not None:
+        return ResolvedTestCommand(
+            command=[str(venv_python), "-m", "pytest", "-q", *tests], source="project_venv"
+        )
+    return ResolvedTestCommand(
+        command=[sys.executable, "-m", "pytest", "-q", *tests], source="runtime"
+    )
+
+
+def _discover_test_command(root: Path) -> list[str] | None:
+    """Small pytest discovery for test-fix tasks (see :func:`resolve_test_command`)."""
+    return resolve_test_command(root).command
 
 
 # ------------------------------------------------------------------------------- runner
@@ -363,6 +441,92 @@ class OCFlowRunner:
         session_id: str | None = None,
         run_id: str | None = None,
     ) -> OCFlowRunResult:
+        """Run OC Flow for ``task``; an interrupt yields canonical ``cancelled``.
+
+        Thin cancellation boundary over :meth:`_run_governed` (RUN_STATE_CONTRACT):
+        a KeyboardInterrupt/SIGINT mid-run is finalized as status ``cancelled``
+        (exit code 1) and, when the run dir already exists, run.json is persisted
+        with the cancelled state — best-effort, never corrupting partial artifacts.
+        """
+        session_id = session_id or new_session_id()
+        run_id = run_id or new_run_id()
+        try:
+            return self._run_governed(
+                task,
+                lane=lane,
+                profile=profile,
+                seed_paths=seed_paths,
+                requested_edits=requested_edits,
+                run_external_inspection=run_external_inspection,
+                test_command=test_command,
+                session_id=session_id,
+                run_id=run_id,
+            )
+        except KeyboardInterrupt:
+            return self._finalize_cancelled(task, session_id=session_id, run_id=run_id)
+
+    def _finalize_cancelled(self, task: str, *, session_id: str, run_id: str) -> OCFlowRunResult:
+        """Signal-safe cancellation finalizer (RUN_STATE_CONTRACT ``cancelled``)."""
+        from opencontext_core.models.canonical_status import exit_code_for_run
+
+        exit_code = exit_code_for_run("cancelled")
+        reason = "run interrupted (SIGINT/KeyboardInterrupt)"
+        run_dir = self._run_dir(session_id, run_id)
+        if run_dir.is_dir():
+            # Best-effort persistence — a failure here must never mask the
+            # cancellation itself.
+            try:
+                finished_at = datetime.now(tz=UTC).isoformat()
+                manifest_path = run_dir / "run.json"
+                manifest = _load(manifest_path)
+                if not isinstance(manifest, dict):
+                    manifest = {
+                        "schema_version": "opencontext.oc_flow.run_manifest.v1",
+                        "run_id": run_id,
+                        "session_id": session_id,
+                        "workflow": "oc-flow",
+                        "task": task,
+                        "created_at": finished_at,
+                    }
+                manifest.update(
+                    {
+                        "status": "cancelled",
+                        "canonical_status": "cancelled",
+                        "exit_code": exit_code,
+                        "completion_reason": reason,
+                        "finished_at": finished_at,
+                    }
+                )
+                _dump(manifest_path, manifest)
+                state = _load(run_dir / "state.json")
+                if isinstance(state, dict):
+                    state["status"] = "cancelled"
+                    _dump(run_dir / "state.json", state)
+            except Exception:
+                pass
+        return OCFlowRunResult(
+            run_id=run_id,
+            session_id=session_id,
+            status="cancelled",
+            final_node="cancelled",
+            completion_reason=reason,
+            canonical_status="cancelled",
+            exit_code=exit_code,
+        )
+
+    def _run_governed(
+        self,
+        task: str,
+        *,
+        lane: Lane | str = Lane.FAST,
+        profile: str | None = "balanced",
+        seed_paths: list[str] | None = None,
+        requested_edits: list[ApplyEdit] | None = None,
+        run_external_inspection: bool = False,
+        test_command: list[str] | None = None,
+        session_id: str | None = None,
+        run_id: str | None = None,
+    ) -> OCFlowRunResult:
         """Run OC Flow end to end for ``task`` (FLOW-16, book §25)."""
         if not self.enabled:
             raise OCFlowError("OC Flow is disabled (set runtime.oc_flow_enabled=true)")
@@ -397,8 +561,13 @@ class OCFlowRunner:
             # TDD_STRICT_CONTRACT: a strict mutation run must execute tests, so
             # verification is required regardless of the task wording.
             verify_required = True
+        # Evidence provenance: which source chose the verification command
+        # (an explicitly passed command counts as configured).
+        runner_source: str | None = "configured" if test_command is not None else None
         if verify_required and test_command is None:
-            test_command = _discover_test_command(self.root)
+            resolved_command = resolve_test_command(self.root)
+            test_command = resolved_command.command
+            runner_source = resolved_command.source if test_command else None
         run_external_inspection = run_external_inspection or bool(test_command)
 
         # RED evidence (TDD_STRICT_CONTRACT): run the relevant tests BEFORE any
@@ -770,6 +939,7 @@ class OCFlowRunner:
             canonical_status=canonical_status,
             exit_code=exit_code,
             started_at=started_at,
+            runner_source=runner_source,
         )
 
         return OCFlowRunResult(
@@ -908,6 +1078,7 @@ class OCFlowRunner:
         canonical_status: str = "",
         exit_code: int = 0,
         started_at: str = "",
+        runner_source: str | None = None,
     ) -> None:
         run_dir = self._run_dir(session_id, run_id)
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -959,6 +1130,9 @@ class OCFlowRunner:
             "commands": verified_by,
             "outcome": verification_outcome,
             "passed": verification_outcome == "passed",
+            # Additive provenance: which source chose the verification command
+            # ("configured" | "project_venv" | "runtime", null when none ran).
+            "runner_source": runner_source,
         }
         manifest = {
             "schema_version": "opencontext.oc_flow.run_manifest.v1",
@@ -993,6 +1167,7 @@ class OCFlowRunner:
             "commands": verified_by,
             "outcome": verification_outcome,
             "exit_code": green_evidence.get("exit_code"),
+            "runner_source": runner_source,
             "summary": (
                 ctx.inspection.failure_summary
                 if ctx.inspection and ctx.inspection.failure_summary

@@ -1618,6 +1618,12 @@ class OpenContextConfig(BaseModel):
     edits_file: str | None = Field(
         default=None, description="JSON ApplyEdit file used by the test_stub provider."
     )
+    # Unified-diff executor opt-in (EXE-004). When ``provider == "patch"`` and
+    # ``patch_file`` resolves under the project root, the CLI builds a
+    # PatchGateway executor that applies the diff through the normal pipeline.
+    patch_file: str | None = Field(
+        default=None, description="Unified-diff file used by the patch executor."
+    )
 
     project: ProjectConfig = Field(description="Project configuration.")
     models: ModelConfigMap = Field(description="Model aliases.")

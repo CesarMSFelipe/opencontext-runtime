@@ -197,6 +197,9 @@ class HarnessRunner:
         # SDD-CONV). Default off → legacy advisory scaffold reporting.
         self._sdd_strict = False
         self._workflow_registry: Any = None
+        # The state of the run currently executing (set by create_run), used by
+        # the cancellation finalizer to locate the run dir on interrupt.
+        self._active_state: HarnessState | None = None
 
         # Agent memory store. This MUST resolve to the same DB (path + provider)
         # the runtime's recall path reads, or every harvested memory lands in a
@@ -269,6 +272,7 @@ class HarnessRunner:
         delegate = self._build_executor()
         if delegate is not None:
             state.delegate = delegate
+        self._active_state = state
         return state
 
     def _load_program_plan(self) -> Any:
@@ -704,6 +708,68 @@ class HarnessRunner:
         return done
 
     def run(
+        self,
+        workflow: str,
+        task: str,
+        budget_mode: BudgetMode = BudgetMode.WARN,
+        *,
+        apply_edits: list[Any] | None = None,
+        approved_phases: set[str] | None = None,
+        resume_from: str | None = None,
+    ) -> HarnessRunResult:
+        """Execute a workflow; an interrupt yields canonical ``cancelled``.
+
+        Thin cancellation boundary over :meth:`_run_governed`
+        (RUN_STATE_CONTRACT): a KeyboardInterrupt/SIGINT mid-run is finalized as
+        ``GateStatus.CANCELLED`` (exit code 1) and, when the run dir already
+        exists, run.json is persisted with the cancelled state — best-effort,
+        never corrupting partial artifacts.
+        """
+        try:
+            return self._run_governed(
+                workflow,
+                task,
+                budget_mode,
+                apply_edits=apply_edits,
+                approved_phases=approved_phases,
+                resume_from=resume_from,
+            )
+        except KeyboardInterrupt:
+            return self._finalize_cancelled_run(workflow, task)
+
+    def _finalize_cancelled_run(self, workflow: str, task: str) -> HarnessRunResult:
+        """Signal-safe cancellation finalizer (RUN_STATE_CONTRACT ``cancelled``)."""
+        from opencontext_core.models.canonical_status import exit_code_for_run
+
+        state = self._active_state
+        run_id = state.run_id if state is not None else f"{workflow}-cancelled"
+        result = HarnessRunResult(
+            run_id=run_id,
+            workflow=workflow,
+            task=task,
+            status=GateStatus.CANCELLED,
+            warnings=["run interrupted (SIGINT/KeyboardInterrupt)"],
+        )
+        # Best-effort: persist run.json only when the run dir already exists —
+        # a failure here must never mask the cancellation itself.
+        try:
+            run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / run_id
+            if run_dir.is_dir():
+                payload = {
+                    "run_id": run_id,
+                    "workflow": workflow,
+                    "task": task,
+                    "status": "cancelled",
+                    "canonical_status": "cancelled",
+                    "exit_code": exit_code_for_run("cancelled"),
+                    "created_at": result.created_at,
+                }
+                (run_dir / "run.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+        return result
+
+    def _run_governed(
         self,
         workflow: str,
         task: str,
@@ -1646,15 +1712,22 @@ class HarnessRunner:
             # so strict TDD set via opencontext.yaml's harness section — not only
             # harness.yaml workflow_defaults — activates the GREEN gate too.
             tdd_mode, _ = self._harness_governance()
-            # Discover the project's real test command instead of a bare ``pytest``,
+            # Resolve the project's real test command instead of a bare ``pytest``,
             # which fails to import project modules (exit 2) when the project has no
-            # pythonpath/rootdir config. Fall back to the interpreter's pytest module.
+            # pythonpath/rootdir config. Resolution order: configured test_command >
+            # the project's own venv interpreter > this runtime's interpreter.
             import sys as _sys
 
-            from opencontext_core.oc_flow.runner import _discover_test_command
+            from opencontext_core.oc_flow.runner import resolve_test_command
 
-            cmd = _discover_test_command(state.root) or [_sys.executable, "-m", "pytest"]
-            return TestsPassGate().evaluate(cmd=cmd, cwd=state.root, tdd_mode=tdd_mode)
+            resolved = resolve_test_command(state.root)
+            cmd = resolved.command or [_sys.executable, "-m", "pytest"]
+            runner_source = resolved.source if resolved.command else "runtime"
+            gate = TestsPassGate().evaluate(cmd=cmd, cwd=state.root, tdd_mode=tdd_mode)
+            # Additive evidence: record which source chose the verification command.
+            if isinstance(getattr(gate, "metadata", None), dict):
+                gate.metadata["runner_source"] = runner_source
+            return gate
         # Unknown / unbound declared gate: do not fabricate a result.
         return None
 
@@ -2514,6 +2587,10 @@ class HarnessRunner:
             # (test_failure | environment_error | no_tests | already_passing).
             if meta.get("classification"):
                 payload["classification"] = str(meta["classification"])
+            # Additive: which source chose the verification command
+            # ("configured" | "project_venv" | "runtime").
+            if meta.get("runner_source"):
+                payload["runner_source"] = str(meta["runner_source"])
             return payload
 
         red = _evidence(red_gate)

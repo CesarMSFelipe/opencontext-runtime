@@ -1270,6 +1270,8 @@ class RuntimeApi:
         value = getattr(raw, "value", raw)
         text = str(value).lower() if value is not None else "completed"
         # OC Flow terminal vocabulary — pass through unchanged (C15 parity fix).
+        # "cancelled" is shared by both engines (RUN_STATE_CONTRACT): OC Flow's
+        # cancellation finalizer and the harness GateStatus.CANCELLED both emit it.
         _OC_FLOW_TERMINAL = {
             "completed",
             "blocked",
@@ -1279,6 +1281,7 @@ class RuntimeApi:
             "needs_user_edit",
             "escalated",
             "tdd_violation",
+            "cancelled",
         }
         if text in _OC_FLOW_TERMINAL:
             return text

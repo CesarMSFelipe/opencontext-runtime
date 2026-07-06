@@ -47,6 +47,10 @@ class GateStatus(StrEnum):
     # PASSED (which would imply edits were written). Mirrors OC Flow's
     # ``needs_executor`` vocabulary so the two surfaces stay consistent.
     NOT_APPLIED = "not_applied"
+    # Set on the HarnessRunResult when the run was interrupted (SIGINT /
+    # KeyboardInterrupt). Maps 1:1 onto the canonical ``cancelled`` state
+    # (RUN_STATE_CONTRACT); never produced by a gate evaluation.
+    CANCELLED = "cancelled"
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}.{self.name}>"
