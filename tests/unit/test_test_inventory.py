@@ -107,6 +107,10 @@ class TestClassify:
         label, _ = classify(_record(suite="done_in_v1", path="tests/done_in_v1/test_x.py"))
         assert label == "QUARANTINE"
 
+    def test_quarantine_suite_is_quarantine(self) -> None:
+        label, _ = classify(_record(suite="quarantine", path="tests/quarantine/test_x.py"))
+        assert label == "QUARANTINE"
+
     def test_flaky_marker_is_quarantine(self) -> None:
         label, _ = classify(_record(markers=["flaky"]))
         assert label == "QUARANTINE"

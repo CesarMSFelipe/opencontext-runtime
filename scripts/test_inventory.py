@@ -15,8 +15,8 @@ Classification rules (transparent, applied in this precedence order):
     suite, ACCEPTANCE_CONTRACT.md AC-001..AC-030).
 2.  suite ``golden`` or ``compat``  -> KEEP_CONTRACT (snapshot/compat
     surfaces are contract tests by construction).
-3.  suite ``done_in_v1``            -> QUARANTINE (archived v1 validation
-    suite; expiry decision pending).
+3.  suite ``done_in_v1`` or ``quarantine`` -> QUARANTINE (archived v1
+    validation suite / already-quarantined skip-marked files).
 4.  ``flaky`` marker present        -> QUARANTINE (fix or expire per §26.3).
 5.  mock imports AND no filesystem AND no subprocess usage -> DELETE
     candidate ("only proves mocks" rule from §26.3).
@@ -71,7 +71,7 @@ CLASSIFICATIONS = (
 
 CONTRACT_SUITES = {"golden", "compat"}
 BOUNDARY_SUITES = {"e2e", "integration", "mcp", "environment"}
-ARCHIVED_SUITES = {"done_in_v1"}
+QUARANTINE_SUITES = {"done_in_v1", "quarantine"}
 # MERGE may only replace these base labels (never acceptance/contract/etc.).
 MERGEABLE = {"KEEP_UNIT_CRITICAL", "KEEP_INTEGRATION_BOUNDARY"}
 # Directories never inventoried: fixture projects contain seeded failing
@@ -113,8 +113,8 @@ def classify(record: dict) -> tuple[str, list[str]]:
         return "KEEP_ACCEPTANCE", ["rule 1: tests/acceptance black-box suite"]
     if suite in CONTRACT_SUITES:
         return "KEEP_CONTRACT", [f"rule 2: contract suite '{suite}'"]
-    if suite in ARCHIVED_SUITES:
-        return "QUARANTINE", [f"rule 3: archived suite '{suite}'"]
+    if suite in QUARANTINE_SUITES:
+        return "QUARANTINE", [f"rule 3: archived/quarantined suite '{suite}'"]
     if "flaky" in record["markers"]:
         return "QUARANTINE", ["rule 4: flaky marker"]
     if record["uses_mock"] and not record["uses_filesystem"] and not record["uses_subprocess"]:

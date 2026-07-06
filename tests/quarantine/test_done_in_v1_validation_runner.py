@@ -10,6 +10,21 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
+# Quarantined 2026-07-06 (test-reduction pass, plan §26.3): archived v1
+# validation suite (was tests/done_in_v1/). Not flaky — retired from default
+# signal because each test re-runs all 17 behavioral probes and rewrites
+# artifacts/done-in-v1-validation.json during the run (slow, repo-mutating).
+# Remove the skip mark to re-verify the v1 probe contract explicitly.
+pytestmark = [
+    pytest.mark.quarantine,
+    pytest.mark.skip(
+        reason="quarantined 2026-07-06: archived done_in_v1 suite; re-runs 17 "
+        "behavioral probes and rewrites artifacts/ during test runs"
+    ),
+]
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_DIR = REPO_ROOT / "tools"
 ARTIFACTS_DIR = REPO_ROOT / "artifacts"
