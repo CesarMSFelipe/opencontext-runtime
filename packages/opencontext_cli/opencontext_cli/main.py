@@ -88,6 +88,7 @@ from opencontext_cli.commands.update_cmd import (
     handle_upgrade,
 )
 from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
+from opencontext_cli.contracts.errors import CliContractError
 from opencontext_cli.output import add_output_flag, eprint
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
 from opencontext_core.config import SecurityMode, default_config_data, load_config
@@ -305,6 +306,15 @@ def main() -> None:
             _notify_outdated(args)
         except Exception:
             pass
+    except CliContractError as exc:
+        if getattr(args, "json", False):
+            json.dump(exc.to_envelope(), sys.stdout)
+            sys.stdout.write("\n")
+        else:
+            eprint(f"Error: {exc.message}")
+            if exc.hint:
+                err_console.dim(f"  {exc.hint}")
+        raise SystemExit(exc.exit_code) from exc
     except OpenContextError as exc:
         eprint(f"Error: {exc}")
         _print_suggestion(args.command if hasattr(args, "command") else "")
@@ -1707,8 +1717,7 @@ def _dispatch(args: argparse.Namespace) -> None:
         handle_health(args)
         return
     if command == "status":
-        _status(getattr(args, "root", "."), json_output=getattr(args, "json", False))
-        return
+        sys.exit(_status(getattr(args, "root", "."), json_output=getattr(args, "json", False)))
     if command == "config":
         handle_config(args)
         return
@@ -3265,11 +3274,13 @@ def _workflow_pack_metadata(name: str | None) -> dict[str, Any]:
     }
 
 
-def _status(root: str = ".", *, json_output: bool = False) -> None:
-    """Show project status at a glance."""
+def _status(root: str = ".", *, json_output: bool = False) -> int:
+    """Show project status at a glance; return the contract exit code."""
+    from opencontext_cli.contracts.exit_codes import exit_code_for_status
     from opencontext_core.config import load_config_or_defaults
     from opencontext_core.dx.console_styles import console
     from opencontext_core.indexing.git_context import GitContextProvider
+    from opencontext_core.models.canonical_status import to_canonical
     from opencontext_core.paths import resolve_storage_path
 
     project_root = Path(root).resolve()
@@ -3309,11 +3320,17 @@ def _status(root: str = ".", *, json_output: bool = False) -> None:
     checks_count = len(list(checks_dir.glob("*.md"))) if checks_dir.exists() else 0
     has_workspace = opencontext_dir.exists()
 
+    status_value = "ready" if (has_config and index_info["indexed"]) else "partial"
+    canonical = to_canonical(status_value)
+    exit_code = exit_code_for_status(canonical.value)
+
     if json_output:
         payload: dict[str, Any] = {
             "schema": "opencontext/status/v1",
             "project": str(project_root),
-            "status": "ready" if (has_config and index_info["indexed"]) else "partial",
+            "status": status_value,
+            "canonical_status": canonical.value,
+            "exit_code": exit_code,
             "config": {"exists": has_config, "path": str(config_path)},
             "index": index_info,
             "git": git_info,
@@ -3324,7 +3341,7 @@ def _status(root: str = ".", *, json_output: bool = False) -> None:
         }
         json.dump(payload, sys.stdout, indent=2)
         sys.stdout.write("\n")
-        return
+        return exit_code
 
     console.header("OpenContext Status")
     console.print(f"[bold]Project:[/] {project_root}")
@@ -3380,6 +3397,7 @@ def _status(root: str = ".", *, json_output: bool = False) -> None:
 
     console.print("")
     console.info("Run 'opencontext --help' for all commands")
+    return exit_code
 
 
 def _doctor(
