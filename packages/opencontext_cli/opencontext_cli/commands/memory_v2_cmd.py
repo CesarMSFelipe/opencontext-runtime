@@ -580,35 +580,44 @@ def handle_memory_lifecycle(args: argparse.Namespace, command: str) -> None:
                 file=sys.stderr,
             )
             raise SystemExit(2)
-        from opencontext_memory import MemoryStore, mem_purge
-
-        from opencontext_core.paths import StorageMode, resolve_storage_path
-
-        storage = resolve_storage_path(cwd, StorageMode.local)
-        report: dict[str, Any] = {
-            "purged": True,
-            "observations_removed": 0,
-            "relations_removed": 0,
-            "sessions_removed": 0,
-        }
-        obs_db = storage / "memory_v2.db"
-        if obs_db.is_file():
-            store = MemoryStore.open(obs_db)
-            report.update(mem_purge(store))
-            store.close()
-        # Remove the managed store files outright (uninstall-grade wipe).
-        removed_files: list[str] = []
-        for stem in ("memory_v2.db", "memory.db"):
-            for suffix in ("", "-wal", "-shm"):
-                candidate = storage / f"{stem}{suffix}"
-                if candidate.is_file():
-                    candidate.unlink()
-                    removed_files.append(str(candidate))
-        report["removed_files"] = removed_files
-        print(json.dumps(report, indent=2, default=str))
+        print(json.dumps(purge_memory_state(cwd), indent=2, default=str))
         return
 
     raise SystemExit(f"unknown memory lifecycle command: {command}")
+
+
+def purge_memory_state(cwd: Path) -> dict[str, Any]:
+    """Delete ALL managed memory state for *cwd*.
+
+    Shared by ``memory purge --yes`` and the workspace uninstall purge, so
+    both paths perform the same uninstall-grade wipe.
+    """
+    from opencontext_memory import MemoryStore, mem_purge
+
+    from opencontext_core.paths import StorageMode, resolve_storage_path
+
+    storage = resolve_storage_path(Path(cwd), StorageMode.local)
+    report: dict[str, Any] = {
+        "purged": True,
+        "observations_removed": 0,
+        "relations_removed": 0,
+        "sessions_removed": 0,
+    }
+    obs_db = storage / "memory_v2.db"
+    if obs_db.is_file():
+        store = MemoryStore.open(obs_db)
+        report.update(mem_purge(store))
+        store.close()
+    # Remove the managed store files outright (uninstall-grade wipe).
+    removed_files: list[str] = []
+    for stem in ("memory_v2.db", "memory.db"):
+        for suffix in ("", "-wal", "-shm"):
+            candidate = storage / f"{stem}{suffix}"
+            if candidate.is_file():
+                candidate.unlink()
+                removed_files.append(str(candidate))
+    report["removed_files"] = removed_files
+    return report
 
 
 # Re-export for backward compatibility
@@ -618,4 +627,5 @@ __all__ = [
     "add_memory_v2_parser",
     "handle_memory_lifecycle",
     "handle_memory_v2",
+    "purge_memory_state",
 ]

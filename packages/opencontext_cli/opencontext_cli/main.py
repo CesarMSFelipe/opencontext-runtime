@@ -2760,6 +2760,15 @@ def _install(args: argparse.Namespace) -> None:
             console.print("[yellow]Setup cancelled.[/]")
             return
 
+    # Snapshot the workspace BEFORE any writer runs so the install can record
+    # everything it creates in the v2 manifest (manifest-driven uninstall).
+    try:
+        from opencontext_core.paths.install_manifest import snapshot_workspace
+
+        _manifest_snapshot = snapshot_workspace(root)
+    except Exception:
+        _manifest_snapshot = None
+
     # ── Run the canonical onboarding engine ───────────────────────────
     # config + prefs + index + SDD context + agent files + harness are all done by
     # OnboardingService.run() — the SAME engine init/onboard use, so the install
@@ -2861,6 +2870,18 @@ def _install(args: argparse.Namespace) -> None:
         summary.append(f"✓ Verify ({passed}/{len(checks)} checks passed)")
     except Exception as exc:
         summary.append(f"⚠ Verify: {exc}")
+
+    # ── Install manifest (schema v2) ──────────────────────────────────
+    # Diff against the pre-install snapshot and persist created_paths /
+    # modified_files / state_paths so uninstall is manifest-driven.
+    if _manifest_snapshot is not None:
+        try:
+            from opencontext_core.paths.install_manifest import finalize_install_manifest
+
+            finalize_install_manifest(root, _manifest_snapshot, agent_configs=list(active_clients))
+            summary.append("✓ Install manifest (uninstall map)")
+        except Exception as exc:
+            summary.append(f"⚠ Install manifest: {exc}")
 
     # ── Summary ────────────────────────────────────────────────────────
     console.print()

@@ -44,9 +44,10 @@ _UNINSTALL_WIZARD_STEPS: dict[str, WizardStep] = {
 def _strip_project_managed_blocks(root: object, scope: str) -> None:
     """Remove project-level managed blocks that setup added outside any single
     agent: the stack-standards block in AGENTS.md and the storage block in
-    .gitignore. Preserves all user content. Best-effort, local scope only.
+    .gitignore. Preserves all user content. Best-effort, workspace scopes only
+    ("local" is the legacy alias for "workspace"; "all" covers both tiers).
     """
-    if scope != "local":
+    if scope not in ("local", "workspace", "all"):
         return
     from pathlib import Path
 
@@ -138,6 +139,41 @@ def _purge_project_artifacts(root: object) -> list[str]:
     return removed
 
 
+def _load_v2_manifest(root: object) -> dict[str, Any] | None:
+    """Load the workspace install manifest when it carries v2 fields.
+
+    Returns ``None`` for a missing/v1 manifest so callers fall back to the
+    hardcoded purge targets (INSTALL_UNINSTALL_CONTRACT: manifest-driven when
+    available, compatible otherwise).
+    """
+    from opencontext_core.paths import read_manifest
+
+    manifest = read_manifest(Path(str(root)) / ".opencontext")
+    if not isinstance(manifest, dict):
+        return None
+    if int(manifest.get("schema_version") or 1) < 2:
+        return None
+    if not manifest.get("created_paths") and not manifest.get("state_paths"):
+        return None
+    return manifest
+
+
+def _purge_workspace_with_manifest(root: object, manifest: dict[str, Any]) -> dict[str, Any]:
+    """Manifest-driven workspace purge: memory wipe + exact managed deletion."""
+    from opencontext_core.paths.install_manifest import purge_from_manifest
+
+    base = Path(str(root))
+    result: dict[str, Any] = {}
+    try:
+        from opencontext_cli.commands.memory_v2_cmd import purge_memory_state
+
+        result["memory"] = purge_memory_state(base)
+    except Exception:
+        pass
+    result.update(purge_from_manifest(base, manifest))
+    return result
+
+
 def add_uninstall_parser(subparsers: Any) -> None:
     """Add the ``uninstall`` command parser."""
     parser = subparsers.add_parser(
@@ -210,10 +246,8 @@ def _global_product_install_targets() -> list[Path]:
 
     # NOTE: known fixed-path removal — upgrade to manifest-driven if install
     # methods diversify (e.g. brew/npm managed paths are added to install.sh).
-    # Paths intentionally excluded (not created by install.sh):
-    #   - ~/.local/bin/oc        (not in install.sh)
-    #   - ~/.cache/opencontext   (not in install.sh)
-    #   - ~/.local/state/opencontext (not in install.sh)
+    # ~/.cache/opencontext and ~/.local/state/opencontext are handled by
+    # global_state_roots() during a global purge; ~/.local/bin/oc is not ours.
     """
     home = Path.home()
     return [
@@ -378,6 +412,8 @@ def _purge_global_state() -> list[str]:
       2. Product-install paths from install.sh: ~/.opencontext/venv.
       3. ~/.local/bin/opencontext symlink — only when it points into ~/.opencontext.
       4. Shell rc PATH lines: the '# OpenContext Runtime' + export PATH block.
+      5. Whole state roots: ~/.opencontext, ~/.config/opencontext, and the XDG
+         state/cache opencontext dirs (env overrides respected).
 
     NOTE: a system-level Engram provisioned by ``install --install-engram`` (pipx/npm)
     is intentionally NOT reversed here — that is a separate system install the user
@@ -426,13 +462,41 @@ def _purge_global_state() -> list[str]:
     # 4. Strip the '# OpenContext Runtime' PATH block from shell rc files
     removed.extend(_strip_rc_path_lines(home))
 
-    # 5. Prune empty parent dirs (best-effort; silently skips non-empty)
+    # 5. Whole HOME state roots: ~/.opencontext, ~/.config/opencontext and the
+    #    XDG state/cache dirs (env overrides respected; symlinks never followed).
+    from opencontext_core.paths.install_manifest import _remove_no_follow, global_state_roots
+
+    for target in global_state_roots():
+        if not target.exists() and not target.is_symlink():
+            continue
+        try:
+            _remove_no_follow(target)
+            removed.append(str(target))
+        except Exception:
+            pass
+
+    # 6. Prune empty parent dirs (best-effort; silently skips non-empty)
     for parent in (home / ".config", home / ".opencontext"):
         try:
             parent.rmdir()
         except OSError:
             pass
     return removed
+
+
+def _global_purge_plan() -> list[str]:
+    """The exact HOME-level paths a global purge would remove (dry-run plan)."""
+    from opencontext_core.paths.install_manifest import global_state_roots
+
+    plan = [
+        *(str(p) for p in _global_state_targets()),
+        *(str(p) for p in _global_product_install_targets()),
+        *(str(p) for p in global_state_roots()),
+    ]
+    oc_symlink = _oc_symlink_in_local_bin()
+    if oc_symlink is not None:
+        plan.append(str(oc_symlink))
+    return list(dict.fromkeys(plan))
 
 
 def _run_full_uninstall(
@@ -689,6 +753,13 @@ def verify_no_global_traces(agents: list[str]) -> list[str]:
         if state_path.exists():
             residue.append(str(state_path))
 
+    # Whole HOME state roots (XDG state/cache dirs, ~/.opencontext).
+    from opencontext_core.paths.install_manifest import global_state_roots
+
+    for state_root in global_state_roots():
+        if state_root.exists():
+            residue.append(str(state_root))
+
     # Product-install paths created by install.sh.
     for install_path in _global_product_install_targets():
         if install_path.exists():
@@ -818,11 +889,7 @@ def handle_uninstall(args: Any) -> None:
                 ".claude/commands/oc-*.md",
             ]
             if getattr(args, "global_state", False):
-                targets.extend(str(p) for p in _global_state_targets())
-                targets.extend(str(p) for p in _global_product_install_targets())
-                oc_sym = _oc_symlink_in_local_bin()
-                if oc_sym is not None:
-                    targets.append(str(oc_sym))
+                targets.extend(_global_purge_plan())
                 home = Path.home()
                 for rc_name in _RC_FILES:
                     rc_path = home / rc_name
@@ -882,8 +949,28 @@ def handle_uninstall(args: Any) -> None:
             console.info("No configured agents to remove.")
         return
 
+    # Scope split + manifest load, shared by the dry-run plan, the purge, and
+    # the post-removal verify. Loaded BEFORE the purge deletes the manifest.
+    _purge_requested = _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE")
+    _ws_scope = scope in ("workspace", "local", "all")
+    _global_scope = scope in ("global", "all")
+    _root_path = Path(str(root))
+    _ws_manifest = _load_v2_manifest(_root_path) if _ws_scope else None
+
     if dry_run:
         report = configurator.deconfigure(valid, scope=scope, dry_run=True)
+        if _purge_requested and _ws_scope:
+            if _ws_manifest is not None:
+                report["purge_plan"] = {
+                    "source": "manifest",
+                    "created_paths": list(_ws_manifest.get("created_paths") or []),
+                    "state_paths": list(_ws_manifest.get("state_paths") or []),
+                    "modified_files": list(_ws_manifest.get("modified_files") or []),
+                }
+            else:
+                report["purge_plan"] = {"source": "legacy", "targets": list(_PURGE_TARGETS)}
+        if _purge_requested and _global_scope:
+            report["global_purge_plan"] = _global_purge_plan()
         if json_output:
             print(json.dumps(report, indent=2))
         else:
@@ -898,8 +985,14 @@ def handle_uninstall(args: Any) -> None:
                         console.dim(f"    {verb} {path}")
                     else:
                         console.dim(f"    {action}")
-            if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE"):
-                console.dim(f"  would purge: {', '.join(_PURGE_TARGETS)}")
+            if _purge_requested and _ws_scope:
+                plan = report.get("purge_plan") or {}
+                targets = plan.get("created_paths") or plan.get("targets") or []
+                console.dim(f"  would purge: {', '.join(str(t) for t in targets)}")
+            if _purge_requested and _global_scope:
+                console.dim(
+                    f"  would purge (global): {', '.join(report.get('global_purge_plan', []))}"
+                )
         return
 
     # Destructive: require explicit confirmation. --json selects machine-readable
@@ -931,7 +1024,10 @@ def handle_uninstall(args: Any) -> None:
     report = configurator.deconfigure(valid, scope=scope)
     if unknown:
         report["skipped"] = unknown
-    _strip_project_managed_blocks(getattr(args, "root", "."), scope)
+    # When a manifest-driven purge runs below, the manifest's modified_files
+    # revert owns the block-stripping (and records it in the report).
+    if not (_purge_requested and _ws_scope and _ws_manifest is not None):
+        _strip_project_managed_blocks(getattr(args, "root", "."), scope)
 
     # Full uninstall: clear the global install ledger so a later reinstall re-runs
     # global setup instead of short-circuiting on "already installed".
@@ -947,19 +1043,52 @@ def handle_uninstall(args: Any) -> None:
 
     # --purge deletes project artifacts for any workspace-scoped run. The default
     # scope is "workspace" ("local" is its legacy alias); "all" covers it too.
-    # Only a global-only scope skips the project purge.
-    if _resolve_flag(getattr(args, "purge", False), "OPENCONTEXT_PURGE") and scope in (
-        "workspace",
-        "local",
-        "all",
-    ):
-        report["purged"] = _purge_project_artifacts(getattr(args, "root", "."))
+    # Manifest-driven when the install recorded a v2 manifest: delete exactly
+    # created_paths + state_paths, revert managed blocks, report unmanaged.
+    if _purge_requested and _ws_scope:
+        if _ws_manifest is not None:
+            purge_result = _purge_workspace_with_manifest(_root_path, _ws_manifest)
+            report["purged"] = purge_result["removed"]
+            report["reverted"] = purge_result["reverted"]
+            report["unmanaged"] = purge_result["unmanaged"]
+            report["purge_source"] = "manifest"
+        else:
+            report["purged"] = _purge_project_artifacts(getattr(args, "root", "."))
+            report["purge_source"] = "legacy"
+
+    # Global scope: purge HOME-level OpenContext state. Runs AFTER clear_state,
+    # whose InstallationManager constructor recreates ~/.config/opencontext.
+    if _purge_requested and _global_scope:
+        report["global_purged"] = _purge_global_state()
 
     # --verify combined with a removal action: verify AFTER removal, and let the
     # exit code reflect whether traces remain (the natural "remove and confirm" form).
+    # The verify is scoped: workspace scans the project (manifest re-scan when a
+    # v2 manifest exists), global scans only HOME-level state.
     if getattr(args, "verify", False):
-        residue = verify_no_traces(getattr(args, "root", "."))
-        report["verify"] = {"passed": len(residue) == 0, "residue": residue}
+        ws_residue: list[str] = []
+        verify_unmanaged: list[str] = []
+        if _ws_scope:
+            scan = verify_no_traces(getattr(args, "root", "."))
+            if _ws_manifest is not None:
+                from opencontext_core.paths.install_manifest import verify_from_manifest
+
+                mv = verify_from_manifest(_root_path, _ws_manifest)
+                ws_residue = [str(_root_path / rel) for rel in mv["residue"]]
+                verify_unmanaged = [str(_root_path / rel) for rel in mv["unmanaged"]]
+                managed = set(ws_residue) | set(verify_unmanaged)
+                # Anything the legacy scan still sees but the manifest does not
+                # own is an unmanaged leftover: reported, never deleted, exit 0.
+                verify_unmanaged.extend(hit for hit in scan if hit not in managed)
+            else:
+                ws_residue = scan
+        global_verify_residue = verify_no_global_traces([]) if _global_scope else []
+        report["verify"] = {
+            "passed": len(ws_residue) == 0 and len(global_verify_residue) == 0,
+            "residue": ws_residue,
+            "global_residue": global_verify_residue,
+            "unmanaged": sorted(dict.fromkeys(verify_unmanaged)),
+        }
 
     if json_output:
         print(json.dumps(report, indent=2))
@@ -987,9 +1116,11 @@ def handle_uninstall(args: Any) -> None:
         if report["verify"]["passed"]:
             console.success("verify passed: no traces remain.")
         else:
-            console.warning("verify failed: project traces remain:")
+            console.warning("verify failed: managed traces remain:")
             for p in report["verify"]["residue"]:
                 console.dim(f"  {p}")
+            for p in report["verify"].get("global_residue", []):
+                console.dim(f"  {p} (global)")
             console.dim(
                 "These are agent instruction files (kept because they may hold your own "
                 "content). Run 'opencontext uninstall --full --yes' to remove all traces."

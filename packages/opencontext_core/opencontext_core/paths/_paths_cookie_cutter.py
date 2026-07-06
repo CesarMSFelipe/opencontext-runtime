@@ -70,10 +70,13 @@ _PATH_CALL_NAMES: Final[frozenset[str]] = frozenset({"open"})
 
 #: Sanctioned path-construction owners — the resolver itself + cookie-cutter.
 #: Files matching these prefixes are excluded from the AST scan.
+#: install_manifest.py is the install/uninstall path authority: it records and
+#: deletes the literal managed locations, so it must name them.
 _OWNER_PREFIXES: Final[tuple[str, ...]] = (
     "opencontext_core/opencontext_core/paths/__init__.py",
     "opencontext_core/opencontext_core/paths/resolve_paths.py",
     "opencontext_core/opencontext_core/paths/_paths_cookie_cutter.py",
+    "opencontext_core/opencontext_core/paths/install_manifest.py",
 )
 
 

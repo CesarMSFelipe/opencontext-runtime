@@ -49,12 +49,6 @@ def test_workspace_uninstall_purges_managed_state(oc_bin, workspace) -> None:
     assert (ws.root / "tests" / "test_app.py").is_file()
 
 
-@pytest.mark.xfail(
-    reason="GAP-022: managed-residue verification fails — install writes .gitignore "
-    "but workspace purge leaves it, so --verify reports residue and exits 1 "
-    "instead of the contract's clean 0",
-    strict=False,
-)
 def test_workspace_uninstall_verify_passes_clean(oc_bin, workspace) -> None:
     """AC-022: after a workspace purge, `--verify` finds no managed residue and exits 0."""
     ws = workspace("py_bugfix_basic")
@@ -69,12 +63,6 @@ def test_workspace_uninstall_verify_passes_clean(oc_bin, workspace) -> None:
     )
 
 
-@pytest.mark.xfail(
-    reason="GAP-023: manifest-driven product uninstall missing — global purge "
-    "reports state_cleared but leaves HOME state dirs and verify scans the "
-    "workspace instead of the product manifest, so verification never passes",
-    strict=False,
-)
 def test_product_uninstall_uses_manifest_and_cleans_home_state(oc_bin, workspace) -> None:
     """AC-023: product uninstall `--purge --verify` is manifest-driven and cleans the install."""
     ws = workspace("py_bugfix_basic")
