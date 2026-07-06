@@ -36,6 +36,7 @@ from opencontext_core.oc_flow.budgets import (
 from opencontext_core.oc_flow.completion import (
     CompletionStatus,
     completion_reason,
+    functional_change_expected,
     mutation_required,
     resolve_completion,
     verification_required,
@@ -72,10 +73,14 @@ from opencontext_core.runtime.decisions import (
 )
 from opencontext_core.runtime.ids import new_run_id, new_session_id
 from opencontext_core.tdd.red_green import (
+    TDD_NOT_APPLICABLE,
+    TDD_TEST_ONLY_EDIT,
     VIOLATION_REASONS,
     TddEvidence,
     capture_test_run,
     evaluate_strict,
+    is_test_only_change,
+    regression_command,
     runner_available,
 )
 
@@ -592,6 +597,16 @@ class OCFlowRunner:
                 has_test_command=bool(test_command) and runner_ok,
                 red=tdd_evidence.red,
             )
+        if strict_tdd and not mut_required:
+            # TDD policy: a documentation/read-only task has no applicable
+            # RED/GREEN cycle — record an explicit not_applicable result with a
+            # justification instead of a silent empty strict block. Evidence is
+            # never fabricated for such tasks.
+            tdd_evidence.mode_result = TDD_NOT_APPLICABLE
+            tdd_evidence.justification = (
+                "strict TDD is not applicable: the task is read-only/documentation "
+                "and requires no functional change, so no RED/GREEN cycle was run"
+            )
         # C16: compute once, use for both ctx and the retry_policy decision below.
         _max_attempts_resolved = resolve_max_attempts(profile=profile, lane=lane_enum)
         ctx = OCFlowContext(
@@ -840,10 +855,44 @@ class OCFlowRunner:
         if green is not None:
             tdd_evidence.green = green
 
-        # Gate catalog + the ONE enforcement point: a run may not stay `completed`
-        # when a mandatory gate failed (RUN_STATE_CONTRACT rule 1).
         verification_outcome = ctx.inspection.verification_outcome if ctx.inspection else "not_run"
         short_circuited = tdd_evidence.violation is not None
+
+        # Suspicious test-only edit (TDD policy): a strict run whose EVERY edit
+        # lands in test files while the task required a functional change gamed
+        # its own verification (e.g. rewrote the failing test to assert the buggy
+        # behavior). Flag it as a violation so it can never stay `completed`.
+        functional_expected = functional_change_expected(task)
+        test_only_suspicious = (
+            strict_tdd
+            and not short_circuited
+            and functional_expected
+            and is_test_only_change(list(ctx.changed_files))
+        )
+        if test_only_suspicious:
+            tdd_evidence.violation = TDD_TEST_ONLY_EDIT
+            self._emit_event(
+                events,
+                "tdd.violation",
+                final_node,
+                {"violation": TDD_TEST_ONLY_EDIT, "mode": self._tdd_mode},
+            )
+
+        # Regression evidence (TDD_STRICT_CONTRACT step 7): after a proven GREEN
+        # on a clean strict mutation run, execute the broader suite once and
+        # record its honest command + exit code under ``tdd.regression``.
+        if (
+            strict_tdd
+            and mut_required
+            and tdd_evidence.violation is None
+            and tdd_evidence.green_proven
+            and bool(ctx.changed_files)
+            and test_command
+        ):
+            tdd_evidence.regression = capture_test_run(regression_command(test_command), self.root)
+
+        # Gate catalog + the ONE enforcement point: a run may not stay `completed`
+        # when a mandatory gate failed (RUN_STATE_CONTRACT rule 1).
         gates = evaluate_oc_flow_gates(
             workspace_valid=self.root.is_dir(),
             config_valid=self._config_valid(),
@@ -855,6 +904,12 @@ class OCFlowRunner:
             ),
             tdd_red_proven_if_strict=(
                 tdd_evidence.red_proven if (strict_tdd and mut_required) else None
+            ),
+            tdd_functional_change_if_required=(
+                None
+                if (short_circuited or not strict_tdd or not functional_expected)
+                or not ctx.changed_files
+                else not test_only_suspicious
             ),
             mutation_performed_if_required=(
                 bool(ctx.changed_files) if (mut_required and not short_circuited) else None
@@ -869,6 +924,8 @@ class OCFlowRunner:
             ),
         )
         status = enforce_gates(status, gates)
+        if test_only_suspicious and status not in ("completed", "passed"):
+            reason = VIOLATION_REASONS[TDD_TEST_ONLY_EDIT]
 
         # R4: post-run confidence report — emit as a RuntimeDecision so
         # decisions.json captures the ConfidenceEngine evaluation.  Real signals

@@ -23,6 +23,7 @@ OC_FLOW_GATE_IDS = (
     "context_pack_created",
     "executor_available",
     "tdd_red_proven_if_strict",
+    "tdd_functional_change_if_required",
     "mutation_performed_if_required",
     "verification_executed",
     "verification_passed",
@@ -40,6 +41,10 @@ _GATE_MESSAGES = {
     "tdd_red_proven_if_strict": (
         "strict TDD: RED proven before mutation",
         "strict TDD: RED not proven before mutation",
+    ),
+    "tdd_functional_change_if_required": (
+        "strict TDD: edits include a functional (non-test) change",
+        "strict TDD: only test files changed while a functional change was required",
     ),
     "mutation_performed_if_required": (
         "mutation task produced edits",
@@ -81,6 +86,7 @@ def evaluate_oc_flow_gates(
     mutation_performed_if_required: bool | None,
     verification_executed: bool | None,
     verification_passed: bool | None,
+    tdd_functional_change_if_required: bool | None = None,
     report_written: bool = True,
 ) -> list[dict[str, Any]]:
     """Evaluate the OC Flow gate catalog. ``None`` inputs are skipped gates."""
@@ -90,6 +96,7 @@ def evaluate_oc_flow_gates(
         _gate("context_pack_created", context_pack_created),
         _gate("executor_available", executor_available),
         _gate("tdd_red_proven_if_strict", tdd_red_proven_if_strict),
+        _gate("tdd_functional_change_if_required", tdd_functional_change_if_required),
         _gate("mutation_performed_if_required", mutation_performed_if_required),
         _gate("verification_executed", verification_executed),
         _gate("verification_passed", verification_passed),

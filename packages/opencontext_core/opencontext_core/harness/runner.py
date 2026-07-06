@@ -2559,14 +2559,20 @@ class HarnessRunner:
 
         RED comes from ``failing_test_exists`` (strict mode executes the test and
         records its exit code); GREEN from ``tests_pass`` / the fix-loop
-        ``verify_tests_passed`` reverify. Proof requires a REAL recorded exit code
-        — gate existence alone never claims evidence.
+        ``verify_tests_passed`` reverify. When BOTH recorded exit codes, the
+        verify-phase suite re-run is the contract's step-7 regression evidence.
+        Proof requires a REAL recorded exit code — gate existence alone never
+        claims evidence.
         """
         red_gate = next((g for g in gates if getattr(g, "id", "") == "failing_test_exists"), None)
-        green_gate = next(
-            (g for g in gates if getattr(g, "id", "") in ("tests_pass", "verify_tests_passed")),
-            None,
+        green_gate = next((g for g in gates if getattr(g, "id", "") == "tests_pass"), None)
+        regression_gate = next(
+            (g for g in gates if getattr(g, "id", "") == "verify_tests_passed"), None
         )
+        if green_gate is None:
+            # Without an apply-phase GREEN, the verify re-run stays the green
+            # evidence (legacy behaviour) and no separate regression is claimed.
+            green_gate, regression_gate = regression_gate, None
         if red_gate is None and green_gate is None:
             return None
 
@@ -2602,7 +2608,7 @@ class HarnessRunner:
             "mode": self.config.tdd_mode,
             "red": red,
             "green": green,
-            "regression": None,
+            "regression": _evidence(regression_gate),
             "red_proven": bool(
                 red and red["exit_code"] != 0 and red_classification in (None, "test_failure")
             ),

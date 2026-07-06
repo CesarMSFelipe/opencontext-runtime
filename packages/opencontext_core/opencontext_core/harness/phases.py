@@ -2288,6 +2288,27 @@ class VerifyPhase(HarnessPhase):
                     phase="verify",
                     status=GateStatus.FAILED,
                     message=f"Tests exited with code {test_result['exit_code']}",
+                    metadata={
+                        "exit_code": test_result.get("exit_code"),
+                        "command": str(test_result.get("command", "")),
+                    },
+                )
+            )
+        elif tests_executed and test_result.get("command"):
+            # Contract step 7 (regression evidence): the verify phase's suite
+            # re-run is the run's regression proof — persist a PASSED gate with
+            # the real command + exit code so the run.json ``tdd.regression``
+            # block can carry it instead of a hardcoded null.
+            gates.append(
+                PhaseGate(
+                    id="verify_tests_passed",
+                    phase="verify",
+                    status=GateStatus.PASSED,
+                    message=summary,
+                    metadata={
+                        "exit_code": test_result.get("exit_code"),
+                        "command": str(test_result.get("command", "")),
+                    },
                 )
             )
         elif not tests_executed and had_changes:

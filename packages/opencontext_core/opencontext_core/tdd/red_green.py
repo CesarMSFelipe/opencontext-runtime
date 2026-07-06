@@ -27,6 +27,11 @@ PREFLIGHT_TIMEOUT = 30
 #: Stable violation codes (CLI_CONTRACT error-code namespace).
 TDD_NO_TEST_RUNNER = "TDD_NO_TEST_RUNNER"
 TDD_RED_NOT_PROVEN = "TDD_RED_NOT_PROVEN"
+TDD_TEST_ONLY_EDIT = "TDD_TEST_ONLY_EDIT"
+
+#: Explicit strict-mode result for tasks with no applicable RED/GREEN cycle
+#: (documentation / analysis / read-only tasks) — policy: never fake evidence.
+TDD_NOT_APPLICABLE = "not_applicable"
 
 #: Human-readable reasons per violation code.
 VIOLATION_REASONS = {
@@ -36,6 +41,10 @@ VIOLATION_REASONS = {
     ),
     TDD_RED_NOT_PROVEN: (
         "TDD strict: the candidate test already passes — RED was not proven before the mutation"
+    ),
+    TDD_TEST_ONLY_EDIT: (
+        "TDD strict: only test files were edited while the task required a functional "
+        "change — rewriting tests to make them pass is suspicious, not a fix"
     ),
 }
 
@@ -64,6 +73,48 @@ _TEST_FAILURE_EVIDENCE_RE = re.compile(
 
 #: Pytest exit code for an empty collection ("no tests ran").
 _PYTEST_NO_TESTS_COLLECTED = 5
+
+#: Paths that are test code: tests/** (or testing/**), test_*.py, *_test.py,
+#: and conftest.py — the surface an executor could rewrite to game a RED test.
+_TEST_PATH_RE = re.compile(
+    r"(?:^|/)tests?/|(?:^|/)testing/|(?:^|/)test_[^/]+\.py$|(?:^|/)[^/]+_test\.py$"
+    r"|(?:^|/)conftest\.py$"
+)
+
+
+def is_test_path(path: str) -> bool:
+    """Whether *path* is test code (test file patterns or a tests directory)."""
+    return bool(_TEST_PATH_RE.search(str(path).replace("\\", "/")))
+
+
+def is_test_only_change(changed_files: list[str]) -> bool:
+    """Whether a non-empty change set touches ONLY test code.
+
+    Policy input for :data:`TDD_TEST_ONLY_EDIT`: a strict mutation run whose
+    every edit lands in test files did not make the functional change the task
+    required. An empty change set is a different (no-op) failure mode, never a
+    test-only one.
+    """
+    files = [str(f) for f in changed_files]
+    return bool(files) and all(is_test_path(f) for f in files)
+
+
+def regression_command(test_command: list[str]) -> list[str]:
+    """Derive the broader-suite command from a targeted test command (step 7).
+
+    The contract's minimal-regression step re-runs the SAME runner without the
+    targeted test selection (``.py`` paths / ``::`` node ids), so the runner
+    collects the whole project. A command with no target arguments is already
+    suite-wide and is reused as-is.
+    """
+    broad = [
+        part
+        for part in test_command
+        if not (str(part).endswith(".py") or "::" in str(part) or is_test_path(str(part)))
+    ]
+    if broad and len(broad) < len(test_command):
+        return broad
+    return list(test_command)
 
 
 def classify_test_run(exit_code: int, output: str) -> str:
@@ -153,6 +204,12 @@ class TddEvidence:
     green: TddRunEvidence | None = None
     regression: TddRunEvidence | None = None
     violation: str | None = None
+    #: Explicit strict-mode applicability result (additive): ``not_applicable``
+    #: for documentation/read-only tasks where no RED/GREEN cycle applies.
+    mode_result: str | None = None
+    #: Human-readable justification for ``mode_result`` (policy: never a silent
+    #: empty strict block).
+    justification: str | None = None
 
     @property
     def red_proven(self) -> bool:
@@ -179,6 +236,9 @@ class TddEvidence:
         }
         if self.violation:
             payload["violation"] = self.violation
+        if self.mode_result:
+            payload["mode_result"] = self.mode_result
+            payload["justification"] = self.justification or ""
         return payload
 
 
