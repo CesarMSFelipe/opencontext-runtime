@@ -27,6 +27,13 @@ KEEP_KINDS: tuple[str, ...] = (
     "diagnostic",
     "evidence",
     "failed_strategy",
+    # CTX-PROTECTED-LIST (DOC2 §13.4): imports, relevant configuration,
+    # memory/KG-referenced fragments, recent changes, recent decisions.
+    "import",
+    "configuration",
+    "referenced_fragment",
+    "recent_change",
+    "recent_decision",
 )
 COMPRESS_KINDS: tuple[str, ...] = (
     "repeated_log",
@@ -44,7 +51,19 @@ DISCARD_KINDS: tuple[str, ...] = (
 # Protected-span kinds that map onto the KEEP taxonomy (so a detected span of one of
 # these kinds means "do not lossy-compress this item").
 _PROTECTED_KEEP_KINDS: frozenset[str] = frozenset(
-    {"acceptance_criteria", "signature", "diagnostic", "evidence", "warning", "constraint"}
+    {
+        "acceptance_criteria",
+        "signature",
+        "diagnostic",
+        "evidence",
+        "warning",
+        "constraint",
+        "import",
+        "configuration",
+        "referenced_fragment",
+        "recent_change",
+        "recent_decision",
+    }
 )
 
 # Span kinds that are NOT load-bearing: a bare number or import path fires on

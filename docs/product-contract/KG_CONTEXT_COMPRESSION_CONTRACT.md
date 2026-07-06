@@ -57,6 +57,18 @@ task understanding → workspace scan → KG candidate expansion → memory reca
 Ranking factors (initial weights): direct task match 0.30, KG neighborhood 0.25, related tests
 0.15, recency 0.10, linked memory 0.10, centrality 0.05, size penalty −0.05.
 
+> Current → Target: the numbers above are the plan's RECOMMENDED initial weights, not the
+> shipped defaults. The shipped `RetrievalWeights` defaults
+> (`opencontext_core/retrieval/scoring.py`) are tuned differently (semantic_relevance 0.34,
+> definition 0.18, graph_centrality 0.13, call_distance 0.08, memory_confidence 0.07,
+> test_affinity 0.05, freshness 0.02, token_cost_penalty 0.03, …) and are pinned by
+> CTX-RANKING-FACTORS tests (`tests/core/test_ranking_factor_weights.py`). All seven
+> documented factor families map onto shipped fields (direct match → semantic_relevance,
+> KG neighborhood → call_distance, related tests → test_affinity, recency → freshness,
+> memory → memory_confidence, centrality → graph_centrality, size penalty →
+> token_cost_penalty), and `context.ranking` config overrides let a project opt into the
+> documented numbers.
+
 ## Protected spans (never compressed aggressively)
 
 - function signatures
