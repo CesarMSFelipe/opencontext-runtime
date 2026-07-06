@@ -2191,12 +2191,44 @@ class HarnessRunner:
 
         Overridable seam (tests stub it). Returns the freshly-evaluated verify
         gates (architecture_clean / quality_standards / tests_covered / ...).
+
+        Also re-runs the test suite against any edits applied by the fix loop so
+        that ``_run_fix_loop`` cannot declare "recovered" while tests still fail.
         """
         verify_config = self.config.phases.get("verify")
-        if verify_config is None:
-            return []
-        synthetic = PhaseResult(phase="verify", status=GateStatus.PASSED)
-        return list(self._dispatch_declared_gates(state, "verify", verify_config, synthetic))
+        declared_gates: list[PhaseGate] = []
+        if verify_config is not None:
+            synthetic = PhaseResult(phase="verify", status=GateStatus.PASSED)
+            declared_gates = list(
+                self._dispatch_declared_gates(state, "verify", verify_config, synthetic)
+            )
+
+        # Re-run the test suite against the new edits from the fix loop.
+        # Without this, fix loops can claim "recovered" while tests still fail.
+        changed = [
+            e["path"] if isinstance(e, dict) else getattr(e, "path", str(e))
+            for e in (getattr(state, "apply_edits", None) or [])
+        ]
+        try:
+            from opencontext_core.harness.phases import VerifyPhase
+
+            verify_instance = VerifyPhase.__new__(VerifyPhase)
+            test_result = verify_instance._run_tests(state.root, changed_files=changed)
+            if test_result.get("exit_code", 0) != 0:
+                declared_gates.append(
+                    PhaseGate(
+                        id="verify_tests_passed",
+                        phase="verify",
+                        status=GateStatus.FAILED,
+                        message=(
+                            f"Tests exited with code {test_result['exit_code']} (fix-loop reverify)"
+                        ),
+                    )
+                )
+        except Exception:
+            pass  # test runner failure is non-fatal here
+
+        return declared_gates
 
     @staticmethod
     def _fix_loop_event(
