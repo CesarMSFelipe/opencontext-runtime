@@ -76,6 +76,7 @@ from opencontext_core.tdd.red_green import (
     TddEvidence,
     capture_test_run,
     evaluate_strict,
+    runner_available,
 )
 
 # Safety cap on total node steps (the diagnosis attempt budget already bounds the
@@ -405,12 +406,20 @@ class OCFlowRunner:
         # additionally enforces the contract table (no runner / already-green test
         # -> violation); other modes capture evidence only.
         tdd_evidence = TddEvidence(mode=self._tdd_mode)
+        runner_ok = True
         if mut_required and test_command:
-            tdd_evidence.red = capture_test_run(test_command, self.root)
+            # Preflight (TDD_STRICT_CONTRACT): an unavailable runner can never
+            # prove RED — "No module named pytest" exiting 1 is an environment
+            # error, not a failing test. Strict mode routes an unavailable
+            # runner to the blocked/no-test-runner path instead of capturing a
+            # spurious non-zero exit as evidence.
+            runner_ok = runner_available(test_command)
+            if runner_ok:
+                tdd_evidence.red = capture_test_run(test_command, self.root)
         if strict_tdd:
             tdd_evidence.violation = evaluate_strict(
                 mutation_required=mut_required,
-                has_test_command=bool(test_command),
+                has_test_command=bool(test_command) and runner_ok,
                 red=tdd_evidence.red,
             )
         # C16: compute once, use for both ctx and the retry_policy decision below.

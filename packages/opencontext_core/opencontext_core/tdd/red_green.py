@@ -3,12 +3,15 @@
 Captures machine-verified test-run evidence before (RED) and after (GREEN) a
 mutation, and evaluates strict-mode violations as pure logic. OC Flow (`run`)
 and the SDD harness surface this evidence in the persisted ``run.json`` ``tdd``
-block; an already-passing test is never RED.
+block; an already-passing test is never RED, and neither is an environment or
+usage error ("No module named pytest" exiting 1 proves nothing).
 """
 
 from __future__ import annotations
 
 import os
+import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -17,6 +20,9 @@ from typing import Any
 
 #: Bounded ceiling for one evidence test run (seconds).
 DEFAULT_TEST_TIMEOUT = 120
+
+#: Bounded ceiling for the runner-availability preflight (seconds).
+PREFLIGHT_TIMEOUT = 30
 
 #: Stable violation codes (CLI_CONTRACT error-code namespace).
 TDD_NO_TEST_RUNNER = "TDD_NO_TEST_RUNNER"
@@ -33,6 +39,82 @@ VIOLATION_REASONS = {
     ),
 }
 
+#: RED-run classification values (additive ``classification`` evidence field).
+CLASSIFICATION_TEST_FAILURE = "test_failure"
+CLASSIFICATION_ENVIRONMENT_ERROR = "environment_error"
+CLASSIFICATION_NO_TESTS = "no_tests"
+CLASSIFICATION_ALREADY_PASSING = "already_passing"
+
+#: Output signatures of a broken runner/invocation — never a failing test.
+#: Deliberately specific: an ImportError *inside* a test is a genuine RED
+#: (classic TDD on a not-yet-written module); only the runner's own breakage
+#: is an environment error.
+_ENVIRONMENT_ERROR_SIGNATURES = (
+    "No module named pytest",
+    "error: unrecognized arguments",
+    "ERROR: usage",
+    "ERROR: file or directory not found",
+)
+
+#: Output evidence that tests actually EXECUTED and FAILED (pytest failure
+#: lines / summary counts / assertion output).
+_TEST_FAILURE_EVIDENCE_RE = re.compile(
+    r"(?:^|\n)FAILED\b|\b\d+ failed\b|={3,} FAILURES ={3,}|\bAssertionError\b|\bassert\s"
+)
+
+#: Pytest exit code for an empty collection ("no tests ran").
+_PYTEST_NO_TESTS_COLLECTED = 5
+
+
+def classify_test_run(exit_code: int, output: str) -> str:
+    """Classify one pre-mutation test run for RED-evidence purposes.
+
+    TDD_STRICT_CONTRACT: only a genuine executed-and-failed test proves RED.
+    Environment/usage errors (missing runner module, unrecognized arguments,
+    pytest exit codes 2/3/4), an empty collection (exit 5), and a green run
+    can never be RED.
+    """
+    if exit_code == 0:
+        return CLASSIFICATION_ALREADY_PASSING
+    text = output or ""
+    if any(signature in text for signature in _ENVIRONMENT_ERROR_SIGNATURES):
+        return CLASSIFICATION_ENVIRONMENT_ERROR
+    if exit_code == _PYTEST_NO_TESTS_COLLECTED:
+        return CLASSIFICATION_NO_TESTS
+    if exit_code == 1 and _TEST_FAILURE_EVIDENCE_RE.search(text):
+        return CLASSIFICATION_TEST_FAILURE
+    # Exit codes 2/3/4 (interrupted / internal / usage), signals, missing
+    # binaries, and an exit 1 with no executed-and-failed evidence.
+    return CLASSIFICATION_ENVIRONMENT_ERROR
+
+
+def runner_available(command: list[str], *, timeout: int = PREFLIGHT_TIMEOUT) -> bool:
+    """Preflight: can *command*'s test runner actually execute?
+
+    ``<interpreter> -m <module> ...`` commands import the module in the SAME
+    interpreter that would run the tests (so ``python -m pytest`` in a venv
+    without pytest is caught before it fakes a RED). Plain binaries resolve on
+    PATH. Unknown shapes stay optimistic — :func:`classify_test_run` on the
+    captured output is the honest backstop.
+    """
+    if not command:
+        return False
+    if "-m" in command[1:]:
+        module_index = command.index("-m", 1) + 1
+        module = command[module_index] if module_index < len(command) else ""
+        if module and all(part.isidentifier() for part in module.split(".")):
+            try:
+                proc = subprocess.run(
+                    [command[0], "-c", f"import {module}"],
+                    capture_output=True,
+                    timeout=timeout,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError):
+                return False
+            return proc.returncode == 0
+    return shutil.which(command[0]) is not None
+
 
 @dataclass
 class TddRunEvidence:
@@ -42,6 +124,15 @@ class TddRunEvidence:
     exit_code: int
     failure_summary: str = ""
     captured_at: str = ""
+    #: RED classification (additive): test_failure | environment_error |
+    #: no_tests | already_passing. Empty for evidence recorded before this
+    #: field existed — derived from exit code + summary on read.
+    classification: str = ""
+
+    @property
+    def effective_classification(self) -> str:
+        """Recorded classification, derived from exit code + summary when absent."""
+        return self.classification or classify_test_run(self.exit_code, self.failure_summary)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -49,6 +140,7 @@ class TddRunEvidence:
             "exit_code": self.exit_code,
             "failure_summary": self.failure_summary,
             "captured_at": self.captured_at,
+            "classification": self.effective_classification,
         }
 
 
@@ -64,8 +156,13 @@ class TddEvidence:
 
     @property
     def red_proven(self) -> bool:
-        # An already-passing test is NOT RED (TDD_STRICT_CONTRACT policy table).
-        return self.red is not None and self.red.exit_code != 0
+        # Only a genuine executed-and-failed test proves RED. An already-passing
+        # test, an environment/usage error ("No module named pytest" exiting 1),
+        # or an empty collection never does (TDD_STRICT_CONTRACT policy table).
+        return (
+            self.red is not None
+            and self.red.effective_classification == CLASSIFICATION_TEST_FAILURE
+        )
 
     @property
     def green_proven(self) -> bool:
@@ -118,12 +215,14 @@ def capture_test_run(
             exit_code=-1,
             failure_summary=f"test run could not execute: {exc}",
             captured_at=captured_at,
+            classification=CLASSIFICATION_ENVIRONMENT_ERROR,
         )
     return TddRunEvidence(
         command=command_text,
         exit_code=proc.returncode,
         failure_summary=_failure_summary(proc.stdout, proc.stderr, proc.returncode),
         captured_at=captured_at,
+        classification=classify_test_run(proc.returncode, f"{proc.stdout}\n{proc.stderr}"),
     )
 
 
@@ -133,14 +232,20 @@ def evaluate_strict(
     """Pure strict-mode gate: return a violation code, or None when clean.
 
     Contract table (TDD_STRICT_CONTRACT): no detectable test runner on a
-    mutation task -> blocked; a candidate test that already passes is not RED.
+    mutation task -> blocked; a candidate test that already passes is not RED;
+    an environment/usage error or an empty collection is not RED either — it
+    routes to the same blocked/no-test-runner path.
     """
     if not mutation_required:
         return None
     if not has_test_command:
         return TDD_NO_TEST_RUNNER
-    if red is not None and red.exit_code == 0:
-        return TDD_RED_NOT_PROVEN
+    if red is not None:
+        classification = red.effective_classification
+        if classification == CLASSIFICATION_ALREADY_PASSING:
+            return TDD_RED_NOT_PROVEN
+        if classification in (CLASSIFICATION_ENVIRONMENT_ERROR, CLASSIFICATION_NO_TESTS):
+            return TDD_NO_TEST_RUNNER
     return None
 
 

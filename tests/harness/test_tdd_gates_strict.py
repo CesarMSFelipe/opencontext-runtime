@@ -99,6 +99,60 @@ class TestFailingTestExistsGateStrictMode:
         assert result.status == GateStatus.FAILED
         assert "timeout" in result.message.lower()
 
+    def test_strict_environment_error_is_not_red(self, tmp_path: Path) -> None:
+        """Exit 1 with 'No module named pytest' is an environment error, NOT RED."""
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_my_feature.py").write_text(
+            "def test_x(): assert False\n", encoding="utf-8"
+        )
+
+        gate = FailingTestExistsGate()
+        with patch(
+            "opencontext_core.harness.gates.subprocess.run",
+            return_value=MagicMock(
+                returncode=1, stdout="/usr/bin/python3: No module named pytest\n", stderr=""
+            ),
+        ):
+            result = gate.evaluate("my_feature", tmp_path, tdd_mode="strict")
+
+        assert result.status == GateStatus.FAILED
+        assert result.metadata.get("classification") == "environment_error"
+
+    def test_strict_no_tests_collected_is_not_red(self, tmp_path: Path) -> None:
+        """Pytest exit 5 (no tests collected) must not count as RED."""
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_my_feature.py").write_text("# empty\n", encoding="utf-8")
+
+        gate = FailingTestExistsGate()
+        with patch(
+            "opencontext_core.harness.gates.subprocess.run",
+            return_value=MagicMock(returncode=5, stdout="no tests ran in 0.01s\n", stderr=""),
+        ):
+            result = gate.evaluate("my_feature", tmp_path, tdd_mode="strict")
+
+        assert result.status == GateStatus.FAILED
+        assert result.metadata.get("classification") == "no_tests"
+
+    def test_strict_missing_runner_binary_fails_gracefully(self, tmp_path: Path) -> None:
+        """An absent pytest binary must FAIL the gate, never raise or prove RED."""
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_my_feature.py").write_text(
+            "def test_x(): assert False\n", encoding="utf-8"
+        )
+
+        gate = FailingTestExistsGate()
+        with patch(
+            "opencontext_core.harness.gates.subprocess.run",
+            side_effect=FileNotFoundError("pytest"),
+        ):
+            result = gate.evaluate("my_feature", tmp_path, tdd_mode="strict")
+
+        assert result.status == GateStatus.FAILED
+        assert result.metadata.get("classification") == "environment_error"
+
     def test_strict_no_shell_injection(self, tmp_path: Path) -> None:
         """Subprocess is called with a list (not shell=True) to prevent injection."""
         tests_dir = tmp_path / "tests"

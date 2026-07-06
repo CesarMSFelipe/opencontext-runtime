@@ -274,16 +274,18 @@ def _require_parseable_project_yaml(yaml_path: Path) -> None:
 def _config_explain(args: Any) -> None:
     """Explain the effective config: value + source layer/file/line per key."""
     from opencontext_cli.contracts import CliContractError
-    from opencontext_core.config_explain import explain
+    from opencontext_core.config_explain import explain, redact_secret_input_values
     from opencontext_core.errors import ConfigurationError
 
     root = Path(getattr(args, "root", None) or ".").resolve()
     try:
         payload = explain(root)
     except ConfigurationError as exc:
+        # Never echo secret-shaped config values in the envelope (JSON stdout)
+        # or the human stderr path — both render this message.
         raise CliContractError(
             "CONFIG_INVALID",
-            str(exc),
+            redact_secret_input_values(str(exc)),
             hint=(
                 "Fix opencontext.yaml (run 'opencontext config doctor' for the "
                 "failing keys), or pass --config <path> to use another file."

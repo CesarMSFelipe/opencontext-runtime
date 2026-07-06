@@ -313,9 +313,14 @@ def main() -> None:
     except ConfigurationError as exc:
         # Invalid/unparseable config is a contract failure: structured envelope
         # in JSON mode, needs_configuration exit code 3 (CLI_CONTRACT.md).
+        # Pydantic validation text can echo the offending raw value
+        # (`input_value='sk-...'`) — redact secret-shaped payloads before the
+        # message reaches the envelope (stdout) or the human stderr path.
+        from opencontext_core.config_explain import redact_secret_input_values
+
         contract = CliContractError(
             "CONFIG_INVALID",
-            str(exc),
+            redact_secret_input_values(str(exc)),
             hint=(
                 "Fix opencontext.yaml (run 'opencontext config doctor' for the "
                 "failing keys), or pass --config <path> to use another file."
@@ -1401,7 +1406,7 @@ def _build_parser() -> argparse.ArgumentParser:
     memory_demote.add_argument("memory_id")
     memory_demote.add_argument("--to", default="archive")
     memory_approve = memory_sub.add_parser(
-        "approve", help="Approve a proposed memory (proposed -> approved)."
+        "approve", help="Approve a proposed memory (proposed -> active)."
     )
     memory_approve.add_argument("memory_id")
     memory_reject = memory_sub.add_parser(

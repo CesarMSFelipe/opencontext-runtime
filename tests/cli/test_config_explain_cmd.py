@@ -86,3 +86,52 @@ def test_config_explain_envelope_shape_matches_contract(tmp_path: Path) -> None:
     assert envelope["error"]["code"] == "CONFIG_INVALID"
     assert envelope["error"]["message"]
     assert envelope["error"]["hint"]
+
+
+# ---------------------------------------------------------------------------
+# CONFIG_INVALID envelopes must never echo secret-shaped config values
+# ---------------------------------------------------------------------------
+
+
+def test_config_invalid_envelope_never_echoes_secret_values(tmp_path: Path, monkeypatch) -> None:
+    """Regression: pydantic `input_value='sk-...'` leaked verbatim in the envelope.
+
+    Both the JSON envelope (stdout) and the human path (which prints
+    ``err.message`` on stderr) must carry the mask, not the raw secret.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))  # hermetic: no real global config
+    _write(
+        tmp_path,
+        "providers:\n  api_key: sk-supersecret12345\nstorage:\n  mode: sk-supersecret12345\n",
+    )
+    with pytest.raises(CliContractError) as excinfo:
+        handle_config(_args("explain", root=str(tmp_path), json=True))
+    err = excinfo.value
+    assert err.code == "CONFIG_INVALID"
+    dumped = json.dumps(err.to_envelope())
+    assert "sk-supersecret12345" not in dumped
+    assert "sk-supersecret12345" not in err.message  # human stderr path
+    assert "***" in err.message
+
+
+def test_redactor_masks_dict_reprs_containing_secret_keys() -> None:
+    from opencontext_core.config_explain import redact_secret_input_values
+
+    message = (
+        "project\n"
+        "  Field required [type=missing, "
+        "input_value={'providers': {'api_key': 'sk-supersecret12345'}}, input_type=dict]"
+    )
+    redacted = redact_secret_input_values(message)
+    assert "sk-supersecret12345" not in redacted
+    assert "Field required" in redacted
+
+
+def test_redactor_keeps_non_secret_values_intact() -> None:
+    from opencontext_core.config_explain import redact_secret_input_values
+
+    message = (
+        "storage.mode\n"
+        "  Input should be 'user' or 'local' [type=enum, input_value='weird', input_type=str]"
+    )
+    assert redact_secret_input_values(message) == message

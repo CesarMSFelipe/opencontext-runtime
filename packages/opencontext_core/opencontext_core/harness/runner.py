@@ -2504,21 +2504,31 @@ class HarnessRunner:
             exit_code = meta.get("exit_code")
             if exit_code is None:
                 return None
-            return {
+            payload: dict[str, Any] = {
                 "command": str(meta.get("command", "")),
                 "exit_code": int(exit_code),
                 "failure_summary": gate.message if int(exit_code) != 0 else "",
                 "captured_at": created_at,
             }
+            # Additive: the RED classification recorded by the strict pre-gate
+            # (test_failure | environment_error | no_tests | already_passing).
+            if meta.get("classification"):
+                payload["classification"] = str(meta["classification"])
+            return payload
 
         red = _evidence(red_gate)
         green = _evidence(green_gate)
+        # A non-zero exit proves RED only when it was a genuine executed-and-
+        # failed test — an environment/usage error never does (TDD_STRICT_CONTRACT).
+        red_classification = (red or {}).get("classification")
         return {
             "mode": self.config.tdd_mode,
             "red": red,
             "green": green,
             "regression": None,
-            "red_proven": bool(red and red["exit_code"] != 0),
+            "red_proven": bool(
+                red and red["exit_code"] != 0 and red_classification in (None, "test_failure")
+            ),
             "green_proven": bool(green and green["exit_code"] == 0),
         }
 

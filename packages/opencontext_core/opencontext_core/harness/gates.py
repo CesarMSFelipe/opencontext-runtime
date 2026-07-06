@@ -674,10 +674,19 @@ class FailingTestExistsGate:
     def _verify_test_is_red(
         self, task: str, test_path: str, root: Path, all_matches: list[str]
     ) -> PhaseGate:
-        """Execute ``test_path`` and return PASSED only when it exits non-zero.
+        """Execute ``test_path`` and return PASSED only on a genuine test failure.
 
-        Only the single matched file is run — never the full suite.
+        Only the single matched file is run — never the full suite. A non-zero
+        exit alone is NOT RED: an environment/usage error ("No module named
+        pytest", unrecognized arguments, exit 5 empty collection) proves
+        nothing (TDD_STRICT_CONTRACT).
         """
+        from opencontext_core.tdd.red_green import (
+            CLASSIFICATION_ENVIRONMENT_ERROR,
+            CLASSIFICATION_TEST_FAILURE,
+            classify_test_run,
+        )
+
         red_cmd = ["pytest", test_path, "-x", "-q", "--no-header", "--tb=no"]
         try:
             proc = subprocess.run(
@@ -699,9 +708,26 @@ class FailingTestExistsGate:
                 ),
                 metadata={"task": task, "test_path": test_path},
             )
+        except OSError as exc:
+            # Missing/broken test runner binary: blocked, never a proven RED.
+            return PhaseGate(
+                id=self.id,
+                phase="verify",
+                status=GateStatus.FAILED,
+                message=(
+                    f"Strict TDD: test runner unavailable ({exc}). Install the "
+                    "project's test runner before a strict mutation run."
+                ),
+                metadata={
+                    "task": task,
+                    "test_path": test_path,
+                    "classification": CLASSIFICATION_ENVIRONMENT_ERROR,
+                },
+            )
 
-        if proc.returncode != 0:
-            # Non-zero exit → test is RED, gate PASSES.
+        classification = classify_test_run(proc.returncode, f"{proc.stdout}\n{proc.stderr}")
+        if classification == CLASSIFICATION_TEST_FAILURE:
+            # Genuine executed-and-failed test → RED confirmed, gate PASSES.
             return PhaseGate(
                 id=self.id,
                 phase="verify",
@@ -712,6 +738,27 @@ class FailingTestExistsGate:
                     "task": task,
                     "exit_code": proc.returncode,
                     "command": " ".join(red_cmd),
+                    "classification": classification,
+                },
+            )
+
+        if proc.returncode != 0:
+            # Environment/usage error or empty collection: an invalid RED.
+            return PhaseGate(
+                id=self.id,
+                phase="verify",
+                status=GateStatus.FAILED,
+                message=(
+                    f"Strict TDD: test run for '{test_path}' did not execute-and-fail "
+                    f"({classification}, exit {proc.returncode}). An environment or "
+                    "usage error is not a valid RED."
+                ),
+                metadata={
+                    "task": task,
+                    "test_path": test_path,
+                    "exit_code": proc.returncode,
+                    "command": " ".join(red_cmd),
+                    "classification": classification,
                 },
             )
 
@@ -730,6 +777,7 @@ class FailingTestExistsGate:
                 "test_path": test_path,
                 "exit_code": 0,
                 "command": " ".join(red_cmd),
+                "classification": classification,
             },
         )
 

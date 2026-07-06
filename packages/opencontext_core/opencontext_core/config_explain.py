@@ -41,6 +41,68 @@ def is_secret_key(dotted: str) -> bool:
     return bool(_SECRET_KEY_RE.search(dotted.rsplit(".", 1)[-1]))
 
 
+# Pydantic embeds the offending raw value as ``input_value=<repr>, input_type=...``
+# in its validation message. When that value (or its config key) is a credential,
+# the CONFIG_INVALID envelope would echo the secret verbatim.
+_INPUT_VALUE_RE = re.compile(r"input_value=(?P<value>.*?)(?=, input_type=|$)", re.MULTILINE)
+
+# A bare token with a classic secret prefix (short keys the full scanner's
+# length thresholds would miss, e.g. a 16-character ``sk-`` value).
+_SECRET_VALUE_PREFIX_RE = re.compile(r"^(?:sk|rk|pk)[-_][A-Za-z0-9_\-]{6,}", re.IGNORECASE)
+
+# Quoted keys inside a dict repr (``{'api_key': '...'}``) echoed as input_value.
+_QUOTED_KEY_RE = re.compile(r"['\"]([A-Za-z0-9_\-]+)['\"]\s*:")
+
+# A pydantic error-location line: an unindented dotted key path.
+_LOC_LINE_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.\-]*$")
+
+
+def redact_secret_input_values(message: str) -> str:
+    """Mask pydantic ``input_value=...`` payloads that look credential-shaped.
+
+    CONFIG_INVALID envelopes (and the human stderr path) embed pydantic's
+    validation message verbatim. When the offending key path matches
+    :func:`is_secret_key` or the echoed value itself looks like a secret, the
+    payload is replaced with :data:`SECRET_MASK`; the rest of the message stays
+    intact so the error remains actionable.
+    """
+
+    def _replace(match: re.Match[str]) -> str:
+        value = match.group("value")
+        if _input_value_looks_secret(value) or _loc_is_secret(message[: match.start()]):
+            return f"input_value={SECRET_MASK}"
+        return match.group(0)
+
+    return _INPUT_VALUE_RE.sub(_replace, message)
+
+
+def _input_value_looks_secret(value: str) -> bool:
+    """True when an echoed ``input_value`` payload looks credential-shaped."""
+    stripped = value.strip().strip("'\"")
+    if _SECRET_VALUE_PREFIX_RE.match(stripped):
+        return True
+    if any(is_secret_key(m.group(1)) for m in _QUOTED_KEY_RE.finditer(value)):
+        return True
+    try:
+        from opencontext_core.safety.secrets import SecretScanner
+
+        return bool(SecretScanner().scan(value))
+    except Exception:
+        return False
+
+
+def _loc_is_secret(preceding: str) -> bool:
+    """True when the nearest pydantic error-location line names a secret key."""
+    for line in reversed(preceding.splitlines()):
+        candidate = line.strip()
+        if not candidate:
+            continue
+        if line[:1].isspace():
+            continue  # indented detail lines; the loc line is unindented
+        return bool(_LOC_LINE_RE.match(candidate) and is_secret_key(candidate))
+    return False
+
+
 def _mask_tree(data: Any, prefix: str = "") -> Any:
     """Return a copy of *data* with secret-keyed values replaced by the mask."""
     if not isinstance(data, dict):
