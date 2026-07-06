@@ -119,3 +119,32 @@ def test_manifest_persistence_redacts_sensitive_summaries(tmp_path: Path) -> Non
     assert leaked_before
     persisted = runtime.load_manifest()
     assert all("@" not in file.summary for file in persisted.files)
+
+
+def test_prose_redaction_strips_inline_env_assignments() -> None:
+    """AC-028: prose boundaries redact inline NAME=value secrets missed by the scanner.
+
+    The core `ENV_SECRET_RE` is line-anchored and `AWS_ACCESS_KEY_RE` requires an
+    exact 16-char tail, so a mid-sentence `AWS_SECRET_ACCESS_KEY=AKIA…KEY9` in a
+    run task survives `SecretScanner.redact` and used to leak verbatim into
+    state.json / events / deltas. `redact_prose_secrets` closes that gap.
+    """
+    from opencontext_core.safety.redaction import redact_prose_secrets
+
+    aws = "AKIAIOSFODNN7EXAMPLEKEY9"
+    openai = "sk-proj-abcdef1234567890abcdef1234567890"
+    text = f"Fix the deploy; it uses api_key={openai} and AWS_SECRET_ACCESS_KEY={aws} today"
+
+    redacted = redact_prose_secrets(text)
+
+    assert aws not in redacted
+    assert openai not in redacted
+    assert "[REDACTED:" in redacted
+    assert "Fix the deploy" in redacted and "today" in redacted
+
+    # Idempotent: a second pass never mangles the placeholders.
+    assert redact_prose_secrets(redacted) == redacted
+    # Prose without secrets passes through untouched.
+    assert redact_prose_secrets("plain sentence, no credentials") == (
+        "plain sentence, no credentials"
+    )

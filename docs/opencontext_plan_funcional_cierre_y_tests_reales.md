@@ -1241,7 +1241,7 @@ Eliminar o no crear tests de este tipo:
 | Suite | Cantidad aproximada | Tiempo objetivo |
 |---|---:|---:|
 | Acceptance smoke | 8–12 | < 60 s |
-| Acceptance full | 25–35 | < 5 min |
+| Acceptance full | 25–50 | < 5 min |
 | Golden contracts | 15–25 | < 30 s |
 | Unit core algorithms | 60–120 | < 10 s |
 | Integration narrow | 20–40 | < 60 s |

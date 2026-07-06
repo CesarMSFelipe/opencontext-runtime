@@ -12,6 +12,7 @@ dirs, so global state never leaks in either direction.
 from __future__ import annotations
 
 import shutil
+import time
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,47 @@ from tests.acceptance.helpers.workspace import (
 # The fixture projects contain deliberately-failing seeded tests; never collect
 # them in place (same convention as tests/golden/conftest.py).
 collect_ignore_glob = ["fixtures/*"]
+
+# --- Lane timing accounting (TIME-SMOKE / TIME-FULL-ACC) --------------------
+# ACCEPTANCE_CONTRACT.md "Timing budgets" (plan §21.1) gives the smoke and full
+# acceptance lanes wall-clock budgets. The guards in test_acceptance_timing.py
+# enforce them in-lane: this conftest records when the lane started and what
+# was selected, and reorders the guard meta-tests to run LAST so the elapsed
+# wall clock they read covers the whole lane.
+
+_ACCEPTANCE_DIR = Path(__file__).resolve().parent
+_TIMING_GUARD_FILE = "test_acceptance_timing.py"
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    session.config._oc_lane_start = time.monotonic()  # type: ignore[attr-defined]
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if getattr(config, "_oc_lane_start", None) is None:
+        # Fallback: for invocations where this conftest is not an initial
+        # conftest (e.g. whole-repo runs) sessionstart never fired here.
+        config._oc_lane_start = time.monotonic()  # type: ignore[attr-defined]
+
+    def _is_acceptance(item: pytest.Item) -> bool:
+        path = Path(item.path).resolve()
+        return _ACCEPTANCE_DIR == path.parent or _ACCEPTANCE_DIR in path.parents
+
+    acceptance = [item for item in items if _is_acceptance(item)]
+    guards = [item for item in acceptance if Path(item.path).name == _TIMING_GUARD_FILE]
+    scenarios = [item for item in acceptance if item not in guards]
+    config._oc_lane_selection = {  # type: ignore[attr-defined]
+        "only_acceptance_selected": len(acceptance) == len(items),
+        "scenario_count": len(scenarios),
+        "smoke_scenario_count": sum(
+            1 for item in scenarios if item.get_closest_marker("smoke") is not None
+        ),
+    }
+    # Run the timing guards last so their wall-clock reading covers the lane.
+    for guard in guards:
+        items.remove(guard)
+        items.append(guard)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

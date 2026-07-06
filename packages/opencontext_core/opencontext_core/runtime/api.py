@@ -282,12 +282,13 @@ class RuntimeApi:
         root = request.root or str(self._root)
         capabilities = _detect_capabilities()
         # Redact secrets in the session task so a token is never persisted raw into
-        # session.json / events.jsonl (defense in depth for MCP/API callers).
+        # session.json / events.jsonl (defense in depth for MCP/API callers). The
+        # prose pass also catches inline NAME=value assignments (AC-028).
         _task = request.task
         if _task:
-            from opencontext_core.safety.secrets import SecretScanner
+            from opencontext_core.safety.redaction import redact_prose_secrets
 
-            _task = SecretScanner().redact(_task)
+            _task = redact_prose_secrets(_task)
         session = RuntimeSession(
             session_id=session_id,
             root=root,
@@ -354,6 +355,13 @@ class RuntimeApi:
         ``resume_from`` so the harness skips already-completed phases and carries
         over the prior run's artifacts instead of overwriting them).
         """
+        # Defense in depth (AC-028): ``request.task`` may arrive raw from any
+        # API/MCP caller and is persisted verbatim into the ``workflow.started``
+        # event — redact before the task reaches the event log or the harness.
+        if task:
+            from opencontext_core.safety.redaction import redact_prose_secrets
+
+            task = redact_prose_secrets(task)
         # Resolve ``auto`` to the CONCRETE engine here so the run id, the harness
         # dispatch and the reported workflow all agree — a broad task was otherwise
         # labeled ``sdd`` but still executed the OC Flow graph.

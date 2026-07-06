@@ -75,8 +75,16 @@ developer-local state; every failure message names the contract it broke.
 
 | Suite | Size | Budget |
 |---|---:|---:|
-| Smoke (every PR) | 8–12 tests | < 60 s |
-| Full acceptance (main/release) | 25–35 tests | < 5 min |
+| Smoke (every PR) | 8–12 scenario tests | < 60 s |
+| Full acceptance (main/release) | 25–50 scenario tests | < 5 min |
+
+Both budgets are enforced in-lane by the guard meta-tests in
+`tests/acceptance/test_acceptance_timing.py` (TIME-SMOKE / TIME-FULL-ACC): they run
+last in the lane and fail when the selected scenario count leaves the size band or the
+lane's wall clock exceeds its budget. Guard meta-tests are excluded from the scenario
+counts. The full-acceptance band was widened from the original 25–35 to 25–50: several
+AC IDs are honestly pinned by more than one scenario (the suite sits at 43), and the
+growth cap below still freezes the scenario list itself.
 
 > Current → Target: `tests/acceptance/` with `--oc-bin` does not exist yet; today's suite is
 > in-process pytest. This file freezes the scenario list so the harness can be built against it

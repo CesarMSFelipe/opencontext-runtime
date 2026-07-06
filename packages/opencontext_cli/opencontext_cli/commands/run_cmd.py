@@ -231,9 +231,9 @@ def handle_run_exec(args: Any) -> int:
     # and the provider-bound context envelope — "Context redaction is applied
     # automatically" must hold for the task itself, not only provider errors.
     if task:
-        from opencontext_core.safety.secrets import SecretScanner
+        from opencontext_core.safety.redaction import redact_prose_secrets
 
-        task = SecretScanner().redact(task)
+        task = redact_prose_secrets(task)
     workflow = getattr(args, "workflow", "oc-flow")
     lane = getattr(args, "lane", "fast")
     profile = getattr(args, "profile", "balanced")

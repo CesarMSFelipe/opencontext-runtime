@@ -533,11 +533,12 @@ class OCFlowRunner:
 
         # Defense in depth: redact secrets in the task at the flow boundary so any
         # caller (MCP, API, direct) that did not pre-redact still never persists a
-        # raw token into run artifacts or the provider-bound context envelope.
+        # raw token into run artifacts or the provider-bound context envelope. The
+        # prose pass also catches inline NAME=value assignments (AC-028).
         if task:
-            from opencontext_core.safety.secrets import SecretScanner
+            from opencontext_core.safety.redaction import redact_prose_secrets
 
-            task = SecretScanner().redact(task)
+            task = redact_prose_secrets(task)
 
         lane_enum = Lane(str(lane))
         session_id = session_id or new_session_id()

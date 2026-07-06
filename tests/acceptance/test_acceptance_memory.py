@@ -84,40 +84,70 @@ def test_second_run_reports_approved_memory_as_used(stub_run) -> None:
 
 
 def test_memory_compact_preserves_protected_memory(oc_bin, workspace) -> None:
-    """AC-019: `memory compact` reduces old entries without deleting protected memory."""
+    """AC-019: `memory compact` reduces old entries without deleting protected memory.
+
+    Seeds real compactable duplicates through the CLI (save twice with distinct
+    content, then converge one entry via `memory v2 update` — save-time dedupe
+    absorbs equal-content saves, so convergence is the black-box way to create
+    duplicates) and asserts the CLI reports an actual reduction, not just exit 0.
+    """
     ws = workspace("memory_reuse_basic")
     install_workspace(oc_bin, ws)
 
-    proc, receipt = run_json(
+    def save(title: str, content: str, obs_type: str) -> int:
+        proc, receipt = run_json(
+            oc_bin,
+            ["memory", "v2", "save", "--title", title, "--content", content, "--type", obs_type],
+            cwd=ws.root,
+            env=ws.env,
+        )
+        assert proc.returncode == 0, proc.stderr[:400]
+        return int(receipt["receipt"]["id"])
+
+    protected_id = save(
+        "Protected architecture decision",
+        "We keep the hexagonal core; adapters stay in the outer ring.",
+        "decision",
+    )
+    pin = run(oc_bin, ["memory", "v2", "pin", "--id", str(protected_id)], cwd=ws.root, env=ws.env)
+    assert pin.returncode == 0, pin.stderr[:400]
+
+    duplicate_payload = "The build cache lives under .cache/build and is safe to delete."
+    keeper_id = save("Build cache note", duplicate_payload, "discovery")
+    duplicate_id = save("Build cache note (older wording)", "Old wording to converge.", "discovery")
+    update = run(
         oc_bin,
-        [
-            "memory",
-            "v2",
-            "save",
-            "--title",
-            "Protected architecture decision",
-            "--content",
-            "We keep the hexagonal core; adapters stay in the outer ring.",
-            "--type",
-            "decision",
-        ],
+        ["memory", "v2", "update", "--id", str(duplicate_id), "--content", duplicate_payload],
         cwd=ws.root,
         env=ws.env,
     )
-    assert proc.returncode == 0, proc.stderr[:400]
-    saved_id = receipt["receipt"]["id"]
-    pin = run(oc_bin, ["memory", "v2", "pin", "--id", str(saved_id)], cwd=ws.root, env=ws.env)
-    assert pin.returncode == 0, pin.stderr[:400]
+    assert update.returncode == 0, update.stderr[:400]
 
-    compact = run(oc_bin, ["memory", "compact"], cwd=ws.root, env=ws.env)
-    assert compact.returncode == 0, (
+    proc, report = run_json(oc_bin, ["memory", "compact"], cwd=ws.root, env=ws.env)
+    assert proc.returncode == 0, (
         f"MEMORY_CONTRACT command surface: `memory compact` must exist, "
-        f"got exit {compact.returncode}: {compact.stderr[:300]}"
+        f"got exit {proc.returncode}: {proc.stderr[:300]}"
     )
+
+    # The CLI path must actually reduce entries (a no-op that exits 0 fails here).
+    assert report["after"] < report["before"], (
+        f"MEMORY_CONTRACT `compact`: expected a real reduction, got {report}"
+    )
+    assert report["after"] == report["before"] - 1, report
+    assert duplicate_id in report["compacted_ids"], report
+    assert keeper_id not in report["compacted_ids"], report
+    assert protected_id not in report["compacted_ids"], report
+
+    # The oldest duplicate survives; the compacted one is gone from reads.
+    proc, keeper = run_json(
+        oc_bin, ["memory", "v2", "get", "--id", str(keeper_id)], cwd=ws.root, env=ws.env
+    )
+    assert proc.returncode == 0
+    assert keeper["deleted_at"] is None
 
     # The pinned decision must survive compaction.
     proc, observation = run_json(
-        oc_bin, ["memory", "v2", "get", "--id", str(saved_id)], cwd=ws.root, env=ws.env
+        oc_bin, ["memory", "v2", "get", "--id", str(protected_id)], cwd=ws.root, env=ws.env
     )
     assert proc.returncode == 0
     assert observation["deleted_at"] is None

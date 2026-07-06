@@ -10,7 +10,14 @@ import pytest
 
 from tests.acceptance.helpers.cli import run_json
 from tests.acceptance.helpers.json_assertions import find_secret_leaks
-from tests.acceptance.helpers.ops import install_workspace
+from tests.acceptance.helpers.ops import (
+    WORKFLOW_TIMEOUT,
+    find_run_dir,
+    index_workspace,
+    install_workspace,
+    read_json,
+)
+from tests.acceptance.helpers.workspace import CORRECT_ADD_EDITS
 
 pytestmark = pytest.mark.acceptance
 
@@ -85,3 +92,51 @@ def test_secret_redaction_strips_tokens_from_memory(oc_bin, workspace) -> None:
     assert proc.returncode == 0, proc.stderr[:400]
     leaks = find_secret_leaks(observation.get("content", ""), _SEEDED_SECRETS)
     assert not leaks, f"raw secrets persisted in memory: {leaks}"
+
+
+def test_secret_redaction_scrubs_the_whole_run_report_bundle(oc_bin, workspace) -> None:
+    """AC-028: secrets seeded through a real run never persist in the report bundle.
+
+    Seeds tokens into the run task (the way a user pastes credentials into a
+    prompt), completes a real stub-executor workflow run, then scans EVERY file
+    the run persisted under `.opencontext/` — state.json, run.json, events,
+    session store, patch.diff, consolidation deltas — with `find_secret_leaks`.
+    """
+    ws = workspace("py_bugfix_basic")
+    ws.write_stub_provider(CORRECT_ADD_EDITS)
+    install_workspace(oc_bin, ws)
+    index_workspace(oc_bin, ws)
+
+    task = (
+        f"Fix failing test in app.py; deploy uses api_key={_SEEDED_SECRETS[1]} "
+        f"and AWS_SECRET_ACCESS_KEY={_SEEDED_SECRETS[0]}"
+    )
+    proc, summary = run_json(
+        oc_bin, ["run", task, "--json"], cwd=ws.root, env=ws.env, timeout=WORKFLOW_TIMEOUT
+    )
+    assert proc.returncode == 0, proc.stderr[:500]
+    assert summary.get("status") == "passed", summary
+
+    # The run summary printed to the caller must already be clean.
+    assert not find_secret_leaks(proc.stdout, _SEEDED_SECRETS), (
+        "raw secrets leaked into the run summary stdout"
+    )
+
+    # Honesty guard: the secrets really entered the pipeline and were redacted
+    # (not merely absent) — the persisted task carries redaction markers.
+    run_dir = find_run_dir(ws, summary["run_id"])
+    state = read_json(run_dir / "state.json")
+    assert "[REDACTED:" in str(state.get("task", "")), (
+        f"expected redaction markers in the persisted task, got {state.get('task')!r}"
+    )
+
+    # PRODUCT_CONTRACT safety: no persisted artifact of the run — manifest,
+    # events, diffs, deltas, session store — may contain a seeded secret.
+    leaks: list[str] = []
+    for path in sorted((ws.root / ".opencontext").rglob("*")):
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for secret in find_secret_leaks(text, _SEEDED_SECRETS):
+            leaks.append(f"{path.relative_to(ws.root)} -> {secret[:12]}…")
+    assert not leaks, "raw secrets persisted in the report bundle:\n" + "\n".join(leaks)
