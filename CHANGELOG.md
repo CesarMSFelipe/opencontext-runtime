@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-06
+
+### Added
+
+- `opencontext stack --json` and `opencontext models show --json` flags for
+  machine-readable output from the CLI.
+
+### Fixed
+
+- **Harness fix loop**: `_reverify` now re-runs the test suite after fix-loop
+  edits so the loop cannot declare "recovered" while pytest still fails.
+- **Verification outcome**: the runner now exits with code 1 when
+  `verification_outcome` is `failed`, surfacing real failures to CI.
+- **SDD proposal artifact**: `sdd new` writes `propose.md` to match the phase
+  detector key expected by subsequent phases.
+- **Engram install guidance**: removed a wrong `pipx install` hint; replaced
+  with actionable install guidance.
+- **TestsPassGate test**: now uses `sys.executable` instead of a bare `python`
+  to locate the interpreter, fixing flakiness in virtual-environment runs.
+- **Verify propagation**: test failure in the verify phase now propagates to
+  `final_status` as `FAILED` (was silently `WARNING` in some paths).
+
 ## [1.6.0] - 2026-06-30
 
 This release lands the **vNext agentic-engineering runtime**: twelve new subsystems behind a parity-gated compatibility layer, all flipped to their vNext implementation as the default. Legacy paths remain available and revertible.
