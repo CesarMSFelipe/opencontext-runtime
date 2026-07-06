@@ -9,6 +9,7 @@ from opencontext_cli.tui.screens.new_change import NewChangeScreen
 from opencontext_cli.tui.screens.receipt import ReceiptViewer
 from opencontext_cli.tui.screens.runs import RunDetailScreen, RunsScreen
 from opencontext_cli.tui.screens.sdd import SddScreen
+from opencontext_cli.tui.screens.tdd_gates import TddGatesScreen
 from opencontext_cli.tui.screens.uninstall_preview import UninstallPreviewScreen
 from opencontext_cli.tui.screens.workspace_error import WorkspaceErrorScreen
 
@@ -28,6 +29,7 @@ __all__ = [
     "RunDetailScreen",
     "RunsScreen",
     "SddScreen",
+    "TddGatesScreen",
     "UninstallPreviewScreen",
     "WorkspaceErrorScreen",
 ]

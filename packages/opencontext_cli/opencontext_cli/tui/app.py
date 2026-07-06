@@ -262,6 +262,7 @@ class HomeScreen(Screen[None]):
     _ACTIONS: ClassVar[list[tuple[str, str]]] = [
         ("cockpit", "Main · Cockpit / active run"),
         ("runs", "Main · Runs"),
+        ("tdd_gates", "Main · TDD Gates"),
         ("new_change", "Main · Start new change"),
         ("verified", "Main · Build verified context"),
         ("graph", "Main · Knowledge graph"),
@@ -355,6 +356,11 @@ class HomeScreen(Screen[None]):
             from opencontext_cli.tui.screens.runs import RunsScreen
 
             self.app.push_screen(RunsScreen())
+            return
+        if key == "tdd_gates":
+            from opencontext_cli.tui.screens.tdd_gates import TddGatesScreen
+
+            self.app.push_screen(TddGatesScreen())
             return
         if key == "sdd":
             from opencontext_cli.tui.screens.sdd import SddScreen
