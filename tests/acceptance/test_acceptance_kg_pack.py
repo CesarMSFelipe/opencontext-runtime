@@ -99,11 +99,6 @@ def test_pack_reports_token_budget(oc_bin, large_indexed_ws) -> None:
     )
 
 
-@pytest.mark.xfail(
-    reason="GAP-008: pack metrics block missing (no kg_nodes_used/kg_edges_used/"
-    "memory_hits/protected_spans/compression_ratio in pack output)",
-    strict=False,
-)
 def test_pack_reports_kg_usage_metrics(oc_bin, large_indexed_ws) -> None:
     """AC-008: `pack` reports KG usage metrics (mandatory pack metrics JSON)."""
     payload = _pack(oc_bin, large_indexed_ws, "--max-tokens", "800")

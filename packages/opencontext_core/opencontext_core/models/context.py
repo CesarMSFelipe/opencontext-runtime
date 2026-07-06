@@ -154,6 +154,35 @@ class CompressionPackMetadata(BaseModel):
     items_compressed: int = Field(ge=0, description="Number of items that were compressed.")
 
 
+class ContextPackMetrics(BaseModel):
+    """Mandatory pack metrics block (KG_CONTEXT_COMPRESSION_CONTRACT)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    budget_tokens: int = Field(ge=0, description="Token budget given to the packer.")
+    input_tokens_estimated: int = Field(
+        ge=0, description="Estimated tokens across all candidates considered."
+    )
+    output_tokens_estimated: int = Field(ge=0, description="Estimated tokens of the packed output.")
+    compression_ratio: float | None = Field(
+        default=None,
+        description="tokens_after / tokens_before when compression ran; null otherwise.",
+    )
+    kg_used: bool = Field(description="Whether knowledge-graph candidates entered the pack.")
+    kg_nodes_used: int = Field(ge=0, description="KG-backed nodes selected into the pack.")
+    kg_edges_used: int = Field(
+        ge=0, description="KG edges behind the selected nodes (provenance + expansion hops)."
+    )
+    memory_hits: int = Field(ge=0, description="Memory-sourced items included in the pack.")
+    protected_spans: int = Field(
+        ge=0, description="Protected spans detected in selected candidates."
+    )
+    protected_spans_kept: int = Field(
+        ge=0, description="Protected spans preserved in the final pack content."
+    )
+    excluded_files: int = Field(ge=0, description="Candidates omitted from the pack.")
+
+
 class ContextPackResult(BaseModel):
     """Result of token-aware context packing."""
 
@@ -170,6 +199,14 @@ class ContextPackResult(BaseModel):
             "Pack-level compression metadata. Emitted only when compression actually ran "
             "on at least one item; absent (null) when no compression was applied."
         ),
+    )
+    context: ContextPackMetrics | None = Field(
+        default=None,
+        description="Additive pack metrics block (budget, KG usage, memory, protected spans).",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Additive advisory warnings (e.g. missing or empty index).",
     )
 
     @property

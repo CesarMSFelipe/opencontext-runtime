@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import typing
 
-from opencontext_core.context.packing import ContextPackBuilder, sanitize_context_pack
+from opencontext_core.context.packing import (
+    ContextPackBuilder,
+    build_pack_metrics,
+    sanitize_context_pack,
+)
 from opencontext_core.models.context import ContextItem, ContextPackResult, ContextPriority
 from opencontext_core.retrieval.contracts import EvidenceItem, EvidencePlan
 
@@ -39,6 +43,9 @@ class ContextCompiler:
             required_priorities=required_priorities,
             compression_engine=compression_engine,
         )
+        # Mandatory pack metrics block, computed against the pre-pack candidates
+        # so input tokens and protected spans reflect what was actually considered.
+        packed = packed.model_copy(update={"context": build_pack_metrics(packed, ranked)})
         return sanitize_context_pack(packed)
 
 

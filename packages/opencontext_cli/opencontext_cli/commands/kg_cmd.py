@@ -71,6 +71,20 @@ def add_kg_parser(subparsers: Any) -> None:
     kg_status = kg_sub.add_parser("status", help="Check index status.")
     kg_status.add_argument("--json", action="store_true")
 
+    kg_related = kg_sub.add_parser(
+        "related-tests", help="Find tests connected to a file or symbol."
+    )
+    kg_related.add_argument("target", help="File path or symbol name.")
+    kg_related.add_argument("--root", default=".", help="Project root (default: cwd).")
+    kg_related.add_argument("--json", action="store_true")
+
+    kg_explain_pack = kg_sub.add_parser(
+        "explain-pack", help="Explain what a persisted run's context pack selected and why."
+    )
+    kg_explain_pack.add_argument("--run", required=True, help="Run id.")
+    kg_explain_pack.add_argument("--root", default=".", help="Project root (default: cwd).")
+    kg_explain_pack.add_argument("--json", action="store_true")
+
     from opencontext_cli.commands.migration_cmd import add_migrate_subparser
 
     add_migrate_subparser(kg_sub, "kg")
@@ -120,6 +134,9 @@ def handle_kg(args: Any) -> None:
         raise SystemExit(handle_migrate("kg", args))
     if command == "rebuild":
         console.info("KG rebuild: run `opencontext index .` to rebuild the graph from source.")
+        return
+    if command == "explain-pack":
+        _handle_explain_pack(args)
         return
     query = getattr(args, "query", "")
     symbol = getattr(args, "symbol", "")
@@ -272,6 +289,33 @@ def handle_kg(args: Any) -> None:
                     console.print(f"  {info['signature']}")
                 if info.get("code"):
                     console.print(info["code"])
+
+    elif command == "related-tests":
+        target = getattr(args, "target", "")
+        from opencontext_core.graph.related_tests import find_related_tests
+
+        report = find_related_tests(kg.db, target)
+        if report["resolved"]["matches"] == 0:
+            from opencontext_cli.contracts import CliContractError
+
+            kg.close()
+            raise CliContractError(
+                "target_not_found",
+                f"No indexed file or symbol matches: {target}",
+                hint="Run `opencontext index .` first, or check the file path / symbol name.",
+                details={"target": target},
+            )
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            console.header(f"Related tests: {target}")
+            if not report["related_tests"]:
+                console.dim("No related tests found.")
+            for entry in report["related_tests"]:
+                console.print(
+                    f"  [bold]{entry['test']}[/] ({entry['via']} -> {entry['connected_to']})"
+                )
+                console.print(f"    [dim]{entry['file_path']}:{entry['line']}[/]")
 
     elif command == "status":
         stats = kg.get_stats()
@@ -634,6 +678,56 @@ setTimeout(zoomFit, 80);
         console.error(f"Unknown knowledge-graph command: {command}")
 
     kg.close()
+
+
+def _handle_explain_pack(args: Any) -> None:
+    """Explain a persisted run's context pack from either run layout."""
+
+    from opencontext_cli.contracts import CliContractError
+    from opencontext_core.context.pack_explain import (
+        explain_pack_payload,
+        locate_run_context_pack,
+    )
+
+    run_id = getattr(args, "run", "")
+    root = Path(getattr(args, "root", "."))
+    json_output = getattr(args, "json", False)
+    pack_path = locate_run_context_pack(root, run_id)
+    if pack_path is None:
+        raise CliContractError(
+            "run_not_found",
+            f"No persisted context pack for run: {run_id}",
+            hint=(
+                "Packs live under .opencontext/runs/<id>/ or "
+                ".opencontext/sessions/<sid>/runs/<id>/."
+            ),
+            details={"run_id": run_id},
+        )
+    try:
+        pack = json.loads(pack_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise CliContractError(
+            "pack_unreadable",
+            f"Could not read context pack: {exc}",
+            details={"run_id": run_id, "path": str(pack_path)},
+        ) from exc
+    payload = explain_pack_payload(pack, run_id=run_id, pack_path=str(pack_path))
+    if json_output:
+        print(json.dumps(payload, indent=2))
+        return
+    console.header(f"Pack explanation: run {run_id}")
+    console.print(f"  [dim]{pack_path}[/]")
+    for item in payload["selected"]:
+        console.print(f"  [bold]{item['source']}[/] ({item['tokens']} tokens) — {item['reason']}")
+    for omission in payload["omissions"]:
+        console.print(f"  [dim]omitted {omission['item_id']}: {omission['reason']}[/]")
+    metrics = payload.get("context")
+    if metrics:
+        console.print(
+            f"  [dim]budget {metrics.get('budget_tokens')} tokens, "
+            f"kg nodes {metrics.get('kg_nodes_used')}, "
+            f"memory hits {metrics.get('memory_hits')}[/]"
+        )
 
 
 def _find_node_id(kg: KnowledgeGraph, symbol: str) -> int | None:

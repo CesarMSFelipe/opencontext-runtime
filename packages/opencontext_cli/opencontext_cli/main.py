@@ -4828,6 +4828,27 @@ def _verified_context(runtime: OpenContextRuntime, args: argparse.Namespace) -> 
         raise SystemExit(1)
 
 
+def _missing_index_warnings(storage_path: Path, root: str | Path) -> list[str]:
+    """Warn when packing against a missing or empty index (honesty over silence)."""
+
+    hint = f"index missing or empty — run: opencontext index {root}"
+    try:
+        if not (storage_path / "project_manifest.json").exists():
+            return [hint]
+        graph_db = storage_path / "context_graph.db"
+        if not graph_db.exists():
+            return [hint]
+        import sqlite3
+
+        with sqlite3.connect(str(graph_db)) as conn:
+            row = conn.execute("SELECT COUNT(*) FROM nodes").fetchone()
+        if not row or row[0] == 0:
+            return [hint]
+    except Exception:
+        return []
+    return []
+
+
 def _pack(
     runtime: OpenContextRuntime,
     query: str,
@@ -4839,6 +4860,11 @@ def _pack(
     root: str | Path = ".",
 ) -> None:
     pack = runtime.build_context_pack(query, max_tokens)
+    index_warnings = _missing_index_warnings(runtime.storage_path, root)
+    if index_warnings:
+        pack = pack.model_copy(update={"warnings": [*pack.warnings, *index_warnings]})
+        for warning in index_warnings:
+            err_console.warning(warning)
     if output_format == "json":
         rendered = pack.model_dump_json(indent=2)
     elif output_format in {"yaml", "toon", "compact_table"}:
