@@ -260,7 +260,11 @@ def test_cli_contract_error_envelope_and_exit_code() -> None:
 def test_cli_contract_error_explicit_exit_code_wins() -> None:
     from opencontext_cli.contracts.errors import CliContractError
 
-    err = CliContractError("TDD_RED_NOT_PROVEN", "no failing test", exit_code=6)
+    # TDD_RED_NOT_PROVEN is a cataloged P0 code (CLI-ERR-CODES), so it must
+    # carry a hint even in this exit-code-override construction.
+    err = CliContractError(
+        "TDD_RED_NOT_PROVEN", "no failing test", hint="Run the test first.", exit_code=6
+    )
     assert err.exit_code == 6
     assert err.status == "failed"
 

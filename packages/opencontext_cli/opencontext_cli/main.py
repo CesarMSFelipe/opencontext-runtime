@@ -307,6 +307,12 @@ def main() -> None:
     if hasattr(args, "version") and args.version:
         print(f"opencontext {__version__}")
         return
+    # CLI_CONTRACT global flags: --quiet / --no-color apply before any command
+    # output happens (flag > env > default precedence).
+    if _resolve_flag(getattr(args, "quiet", False), "OPENCONTEXT_QUIET"):
+        os.environ["OPENCONTEXT_QUIET"] = "1"
+    if _resolve_flag(getattr(args, "no_color", False), "NO_COLOR"):
+        _disable_color()
     try:
         _dispatch(args)
         # Post-command update notice is best-effort: it must never turn a
@@ -338,13 +344,36 @@ def main() -> None:
         _render_contract_error(contract, args)
         raise SystemExit(contract.exit_code) from exc
     except OpenContextError as exc:
+        # CLI_CONTRACT: every stable-command failure in --json mode emits the
+        # standard error envelope with a stable code (no bare stderr text).
+        command = str(getattr(args, "command", "") or "")
+        if _machine_mode(args):
+            contract = CliContractError(
+                "OPERATION_FAILED", str(exc), hint=_suggestion_text(command)
+            )
+            _render_contract_error(contract, args)
+            raise SystemExit(contract.exit_code) from exc
         eprint(f"Error: {exc}")
-        _print_suggestion(args.command if hasattr(args, "command") else "")
+        _print_suggestion(command)
         raise SystemExit(1) from exc
     except FileNotFoundError as exc:
+        if _machine_mode(args):
+            contract = CliContractError(
+                "FILE_NOT_FOUND", str(exc), hint="Check the path exists and retry."
+            )
+            _render_contract_error(contract, args)
+            raise SystemExit(contract.exit_code) from exc
         eprint(f"File not found - {exc}")
         raise SystemExit(1) from exc
     except PermissionError as exc:
+        if _machine_mode(args):
+            contract = CliContractError(
+                "PERMISSION_DENIED",
+                str(exc),
+                hint="Check filesystem permissions for the reported path and retry.",
+            )
+            _render_contract_error(contract, args)
+            raise SystemExit(contract.exit_code) from exc
         eprint(f"Permission denied - {exc}")
         raise SystemExit(1) from exc
     except KeyboardInterrupt:
@@ -355,6 +384,17 @@ def main() -> None:
         # actionable message; OPENCONTEXT_DEBUG=1 restores the full traceback.
         if os.environ.get("OPENCONTEXT_DEBUG"):
             raise
+        if _machine_mode(args):
+            contract = CliContractError(
+                "UNEXPECTED_ERROR",
+                str(exc),
+                hint=(
+                    "Run 'opencontext doctor' to check your setup, or re-run with "
+                    "OPENCONTEXT_DEBUG=1 for the full traceback."
+                ),
+            )
+            _render_contract_error(contract, args)
+            raise SystemExit(contract.exit_code) from exc
         eprint(f"Unexpected error: {exc}")
         err_console.dim(
             "  Run 'opencontext doctor' to check your setup, or re-run with "
@@ -363,12 +403,41 @@ def main() -> None:
         raise SystemExit(1) from exc
 
 
+def _machine_mode(args: argparse.Namespace) -> bool:
+    """True when the invocation promised machine-readable (JSON) stdout.
+
+    Covers ``--json`` / ``--output json`` / the ``OPENCONTEXT_JSON`` env alias
+    (via :func:`resolve_output_mode`) plus the ``pack --format json`` spelling.
+    """
+    from opencontext_cli.output import OutputMode, resolve_output_mode
+
+    if getattr(args, "format", None) == "json":
+        return True
+    return resolve_output_mode(args) is OutputMode.json
+
+
+def _disable_color() -> None:
+    """CLI_CONTRACT ``--no-color``: disable ANSI styling process-wide.
+
+    Sets ``NO_COLOR`` (honoured by rich consoles created later) and de-colors
+    the already-created shared consoles (brand stdout console + stderr console).
+    """
+    os.environ["NO_COLOR"] = "1"
+    from opencontext_core.dx import console_styles
+
+    for brand_console in (console_styles.console, err_console):
+        inner = getattr(brand_console, "_console", None)
+        if inner is not None:
+            inner.no_color = True
+
+
 def _render_contract_error(exc: CliContractError, args: argparse.Namespace) -> None:
     """Render a contract error: pure JSON envelope on stdout in machine mode.
 
-    Machine mode is ``--json`` or (for commands like ``pack``) ``--format json``.
+    Machine mode is ``--json`` (or its env alias) or, for commands like
+    ``pack``, ``--format json``.
     """
-    if getattr(args, "json", False) or getattr(args, "format", None) == "json":
+    if _machine_mode(args):
         json.dump(exc.to_envelope(), sys.stdout)
         sys.stdout.write("\n")
     else:
@@ -377,24 +446,26 @@ def _render_contract_error(exc: CliContractError, args: argparse.Namespace) -> N
             err_console.dim(f"  {exc.hint}")
 
 
+def _suggestion_text(command: str) -> str:
+    """Actionable next step for a failed *command* (stderr hint / envelope hint)."""
+    if command == "index":
+        return "Try: opencontext install"
+    if command == "pack":
+        return "Try: opencontext index . && opencontext pack . --query 'Explain this project'"
+    if command == "knowledge-graph":
+        return "Try: opencontext index ."
+    if command in ("install", "setup"):
+        return "Try: opencontext install"
+    if command == "doctor":
+        return "Try: opencontext install"
+    if command in ("explain", "demo", "verified-context"):
+        return "Try: opencontext index . first, then re-run."
+    return "Run 'opencontext --help' for usage information."
+
+
 def _print_suggestion(command: str) -> None:
     """Print helpful suggestion after an error (stderr, alongside the error)."""
-    if command == "index":
-        err_console.dim("Try: opencontext install")
-    elif command == "pack":
-        err_console.dim(
-            "Try: opencontext index . && opencontext pack . --query 'Explain this project'"
-        )
-    elif command == "knowledge-graph":
-        err_console.dim("Try: opencontext index .")
-    elif command in ("install", "setup"):
-        err_console.dim("Try: opencontext install")
-    elif command == "doctor":
-        err_console.dim("Try: opencontext install")
-    elif command in ("explain", "demo", "verified-context"):
-        err_console.dim("Try: opencontext index . first, then re-run.")
-    else:
-        err_console.dim("Run 'opencontext --help' for usage information.")
+    err_console.dim(_suggestion_text(command))
 
 
 def _check_first_run(command: str, args: argparse.Namespace | None = None) -> None:
@@ -524,12 +595,14 @@ class _PublicHelpFormatter(argparse.RawDescriptionHelpFormatter):
 
 # Mental routes through the product, shown at the bottom of `opencontext --help`
 # so the command set reads as paths, not a flat feature list (Workstream A2).
+# PRODUCT_CONTRACT: internal commands are never promoted here — routes name
+# only stable/preview commands.
 _COMMAND_GROUPS_EPILOG = """\
 command routes:
   Observe    demo, explain, pack, context, tokens
   Integrate  install, setup, mcp, persona, models, capabilities
-  Operate    clarify, loop, harness, workflow, runs
-  Govern     security, privacy, prompt, ci-check, receipt, aicx
+  Operate    clarify, loop, harness, runs
+  Govern     security, privacy, receipt
   Learn      memory, skill, plugin, benchmark
 
 Run 'opencontext <command> --help' for details on any command.
@@ -553,11 +626,27 @@ def _build_parser() -> argparse.ArgumentParser:
         version=f"%(prog)s {__version__}",
         help="Show version and exit.",
     )
+    # CLI_CONTRACT global flags (shared output layer): also registered on every
+    # stable command parser via _apply_stable_flag_layer, so both
+    # `opencontext --quiet status` and `opencontext status --quiet` parse.
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        default=False,
+        help="Suppress human-facing progress/status output.",
+    )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        dest="no_color",
+        default=False,
+        help="Disable ANSI styling.",
+    )
     subparsers = parser.add_subparsers(dest="command", metavar="<command>")
 
     init_parser = subparsers.add_parser(
         "init",
-        help=argparse.SUPPRESS,
+        help="Initialize project configuration (interactive setup wizard).",
         description=(
             "Interactive setup wizard for your project. Guides you through template selection, "
             "security mode, TDD preferences, and agent configuration. Non-interactive mode "
@@ -595,6 +684,11 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=_config_profile_names(),
         default=None,
         help="Built-in configuration profile (PR-013): governance/routing posture.",
+    )
+    init_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a machine-readable init report (implies --non-interactive).",
     )
     install_parser = subparsers.add_parser(
         "install",
@@ -780,6 +874,11 @@ def _build_parser() -> argparse.ArgumentParser:
     clean_parser.add_argument("root", nargs="?", default=".", help="Project root.")
     clean_parser.add_argument("--dry-run", action="store_true", help="Show what would be removed.")
     clean_parser.add_argument("--force", "-f", action="store_true", help="Skip confirmation.")
+    clean_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a machine-readable clean report (removal still requires --force).",
+    )
     instructions_parser = subparsers.add_parser("instructions", help=argparse.SUPPRESS)
     instructions_subparsers = instructions_parser.add_subparsers(
         dest="instructions_command", required=True
@@ -871,6 +970,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     pack_parser.add_argument("--base", default="main", help="Base ref for `pack diff`.")
     pack_parser.add_argument("--head", default="HEAD", help="Head ref for `pack diff`.")
+    pack_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit the pack as JSON (CLI_CONTRACT spelling of --format json).",
+    )
 
     verified_parser = subparsers.add_parser(
         "verified-context",
@@ -1502,7 +1606,49 @@ def _build_parser() -> argparse.ArgumentParser:
     _register_command_alias(subparsers, "kg", "knowledge-graph")
     _register_command_alias(subparsers, "context", "verified-context")
 
+    _apply_stable_flag_layer(subparsers)
+    _apply_maturity_help_policy(subparsers)
+
     return parser
+
+
+def _apply_stable_flag_layer(subparsers: Any) -> None:
+    """Register the shared output flags on every stable command parser.
+
+    CLI_CONTRACT "Global flags": ``--quiet`` / ``--no-color`` parse uniformly
+    on all stable commands (the per-command matrix lives in
+    ``opencontext_cli.contracts.flags``).
+    """
+    from opencontext_cli.contracts.flags import STABLE_COMMAND_FLAGS, add_shared_output_flags
+
+    for command in STABLE_COMMAND_FLAGS:
+        command_parser = subparsers.choices.get(command)
+        if command_parser is not None:
+            add_shared_output_flags(command_parser)
+
+
+def _apply_maturity_help_policy(subparsers: Any) -> None:
+    """Align primary ``--help`` visibility with the command maturity registry.
+
+    PRODUCT_CONTRACT freeze: internal commands are hidden from the primary
+    help; visible preview commands carry a ``(preview)`` marker so they are
+    never presented as stable; stable commands are always listed.
+    """
+    from opencontext_cli.contracts.command_registry import maturity
+
+    for pseudo in subparsers._choices_actions:
+        level = maturity(pseudo.dest)
+        if level == "internal":
+            pseudo.help = argparse.SUPPRESS
+        elif level == "preview":
+            if pseudo.help != argparse.SUPPRESS and pseudo.help and "preview" not in pseudo.help:
+                pseudo.help = f"{pseudo.help} (preview)"
+        elif pseudo.help == argparse.SUPPRESS or not pseudo.help:
+            # Stable commands must be listed; fall back to the parser description.
+            command_parser = subparsers.choices.get(pseudo.dest)
+            description = str(getattr(command_parser, "description", "") or "").strip()
+            first_line = description.splitlines()[0] if description else ""
+            pseudo.help = first_line or f"{pseudo.dest} (stable command)."
 
 
 # Shorthand command -> canonical command. Aliases reuse the canonical parser,
@@ -1570,6 +1716,12 @@ def _resolve_flag(flag: bool, env_var: str, *, default: bool = False) -> bool:
     return default
 
 
+def _normalize_pack_args(args: argparse.Namespace) -> None:
+    """CLI_CONTRACT: ``pack --json`` is the documented spelling of ``--format json``."""
+    if getattr(args, "json", False):
+        args.format = "json"
+
+
 def _dispatch(args: argparse.Namespace) -> None:
     command = getattr(args, "command", None)
 
@@ -1577,6 +1729,9 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command in _ALIAS_TARGETS:
         command = _ALIAS_TARGETS[command]
         args.command = command
+
+    if command == "pack":
+        _normalize_pack_args(args)
 
     # First-run detection for commands that can benefit from onboarding
     if command and command not in ("init", "install", "onboard", "--help", None):
@@ -1598,6 +1753,7 @@ def _dispatch(args: argparse.Namespace) -> None:
             tdd=getattr(args, "tdd", None),
             agent=getattr(args, "agent", None),
             profile=getattr(args, "profile", None),
+            json_output=getattr(args, "json", False),
         )
         return
     if command == "install":
@@ -2020,7 +2176,7 @@ def _dispatch(args: argparse.Namespace) -> None:
             strict=getattr(args, "strict", False),
         )
     elif command == "clean":
-        _clean(args.root, args.dry_run, args.force)
+        _clean(args.root, args.dry_run, args.force, json_output=getattr(args, "json", False))
     elif command == "provider":
         _provider_simulate(args.provider, args.classification, runtime, args.mode)
     elif command == "mcp":
@@ -2040,6 +2196,7 @@ def _init(
     tdd: str | None = None,
     agent: str | None = None,
     profile: str | None = None,
+    json_output: bool = False,
 ) -> None:
     """Initialize project with wizard or fast template.
 
@@ -2049,12 +2206,16 @@ def _init(
     ``profile`` selects a built-in configuration profile (PR-013): the chosen
     name is written to the config's ``profile`` key at the canonical
     ``<root>/opencontext.yaml`` path (the B2 location ``run`` reads).
+
+    ``json_output`` (CLI_CONTRACT ``--json``) implies non-interactive and
+    emits a machine-readable init report instead of the console chrome.
     """
     root = Path.cwd()
 
     # Check if we should launch the interactive wizard
     is_interactive = (
         not non_interactive
+        and not json_output
         and sys.stdout.isatty()
         and os.environ.get("CI", "").strip().lower() not in ("true", "1")
     )
@@ -2086,24 +2247,48 @@ def _init(
     if profile:
         config_data["profile"] = profile
     if path.exists():
-        console.header("OpenContext Init")
-        console.warning(f"Config already exists: {path}")
+        if not json_output:
+            console.header("OpenContext Init")
+            console.warning(f"Config already exists: {path}")
         ensure_workspace(Path("."))
         # Keep the OC state tree (.opencontext/, .storage/) out of git so a
         # freshly `init`-ed project does not surface ~100 untracked files.
         OnboardingService._write_gitignore_storage_block(root)
+        if json_output:
+            print(json.dumps(_init_report(path, template, profile, created=False), indent=2))
         return
     path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
     ensure_workspace(Path("."))
     # Same managed .gitignore block the wizard/install path writes, so `init`
     # alone never litters the user's repo with untracked OC artifacts.
     OnboardingService._write_gitignore_storage_block(root)
+    if json_output:
+        print(json.dumps(_init_report(path, template, profile, created=True), indent=2))
+        return
     console.header("OpenContext Init")
     console.success(f"Created config: {path}")
     console.info(f"Template: {template}")
     if profile:
         console.info(f"Profile: {profile}")
     console.info("Workspace: .opencontext/")
+
+
+def _init_report(
+    config_path: Path, template: str, profile: str | None, *, created: bool
+) -> dict[str, Any]:
+    """Machine-readable ``init --json`` payload (schema-keyed, additive)."""
+    from opencontext_cli.output import envelope
+
+    return envelope(
+        "init.v1",
+        {
+            "created": created,
+            "config": str(config_path),
+            "template": template,
+            "profile": profile,
+            "workspace": ".opencontext/",
+        },
+    )
 
 
 def _apply_profile_to_config(config_path: Path, profile: str) -> None:
@@ -3750,8 +3935,13 @@ def _doctor(
             sys.exit(1)
 
 
-def _clean(root: str, dry_run: bool, force: bool) -> None:
-    """Remove OpenContext data from a project directory."""
+def _clean(root: str, dry_run: bool, force: bool, json_output: bool = False) -> None:
+    """Remove OpenContext data from a project directory.
+
+    ``json_output`` (CLI_CONTRACT ``--json``) implies non-interactive: without
+    ``--force`` nothing is removed and the report says confirmation is still
+    required; with ``--force`` the removal happens and is reported.
+    """
     import shutil
     from pathlib import Path
 
@@ -3767,6 +3957,29 @@ def _clean(root: str, dry_run: bool, force: bool) -> None:
         path = project_root / name
         if path.exists():
             candidates.append(path)
+
+    if json_output:
+        from opencontext_cli.output import envelope
+
+        remove = bool(candidates) and force and not dry_run
+        if remove:
+            for candidate in candidates:
+                if candidate.is_dir():
+                    shutil.rmtree(candidate, ignore_errors=True)
+                else:
+                    candidate.unlink(missing_ok=True)
+        payload = envelope(
+            "clean.v1",
+            {
+                "root": str(project_root),
+                "dry_run": bool(dry_run),
+                "candidates": [str(c) for c in candidates],
+                "removed": [str(c) for c in candidates] if remove else [],
+                "confirmation_required": bool(candidates) and not force and not dry_run,
+            },
+        )
+        print(json.dumps(payload, indent=2))
+        return
 
     console.header("Clean")
     if not candidates:

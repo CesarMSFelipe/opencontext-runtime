@@ -99,10 +99,14 @@ def test_explain_pack_json_reports_selection_justification(
 
 
 def test_explain_pack_missing_run_raises_contract_error(tmp_path: Path) -> None:
-    """KG-006: explain-pack fails with the run_not_found contract error for unknown runs."""
+    """KG-006: explain-pack fails with the RUN_NOT_FOUND contract error for unknown runs.
+
+    CLI-ERR-CODES: the code is the cataloged SCREAMING_SNAKE identifier
+    (``run_not_found`` was migrated to conform to CLI_CONTRACT).
+    """
     args = cli_main._build_parser().parse_args(
         ["knowledge-graph", "explain-pack", "--run", "ghost", "--root", str(tmp_path), "--json"]
     )
     with pytest.raises(CliContractError) as excinfo:
         handle_kg(args)
-    assert excinfo.value.code == "run_not_found"
+    assert excinfo.value.code == "RUN_NOT_FOUND"

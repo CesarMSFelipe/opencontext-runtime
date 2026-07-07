@@ -73,11 +73,33 @@ _RICH_COMPACT_LOGO: list[str] = [
 ]
 
 
+_QUIET_FALSEY = frozenset({"", "0", "false", "no", "off"})
+
+
+def quiet_mode_active() -> bool:
+    """True when ``--quiet`` / ``OPENCONTEXT_QUIET`` is in effect (CLI_CONTRACT).
+
+    Quiet mode suppresses human-facing progress/status text on stdout; error
+    surfaces (stderr-bound consoles) keep printing.
+    """
+    import os
+
+    return os.environ.get("OPENCONTEXT_QUIET", "").strip().lower() not in _QUIET_FALSEY
+
+
 class BrandConsole:
     """Console wrapper with brand styling."""
 
     def __init__(self) -> None:
         self._console = Console() if RICH_AVAILABLE else None
+
+    def _suppressed(self) -> bool:
+        """Quiet mode silences stdout-bound chrome; stderr consoles still emit."""
+        if not quiet_mode_active():
+            return False
+        if self._console is not None and getattr(self._console, "stderr", False):
+            return False
+        return True
 
     def __getattr__(self, name: str) -> Any:
         """Delegate unknown attributes to the underlying rich console."""
@@ -100,6 +122,8 @@ class BrandConsole:
 
     def print(self, *args: Any, **kwargs: Any) -> None:
         """Print with rich if available."""
+        if self._suppressed():
+            return
         if self._console:
             self._console.print(*args, **kwargs)
         else:
@@ -124,6 +148,8 @@ class BrandConsole:
         """Print a branded header — the logo plus (optionally) a titled panel — so
         every command surface (install, status, doctor, uninstall…) carries the
         same brand chrome as the interactive menus, not a bare title rule."""
+        if self._suppressed():
+            return
         if self._console:
             for line in _RICH_LOGO:
                 self._console.print(line)
@@ -150,6 +176,8 @@ class BrandConsole:
 
     def table(self, title: str, columns: list[str], rows: list[list[str]]) -> Table | None:
         """Create a styled table."""
+        if self._suppressed():
+            return None
         if not self._console:
             # Fallback: simple text table
             print(f"\n{title}:")
@@ -167,6 +195,8 @@ class BrandConsole:
 
     def progress(self, description: str = "Working...") -> Any:
         """Create a progress context manager."""
+        if self._suppressed():
+            return _NoOpProgress()
         if not self._console:
             print(description)
             return _NoOpProgress()
@@ -184,6 +214,8 @@ class BrandConsole:
         spinner. Falls back to a plain print + no-op context manager when rich
         is unavailable, so ``with console.status(...)`` never crashes.
         """
+        if self._suppressed():
+            return _NoOpStatus()
         if not self._console:
             print(message)
             return _NoOpStatus()
@@ -207,6 +239,8 @@ class BrandConsole:
         (default), ``success``, ``warning``, or ``error``. ``fit=True`` sizes
         the panel to its content (compact result banners) instead of full width.
         """
+        if self._suppressed():
+            return
         border = {
             "info": BRAND_SECONDARY,
             "success": BRAND_SUCCESS,

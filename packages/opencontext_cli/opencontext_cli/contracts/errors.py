@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from opencontext_cli.contracts.error_codes import requires_hint
 from opencontext_cli.contracts.error_envelope import error_envelope
 from opencontext_cli.contracts.exit_codes import exit_code_for_status
 
@@ -14,6 +15,9 @@ class CliContractError(Exception):
     The top-level dispatcher renders it: pure JSON on stdout under ``--json``,
     a human message on stderr otherwise, exiting with
     ``exit_code_for_status(status)`` unless *exit_code* overrides it.
+
+    Cataloged P0 codes (``contracts.error_codes``) must carry an actionable
+    ``hint`` — constructing one without it fails fast (CLI_CONTRACT).
     """
 
     def __init__(
@@ -27,6 +31,10 @@ class CliContractError(Exception):
         exit_code: int | None = None,
     ) -> None:
         super().__init__(message)
+        if hint is None and requires_hint(code):
+            raise ValueError(
+                f"error code {code} is P0 (CLI_CONTRACT): an actionable hint is required"
+            )
         self.code = code
         self.message = message
         self.hint = hint

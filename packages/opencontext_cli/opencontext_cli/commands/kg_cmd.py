@@ -311,7 +311,7 @@ def handle_kg(args: Any) -> None:
 
             kg.close()
             raise CliContractError(
-                "target_not_found",
+                "TARGET_NOT_FOUND",
                 f"No indexed file or symbol matches: {target}",
                 hint="Run `opencontext index .` first, or check the file path / symbol name.",
                 details={"target": target},
@@ -721,7 +721,7 @@ def _handle_explain_pack(args: Any) -> None:
     pack_path = locate_run_context_pack(root, run_id)
     if pack_path is None:
         raise CliContractError(
-            "run_not_found",
+            "RUN_NOT_FOUND",
             f"No persisted context pack for run: {run_id}",
             hint=(
                 "Packs live under .opencontext/runs/<id>/ or "
@@ -733,7 +733,7 @@ def _handle_explain_pack(args: Any) -> None:
         pack = json.loads(pack_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise CliContractError(
-            "pack_unreadable",
+            "PACK_UNREADABLE",
             f"Could not read context pack: {exc}",
             details={"run_id": run_id, "path": str(pack_path)},
         ) from exc

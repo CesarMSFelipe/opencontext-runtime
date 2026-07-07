@@ -19,11 +19,20 @@ flag name and semantics must be uniform:
 | `--config <path>` | Explicit config file (overrides `<root>/opencontext.yaml`) |
 | `--no-color` | Disable ANSI styling |
 
-> Current → Target: today only `--config` is a top-level global; `--json`, `--root`,
-> `--dry-run` exist per-command (e.g. `run`, `uninstall`, `index`, `status`, `doctor`);
-> `--quiet`/`--verbose` exist only as `version --output quiet|verbose`; `--no-color` is not
-> implemented. Target: one shared flag layer in `opencontext_cli` used by every stable command.
-> Known deviation to fix: `pack` uses `--format json` instead of `--json`.
+> Current: the shared flag layer lives in `opencontext_cli/contracts/flags.py`.
+> `--quiet` and `--no-color` are implemented uniformly on every stable command (top-level
+> `opencontext --quiet <command>` and trailing `opencontext <command> --quiet`, plus the
+> `OPENCONTEXT_QUIET` / `NO_COLOR` env aliases). `--json` parses on every stable leaf
+> command where it applies (`version`, `status`, `doctor`, `index`, `install`, `run`,
+> `uninstall`, `pack`, `init`, `clean`); tree-style commands (`config`, `memory`,
+> `knowledge-graph`, `runs`, `sdd`, `harness`) expose `--json` on their subcommands.
+> `pack --json` is the documented spelling; `--format json` remains as a back-compat
+> alias (additive migration). The exact per-command flag subset is frozen in
+> `STABLE_COMMAND_FLAGS` and pinned by `tests/cli/test_cli_flags_matrix.py`.
+> Remaining documented deviations: `--root` is a positional argument on `index`,
+> `status`, `clean`, `install`, and `pack` (option form only on `run`/`uninstall`);
+> `--verbose` exists per-subcommand (`sdd`, `memory`) and as `version --output verbose`;
+> `--profile` applies to `init`/`run`; `--verify` applies to `uninstall`/scopes.
 
 ## JSON purity rule
 
@@ -53,6 +62,15 @@ Every stable command failure in `--json` mode emits:
 Rules: `error.code` is a stable SCREAMING_SNAKE identifier (semver-protected); `message` is
 human-readable; `hint` is an actionable next step (P0 errors must have one); `details` is an
 open object. `status` uses only canonical states (`RUN_STATE_CONTRACT.md`).
+
+The stable code set is frozen in `opencontext_cli/contracts/error_codes.py` and pinned by
+`tests/cli/test_error_code_catalog.py`; cataloged P0 codes reject construction without a
+hint. The top-level dispatcher guarantees the envelope for every stable-command failure in
+JSON mode: otherwise-unhandled `OpenContextError` / `FileNotFoundError` / `PermissionError` /
+unexpected exceptions render `OPERATION_FAILED` / `FILE_NOT_FOUND` / `PERMISSION_DENIED` /
+`UNEXPECTED_ERROR` (pinned by `tests/cli/test_cli_json_envelope_matrix.py`). Historical
+lowercase codes (`run_not_found`, `target_not_found`, `pack_unreadable`) were migrated to
+their SCREAMING_SNAKE forms to conform to this rule.
 
 ## Exit codes
 
