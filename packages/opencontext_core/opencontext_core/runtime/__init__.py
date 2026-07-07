@@ -1213,7 +1213,11 @@ class OpenContextRuntime:
         # ranked candidate set (the compiler preserves this order into the pack).
         candidates = [evidence_to_context_item(item) for item in plan.evidence]
         ranked = candidates
-        sanitized_pack = ContextCompiler().compile(plan, compression_engine=self.compression_engine)
+        sanitized_pack = ContextCompiler().compile(
+            plan,
+            compression_engine=self.compression_engine,
+            full_file_threshold=self.config.context.full_file_threshold,
+        )
         ContextFirewall(self.config).check_context_export(
             [*sanitized_pack.included, *sanitized_pack.omitted],
             sink="context_pack",

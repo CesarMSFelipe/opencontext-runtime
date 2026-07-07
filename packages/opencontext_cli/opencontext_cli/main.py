@@ -4742,16 +4742,27 @@ def _harness_report(run_id: str | None, root: str = ".", json_output: bool = Fal
     root_path = Path(root).resolve()
     runs_dir = root_path / ".opencontext" / "runs"
 
+    def _not_found(message: str) -> None:
+        # JSON purity rule (CLI_CONTRACT): under --json the dispatcher renders a
+        # pure JSON error envelope on stdout; the human path keeps stderr text.
+        if json_output:
+            raise CliContractError(
+                "RUN_NOT_FOUND",
+                message,
+                hint="Run `opencontext harness run` first, or `opencontext runs list`.",
+            )
+        eprint(message)
+
     # Find the run to report on
     if run_id:
         target = runs_dir / run_id
         if not target.exists():
-            eprint(f"Run not found: {run_id}")
+            _not_found(f"Run not found: {run_id}")
             return
     else:
         # Find the most recent run by modification time
         if not runs_dir.exists():
-            eprint("No runs found. Run 'opencontext harness run' first.")
+            _not_found("No runs found. Run 'opencontext harness run' first.")
             return
         runs = sorted(
             (d for d in runs_dir.iterdir() if d.is_dir()),
@@ -4759,7 +4770,7 @@ def _harness_report(run_id: str | None, root: str = ".", json_output: bool = Fal
             reverse=True,
         )
         if not runs:
-            eprint("No runs found. Run 'opencontext harness run' first.")
+            _not_found("No runs found. Run 'opencontext harness run' first.")
             return
         target = runs[0]
 
@@ -4781,6 +4792,13 @@ def _harness_report(run_id: str | None, root: str = ".", json_output: bool = Fal
         report_label = "run"
 
     if not report_file:
+        if json_output:
+            raise CliContractError(
+                "RUN_NOT_FOUND",
+                f"No report found in {target}",
+                hint="The run recorded no archive-report.json, review.json or run.json.",
+                details={"run_dir": str(target)},
+            )
         eprint(f"No report found in {target}")
         err_console.dim("Available files:")
         for f in sorted(target.iterdir()):

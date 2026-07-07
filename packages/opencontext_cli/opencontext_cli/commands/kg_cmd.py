@@ -247,11 +247,12 @@ def handle_kg(args: Any) -> None:
                 _print_graph_results(results)
 
     elif command == "impact":
-        console.header(f"Impact: {symbol}")
         results = _find_callers(kg, symbol, radius)
         if json_output:
+            # JSON purity rule (CLI_CONTRACT): stdout carries only the document.
             print(json.dumps(results, indent=2))
         else:
+            console.header(f"Impact: {symbol}")
             if not results:
                 console.info("No impact found.")
             else:
@@ -363,7 +364,9 @@ def handle_kg(args: Any) -> None:
         target_name = getattr(args, "target", "")
         max_depth = getattr(args, "max_depth", 10)
         json_output = getattr(args, "json", False)
-        console.header(f"Trace: {source_name} -> {target_name}")
+        if not json_output:
+            # JSON purity rule (CLI_CONTRACT): stdout carries only the document.
+            console.header(f"Trace: {source_name} -> {target_name}")
 
         from opencontext_core.indexing.call_graph import CallGraphAnalyzer
 
@@ -371,11 +374,17 @@ def handle_kg(args: Any) -> None:
         source_id = _find_node_id(kg, source_name)
         target_id = _find_node_id(kg, target_name)
 
+        def _symbol_not_found(name: str) -> None:
+            if json_output:
+                print(json.dumps({"error": f"Symbol not found: {name}"}))
+            else:
+                console.error(f"Symbol not found: {name}")
+
         if source_id is None:
-            console.error(f"Symbol not found: {source_name}")
+            _symbol_not_found(source_name)
             return
         if target_id is None:
-            console.error(f"Symbol not found: {target_name}")
+            _symbol_not_found(target_name)
             return
 
         result = analyzer.find_path(source_id, target_id, max_depth=max_depth)

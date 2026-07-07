@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.contracts.errors import CliContractError
 from opencontext_cli.output import eprint
 from opencontext_core.dx.console_styles import console
 from opencontext_core.harness.run_store import RunStore
@@ -610,8 +611,14 @@ def handle_run_inspect(args: Any) -> None:
         run_dir = _run_dir(root, args.run_id)
         run_json = _read_run_json(run_dir)
         if run_json is None:
-            eprint(f"Run not found: {args.run_id}")
-            sys.exit(1)
+            # JSON purity rule (CLI_CONTRACT): the dispatcher renders this as a
+            # pure JSON error envelope on stdout under --json (exit 1 either way).
+            raise CliContractError(
+                "RUN_NOT_FOUND",
+                f"Run not found: {args.run_id}",
+                hint="Run `opencontext runs list` to see the persisted run ids.",
+                details={"run_id": args.run_id},
+            )
         # Harness runs keep gates.json/artifacts.json at the run root; OC Flow keeps
         # them under artifacts/oc-flow/. Count both so `runs show` is not blind to
         # oc-flow runs (which previously reported gates:0, artifacts:0).
@@ -641,8 +648,12 @@ def handle_run_inspect(args: Any) -> None:
     if action == "artifacts":
         run_dir = _run_dir(root, args.run_id)
         if not run_dir.is_dir():
-            eprint(f"Run not found: {args.run_id}")
-            sys.exit(1)
+            raise CliContractError(
+                "RUN_NOT_FOUND",
+                f"Run not found: {args.run_id}",
+                hint="Run `opencontext runs list` to see the persisted run ids.",
+                details={"run_id": args.run_id},
+            )
         # Include the nested OC Flow artifact tree (artifacts/oc-flow/…), not just
         # top-level files — otherwise oc-flow runs looked empty. Paths are relative
         # to the run dir so the harness (flat) and oc-flow (nested) layouts read alike.
