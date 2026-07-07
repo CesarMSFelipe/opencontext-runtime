@@ -63,6 +63,7 @@ from opencontext_core.harness.phases import (
     VerifyPhase,
 )
 from opencontext_core.models.trace import RunEvent
+from opencontext_core.oc_flow.run_bundle import ensure_gate_evidence
 from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.workflow.delegation_validator import (
     DelegationValidationError,
@@ -2695,7 +2696,9 @@ class HarnessRunner:
                 },
             },
             "ledger.json": {"ledgers": _serialize(result.ledgers)},
-            "gates.json": {"gates": _serialize(result.gates)},
+            # GATES_CONTRACT §Evidence rule: no gate record persists without a
+            # non-empty evidence message (HARNESS-CRIT-4).
+            "gates.json": {"gates": ensure_gate_evidence(_serialize(result.gates))},
             "artifacts.json": {"artifacts": _serialize(result.artifacts)},
             "decisions.json": {"decisions": _serialize(result.decisions)},
             "events.json": {"events": _serialize(result.events)},

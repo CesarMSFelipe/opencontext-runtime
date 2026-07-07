@@ -104,6 +104,26 @@ def evaluate_oc_flow_gates(
     ]
 
 
+def ensure_gate_evidence(gates: list[Any]) -> list[Any]:
+    """Backfill a non-empty evidence ``message`` on every gate record.
+
+    GATES_CONTRACT §Evidence rule: no gate record may be persisted to
+    ``gates.json`` without a human-readable message. Records that already carry
+    one are returned untouched; records missing one get an honest fallback that
+    names the gate id and status instead of inventing evidence.
+    """
+    for gate in gates:
+        if not isinstance(gate, dict):
+            continue
+        message = gate.get("message")
+        if isinstance(message, str) and message.strip():
+            continue
+        gate_id = gate.get("id", "unknown")
+        status = gate.get("status", "unknown")
+        gate["message"] = f"gate '{gate_id}' recorded status '{status}' without an evidence message"
+    return gates
+
+
 def enforce_gates(status: str, gates: list[dict[str, Any]]) -> str:
     """The ONE enforcement point: no `completed`/`passed` with a failed gate.
 
@@ -149,7 +169,7 @@ def write_run_bundle(
     """Persist run.json / gates.json / verification.json (+ mutations.diff)."""
     run_dir.mkdir(parents=True, exist_ok=True)
     _dump(run_dir / "run.json", manifest)
-    _dump(run_dir / "gates.json", {"gates": gates})
+    _dump(run_dir / "gates.json", {"gates": ensure_gate_evidence(gates)})
     _dump(run_dir / "verification.json", verification)
     if patch_text and patch_text.strip() and not patch_text.lstrip().startswith("#"):
         # Bytes + LF-normalized so the unified diff stays portable (same rule as

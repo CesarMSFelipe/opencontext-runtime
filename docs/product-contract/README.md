@@ -10,6 +10,7 @@ contract carries an explicit "Current → Target" note.
 | [PRODUCT_CONTRACT.md](PRODUCT_CONTRACT.md) | What OpenContext is, command maturity tiers, stable commands, mandatory flows, Definition of Done. |
 | [CLI_CONTRACT.md](CLI_CONTRACT.md) | Global flags, JSON purity, standard error envelope, exit codes, semver promise. |
 | [RUN_STATE_CONTRACT.md](RUN_STATE_CONTRACT.md) | The only canonical final states, their exit-code mapping, and the no-evidence-no-passed rule. |
+| [GATES_CONTRACT.md](GATES_CONTRACT.md) | The mandatory gate catalog per workflow, enforcement rules, and the per-gate evidence rule. |
 | [ACCEPTANCE_CONTRACT.md](ACCEPTANCE_CONTRACT.md) | AC-001..AC-030 and SMOKE-001..010 black-box scenarios, execution modes, timing budgets. |
 | [INSTALL_UNINSTALL_CONTRACT.md](INSTALL_UNINSTALL_CONTRACT.md) | Product/workspace/agents scopes, manifest schemas, manifest-driven uninstall algorithm, safety rules. |
 | [TDD_STRICT_CONTRACT.md](TDD_STRICT_CONTRACT.md) | RED → GREEN contract, evidence JSON shapes, and strict-mode policies. |
