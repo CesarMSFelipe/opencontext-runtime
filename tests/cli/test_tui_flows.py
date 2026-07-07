@@ -39,6 +39,10 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setattr(UserConfigStore, "CONFIG_DIR", cfg_dir)
     monkeypatch.setattr(UserConfigStore, "CONFIG_FILE", cfg_dir / "user-config.json")
     monkeypatch.setenv("HOME", str(tmp_path))
+    # Path.home() reads USERPROFILE (not HOME) on Windows, so the global-config
+    # layer would resolve to the real profile and miss the test's global config.
+    # Redirect the Windows home var too so _global_config_path() lands in tmp_path.
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     return tmp_path
 

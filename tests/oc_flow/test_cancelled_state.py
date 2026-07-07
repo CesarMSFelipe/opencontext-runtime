@@ -104,6 +104,14 @@ def test_cancelled_maps_to_exit_one() -> None:
 
 
 # ---------------------------------------------------------------- SIGINT (smoke)
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason=(
+        "POSIX SIGINT delivery via Popen.send_signal is unsupported on Windows "
+        "(raises ValueError: Unsupported signal: 2). The cancelled-state contract "
+        "is covered cross-platform by the in-process KeyboardInterrupt tests above."
+    ),
+)
 def test_sigint_subprocess_smoke(tmp_path: Path) -> None:
     """A real SIGINT during a slow run exits nonzero with run.json cancelled."""
     script = textwrap.dedent(
