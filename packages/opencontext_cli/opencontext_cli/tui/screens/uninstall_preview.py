@@ -21,8 +21,13 @@ from opencontext_cli.tui.brand import DIM, WARNING, BrandBar
 
 
 def build_uninstall_preview(root: Path) -> dict[str, Any]:
-    """The uninstall dry-run plan: agent removals + managed paths."""
-    from opencontext_cli.commands.uninstall_cmd import _PURGE_TARGETS, _load_v2_manifest
+    """The uninstall dry-run plan: agent removals, managed paths, and the
+    possible-residue report (same detector as ``opencontext uninstall verify``)."""
+    from opencontext_cli.commands.uninstall_cmd import (
+        _PURGE_TARGETS,
+        _load_v2_manifest,
+        verify_no_traces,
+    )
     from opencontext_core.configurator import Configurator
 
     configurator = Configurator(project_root=root)
@@ -43,7 +48,16 @@ def build_uninstall_preview(root: Path) -> dict[str, Any]:
             "state_paths": [],
             "modified_files": [],
         }
-    return {"agents": agents, "results": report.get("results", []), "managed_paths": managed}
+    try:
+        possible_residue = [str(trace) for trace in verify_no_traces(root)]
+    except Exception:  # the residue scan is advisory — never block the preview
+        possible_residue = []
+    return {
+        "agents": agents,
+        "results": report.get("results", []),
+        "managed_paths": managed,
+        "possible_residue": possible_residue,
+    }
 
 
 class UninstallPreviewScreen(Screen[None]):
@@ -104,6 +118,16 @@ class UninstallPreviewScreen(Screen[None]):
             lines.append(f"  • {escape(path)} [{DIM}](state)[/]")
         for path in managed["modified_files"]:
             lines.append(f"  • {escape(path)} [{DIM}](managed block only)[/]")
+        lines.append("")
+        residue = preview.get("possible_residue", [])
+        if residue:
+            lines.append(
+                f"[bold]Possible residue[/] [{DIM}](traces uninstall must remove — "
+                "verified afterwards by 'opencontext uninstall verify')[/]"
+            )
+            lines.extend(f"  • {escape(path)}" for path in residue)
+        else:
+            lines.append("[bold]Possible residue[/] [dim]none detected[/dim]")
         return "\n".join(lines)
 
     def action_dismiss(self, result: Any = None) -> None:  # type: ignore[override]

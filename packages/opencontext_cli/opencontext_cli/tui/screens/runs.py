@@ -3,8 +3,8 @@
 Runs live under ``<root>/.opencontext/runs/<run_id>/`` (harness) and
 ``<root>/.opencontext/sessions/<session_id>/runs/<run_id>/`` (OC Flow /
 durable apply). The list shows every run newest first; Enter opens the
-evidence detail (gates, verification, TDD block, changed files) with a raw
-JSON toggle.
+evidence detail (phase breakdown, gates, verification, TDD block, changed
+files, and the run log from events.json/events.jsonl) with a raw JSON toggle.
 """
 
 from __future__ import annotations
@@ -89,8 +89,50 @@ def list_run_rows(root: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _load_log_events(run_dir: Path) -> list[dict[str, Any]]:
+    """The run log: ``events.json`` (harness) or ``events.jsonl`` (session)."""
+    doc = _read_json(run_dir / "events.json")
+    raw = doc.get("events") if isinstance(doc, dict) else None
+    if isinstance(raw, list):
+        return [event for event in raw if isinstance(event, dict)]
+    jsonl = run_dir / "events.jsonl"
+    events: list[dict[str, Any]] = []
+    if jsonl.is_file():
+        try:
+            lines = jsonl.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return events
+        for line in lines:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(event, dict):
+                events.append(event)
+    return events
+
+
+def _phase_breakdown(gates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Per-phase rollup from the gates: first-appearance order, failed wins."""
+    order: list[str] = []
+    statuses: dict[str, str] = {}
+    for gate in gates:
+        phase = str(gate.get("phase") or "")
+        if not phase:
+            continue
+        if phase not in statuses:
+            order.append(phase)
+            statuses[phase] = str(gate.get("status", "?"))
+        if gate.get("status") == "failed":
+            statuses[phase] = "failed"
+        elif gate.get("status") == "passed" and statuses[phase] != "failed":
+            statuses[phase] = "passed"
+    return [{"phase": phase, "status": statuses[phase]} for phase in order]
+
+
 def load_run_detail(run_dir: Path) -> dict[str, Any]:
-    """The evidence bundle for one run: manifest, gates, verification, TDD."""
+    """The evidence bundle for one run: manifest, phases, gates, verification,
+    TDD, log events, and changed files."""
     run = _read_json(run_dir / "run.json") or _read_json(run_dir / "state.json") or {}
     if not isinstance(run, dict):
         run = {}
@@ -99,7 +141,11 @@ def load_run_detail(run_dir: Path) -> dict[str, Any]:
     gates_doc = _read_json(run_dir / "gates.json") or _read_json(oc_dir / "gates.json") or {}
     raw_gates = gates_doc.get("gates", []) if isinstance(gates_doc, dict) else []
     gates = [
-        {"name": str(g.get("name") or g.get("id") or "?"), "status": str(g.get("status", "?"))}
+        {
+            "name": str(g.get("name") or g.get("id") or "?"),
+            "status": str(g.get("status", "?")),
+            "phase": str(g.get("phase") or ""),
+        }
         for g in raw_gates
         if isinstance(g, dict)
     ]
@@ -110,10 +156,12 @@ def load_run_detail(run_dir: Path) -> dict[str, Any]:
     changed = run.get("changed_files") or []
     return {
         "run": run,
+        "phases": _phase_breakdown(gates),
         "gates": gates,
         "verification": verification if isinstance(verification, dict) else {},
         "tdd": tdd if isinstance(tdd, dict) else None,
         "changed_files": [str(c) for c in changed] if isinstance(changed, list) else [],
+        "log": _load_log_events(run_dir),
     }
 
 
@@ -225,6 +273,15 @@ class RunDetailScreen(Screen[None]):
             f"[bold]Status:[/] [{status_color}]{escape(status)}[/]",
             f"[bold]Task:[/] {escape(str(run.get('task') or ''))}",
         ]
+        if detail["phases"]:
+            lines.append("")
+            lines.append("[bold]Phases:[/]")
+            for phase in detail["phases"]:
+                icon = _GATE_ICONS.get(phase["status"], "?")
+                color = SUCCESS if phase["status"] == "passed" else ERROR
+                lines.append(
+                    f"  [{color}]{icon}[/] {escape(phase['phase'])}  {escape(phase['status'])}"
+                )
         if detail["gates"]:
             lines.append("")
             lines.append("[bold]Gates:[/]")
@@ -233,8 +290,9 @@ class RunDetailScreen(Screen[None]):
                 color = SUCCESS if gate["status"] == "passed" else ERROR
                 if gate["status"] == "skipped":
                     color = DIM
+                suffix = f"  [{DIM}]({escape(gate['phase'])})[/]" if gate.get("phase") else ""
                 lines.append(
-                    f"  [{color}]{icon}[/] {escape(gate['name'])}  {escape(gate['status'])}"
+                    f"  [{color}]{icon}[/] {escape(gate['name'])}  {escape(gate['status'])}{suffix}"
                 )
         verification = detail["verification"]
         if verification:
@@ -254,6 +312,18 @@ class RunDetailScreen(Screen[None]):
             lines.append("")
             lines.append("[bold]Changed files:[/]")
             lines.extend(f"  • {escape(path)}" for path in detail["changed_files"])
+        if detail["log"]:
+            lines.append("")
+            lines.append(f"[bold]Log:[/] [{DIM}]last {min(len(detail['log']), 20)} event(s)[/]")
+            for event in detail["log"][-20:]:
+                stamp = str(event.get("timestamp") or "")[11:19]
+                status = str(event.get("status") or "")
+                color = ERROR if status == "failed" else DIM
+                lines.append(
+                    f"  [{DIM}]{escape(stamp)}[/] {escape(str(event.get('phase') or '?'))} "
+                    f"{escape(str(event.get('action') or ''))} [{color}]{escape(status)}[/] "
+                    f"{escape(str(event.get('observation') or '')[:100])}"
+                )
         return "\n".join(lines)
 
     def action_toggle_raw(self) -> None:

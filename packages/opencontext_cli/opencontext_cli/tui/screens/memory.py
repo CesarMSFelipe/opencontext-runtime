@@ -1,11 +1,16 @@
 """MemoryBrowserScreen — v2 observations with approval-lifecycle actions.
 
 Lists the workspace's ``memory_v2.db`` observations (id, lifecycle state,
-title, type) newest first. ``a`` approves and ``x`` rejects the selected
-``proposed`` memory through the same :func:`opencontext_memory.mem_approve`
-/ :func:`opencontext_memory.mem_reject` entry points the
+title, type, trust, expiry, origin) newest first. ``t`` cycles a type filter.
+``a`` approves and ``x`` rejects the selected ``proposed`` memory through the
+same :func:`opencontext_memory.mem_approve` /
+:func:`opencontext_memory.mem_reject` entry points the
 ``opencontext memory approve|reject`` CLI verbs use; reject asks for
 confirmation first. Non-proposed rows are a no-op with a status-bar hint.
+
+The store tracks no numeric confidence; the trust column is honestly derived
+from the real lifecycle fields (``pinned``, ``lifecycle_state``,
+``review_after``) via :func:`trust_label`.
 """
 
 from __future__ import annotations
@@ -39,25 +44,47 @@ def _open_store(root: Path) -> Any:
     return MemoryStore.open(_store_db_path(root))
 
 
-def list_memory_rows(root: Path) -> list[dict[str, Any]]:
-    """Live observations (id, lifecycle_state, title, type), newest first."""
+def list_memory_rows(root: Path, *, type_filter: str | None = None) -> list[dict[str, Any]]:
+    """Live observations (id, lifecycle_state, title, type, session_id, scope,
+    pinned, review_after), newest first; optionally narrowed to one type."""
     if not _store_db_path(root).is_file():
         return []
     store = _open_store(root)
     try:
+        query = """
+            SELECT id, title, type, lifecycle_state, created_at,
+                   session_id, scope, pinned, review_after
+            FROM observations
+            WHERE deleted_at IS NULL
+        """
+        params: tuple[Any, ...] = ()
+        if type_filter is not None:
+            query += " AND type = ?"
+            params = (type_filter,)
+        query += " ORDER BY id DESC LIMIT 200"
         with store._connect() as conn:  # read-only inspection handle
-            rows = conn.execute(
-                """
-                SELECT id, title, type, lifecycle_state, created_at
-                FROM observations
-                WHERE deleted_at IS NULL
-                ORDER BY id DESC
-                LIMIT 200
-                """
-            ).fetchall()
+            rows = conn.execute(query, params).fetchall()
         return [dict(row) for row in rows]
     finally:
         store.close()
+
+
+def trust_label(row: dict[str, Any]) -> str:
+    """Derived trust for one observation row — from real lifecycle fields only.
+
+    ``pinned`` rows are explicitly protected; ``proposed`` rows are not yet
+    approved (unverified); an overdue ``review_after`` means stale context
+    (needs_review); everything else is approved, current memory (trusted).
+    """
+    if int(row.get("pinned") or 0):
+        return "pinned"
+    if str(row.get("lifecycle_state")) == "proposed":
+        return "unverified"
+    from opencontext_memory.lifecycle import state
+
+    if state(row.get("review_after")) == "needs_review":
+        return "needs_review"
+    return "trusted"
 
 
 class RejectConfirmScreen(ModalScreen[bool]):
@@ -99,12 +126,14 @@ class RejectConfirmScreen(ModalScreen[bool]):
 
 
 class MemoryBrowserScreen(Screen[None]):
-    """Workspace memories with lifecycle state — a approves, x rejects proposed."""
+    """Workspace memories with lifecycle state — a approves, x rejects proposed,
+    t cycles the type filter."""
 
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("escape,q", "dismiss", "Back"),
         Binding("a", "approve", "Approve"),
         Binding("x", "reject", "Reject"),
+        Binding("t", "cycle_filter", "Filter type"),
     ]
 
     DEFAULT_CSS = """
@@ -117,12 +146,14 @@ class MemoryBrowserScreen(Screen[None]):
         super().__init__()
         self._root = root or Path(".")
         self._rows: list[dict[str, Any]] = []
+        self._type_filter: str | None = None
 
     def compose(self) -> ComposeResult:
         yield BrandBar()
         yield Static(
             "[bold]Memory[/]\n"
-            "[dim]Workspace memories — a approves, x rejects the selected proposed row[/]",
+            "[dim]Workspace memories — a approves, x rejects the selected proposed row, "
+            "t filters by type[/]",
             markup=True,
         )
         yield ListView(id="memory-list")
@@ -133,28 +164,48 @@ class MemoryBrowserScreen(Screen[None]):
     async def on_mount(self) -> None:
         await self._reload()
 
+    @staticmethod
+    def _row_label(row: dict[str, Any]) -> str:
+        state = str(row["lifecycle_state"])
+        color = _STATE_COLORS.get(state, DIM)
+        expiry = str(row.get("review_after") or "none")
+        origin = str(row.get("session_id") or "?")
+        return (
+            f"#{row['id']}  [{color}]{escape(state)}[/]  "
+            f"{escape(str(row['title']))}  [{DIM}]{escape(str(row['type']))}[/]  "
+            f"{escape(trust_label(row))}  [{DIM}]exp:{escape(expiry)}  from:{escape(origin)}[/]"
+        )
+
     async def _reload(self) -> None:
-        self._rows = list_memory_rows(self._root)
+        self._rows = list_memory_rows(self._root, type_filter=self._type_filter)
         lv = self.query_one("#memory-list", ListView)
         await lv.clear()
         for row in self._rows:
-            state = str(row["lifecycle_state"])
-            color = _STATE_COLORS.get(state, DIM)
-            lv.append(
-                ListItem(
-                    Label(
-                        f"#{row['id']}  [{color}]{escape(state)}[/]  "
-                        f"{escape(str(row['title']))}  [{DIM}]{escape(str(row['type']))}[/]"
-                    )
-                )
-            )
+            lv.append(ListItem(Label(self._row_label(row))))
         empty = self.query_one("#memory-empty", Static)
         if self._rows:
             empty.update("")
             lv.index = 0
             lv.focus()
+        elif self._type_filter is not None:
+            empty.update(f"[dim]No memories of type '{escape(self._type_filter)}'.[/dim]")
         else:
             empty.update("[dim]No memories found in the workspace store.[/dim]")
+
+    async def action_cycle_filter(self) -> None:
+        """Cycle the type filter: all → each stored type (sorted) → all."""
+        types = sorted({str(row["type"]) for row in list_memory_rows(self._root)})
+        if not types:
+            self._set_status("[dim]No memories to filter.[/dim]")
+            return
+        if self._type_filter is None:
+            self._type_filter = types[0]
+        else:
+            index = types.index(self._type_filter) + 1 if self._type_filter in types else 0
+            self._type_filter = types[index] if index < len(types) else None
+        await self._reload()
+        label = self._type_filter if self._type_filter is not None else "all"
+        self._set_status(f"Type filter: [bold]{escape(label)}[/]")
 
     def _selected_row(self) -> dict[str, Any] | None:
         index = self.query_one("#memory-list", ListView).index

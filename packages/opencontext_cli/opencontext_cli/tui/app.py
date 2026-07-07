@@ -25,13 +25,18 @@ from opencontext_cli.tui.brand import DIM, PRIMARY, SUCCESS, WARNING, BrandBar
 
 
 class ConfigScreen(Screen[None]):
-    """Configuration as a 3-column Miller menu: Category · Setting · Options."""
+    """Configuration as a 3-column Miller menu: Category · Setting · Options.
+
+    ``v`` surfaces the validation panel: schema diagnostics from
+    ``config doctor``, cross-layer conflicts, and the active overrides.
+    """
 
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("q", "quit_tui", "Quit"),
         Binding("escape", "quit_tui", "Quit", show=False),
         Binding("left", "focus_left", "◀ column", show=False),
         Binding("right", "focus_right", "column ▶", show=False),
+        Binding("v", "show_validation", "Validation"),
     ]
 
     def __init__(self) -> None:
@@ -248,8 +253,65 @@ class ConfigScreen(Screen[None]):
                 return
         self.query_one(f"#{self._COLUMNS[i + 1]}", ListView).focus()
 
+    def action_show_validation(self) -> None:
+        """Render validation diagnostics + layer conflicts into the info panel."""
+        info = self.query_one("#info", Static)
+        try:
+            report = build_config_validation(".")
+        except Exception as exc:  # the panel must render, never crash the menu
+            info.update(f"[red]Validation unavailable: {exc}[/red]")
+            return
+        lines: list[str] = []
+        diags = report["diagnostics"]
+        failed = [d for d in diags if d["status"] == "failed"]
+        warned = [d for d in diags if d["status"] == "warning"]
+        lines.append(
+            f"[bold]Validation:[/] {len(diags)} check(s) — "
+            f"{len(failed)} failed · {len(warned)} warning(s)"
+        )
+        for diag in (*failed, *warned)[:8]:
+            mark = "✗" if diag["status"] == "failed" else "!"
+            lines.append(f"  {mark} {diag['name']} — {diag['message']}")
+        conflicts = report["conflicts"]
+        if conflicts:
+            lines.append(f"[bold]Conflicts:[/] {len(conflicts)} key(s) set by multiple layers")
+            for key, detail in list(conflicts.items())[:8]:
+                layers = " → ".join(detail["layers"])
+                lines.append(f"  {key}: {layers} [{_DIM}](winner: {detail['winner']})[/]")
+        else:
+            lines.append("[bold]Conflicts:[/] none")
+        overrides = report["overrides"]
+        lines.append(f"[bold]Active overrides:[/] {len(overrides)} key(s) set above defaults")
+        info.update("\n".join(lines))
+
     def action_quit_tui(self) -> None:
         self.app.exit()
+
+
+def build_config_validation(root: str | Path = ".") -> dict[str, Any]:
+    """Validation + conflict report for the config inspector (TUI-006).
+
+    Returns ``diagnostics`` (the ``config doctor`` findings), ``conflicts``
+    (dotted keys set by two or more non-default layers, with the layer list
+    and the winning layer), and ``overrides`` (dotted key → winning layer for
+    every key resolved above the defaults layer).
+    """
+    from opencontext_core.config_doctor import validate
+    from opencontext_core.config_resolver import resolve
+
+    diagnostics = [
+        {"name": d.name, "status": d.status, "message": d.message} for d in validate(root)
+    ]
+    provenance = resolve(root).provenance
+    overrides = {
+        key: layer for key, layer in provenance.by_dotted_key.items() if layer != "defaults"
+    }
+    conflicts: dict[str, dict[str, Any]] = {}
+    for key, layers in provenance.dotted_key_layers.items():
+        non_default = [layer for layer in layers if layer != "defaults"]
+        if len(non_default) > 1:
+            conflicts[key] = {"layers": layers, "winner": provenance.by_dotted_key.get(key)}
+    return {"diagnostics": diagnostics, "conflicts": conflicts, "overrides": overrides}
 
 
 class HomeScreen(Screen[None]):

@@ -142,7 +142,7 @@ def test_load_run_detail_collects_evidence(tmp_path) -> None:
 
     run_dir = _write_fake_run(tmp_path, "run-d")
     detail = load_run_detail(run_dir)
-    assert detail["gates"][0] == {"name": "workspace_valid", "status": "passed"}
+    assert detail["gates"][0] == {"name": "workspace_valid", "status": "passed", "phase": "oc-flow"}
     assert detail["verification"]["outcome"] == "passed"
     assert detail["tdd"]["mode"] == "strict"
     assert detail["changed_files"] == ["src/widget.py"]
