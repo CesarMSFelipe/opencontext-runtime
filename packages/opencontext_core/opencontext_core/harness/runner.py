@@ -820,6 +820,9 @@ class HarnessRunner:
         # A hard failure (e.g. an apply pre-gate blocking a write) must not be
         # downgraded to WARNING by subsequent non-strict phase outcomes.
         hard_failed = False
+        # A FAILED apply/verify gate under gate_policy "block" is terminal for
+        # the run (SDD_CONTRACT `failed` state) — sticky against downgrades.
+        terminal_gate_failed = False
 
         # Warn if knowledge graph has not been indexed (ExplorePhase depends on it)
         self._warn_if_kg_not_indexed(state)
@@ -987,12 +990,20 @@ class HarnessRunner:
             # result.gates covers phase self-evaluation (e.g. verify_tests_passed);
             # dispatched covers config-declared gates. Both can independently block.
             all_new_gates = list(result.gates) + dispatched
-            if any(g.status == GateStatus.FAILED for g in all_new_gates):
+            failed_gates = [g for g in all_new_gates if g.status == GateStatus.FAILED]
+            if failed_gates:
                 # Block-by-default: a FAILED verify-phase gate is fatal regardless
                 # of budget_mode when gate_policy is "block" (the default). "warn"
                 # keeps the historical posture (FAILED blocks only under STRICT).
                 if budget_mode is BudgetMode.STRICT or self.config.gate_policy == "block":
                     final_status = GateStatus.FAILED
+                    # SDD_CONTRACT state machine: failed APPLY/VERIFY gates are
+                    # terminal for the run (state `failed`). Mark them sticky so
+                    # a later phase status can never soften the run back to
+                    # WARNING (SDD-008 regression: a failing test suite was
+                    # reported as a passed run).
+                    if any(g.phase in ("apply", "verify") for g in failed_gates):
+                        terminal_gate_failed = True
                 elif not hard_failed:
                     final_status = GateStatus.WARNING
 
@@ -1021,10 +1032,18 @@ class HarnessRunner:
                     final_status = GateStatus.FAILED
                     hard_failed = True
                     break
-                if not hard_failed:
+                # SDD-008 regression guard: a terminal apply/verify gate failure
+                # (set above under gate_policy "block") must never be softened
+                # back to WARNING by this legacy posture branch. Non-terminal
+                # phase failures (e.g. explore on an empty project) keep the
+                # historical advisory WARNING.
+                if not hard_failed and not terminal_gate_failed:
                     final_status = GateStatus.WARNING
             elif result.status == GateStatus.WARNING and not hard_failed:
-                final_status = GateStatus.WARNING
+                # Same guard: a later WARNING phase never downgrades a run whose
+                # apply/verify gates already failed terminally.
+                if not terminal_gate_failed:
+                    final_status = GateStatus.WARNING
 
         # Provider-free apply detection: when the apply phase ran but produced no
         # edits because no executor was wired, the run would otherwise appear as

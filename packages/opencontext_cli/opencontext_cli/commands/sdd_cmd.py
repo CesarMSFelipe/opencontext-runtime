@@ -121,6 +121,15 @@ def add_sdd_parser(subparsers: Any) -> argparse.ArgumentParser:
 
         if verb == "apply":
             p.add_argument("--task", default=None, help="Task ID to apply (e.g. T3.1).")
+            p.add_argument(
+                "--execute",
+                action="store_true",
+                default=False,
+                help=(
+                    "Execute the apply phase with the shared OC Flow harness "
+                    "(equivalent to `opencontext run --workflow sdd`)."
+                ),
+            )
 
     return sdd_parser  # type: ignore[no-any-return]  # subparsers typed Any; add_parser returns ArgumentParser at runtime
 
@@ -145,6 +154,16 @@ def handle_sdd(args: Any) -> None:
     # review runs the honest structural review and persists its artifact.
     if verb == "review":
         _handle_review(change, cwd, verbose)
+        return
+
+    # apply --execute runs the shared harness (real edits, TDD, gates).
+    if verb == "apply" and getattr(args, "execute", False):
+        _handle_apply_execute(change, cwd, verbose)
+        return
+
+    # archive does real, bounded filesystem work: closes a verified change.
+    if verb == "archive":
+        _handle_archive(change, cwd, verbose)
         return
 
     # Phase verbs delegate to the SDD runner via run_phase.
@@ -231,11 +250,26 @@ def _handle_review(change: str | None, cwd: Path, verbose: bool) -> None:
 
 
 def _handle_continue(change: str | None, cwd: Path, verbose: bool) -> None:
-    """Continue with the next recommeded phase."""
-    from opencontext_sdd.dispatcher import RenderNativePhasePrompt
+    """Resume from the last incomplete phase (SDD-009).
 
-    prompt = RenderNativePhasePrompt("continue", change=change)
-    print(prompt)
+    Resolves the change's disk status, prints the dispatcher markdown carrying
+    ``nextRecommended``/``blockedReasons``, and — when the next step is a real
+    phase — the deterministic prompt for that phase. Never emits a static,
+    phase-less prompt.
+    """
+    from opencontext_sdd.dispatcher import RenderDispatcherMarkdown, RenderNativePhasePrompt
+    from opencontext_sdd.status import Resolve
+
+    status = Resolve(change, cwd=str(cwd))
+    print(RenderDispatcherMarkdown(status))
+    if status.nextRecommended in (*_PHASE_VERBS, "review"):
+        tdd_mode = str(status.actionContext.get("tdd_mode", "ask"))
+        print(
+            RenderNativePhasePrompt(
+                status.nextRecommended, change=status.changeName, tdd_mode=tdd_mode
+            )
+        )
+    _refresh_change_manifest(cwd, status.changeName)
 
 
 def _handle_ff(change: str | None, cwd: Path, verbose: bool) -> None:
@@ -273,11 +307,15 @@ def _handle_onboard(cwd: Path, verbose: bool) -> None:
 
 
 def _handle_list(cwd: Path, verbose: bool) -> None:
-    """List active changes."""
+    """List active changes (the closed ``archive/`` folder is not a change)."""
     console.section("Active changes")
     changes_dir = cwd / "openspec" / "changes"
     names = (
-        [child.name for child in sorted(changes_dir.iterdir()) if child.is_dir()]
+        [
+            child.name
+            for child in sorted(changes_dir.iterdir())
+            if child.is_dir() and child.name != "archive"
+        ]
         if changes_dir.is_dir()
         else []
     )
@@ -311,12 +349,25 @@ def _handle_new(change: str | None, cwd: Path, verbose: bool) -> None:
         "## Intent\n\n<why this change>\n\n## Scope\n\n<what changes>\n",
         encoding="utf-8",
     )
+    # SDD-ARTIFACTS: register the change and persist its state-machine position.
+    from opencontext_sdd.artifacts import update_registry, write_change_manifest
+    from opencontext_sdd.status import Resolve
+
+    write_change_manifest(cwd, change)
+    status = Resolve(change, cwd=str(cwd))
+    update_registry(
+        cwd,
+        change,
+        state=status.cycleState,
+        path=change_dir.relative_to(cwd).as_posix(),
+    )
     _print_json(
         {
             "status": "created",
             "change": change,
             "path": str(change_dir),
-            "artifacts": ["proposal.md"],
+            "artifacts": ["proposal.md", "manifest.json"],
+            "state": status.cycleState,
             "next_recommended": "spec",
         },
         verbose,
@@ -324,7 +375,13 @@ def _handle_new(change: str | None, cwd: Path, verbose: bool) -> None:
 
 
 def _handle_init(cwd: Path, verbose: bool) -> None:
-    """Bootstrap the ``openspec/`` file-artifact scaffold for SDD."""
+    """Bootstrap the SDD structure: openspec scaffold + project SDD context.
+
+    SDD-001 / SDD_CONTRACT artifact structure: init persists the project-level
+    SDD context (``.opencontext/sdd/context.json`` + ``testing.md``) and the
+    change registry, alongside the ``openspec/`` file-artifact store. An
+    existing context.json (from install/wizard) is never overwritten.
+    """
     openspec = cwd / "openspec"
     (openspec / "changes").mkdir(parents=True, exist_ok=True)
     (openspec / "specs").mkdir(parents=True, exist_ok=True)
@@ -336,15 +393,169 @@ def _handle_init(cwd: Path, verbose: bool) -> None:
             "`openspec/changes/<name>/`. Start one with `opencontext sdd new <name>`.\n",
             encoding="utf-8",
         )
+
+    # Project SDD context (stack, testing capabilities, TDD mode). Created only
+    # when missing so install/wizard settings are never stomped by a re-init.
+    from opencontext_core.sdd_runtime import write_sdd_context
+
+    context_path = cwd / ".opencontext" / "sdd" / "context.json"
+    sdd_context_created = not context_path.exists()
+    sdd_context_paths = [context_path]
+    if sdd_context_created:
+        _, sdd_context_paths = write_sdd_context(cwd)
+
+    from opencontext_sdd.artifacts import ensure_registry
+
+    registry_file = ensure_registry(cwd)
+
     _print_json(
         {
             "status": "initialized",
             "openspec": str(openspec),
             "created_project_md": created,
+            "sdd_context": [p.relative_to(cwd).as_posix() for p in sdd_context_paths],
+            "sdd_context_created": sdd_context_created,
+            "registry": registry_file.relative_to(cwd).as_posix(),
             "next_recommended": "new",
         },
         verbose,
     )
+
+
+def _handle_archive(change: str | None, cwd: Path, verbose: bool) -> None:
+    """Close a verified change: move it under ``openspec/changes/archive/``
+    preserving every evidence artifact (SDD-010).
+
+    Fail-closed: without a passing verify-report the archive is blocked with
+    exit code 7 (SDD_ARTIFACTS_MISSING) and nothing moves.
+    """
+    import shutil
+    from datetime import UTC, datetime
+
+    from opencontext_sdd.artifacts import mark_manifest_archived, update_registry
+    from opencontext_sdd.status import Resolve
+
+    from opencontext_cli.contracts.exit_codes import ExitCode
+
+    status = Resolve(change, cwd=str(cwd))
+    if status.changeRoot is None or status.nextRecommended != "archive":
+        payload = {
+            "status": "blocked",
+            "phase": "archive",
+            "change": status.changeName,
+            "next_recommended": status.nextRecommended,
+            "blocked_reasons": status.blockedReasons
+            or ["archive requires a passing verify-report"],
+            "exit_code": int(ExitCode.SDD_ARTIFACTS_MISSING),
+        }
+        _print_json(payload, verbose)
+        sys.exit(int(ExitCode.SDD_ARTIFACTS_MISSING))
+
+    change_root = cwd / status.changeRoot
+    archive_root = cwd / "openspec" / "changes" / "archive"
+    archive_root.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).date().isoformat()
+    target = archive_root / f"{stamp}-{status.changeName}"
+    suffix = 2
+    while target.exists():
+        target = archive_root / f"{stamp}-{status.changeName}-{suffix}"
+        suffix += 1
+
+    # Evidence inventory BEFORE the move: everything the change accumulated.
+    evidence = sorted(
+        p.relative_to(change_root).as_posix() for p in change_root.rglob("*") if p.is_file()
+    )
+    shutil.move(str(change_root), str(target))
+
+    archive_report = {
+        "schemaName": "opencontext.sdd-archive",
+        "schemaVersion": 1,
+        "change": status.changeName,
+        "state": "archived",
+        "archived_at": datetime.now(UTC).isoformat(),
+        "archived_from": status.changeRoot,
+        "evidence": evidence,
+    }
+    (target / "archive-report.json").write_text(
+        json.dumps(archive_report, indent=2) + "\n", encoding="utf-8"
+    )
+    mark_manifest_archived(target, str(status.changeName))
+    archived_to = target.relative_to(cwd).as_posix()
+    update_registry(cwd, str(status.changeName), state="archived", path=archived_to)
+
+    _print_json(
+        {
+            "status": "archived",
+            "change": status.changeName,
+            "archived_to": archived_to,
+            "evidence": evidence,
+            "next_recommended": "new",
+        },
+        verbose,
+    )
+
+
+def _handle_apply_execute(change: str | None, cwd: Path, verbose: bool) -> None:
+    """Execute the apply phase with the shared OC Flow harness (SDD-007).
+
+    Delegates to the same entry as ``opencontext run --workflow sdd`` so apply
+    produces a normal run under ``.opencontext/runs/`` (SDD_CONTRACT rule:
+    `apply` uses the same harness as OC Flow). Blocked (exit 7) when the change
+    is not apply-ready.
+    """
+    from types import SimpleNamespace
+
+    from opencontext_sdd.status import Resolve
+
+    from opencontext_cli.contracts.exit_codes import ExitCode
+
+    status = Resolve(change, cwd=str(cwd))
+    if status.changeRoot is None or status.nextRecommended != "apply":
+        payload = {
+            "status": "blocked",
+            "phase": "apply",
+            "change": status.changeName,
+            "next_recommended": status.nextRecommended,
+            "blocked_reasons": status.blockedReasons
+            or [f"apply is not the next dependency-ready phase ({status.nextRecommended})"],
+            "exit_code": int(ExitCode.SDD_ARTIFACTS_MISSING),
+        }
+        _print_json(payload, verbose)
+        sys.exit(int(ExitCode.SDD_ARTIFACTS_MISSING))
+
+    from opencontext_cli.commands import run_cmd
+
+    run_args = SimpleNamespace(
+        task=(
+            f"Apply SDD change '{status.changeName}' per {status.changeRoot}/tasks.md, "
+            f"following {status.changeRoot}/specs/ and design.md"
+        ),
+        workflow="sdd",
+        lane="fast",
+        profile="balanced",
+        root=str(cwd),
+        json=True,
+        resume=None,
+        config=None,
+        list_executors=False,
+        yes=True,
+        non_interactive=True,
+    )
+    rc = run_cmd.handle_run_exec(run_args)
+    _refresh_change_manifest(cwd, status.changeName)
+    sys.exit(int(rc))
+
+
+def _refresh_change_manifest(cwd: Path, change: str | None) -> None:
+    """Best-effort refresh of the per-change manifest's state-machine position."""
+    if not change:
+        return
+    try:
+        from opencontext_sdd.artifacts import write_change_manifest
+
+        write_change_manifest(cwd, change)
+    except Exception:
+        pass  # the manifest is additive metadata; never mask the verb's result
 
 
 def _run_phase(
@@ -377,9 +588,11 @@ def _run_phase(
         print(
             f"note: `opencontext sdd {verb}` resolves/dispatches the SDD phase; it does not "
             "execute edits or gates itself. To EXECUTE with the harness (real edits, TDD, "
-            "gates) run `opencontext run --workflow sdd` (or `opencontext oc-new`).",
+            "gates) run `opencontext sdd apply --execute` / `opencontext run --workflow sdd` "
+            "(or `opencontext oc-new`).",
             file=sys.stderr,
         )
+    _refresh_change_manifest(cwd, change)
     return envelope
 
 
