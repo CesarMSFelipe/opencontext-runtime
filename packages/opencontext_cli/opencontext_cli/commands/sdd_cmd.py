@@ -99,14 +99,13 @@ def add_sdd_parser(subparsers: Any) -> argparse.ArgumentParser:
             "ff",
         }:
             p.add_argument("--change", default=None, help="Change name.")
-            if verb in {"new", "review"}:
-                # SUPPRESS: an absent positional must not overwrite --change.
-                p.add_argument(
-                    "change",
-                    nargs="?",
-                    default=argparse.SUPPRESS,
-                    help="Change name (positional).",
-                )
+            # SUPPRESS: an absent positional must not overwrite --change.
+            p.add_argument(
+                "change",
+                nargs="?",
+                default=argparse.SUPPRESS,
+                help="Change name (positional).",
+            )
 
         if verb == "explore":
             p.add_argument("--topic", default=None, help="Exploration topic.")
