@@ -95,3 +95,9 @@ def test_no_raw_prompt_in_stored_jsonl(tmp_path):
     data = json.loads(raw.strip())
     assert "prompt_hash" in data
     assert data.get("prompt_hash") != "fix bug"
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

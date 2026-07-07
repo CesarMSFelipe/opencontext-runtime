@@ -57,23 +57,31 @@ def gather_kg_status(root: str | Path = ".") -> KnowledgeGraphStatus:
 
     Never raises: an un-indexed or unreadable project yields ``indexed=False`` with a
     short human-readable reason in ``detail``.
+
+    Strictly read-only (AC-031 clean-project promise): this runs on every TUI
+    open (including ``tui --smoke``), so it must never instantiate the full
+    runtime — whose backend factory mkdirs ``.storage/opencontext`` with
+    memory.db/context_graph.db/learning/ inside the project. Artifacts are
+    located with the mode-aware ``resolve_active_storage_file`` (which also
+    falls back to the legacy in-repo layout) and only opened when present.
     """
     project_root = Path(root).resolve()
-    storage_path = project_root / ".storage" / "opencontext"
-    config_path = project_root / "opencontext.yaml"
 
     try:
-        from opencontext_core.runtime import OpenContextRuntime
+        from opencontext_core.config_resolver import resolve_active_storage_file
+        from opencontext_core.models.project import ProjectManifest
 
-        runtime = OpenContextRuntime(
-            config_path=str(config_path) if config_path.exists() else None,
-            storage_path=storage_path,
-        )
+        manifest_path = resolve_active_storage_file(project_root, "project_manifest.json")
     except Exception as exc:
         return KnowledgeGraphStatus(indexed=False, detail=f"runtime unavailable: {exc}")
 
+    if not manifest_path.exists():
+        return KnowledgeGraphStatus(
+            indexed=False,
+            detail="not indexed — run 'opencontext index .'",
+        )
     try:
-        manifest = runtime.load_manifest()
+        manifest = ProjectManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
     except Exception:
         return KnowledgeGraphStatus(
             indexed=False,
@@ -83,9 +91,15 @@ def gather_kg_status(root: str | Path = ".") -> KnowledgeGraphStatus:
     nodes = 0
     edges = 0
     try:
-        graph_stats = runtime.knowledge_graph.get_stats()
-        nodes = int(graph_stats.get("nodes", 0))
-        edges = int(graph_stats.get("edges", 0))
+        kg_db_path = resolve_active_storage_file(project_root, "context_graph.db")
+        if kg_db_path.exists():
+            from opencontext_core.indexing.knowledge_graph import KnowledgeGraph
+
+            graph_stats = KnowledgeGraph(db_path=kg_db_path).get_stats()
+            nodes = int(graph_stats.get("nodes", 0))
+            edges = int(graph_stats.get("edges", 0))
+        else:
+            nodes = int(manifest.metadata.get("knowledge_graph", {}).get("nodes", 0))
     except Exception:
         # Call graph is optional; symbol/file counts still convey value.
         nodes = int(manifest.metadata.get("knowledge_graph", {}).get("nodes", 0))

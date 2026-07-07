@@ -15,14 +15,24 @@ from typing import Any
 import yaml
 
 from opencontext_core.config import (
+    DEPRECATED_CONFIG_KEYS,
     OpenContextConfig,
     _deep_merge,
     _normalize_legacy_config,
     default_config_data,
     find_config,
+    find_deprecated_keys,
 )
 from opencontext_core.config_profiles import BUILTIN_PROFILES
 from opencontext_core.doctor.deep import DeepDiagnostic
+
+# Deprecated config keys → canonical replacement. The registry lives in
+# ``config.py`` (CFG-008: `load_config` warns on these at load time); this
+# alias keeps the historical `config_doctor.DEPRECATED_KEYS` import path.
+# `find_deprecated_keys` is re-exported from `config` for the same reason.
+DEPRECATED_KEYS: dict[str, str] = DEPRECATED_CONFIG_KEYS
+
+__all__ = ["DEPRECATED_KEYS", "find_deprecated_keys", "validate"]
 
 
 def _load_raw(path: Path | None) -> dict[str, Any]:
@@ -98,6 +108,19 @@ def validate(root: str | Path = ".") -> list[DeepDiagnostic]:
                     f"Remove '{key}' or move it under a valid section. "
                     "Run 'opencontext config show' for the valid schema."
                 ),
+            )
+        )
+
+    # 2b. Deprecated keys (still load — normalization migrates them — but the
+    # config should move to the canonical spelling).
+    for finding in find_deprecated_keys(raw):
+        diags.append(
+            DeepDiagnostic(
+                name=f"config.deprecated_key.{finding['key']}",
+                status="warning",
+                message=f"Deprecated key: '{finding['key']}'",
+                details=f"Location: {config_file}",
+                recommendation=finding["hint"],
             )
         )
 

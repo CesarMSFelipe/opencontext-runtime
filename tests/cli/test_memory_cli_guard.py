@@ -91,3 +91,20 @@ def test_audit_reports_live_records(
     assert report["total"] == 2
     assert report["stale"]["count"] >= 1
     assert "quality" in report
+
+
+def test_memory_approve_help_names_the_active_state(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`memory approve` promotes to lifecycle_state "active" — help must say so.
+
+    Regression: the parser help claimed "proposed -> approved" while the
+    contract mapping promotes the observation to "active".
+    """
+    monkeypatch.setenv("COLUMNS", "200")
+    parser = cli._build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["memory", "--help"])
+    out = " ".join(capsys.readouterr().out.split())
+    assert "proposed -> active" in out
+    assert "proposed -> approved" not in out

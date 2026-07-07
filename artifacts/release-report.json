@@ -1,0 +1,62 @@
+{
+  "version": "1.7.0",
+  "generated_at": "2026-07-06T15:42:13.407547+00:00",
+  "artifacts": [
+    {
+      "name": "opencontext.pyz",
+      "sha256": "2736cf58db65575f07cd72081c4eb844ffaf3e4faba24b0ff52640928755c851"
+    },
+    {
+      "name": "opencontext_core-1.7.0-py3-none-any.whl",
+      "sha256": "6873d381925a1f445b946beeda6be207b115c700ae25a96b44f6b14585844600"
+    },
+    {
+      "name": "opencontext_core-1.7.0.tar.gz",
+      "sha256": "96dd498dec4a31e6f6c664fc044017b3d9d99edc42d20386c825402738607de6"
+    },
+    {
+      "name": "opencontext_profiles-1.7.0-py3-none-any.whl",
+      "sha256": "217beb6aa76c28ec0c1bfc9ad5c3f10bda496760f5609fcaabd451ce41fd0a84"
+    },
+    {
+      "name": "opencontext_profiles-1.7.0.tar.gz",
+      "sha256": "68ae77691ca1cc5bca3a79049991a30f739209f2b5ce172e1624491b5cec3572"
+    },
+    {
+      "name": "opencontext_memory-0.1.0-py3-none-any.whl",
+      "sha256": "c1284349254f28f9d9517f723115e0b16e2343a77610019f54bdf9a4fbfadd2a"
+    },
+    {
+      "name": "opencontext_memory-0.1.0.tar.gz",
+      "sha256": "cefe839b0d9974474e4b93caf38e0de387c7704c7e7a9b31690a9b082adf7a6d"
+    },
+    {
+      "name": "opencontext_sdd-0.1.0-py3-none-any.whl",
+      "sha256": "06d6fa10ec54b513c962c6c32737b95a4856a6301aa5642b1c045e2783438107"
+    },
+    {
+      "name": "opencontext_sdd-0.1.0.tar.gz",
+      "sha256": "250deb0b0c013e3d8e4aaf48792d66498347a1db2a42ded6cfb3dffd33fb70d0"
+    },
+    {
+      "name": "opencontext_cli-1.7.0-py3-none-any.whl",
+      "sha256": "8cddf2e26b95aead68bffa176e4a8249a0bc6ec7d6e6d114d9e11313a9bf0bb4"
+    },
+    {
+      "name": "opencontext_cli-1.7.0.tar.gz",
+      "sha256": "dfde877c4f1494ef2e84c8e88834cda3f7132549dbddf0a39721a73fe4a49ec9"
+    }
+  ],
+  "hygiene": "pass",
+  "acceptance": {
+    "passed": 42,
+    "xfailed": 0,
+    "failed": 0,
+    "remaining_gaps": [],
+    "oc_bin": "/tmp/oc-release-venv/bin/opencontext"
+  },
+  "uninstall_verify": "pass",
+  "known_limitations": [
+    "workflow verification resolves pytest via the runtime interpreter (sys.executable); a fresh install without pytest cannot prove GREEN \u2014 the release gate installs pytest into the acceptance venv as a prerequisite (oc_flow/runner.py:_discover_test_command)"
+  ]
+}

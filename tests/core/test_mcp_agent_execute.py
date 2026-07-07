@@ -498,3 +498,9 @@ def test_session_apply_payload_schema_declares_properties(tmp_path: Path) -> Non
     # Forward-compatible: extra payload keys must not be rejected by validators.
     assert payload.get("additionalProperties") is True
     server.close()
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

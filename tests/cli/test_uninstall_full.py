@@ -263,7 +263,8 @@ def test_verify_flag_exits_0_when_clean(tmp_path, monkeypatch):
     assert exc_info.value.code == 0
 
 
-def test_verify_flag_exits_1_when_traces(tmp_path, monkeypatch):
+def test_verify_flag_exits_9_when_traces(tmp_path, monkeypatch):
+    """INSTALL_UNINSTALL_CONTRACT: remaining managed residue exits 9, not 1."""
     agents_dir = tmp_path / ".claude" / "agents"
     agents_dir.mkdir(parents=True)
     (agents_dir / "oc-orchestrator.md").write_text("hi", encoding="utf-8")
@@ -286,7 +287,7 @@ def test_verify_flag_exits_1_when_traces(tmp_path, monkeypatch):
 
     with pytest.raises(SystemExit) as exc_info:
         handle_uninstall(args)
-    assert exc_info.value.code == 1
+    assert exc_info.value.code == 9
 
 
 # ---------------------------------------------------------------------------
@@ -624,8 +625,8 @@ def test_verify_no_global_traces_detects_state_dirs(tmp_path, monkeypatch):
     assert any(r.endswith("backups") for r in residue)
 
 
-def test_verify_flag_exits_1_on_global_only_residue(tmp_path, monkeypatch):
-    """A clean project but global HOME state present must make --verify exit non-zero.
+def test_verify_flag_exits_9_on_global_only_residue(tmp_path, monkeypatch):
+    """A clean project but global HOME state present must make --verify exit 9.
 
     Anti-regression: --verify with scope 'all' (or 'global') must detect global
     HOME residue even when no project-local traces exist. Uses scope='all' to
@@ -658,7 +659,7 @@ def test_verify_flag_exits_1_on_global_only_residue(tmp_path, monkeypatch):
 
     with pytest.raises(SystemExit) as exc_info:
         handle_uninstall(args)
-    assert exc_info.value.code == 1
+    assert exc_info.value.code == 9
 
 
 def test_full_uninstall_global_state_removes_home_opencontext_state(tmp_path, monkeypatch):

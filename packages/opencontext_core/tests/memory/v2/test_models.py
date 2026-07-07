@@ -46,6 +46,16 @@ def test_memory_kind_v2_has_six_values() -> None:
     assert actual == expected
 
 
+def test_memory_status_v2_includes_approval_lifecycle_states() -> None:
+    """MEMORY_CONTRACT states: proposed/approved/expired/compacted are additive."""
+    from opencontext_core.memory.v2.models import MemoryStatusV2
+
+    values = {s.value for s in MemoryStatusV2}
+    # Existing states stay untouched (additive change only).
+    assert {"active", "stale", "superseded", "rejected"} <= values
+    assert {"proposed", "approved", "expired", "compacted"} <= values
+
+
 def test_memory_candidate_v2_requires_topic_key() -> None:
     """A candidate without a topic_key cannot be deduplicated and must be rejected."""
     from opencontext_core.memory.v2.models import MemoryCandidateV2, MemoryKindV2

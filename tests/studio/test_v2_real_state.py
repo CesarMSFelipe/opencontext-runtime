@@ -55,10 +55,17 @@ def _add_decision(root: Path, sid: str, decision_id: str, rationale: str) -> Non
 
 
 def _add_context_report(root: Path, sid: str, used_tokens: int, total_budget: int) -> None:
-    """Write a context-report.json for *sid*."""
-    from opencontext_core.paths import StorageMode, resolve_workspace_path
+    """Write a context-report.json for *sid* into the session's real directory.
 
-    session_dir = resolve_workspace_path(root, StorageMode.local) / "sessions" / sid
+    ``SessionStore`` is mode-aware (``paths.execution_state.sessions_root``),
+    so the report must land next to the session it created — pinning the
+    legacy in-repo path here breaks in user mode where that session tree is
+    never created (execution-state migration).
+    """
+    from opencontext_core.paths import execution_state
+
+    session_dir = execution_state.sessions_root(root) / sid
+    session_dir.mkdir(parents=True, exist_ok=True)
     report = {
         "token_budget": total_budget,
         "layers": [{"name": "pack", "tokens_used": used_tokens, "token_budget": total_budget}],

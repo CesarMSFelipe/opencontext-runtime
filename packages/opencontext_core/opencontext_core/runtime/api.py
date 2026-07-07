@@ -237,7 +237,13 @@ class _OCFlowHarness:
                 ),
             )
 
-        executor = _resolve_executor(self._root)
+        try:
+            executor = _resolve_executor(self._root)
+        except Exception:
+            # An invalid config cannot resolve an executor; run with the model-free
+            # default so the runner's config pre-gate reports needs_configuration
+            # (OC-004) instead of crashing into a generic failure envelope.
+            executor = None
         return OCFlowRunner(root=self._root, executor=executor).run(task)
 
     def run_resume(self, session_id: str, run_id: str, task: str = "") -> Any:
@@ -282,12 +288,13 @@ class RuntimeApi:
         root = request.root or str(self._root)
         capabilities = _detect_capabilities()
         # Redact secrets in the session task so a token is never persisted raw into
-        # session.json / events.jsonl (defense in depth for MCP/API callers).
+        # session.json / events.jsonl (defense in depth for MCP/API callers). The
+        # prose pass also catches inline NAME=value assignments (AC-028).
         _task = request.task
         if _task:
-            from opencontext_core.safety.secrets import SecretScanner
+            from opencontext_core.safety.redaction import redact_prose_secrets
 
-            _task = SecretScanner().redact(_task)
+            _task = redact_prose_secrets(_task)
         session = RuntimeSession(
             session_id=session_id,
             root=root,
@@ -354,6 +361,13 @@ class RuntimeApi:
         ``resume_from`` so the harness skips already-completed phases and carries
         over the prior run's artifacts instead of overwriting them).
         """
+        # Defense in depth (AC-028): ``request.task`` may arrive raw from any
+        # API/MCP caller and is persisted verbatim into the ``workflow.started``
+        # event — redact before the task reaches the event log or the harness.
+        if task:
+            from opencontext_core.safety.redaction import redact_prose_secrets
+
+            task = redact_prose_secrets(task)
         # Resolve ``auto`` to the CONCRETE engine here so the run id, the harness
         # dispatch and the reported workflow all agree — a broad task was otherwise
         # labeled ``sdd`` but still executed the OC Flow graph.
@@ -691,15 +705,9 @@ class RuntimeApi:
     @staticmethod
     def _oc_flow_run_dir(root: Path, flow_session_id: str, flow_run_id: str) -> Path:
         """The OC Flow run tree (mirrors ``OCFlowRunner._run_dir``)."""
-        from opencontext_core.paths import StorageMode, resolve_workspace_path
+        from opencontext_core.paths.execution_state import sessions_root
 
-        return (
-            resolve_workspace_path(root, StorageMode.local)
-            / "sessions"
-            / flow_session_id
-            / "runs"
-            / flow_run_id
-        )
+        return sessions_root(root) / flow_session_id / "runs" / flow_run_id
 
     @staticmethod
     def _write_oc_flow_completion(
@@ -1270,6 +1278,8 @@ class RuntimeApi:
         value = getattr(raw, "value", raw)
         text = str(value).lower() if value is not None else "completed"
         # OC Flow terminal vocabulary — pass through unchanged (C15 parity fix).
+        # "cancelled" is shared by both engines (RUN_STATE_CONTRACT): OC Flow's
+        # cancellation finalizer and the harness GateStatus.CANCELLED both emit it.
         _OC_FLOW_TERMINAL = {
             "completed",
             "blocked",
@@ -1277,7 +1287,12 @@ class RuntimeApi:
             "needs_provider",
             "needs_verification",
             "needs_user_edit",
+            "needs_configuration",
+            "needs_context",
+            "policy_blocked",
             "escalated",
+            "tdd_violation",
+            "cancelled",
         }
         if text in _OC_FLOW_TERMINAL:
             return text

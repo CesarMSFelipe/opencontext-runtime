@@ -23,7 +23,8 @@ from opencontext_sdd.status import Resolve, Status, parse_verify_report
 
 def test_REQ_OSS_001_default_schema_name_and_14_fields_round_trip() -> None:
     """A fresh Status has the canonical schema name, and a fully-populated
-    Status round-trips through JSON with all 14 fields preserved."""
+    Status round-trips through JSON with all 14 core fields preserved (plus the
+    additive SDD-STATES/SDD-RULES operational fields — additive JSON only)."""
     fresh = Status()
     assert fresh.schemaName == "opencontext.sdd-status"
     assert fresh.schemaVersion == 1
@@ -67,6 +68,12 @@ def test_REQ_OSS_001_default_schema_name_and_14_fields_round_trip() -> None:
         "relationships",
         "nextRecommended",
         "blockedReasons",
+        # Additive operational fields (SDD-STATES / SDD-RULES) — additive only,
+        # the 14 core fields above are never removed or renamed.
+        "cycleState",
+        "currentPhase",
+        "gates",
+        "gatesRun",
     }
     assert expected_keys.issubset(payload.keys())
     assert len(payload) == len(expected_keys)

@@ -67,3 +67,53 @@ def test_default_posture_unaffected(tmp_path: Path, monkeypatch) -> None:
     result = _run(tmp_path)
     # No RED pre-check under "ask": the flow behaves as before (completes).
     assert result.status == "completed"
+
+
+def test_strict_environment_error_run_is_blocked_not_red(tmp_path: Path, monkeypatch) -> None:
+    """A runner that exits 1 with "No module named pytest" must never prove RED.
+
+    Regression: an environment/usage error was counted as red_proven=True, so a
+    fresh venv without pytest could "prove" RED and let a strict run pass.
+    """
+    monkeypatch.setenv("OPENCONTEXT_TDD_MODE", "strict")
+    _project(tmp_path, "def add(a, b):\n    return a - b\n")  # genuinely red code
+    fake_runner = [
+        sys.executable,
+        "-c",
+        "import sys; sys.stderr.write('No module named pytest\\n'); sys.exit(1)",
+    ]
+    result = OCFlowRunner(root=tmp_path).run(
+        "fix failing test",
+        lane=Lane.FAST,
+        requested_edits=[_EDIT],
+        test_command=fake_runner,
+    )
+    assert result.status == "tdd_violation"
+    assert result.tdd is not None
+    assert result.tdd["violation"] == "TDD_NO_TEST_RUNNER"
+    assert result.tdd["red_proven"] is False
+    assert result.tdd["red"]["classification"] == "environment_error"
+    # The mutation must NOT be applied on a blocked strict run.
+    assert (tmp_path / "calc.py").read_text(
+        encoding="utf-8"
+    ) == "def add(a, b):\n    return a - b\n"
+
+
+def test_strict_unavailable_runner_is_blocked_before_red(tmp_path: Path, monkeypatch) -> None:
+    """Preflight: a `<python> -m <missing-module>` runner routes to blocked/no-test-runner."""
+    monkeypatch.setenv("OPENCONTEXT_TDD_MODE", "strict")
+    _project(tmp_path, "def add(a, b):\n    return a - b\n")  # red code, but no runner
+    result = OCFlowRunner(root=tmp_path).run(
+        "fix failing test",
+        lane=Lane.FAST,
+        requested_edits=[_EDIT],
+        test_command=[sys.executable, "-m", "definitely_missing_runner_xyz", "-q"],
+    )
+    assert result.status == "tdd_violation"
+    assert result.tdd is not None
+    assert result.tdd["violation"] == "TDD_NO_TEST_RUNNER"
+    assert result.tdd["red_proven"] is False
+    assert result.tdd["red"] is None
+    assert (tmp_path / "calc.py").read_text(
+        encoding="utf-8"
+    ) == "def add(a, b):\n    return a - b\n"

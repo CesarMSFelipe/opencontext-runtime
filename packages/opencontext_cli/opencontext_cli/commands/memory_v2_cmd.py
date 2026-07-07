@@ -98,6 +98,11 @@ def add_memory_v2_parser(subparsers: Any) -> argparse.ArgumentParser:
     p.add_argument("--query", required=True, help="Search query.")
     p.add_argument("--limit", type=int, default=10, help="Max results.")
     p.add_argument("--all-projects", action="store_true")
+    p.add_argument(
+        "--include-proposed",
+        action="store_true",
+        help="Also surface proposed (unapproved) memories.",
+    )
 
     # --- Context ---
     _tool("context", "Get recent session context from previous sessions.")
@@ -232,6 +237,18 @@ def _open_store(cwd: Path) -> Any:
     return MemoryStore.open(db_path)
 
 
+def _approval_required(cwd: Path) -> bool:
+    """Resolve ``memory.approval_required`` from the project config (best-effort)."""
+    try:
+        from opencontext_core.config import load_config_or_defaults
+        from opencontext_core.config_resolver import resolve_config_path
+
+        config = load_config_or_defaults(resolve_config_path(cwd), auto_detect=False)
+        return bool(getattr(getattr(config, "memory", None), "approval_required", False))
+    except Exception:
+        return False
+
+
 def _dispatch_tool(tool: str, cwd: Path, args: argparse.Namespace) -> None:
     """Call the matching opencontext_memory entry point.
 
@@ -256,6 +273,7 @@ def _dispatch_tool(tool: str, cwd: Path, args: argparse.Namespace) -> None:
                 type=getattr(args, "type", "manual"),
                 topic_key=getattr(args, "topic_key", None),
                 capture_prompt=not getattr(args, "no_capture_prompt", False),
+                proposed=_approval_required(cwd),
             )
         except ValueError as exc:
             print(f"memory v2 save: {exc}", file=sys.stderr)
@@ -273,6 +291,7 @@ def _dispatch_tool(tool: str, cwd: Path, args: argparse.Namespace) -> None:
             query=getattr(args, "query", ""),
             limit=getattr(args, "limit", 10),
             project=project,
+            include_proposed=getattr(args, "include_proposed", False),
         )
         print(json.dumps(rows, indent=2, default=str))
         return
@@ -526,10 +545,136 @@ def _dispatch_tool(tool: str, cwd: Path, args: argparse.Namespace) -> None:
     raise SystemExit(2)
 
 
+def handle_memory_lifecycle(args: argparse.Namespace, command: str) -> None:
+    """Top-level approval-lifecycle verbs: approve / reject / compact / purge.
+
+    All four operate on the workspace's v2 observations store and print pure
+    JSON (no branded header) so scripted callers can parse stdout directly.
+    """
+    cwd = Path(getattr(args, "cwd", ".")).resolve()
+
+    if command in ("approve", "reject"):
+        from opencontext_memory import mem_approve, mem_reject
+
+        handler = mem_approve if command == "approve" else mem_reject
+        try:
+            result = handler(_open_store(cwd), observation_id=int(args.memory_id))
+        except (LookupError, ValueError) as exc:
+            print(f"memory {command}: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    if command == "compact":
+        from opencontext_memory import mem_compact
+
+        result = mem_compact(_open_store(cwd))
+        # MEM-006: compaction generates a summary record. The summary lives in
+        # the context repository (`summaries/`) so it is retrievable via
+        # `memory list`/`memory search`; `summary` is an additive report field
+        # (null when nothing was compacted).
+        result["summary"] = _write_compact_summary(cwd, result)
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    if command == "purge":
+        if not getattr(args, "yes", False):
+            print(
+                "memory purge: refusing without --yes — this deletes ALL managed "
+                "memory state for the workspace.",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+        print(json.dumps(purge_memory_state(cwd), indent=2, default=str))
+        return
+
+    raise SystemExit(f"unknown memory lifecycle command: {command}")
+
+
+def _write_compact_summary(cwd: Path, report: dict[str, Any]) -> dict[str, Any] | None:
+    """Generate the MEM-006 compaction summary record, or None on a no-op.
+
+    One `kind="summary"` item per compact invocation describes every compacted
+    cluster (keeper id + absorbed ids). Best-effort: a failing repository write
+    never blocks the compaction itself (the store update already happened).
+    """
+    clusters = [c for c in report.get("clusters") or [] if c.get("compacted_ids")]
+    if not clusters:
+        return None
+    lines = [
+        f"kept #{c['keeper_id']} ('{c['title']}') absorbing "
+        + ", ".join(f"#{i}" for i in c["compacted_ids"])
+        for c in clusters
+    ]
+    content = (
+        f"Memory compaction summary: {len(report['compacted_ids'])} duplicate "
+        f"observation(s) compacted into {len(clusters)} cluster(s): " + "; ".join(lines) + "."
+    )
+    try:
+        from opencontext_core.memory_usability.context_repository import ContextRepository
+
+        item = ContextRepository(cwd).store(
+            content,
+            kind="summary",
+            source="memory-compact",
+            collection="summaries",
+        )
+    except Exception:  # summary generation is additive — never block compact
+        return None
+    return {"id": item.id, "kind": item.kind, "content": item.content}
+
+
+def purge_memory_state(cwd: Path) -> dict[str, Any]:
+    """Delete ALL managed memory state for *cwd*.
+
+    Shared by ``memory purge --yes`` and the workspace uninstall purge, so
+    both paths perform the same uninstall-grade wipe. MEM-007: "everything"
+    includes the markdown context repository (`memory init`'s layout), not
+    just the SQLite stores.
+    """
+    import shutil
+
+    from opencontext_memory import MemoryStore, mem_purge
+
+    from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
+
+    storage = resolve_storage_path(Path(cwd), StorageMode.local)
+    report: dict[str, Any] = {
+        "purged": True,
+        "observations_removed": 0,
+        "relations_removed": 0,
+        "sessions_removed": 0,
+    }
+    obs_db = storage / "memory_v2.db"
+    if obs_db.is_file():
+        store = MemoryStore.open(obs_db)
+        report.update(mem_purge(store))
+        store.close()
+    # Remove the managed store files outright (uninstall-grade wipe).
+    removed_files: list[str] = []
+    for stem in ("memory_v2.db", "memory.db"):
+        for suffix in ("", "-wal", "-shm"):
+            candidate = storage / f"{stem}{suffix}"
+            if candidate.is_file():
+                candidate.unlink()
+                removed_files.append(str(candidate))
+    report["removed_files"] = removed_files
+    # MEM-007: the context repository is managed memory state too.
+    removed_dirs: list[str] = []
+    repo_dir = resolve_workspace_path(Path(cwd), StorageMode.local) / "context-repository"
+    if repo_dir.is_dir():
+        shutil.rmtree(repo_dir, ignore_errors=True)
+        removed_dirs.append(str(repo_dir))
+    report["removed_dirs"] = removed_dirs
+    return report
+
+
 # Re-export for backward compatibility
 __all__ = [
     "DEPRECATION_MAP",
     "SUBCOMMANDS_V2",
     "add_memory_v2_parser",
+    "handle_memory_lifecycle",
     "handle_memory_v2",
+    "purge_memory_state",
 ]

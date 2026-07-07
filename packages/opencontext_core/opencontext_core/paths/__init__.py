@@ -217,26 +217,35 @@ def detect_legacy(root: Path) -> LegacyState | None:
     return LegacyState(storage_path=found_storage, workspace_path=found_workspace)
 
 
-def write_manifest(path: Path, root: Path, version: str) -> None:
+def write_manifest(
+    path: Path, root: Path, version: str, *, extra: dict[str, Any] | None = None
+) -> None:
     """Write an ownership manifest into *path*.
 
     The manifest file is named ``oc-manifest.json`` and contains:
     ``app``, ``project_root``, ``project_id``, ``created_by``, ``version``.
 
-    Idempotent — safe to call on every runtime start; the file is overwritten
-    with the current values so version is always up-to-date.
+    Idempotent — safe to call on every runtime start; the base ownership fields
+    are refreshed so version is always up-to-date, while any additional keys
+    already present (e.g. the install-manifest v2 fields) are preserved.
+    ``extra`` merges additional keys on top (install manifest schema v2).
     """
     from datetime import datetime
 
     path.mkdir(parents=True, exist_ok=True)
-    manifest: dict[str, Any] = {
-        "app": "opencontext",
-        "project_root": str(root.resolve()),
-        "project_id": project_id(root),
-        "created_by": "runtime",
-        "version": version,
-        "created_at": datetime.now(tz=UTC).isoformat(),
-    }
+    manifest: dict[str, Any] = dict(read_manifest(path) or {})
+    manifest.update(
+        {
+            "app": "opencontext",
+            "project_root": str(root.resolve()),
+            "project_id": project_id(root),
+            "created_by": "runtime",
+            "version": version,
+            "created_at": datetime.now(tz=UTC).isoformat(),
+        }
+    )
+    if extra:
+        manifest.update(extra)
     manifest_file = path / _MANIFEST_FILENAME
     manifest_file.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 

@@ -503,7 +503,7 @@ def show_config(root: Path | None = None) -> None:
             else:
                 console.print("    models.roles: (not set)")
 
-            # --- Provenance section (7-layer resolution) ----------------------
+            # --- Provenance section (layered resolution) ----------------------
             _label("Provenance")
             try:
                 from opencontext_core.config_resolver import resolve as _resolve
@@ -519,7 +519,13 @@ def show_config(root: Path | None = None) -> None:
                     layer = prov.layer_of(top_key)
                     console.print(f"    {dotted_key}: [dim]{layer}[/]")
             except Exception as exc:
-                console.print(f"    [dim](provenance unavailable: {exc})[/]")
+                # Same leak surface as CONFIG_INVALID: pydantic validation text
+                # can echo secret-shaped raw values (`input_value='sk-...'`).
+                from opencontext_core.config_explain import redact_secret_input_values
+
+                console.print(
+                    f"    [dim](provenance unavailable: {redact_secret_input_values(str(exc))})[/]"
+                )
 
 
 def reset_config() -> None:

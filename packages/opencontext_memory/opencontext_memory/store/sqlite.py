@@ -55,6 +55,10 @@ class Observation(BaseModel):
     topic_key: str | None = Field(default=None, description="Upsert handle.")
     review_after: str | None = Field(default=None, description="ISO timestamp for next review.")
     pinned: bool = Field(default=False, description="Pin against lifecycle decay.")
+    lifecycle_state: str = Field(
+        default="active",
+        description="Lifecycle state ('active', 'proposed', 'rejected', 'compacted', ...).",
+    )
 
 
 class ObservationWriteResult(BaseModel):
@@ -174,14 +178,15 @@ class MemoryStore:
             now,
             observation.review_after,
             int(observation.pinned),
+            observation.lifecycle_state,
         )
         cur = self._conn.execute(
             """
             INSERT INTO observations (
                 sync_id, session_id, type, title, content,
                 project, scope, topic_key,
-                created_at, updated_at, review_after, pinned
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                created_at, updated_at, review_after, pinned, lifecycle_state
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(topic_key, project, scope)
                 WHERE deleted_at IS NULL AND topic_key IS NOT NULL
             DO UPDATE SET
@@ -192,6 +197,7 @@ class MemoryStore:
                 content = excluded.content,
                 review_after = excluded.review_after,
                 pinned = excluded.pinned,
+                lifecycle_state = excluded.lifecycle_state,
                 updated_at = excluded.updated_at,
                 revision_count = revision_count + 1
             """,
@@ -232,6 +238,7 @@ class MemoryStore:
             """
             SELECT o.id, o.title, o.content, o.project, o.scope,
                    o.topic_key, o.type, o.created_at, o.updated_at,
+                   o.lifecycle_state,
                    bm25(observations_fts) AS rank
             FROM observations_fts
             JOIN observations o ON o.id = observations_fts.rowid

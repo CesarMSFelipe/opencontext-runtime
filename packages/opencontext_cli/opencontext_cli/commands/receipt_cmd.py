@@ -18,7 +18,7 @@ from typing import Any
 from opencontext_cli.output import eprint
 from opencontext_core.dx.console_styles import console
 from opencontext_core.operating_model.receipts import RunReceiptStore
-from opencontext_core.paths import StorageMode, resolve_workspace_path
+from opencontext_core.paths import execution_state
 
 
 def _store(args: Any) -> RunReceiptStore:
@@ -34,10 +34,11 @@ def _root_path(args: Any) -> Path:
 def _list_harness_receipts(root: Path) -> list[Any]:
     """Scan all known receipt locations for every harness/oc_flow receipt.
 
-    Covers two on-disk layouts:
-    - Legacy harness layout: ``.opencontext/runs/<run_id>/receipts/receipts.jsonl``
+    Covers two on-disk layouts in every read root (the active mode-resolved
+    workspace first, the legacy in-repo ``.opencontext`` tree second):
+    - Flat harness layout: ``<runs root>/<run_id>/receipts/receipts.jsonl``
     - OC Flow / RuntimeApi durable-apply layout:
-      ``.opencontext/sessions/<session_id>/runs/<run_id>/receipts/receipts.jsonl``
+      ``<sessions root>/<session_id>/runs/<run_id>/receipts/receipts.jsonl``
 
     Returns every receipt (Receipt, PhaseReceipt, ApplyReceipt, RollbackReceipt)
     across all run directories.  Falls back to an empty list when neither tree
@@ -45,7 +46,6 @@ def _list_harness_receipts(root: Path) -> list[Any]:
     """
     from opencontext_core.harness.receipt_store import ReceiptStore
 
-    ws = resolve_workspace_path(root, StorageMode.local)
     receipts: list[Any] = []
 
     def _scan(run_dir: Path) -> None:
@@ -70,16 +70,18 @@ def _list_harness_receipts(root: Path) -> list[Any]:
                 )
             )
 
-    # Legacy layout: .opencontext/runs/<run_id>/
-    runs_dir = ws / "runs"
-    if runs_dir.is_dir():
+    # Flat layout: <runs root>/<run_id>/ (active location first, legacy second)
+    for runs_dir in execution_state.execution_read_roots(root, "runs"):
+        if not runs_dir.is_dir():
+            continue
         for run_dir in sorted(runs_dir.iterdir()):
             if run_dir.is_dir():
                 _scan(run_dir)
 
-    # Sessions layout: .opencontext/sessions/<session_id>/runs/<run_id>/
-    sessions_dir = ws / "sessions"
-    if sessions_dir.is_dir():
+    # Sessions layout: <sessions root>/<session_id>/runs/<run_id>/
+    for sessions_dir in execution_state.execution_read_roots(root, "sessions"):
+        if not sessions_dir.is_dir():
+            continue
         for session_dir in sorted(sessions_dir.iterdir()):
             if not session_dir.is_dir():
                 continue

@@ -32,6 +32,9 @@ addopts = "-q"
 testpaths = ["tests"]
 markers = [
   "real_host: end-to-end tests that drive the real codex/opencode/claude binaries (skip when absent)",
+  "acceptance: black-box acceptance tests driving the opencontext binary via --oc-bin (AC-001..AC-030)",
+  "smoke: fast acceptance subset equivalent to SMOKE-001..010, run on every PR",
+  "quarantine: skip-marked tests parked under tests/quarantine (archived or flaky; excluded from default signal)",
 ]
 pythonpath = [
   ".",

@@ -45,7 +45,14 @@ from opencontext_memory.project import DetectionResult, DetectProjectFull, avail
 from opencontext_memory.store.migrations import MIGRATIONS, migrate
 from opencontext_memory.store.sqlite import MemoryStore, Observation, ObservationWriteResult
 from opencontext_memory.store.write_queue import WriteQueue
+from opencontext_memory.taxonomy import (
+    CANONICAL_MEMORY_TYPES,
+    MEMORY_TYPE_ALIASES,
+    normalize_memory_type,
+)
+from opencontext_memory.tools.mem_approval import mem_approve, mem_reject
 from opencontext_memory.tools.mem_capture_passive import mem_capture_passive
+from opencontext_memory.tools.mem_compact import mem_compact
 from opencontext_memory.tools.mem_compare import mem_compare
 from opencontext_memory.tools.mem_context import mem_context
 from opencontext_memory.tools.mem_current_project import mem_current_project
@@ -57,6 +64,7 @@ from opencontext_memory.tools.mem_doctor import mem_doctor
 from opencontext_memory.tools.mem_get_observation import mem_get_observation
 from opencontext_memory.tools.mem_judge import mem_judge
 from opencontext_memory.tools.mem_pin import mem_pin
+from opencontext_memory.tools.mem_purge import mem_purge
 from opencontext_memory.tools.mem_review import mem_review
 from opencontext_memory.tools.mem_save import mem_save
 from opencontext_memory.tools.mem_save_prompt import mem_save_prompt
@@ -69,7 +77,9 @@ from opencontext_memory.tools.mem_unpin import mem_unpin
 from opencontext_memory.tools.mem_update import mem_update
 
 __all__ = [
+    "CANONICAL_MEMORY_TYPES",
     "DECAY_DAYS",
+    "MEMORY_TYPE_ALIASES",
     "MIGRATIONS",
     "ConflictEnvelope",
     "DetectProjectFull",
@@ -85,7 +95,9 @@ __all__ = [
     "WriteQueue",
     "available_projects",
     "mark_reviewed",
+    "mem_approve",
     "mem_capture_passive",
+    "mem_compact",
     "mem_compare",
     "mem_context",
     "mem_current_project",
@@ -94,6 +106,8 @@ __all__ = [
     "mem_get_observation",
     "mem_judge",
     "mem_pin",
+    "mem_purge",
+    "mem_reject",
     "mem_review",
     "mem_save",
     "mem_save_prompt",
@@ -105,5 +119,6 @@ __all__ = [
     "mem_unpin",
     "mem_update",
     "migrate",
+    "normalize_memory_type",
     "state",
 ]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from opencontext_core.oc_new.models import OcNewRunState
-from opencontext_core.paths import StorageMode, resolve_workspace_path
+from opencontext_core.paths import execution_state
 
 
 class OcNewStore:
@@ -13,7 +13,7 @@ class OcNewStore:
         self.root = Path(root)
 
     def run_dir(self, run_id: str) -> Path:
-        return resolve_workspace_path(self.root, StorageMode.local) / "runs" / run_id
+        return execution_state.runs_root(self.root) / run_id
 
     def state_path(self, run_id: str) -> Path:
         return self.run_dir(run_id) / "state.json"
@@ -31,11 +31,13 @@ class OcNewStore:
         return OcNewRunState.model_validate_json(path.read_text(encoding="utf-8"))
 
     def list_runs(self) -> list[OcNewRunState]:
-        runs_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs"
-        if not runs_dir.exists():
-            return []
         states: list[OcNewRunState] = []
-        for state_file in sorted(runs_dir.glob("*/state.json"), key=lambda p: p.stat().st_mtime):
+        state_files: list[Path] = []
+        # Active runs tree first, then the legacy in-repo tree (old runs).
+        for runs_dir in execution_state.execution_read_roots(self.root, "runs"):
+            if runs_dir.exists():
+                state_files.extend(runs_dir.glob("*/state.json"))
+        for state_file in sorted(state_files, key=lambda p: p.stat().st_mtime):
             try:
                 states.append(
                     OcNewRunState.model_validate_json(state_file.read_text(encoding="utf-8"))

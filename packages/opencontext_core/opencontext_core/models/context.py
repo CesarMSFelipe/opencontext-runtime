@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from enum import IntEnum
 from typing import Any
 
@@ -129,6 +130,38 @@ class ContextItem(BaseModel):
         description="Normalized trust score for source provenance.",
     )
 
+    @property
+    def source_path(self) -> str:
+        """Bare source path with any ``path:line`` chunk suffix removed.
+
+        Graph-symbol pack items carry chunk-suffixed sources (``src/auth.py:2``)
+        internally, but public surfaces — API ``included_sources``, trace
+        ``quality_inputs``, harness provenance gates — report bare file paths.
+        This property is the single normalization point: it prefers the item's
+        ``graph_provenance.file_path``, falls back to stripping a numeric
+        ``:line`` suffix, and leaves non-chunked sources (files, ``memory:key``
+        identifiers, tool names) untouched.
+        """
+        provenance = self.metadata.get("graph_provenance")
+        if isinstance(provenance, dict):
+            file_path = provenance.get("file_path")
+            if isinstance(file_path, str) and file_path:
+                return file_path
+        base, sep, suffix = self.source.rpartition(":")
+        if sep and suffix.isdigit():
+            return base
+        return self.source
+
+
+def unique_source_paths(items: Iterable[ContextItem]) -> list[str]:
+    """Order-preserving unique bare source paths for a sequence of pack items.
+
+    The projection used by every surface bound to the public bare-path contract
+    (``included_sources`` / ``omitted_sources``): chunks of the same file
+    collapse to one entry, first-seen order wins.
+    """
+    return list(dict.fromkeys(item.source_path for item in items))
+
 
 class ContextOmission(BaseModel):
     """Traceable reason a context item was omitted from a packed prompt."""
@@ -154,6 +187,50 @@ class CompressionPackMetadata(BaseModel):
     items_compressed: int = Field(ge=0, description="Number of items that were compressed.")
 
 
+class ContextPackMetrics(BaseModel):
+    """Mandatory pack metrics block (KG_CONTEXT_COMPRESSION_CONTRACT)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    budget_tokens: int = Field(ge=0, description="Token budget given to the packer.")
+    input_tokens_estimated: int = Field(
+        ge=0, description="Estimated tokens across all candidates considered."
+    )
+    output_tokens_estimated: int = Field(ge=0, description="Estimated tokens of the packed output.")
+    compression_ratio: float | None = Field(
+        default=None,
+        description="tokens_after / tokens_before when compression ran; null otherwise.",
+    )
+    kg_used: bool = Field(description="Whether knowledge-graph candidates entered the pack.")
+    kg_nodes_used: int = Field(ge=0, description="KG-backed nodes selected into the pack.")
+    kg_edges_used: int = Field(
+        ge=0, description="KG edges behind the selected nodes (provenance + expansion hops)."
+    )
+    test_nodes_included: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "KG-backed test nodes selected into the pack (plan kg block "
+            "`test_nodes_included`). Defaults to 0 so legacy persisted packs validate."
+        ),
+    )
+    kg_reason: str | None = Field(
+        default=None,
+        description=(
+            "Pack-level KG selection rationale (plan kg block `reason`). Null on "
+            "legacy persisted packs built before the field existed."
+        ),
+    )
+    memory_hits: int = Field(ge=0, description="Memory-sourced items included in the pack.")
+    protected_spans: int = Field(
+        ge=0, description="Protected spans detected in selected candidates."
+    )
+    protected_spans_kept: int = Field(
+        ge=0, description="Protected spans preserved in the final pack content."
+    )
+    excluded_files: int = Field(ge=0, description="Candidates omitted from the pack.")
+
+
 class ContextPackResult(BaseModel):
     """Result of token-aware context packing."""
 
@@ -170,6 +247,14 @@ class ContextPackResult(BaseModel):
             "Pack-level compression metadata. Emitted only when compression actually ran "
             "on at least one item; absent (null) when no compression was applied."
         ),
+    )
+    context: ContextPackMetrics | None = Field(
+        default=None,
+        description="Additive pack metrics block (budget, KG usage, memory, protected spans).",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Additive advisory warnings (e.g. missing or empty index).",
     )
 
     @property

@@ -10,7 +10,13 @@ from typing import Any
 
 from opencontext_core.compat import StrEnum
 from opencontext_core.config import KnowledgeGraphConfig
-from opencontext_core.indexing.graph_db import Edge, FileRecord, GraphDatabase, Node
+from opencontext_core.indexing.graph_db import (
+    Edge,
+    FileRecord,
+    GraphDatabase,
+    Node,
+    is_test_path,
+)
 from opencontext_core.indexing.graph_delta import CacheInvalidationRegistry, GraphDelta
 from opencontext_core.indexing.tree_sitter_parser import (
     LANGUAGE_EXTENSIONS,
@@ -359,11 +365,17 @@ class KnowledgeGraph:
             return defs[0][1] if defs else None
 
         existing: set[tuple[str, str]] = set()
+        existing_tests: set[tuple[str, str]] = set()
         unresolved_seen: set[tuple[str, int | None]] = set()
         for row in conn.execute(
-            "SELECT source_node_id, target_node_id FROM edges WHERE kind = 'calls'"
+            "SELECT source_node_id, target_node_id, kind FROM edges "
+            "WHERE kind IN ('calls', 'tests')"
         ).fetchall():
-            existing.add((row["source_node_id"], row["target_node_id"]))
+            pair = (row["source_node_id"], row["target_node_id"])
+            if row["kind"] == "tests":
+                existing_tests.add(pair)
+            else:
+                existing.add(pair)
 
         cross_edges: list[Edge] = []
         for file_path, content in file_contents:
@@ -394,6 +406,28 @@ class KnowledgeGraph:
                 if target_id is not None:
                     if node_files.get(target_id) == file_path:
                         continue  # intra-file edge already handled in pass 1
+                    # A test symbol calling a non-test symbol also gets a dedicated
+                    # `tests` edge (KG_CONTEXT_COMPRESSION_CONTRACT) so related-tests
+                    # queries no longer rely on the calls-from-test-file heuristic.
+                    # Checked BEFORE the calls dedup so a pre-existing calls edge
+                    # (indexed before tests emission landed) still gains its edge.
+                    if (
+                        pe.kind == "calls"
+                        and is_test_path(node_files.get(source_id, ""))
+                        and not is_test_path(node_files.get(target_id, ""))
+                        and (source_id, target_id) not in existing_tests
+                    ):
+                        existing_tests.add((source_id, target_id))
+                        cross_edges.append(
+                            Edge(
+                                id=None,
+                                source_node_id=source_id,
+                                target_node_id=target_id,
+                                kind="tests",
+                                call_site_file=file_path,
+                                call_site_line=pe.call_site_line,
+                            )
+                        )
                     if (source_id, target_id) in existing:
                         continue
                     existing.add((source_id, target_id))

@@ -126,7 +126,7 @@ def _collect_functional_governance(
             return None
         return next((p for p in art.rglob(name) if p.is_file()), None)
 
-    if summary.get("status") == "completed":
+    if summary.get("status") in {"passed", "completed"}:
         if (work / "buggy_add.py").read_text(encoding="utf-8") == _FIXED_SRC:
             functional["apply-small-mutation-safely"] = _met("checkpointed edit verified")
         checks = {
@@ -401,7 +401,7 @@ def run_dod_journey(
             "step": "run",
             "exit_code": r.returncode,
             "status": summary.get("status"),
-            "ok": r.returncode == 0 and summary.get("status") == "completed",
+            "ok": r.returncode == 0 and summary.get("status") in {"passed", "completed"},
         }
     )
 
@@ -427,7 +427,8 @@ def test_dod_journey_proves_and_meets_e2e_gate(
     assert all(bool(s["ok"]) for s in steps), steps
     assert (work / "opencontext.yaml").is_file()
     assert any(work.rglob("project_manifest.json"))
-    assert summary["status"] == "completed" and summary["workflow"] == "oc-flow"
+    # `run --json` reports the canonical final state (RUN_STATE_CONTRACT).
+    assert summary["status"] == "passed" and summary["workflow"] == "oc-flow"
     assert (work / "buggy_add.py").read_text(encoding="utf-8") == _FIXED_SRC
 
     # 6) release acceptance — record the DoD proof, then the e2e-dod gate reads MET.

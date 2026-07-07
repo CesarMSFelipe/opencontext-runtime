@@ -20,7 +20,7 @@ from opencontext_core.oc_new.models import (
     PhaseState,
 )
 from opencontext_core.oc_new.store import OcNewStore
-from opencontext_core.paths import StorageMode, resolve_workspace_path
+from opencontext_core.paths.execution_state import execution_workspace, runs_root
 from opencontext_core.workflow.phase_result import PhaseResultEnvelope
 
 if TYPE_CHECKING:
@@ -77,7 +77,7 @@ class OcNewConductor:
         if self.__coord_store is None:
             try:
                 self.__coord_store = AgentCoordinationStore(
-                    resolve_workspace_path(self.root, StorageMode.local) / "coordination.db"
+                    execution_workspace(self.root) / "coordination.db"
                 )
             except Exception:
                 # Return a no-op fallback object so callers can proceed.
@@ -397,11 +397,7 @@ class OcNewConductor:
 
             # NOTE: G4 — validate approval.json content before spawning apply subagent.
             if phase_def.name == "apply":
-                run_dir = (
-                    resolve_workspace_path(self.root, StorageMode.local)
-                    / "runs"
-                    / state.identity.run_id
-                )
+                run_dir = runs_root(self.root) / state.identity.run_id
                 approval_error = self._validate_approval_content(run_dir)
                 if approval_error:
                     return state.model_copy(
@@ -422,11 +418,7 @@ class OcNewConductor:
             # phase requires failing test evidence (failing_test.json in the run dir)
             # before the subagent is spawned, mirroring HarnessRunner's sdd_strict gate.
             if phase_def.name == "apply" and self._is_strict_tdd(state):
-                _run_dir = (
-                    resolve_workspace_path(self.root, StorageMode.local)
-                    / "runs"
-                    / state.identity.run_id
-                )
+                _run_dir = runs_root(self.root) / state.identity.run_id
                 if not (_run_dir / "failing_test.json").exists():
                     _block_reason = (
                         "strict TDD (tdd_mode='strict') requires failing test evidence "
@@ -505,9 +497,15 @@ class OcNewConductor:
                 )
 
             # NOTE: D3 — build deterministic context_report_ref and full AgentHandoff.
-            context_report_ref = (
-                f".opencontext/runs/{state.identity.run_id}/{phase_def.name}.context.json"
-            )
+            # The ref names the real run dir: root-relative in local mode
+            # (byte-identical legacy ``.opencontext/runs/...``), absolute when
+            # execution state lives in user-mode storage outside the project.
+            _ctx_run_dir = self.store.run_dir(state.identity.run_id)
+            try:
+                _ctx_base = _ctx_run_dir.relative_to(Path(self.root).resolve())
+            except ValueError:
+                _ctx_base = _ctx_run_dir
+            context_report_ref = f"{_ctx_base.as_posix()}/{phase_def.name}.context.json"
             handoff = AgentHandoff(
                 run_id=state.identity.run_id,
                 change_id=state.identity.change_id,
@@ -684,9 +682,7 @@ class OcNewConductor:
 
         from opencontext_core.agentic.receipt import AgenticReceipt, sha256_file, sha256_tree
 
-        run_dir = (
-            resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
-        )
+        run_dir = runs_root(self.root) / state.identity.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         config = state.config
@@ -733,9 +729,7 @@ class OcNewConductor:
             tasks=tasks,
             mode=git_mode,
         )
-        run_dir = (
-            resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
-        )
+        run_dir = runs_root(self.root) / state.identity.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         git_plan_path = run_dir / "git_plan.json"
         git_plan_path.write_text(json.dumps(plan.model_dump(), indent=2))
@@ -745,12 +739,7 @@ class OcNewConductor:
         from opencontext_core.agentic.budget import BudgetLedger
         from opencontext_core.agentic.budget_controller import BudgetController
 
-        ledger_path = (
-            resolve_workspace_path(self.root, StorageMode.local)
-            / "runs"
-            / state.identity.run_id
-            / "budget_ledger.json"
-        )
+        ledger_path = runs_root(self.root) / state.identity.run_id / "budget_ledger.json"
         if ledger_path.exists():
             ledger = BudgetLedger.model_validate_json(ledger_path.read_text())
         else:
@@ -763,12 +752,7 @@ class OcNewConductor:
         """Build budget metadata for agent handoff."""
         phase_budget = int(getattr(state.config, "phase_budget", 0) or 0)
         used_before = 0
-        ledger_path = (
-            resolve_workspace_path(self.root, StorageMode.local)
-            / "runs"
-            / state.identity.run_id
-            / "budget_ledger.json"
-        )
+        ledger_path = runs_root(self.root) / state.identity.run_id / "budget_ledger.json"
         if ledger_path.exists():
             try:
                 from opencontext_core.agentic.budget import BudgetLedger
@@ -804,12 +788,7 @@ class OcNewConductor:
 
         from opencontext_core.agentic.budget import BudgetLedger, PhaseBudget
 
-        ledger_path = (
-            resolve_workspace_path(self.root, StorageMode.local)
-            / "runs"
-            / run_id
-            / "budget_ledger.json"
-        )
+        ledger_path = runs_root(self.root) / run_id / "budget_ledger.json"
         if ledger_path.exists():
             ledger = BudgetLedger.model_validate_json(ledger_path.read_text())
         else:
@@ -905,9 +884,7 @@ class OcNewConductor:
         )
 
     def _missing_artifacts(self, state: OcNewRunState, phase_def: PhaseDefinition) -> list[str]:
-        run_dir = (
-            resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.identity.run_id
-        )
+        run_dir = runs_root(self.root) / state.identity.run_id
         spec_dir = self.root / "openspec" / "changes" / state.identity.change_id
         missing: list[str] = []
         for artifact in phase_def.required_artifacts:
@@ -950,17 +927,20 @@ class OcNewConductor:
             return None
         import json
 
-        run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / run_id
+        runs_base = runs_root(self.root)
+        run_dir = runs_base / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         proposal_path = run_dir / "lessons.json"
-        # NOTE: fail-closed — assert the resolved path never touches the user home.
-        home = Path.home()
+        # NOTE: fail-closed — assert the resolved path stays inside the runs
+        # namespace (never e.g. ``~/.claude/skills/``). In user mode the runs
+        # root itself lives under the user home (XDG state), so the guard pins
+        # the path to the resolved runs root rather than banning the home dir.
         try:
-            proposal_path.resolve().relative_to(home.resolve())
+            proposal_path.resolve().relative_to(runs_base.resolve())
         except ValueError:
-            pass
-        else:
-            raise RuntimeError("propose_archive_lessons would write under the user home; aborting")
+            raise RuntimeError(
+                "propose_archive_lessons would write outside the runs namespace; aborting"
+            ) from None
         flow_mode = getattr(getattr(config, "flow_mode", None), "value", "automatic")
         payload = {
             "run_id": run_id,

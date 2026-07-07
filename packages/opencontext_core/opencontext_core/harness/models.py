@@ -47,6 +47,10 @@ class GateStatus(StrEnum):
     # PASSED (which would imply edits were written). Mirrors OC Flow's
     # ``needs_executor`` vocabulary so the two surfaces stay consistent.
     NOT_APPLIED = "not_applied"
+    # Set on the HarnessRunResult when the run was interrupted (SIGINT /
+    # KeyboardInterrupt). Maps 1:1 onto the canonical ``cancelled`` state
+    # (RUN_STATE_CONTRACT); never produced by a gate evaluation.
+    CANCELLED = "cancelled"
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}.{self.name}>"
@@ -278,3 +282,8 @@ class HarnessRunResult:
     # REG-CONV: a noisy harness must be measurable. Fraction of gate findings later
     # judged false positives (0.0 default; populated by the benchmark loop in PR-017).
     false_positive_rate: float = 0.0
+    # TDD_STRICT_CONTRACT evidence block (additive; populated at persist time by
+    # ``HarnessRunner.persist_run``): mode, red/green evidence, red_proven /
+    # green_proven, and ``violation`` when a strict run was blocked on RED —
+    # the same block run.json carries, so `run --json` derives exit-6 parity.
+    tdd: dict[str, Any] | None = None

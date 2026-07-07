@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.agents.executor import ApplyEdit, ApplyOperation
 from opencontext_core.oc_flow.models import Lane
 from opencontext_core.oc_flow.runner import OCFlowRunner
@@ -39,3 +41,9 @@ def test_apply_receipt_records_checksums(tmp_path: Path) -> None:
     assert rec.get("checksum_after") and len(rec["checksum_after"]) == 64
     assert rec["checksum_before"] != rec["checksum_after"]
     assert result is not None
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

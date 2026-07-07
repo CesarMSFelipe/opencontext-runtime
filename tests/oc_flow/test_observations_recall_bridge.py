@@ -89,7 +89,9 @@ def test_cli_observation_is_recalled_into_flow_envelope(tmp_path: Path) -> None:
         proj,
         env,
     )
-    assert run.returncode == 0, run.stderr
+    # A mutation task without an executor honestly ends needs_executor -> exit 5
+    # (RUN_STATE_CONTRACT); the recall assertion below is what this test is about.
+    assert run.returncode in (0, 5), run.stderr
 
     envelopes = list((proj / ".opencontext").rglob("artifacts/oc-flow/context-envelope.json"))
     assert envelopes, "no context-envelope.json produced"

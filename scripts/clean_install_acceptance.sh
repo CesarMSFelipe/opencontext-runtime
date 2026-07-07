@@ -43,6 +43,11 @@ python3 -m venv "$VE"
   "$REPO_ROOT/packages/opencontext_cli" >"$WORK/install.log" 2>&1 \
   || { echo "install FAILED"; tail -20 "$WORK/install.log"; exit 1; }
 
+# A real Python project the user runs `oc run` against has a test runner in its
+# environment; the runtime resolves it to verify the fix. Install pytest into the
+# runtime venv so the `run` step exercises the full mutate->verify->pass path.
+"$VE/bin/pip" -q install pytest >>"$WORK/install.log" 2>&1
+
 OC="$VE/bin/opencontext"
 mkdir -p "$HOME_DIR" "$PROJ"
 printf 'def add(a, b):\n    return a - b\n' > "$PROJ/calc.py"
@@ -63,7 +68,34 @@ check init       oc init --non-interactive
 check setup      oc setup claude-code --scope local --non-interactive
 check index      oc index .
 check pack       oc pack . --query "add function" --format json
-check run        oc run "Fix failing test" --workflow auto --json
+
+# Wire the deterministic test_stub executor so `run` exercises the real
+# mutation+verify path on a clean install. Without a configured executor the
+# honest contract is `needs_executor` (exit 5, AC-009) — not a failure, but this
+# gate proves the productive path end to end. Config mirrors the acceptance
+# suite's stub setup (tests/acceptance/helpers/workspace.py).
+cat > "$PROJ/opencontext.yaml" <<'YAML'
+runtime:
+  oc_flow_enabled: true
+  gateway_enabled: true
+  durable_artifacts: true
+provider: test_stub
+edits_file: provider_stub.json
+YAML
+cat > "$PROJ/provider_stub.json" <<'JSON'
+[
+  {
+    "path": "calc.py",
+    "operation": "replace_range",
+    "start_line": 2,
+    "end_line": 2,
+    "content": "    return a + b",
+    "reason": "fix add: return the sum of its arguments",
+    "requirement_refs": ["add returns the sum of its arguments"]
+  }
+]
+JSON
+check run        oc run "Fix failing test" --json
 check mem_save   oc memory v2 save --title "Pref" --content "prefers pytest" --type preference
 check mem_search oc memory v2 search --query "pytest"
 check mem_doctor oc memory v2 doctor
@@ -74,7 +106,7 @@ check uninstall  oc uninstall claude-code --purge --full --verify --yes --root "
 # The strong uninstall must leave zero OpenContext *config* traces. It must NOT
 # delete user content: source files, .git, and the openspec/ SDD artifact store
 # (proposals/specs the user authored via `sdd new`) are the user's, not OC's.
-LEFT="$(cd "$PROJ" && ls -a | grep -Ev '^\.$|^\.\.$|^calc.py$|^test_calc.py$|^\.git$|^openspec$' | tr '\n' ' ')"
+LEFT="$(cd "$PROJ" && ls -a | grep -Ev '^\.$|^\.\.$|^calc.py$|^test_calc.py$|^provider_stub.json$|^\.git$|^openspec$' | tr '\n' ' ')"
 if [ -n "$LEFT" ]; then
   printf '  \033[31mFAIL\033[0m uninstall left traces: %s\n' "$LEFT"; FAILS=$((FAILS+1))
 else

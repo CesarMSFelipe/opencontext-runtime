@@ -1,15 +1,19 @@
-"""Seven-level configuration resolver (PR-013, SPEC-CLI-013-03).
+"""Layered configuration resolver (PR-013, SPEC-CLI-013-03; plan §6 order).
 
 Resolves the effective :class:`OpenContextConfig` by layering, in order (later
 wins):
 
 1. built-in defaults        (``default_config_data``)
-2. profile defaults         (``config_profiles.get_profile``)
-3. global user config        (``~/.opencontext/config.yaml``, if present)
+2. global user config        (``~/.opencontext/config.yaml``, if present)
+3. org/team config           (``$OPENCONTEXT_ORG_CONFIG`` or the global
+   ``org_config_path`` key; missing → empty layer)
 4. project config            (the project ``opencontext.yaml``)
-5. environment variables     (``OPENCONTEXT_*``)
-6. CLI / MCP request overrides
-7. runtime policy decisions
+5. profile overlay           (``config_profiles.get_profile``; only the keys
+   the selected profile defines)
+6. environment variables     (``OPENCONTEXT_*``)
+7. CLI / MCP request overrides (``overrides`` layer — plan §6 "flags CLI")
+8. temporary run overrides   (``run`` layer — plan §6 "overrides temporales de run")
+9. runtime policy decisions (internal; always topmost)
 
 Returns ``(config, provenance)`` where ``provenance`` records, per top-level
 key, which layer last set it — so a run can explain *why* a value is what it is
@@ -44,35 +48,54 @@ from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_wo
 # assert ordering without hard-coding strings.
 LAYERS: tuple[str, ...] = (
     "defaults",
-    "profile",
     "global",
+    "org",
     "project",
+    "profile",
     "env",
     "overrides",
+    "run",
     "policy",
 )
 
+# Explicit path to the org/team config file (highest-preference org source).
+_ORG_CONFIG_ENV = "OPENCONTEXT_ORG_CONFIG"
+
 # Environment-variable → dotted-config-path mapping. Kept small and explicit;
-# the most load-bearing knob is the profile selector.
+# the most load-bearing knob is the profile selector. TDD/storage mode also
+# have direct readers (harness runner / paths); this map makes them visible to
+# the resolver and `config explain` without breaking those readers.
 _ENV_MAP: dict[str, str] = {
     "OPENCONTEXT_PROFILE": "profile",
     "OPENCONTEXT_SECURITY_MODE": "security.mode",
     "OPENCONTEXT_PROVIDER_STRATEGY": "providers.strategy",
     "OPENCONTEXT_UI_LANGUAGE": "ui_language",
+    "OPENCONTEXT_TDD_MODE": "harness.tdd_mode",
+    "OPENCONTEXT_STORAGE_MODE": "storage.mode",
 }
 
 
 @dataclass
 class ResolutionProvenance:
-    """Records which layer set each top-level config key, plus profile origin."""
+    """Records which layer set each top-level config key, plus profile origin.
+
+    ``by_dotted_key``/``dotted_key_layers`` extend the top-level tracking to
+    nested dotted keys (additive; ``config explain`` consumes them).
+    """
 
     by_key: dict[str, str] = field(default_factory=dict)
     profile: str = DEFAULT_PROFILE
     profile_layer: str = "defaults"
+    by_dotted_key: dict[str, str] = field(default_factory=dict)
+    dotted_key_layers: dict[str, list[str]] = field(default_factory=dict)
 
     def layer_of(self, key: str) -> str:
         """Return the winning layer for *key* (``"defaults"`` if unseen)."""
         return self.by_key.get(key, "defaults")
+
+    def dotted_layer_of(self, dotted: str) -> str:
+        """Return the winning layer for nested *dotted* key (``"defaults"`` if unseen)."""
+        return self.by_dotted_key.get(dotted, "defaults")
 
 
 @dataclass
@@ -83,6 +106,21 @@ class ResolvedConfig:
     provenance: ResolutionProvenance
     profile: str
     data: dict[str, Any]
+
+
+def dotted_leaves(data: dict[str, Any], prefix: str = "") -> list[tuple[str, Any]]:
+    """Return ``(dotted_key, value)`` for every leaf of a nested mapping.
+
+    A leaf is any non-dict value or an empty dict.
+    """
+    leaves: list[tuple[str, Any]] = []
+    for key, value in data.items():
+        dotted = f"{prefix}{key}"
+        if isinstance(value, dict) and value:
+            leaves.extend(dotted_leaves(value, f"{dotted}."))
+        else:
+            leaves.append((dotted, value))
+    return leaves
 
 
 def _set_dotted(target: dict[str, Any], dotted: str, value: Any) -> None:
@@ -119,6 +157,22 @@ def _global_config_path() -> Path:
     return resolve_workspace_path(Path.home(), StorageMode.local) / "config.yaml"
 
 
+def resolve_org_config_file(env: dict[str, str], global_config: dict[str, Any]) -> Path | None:
+    """Locate the org/team config file, or ``None`` when not configured.
+
+    Preference order: the explicit ``$OPENCONTEXT_ORG_CONFIG`` path, then the
+    ``org_config_path`` key in the global config. Never scans parent
+    directories; a missing file resolves to an empty layer.
+    """
+    explicit = env.get(_ORG_CONFIG_ENV, "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+    candidate = global_config.get("org_config_path")
+    if isinstance(candidate, str) and candidate.strip():
+        return Path(candidate).expanduser()
+    return None
+
+
 def _pick_profile(layers: list[tuple[str, dict[str, Any]]]) -> tuple[str, str]:
     """Return ``(profile_name, winning_layer)`` from the non-profile layers.
 
@@ -134,42 +188,65 @@ def _pick_profile(layers: list[tuple[str, dict[str, Any]]]) -> tuple[str, str]:
     return DEFAULT_PROFILE, "defaults"
 
 
+def resolve_project_config_file(project_path: str | Path | None) -> Path | None:
+    """Locate the project config file *resolve* would load for *project_path*."""
+    if project_path is not None:
+        candidate = Path(project_path)
+        if candidate.is_dir():
+            project_file: Path | None = candidate / "opencontext.yaml"
+            if project_file is not None and not project_file.exists():
+                project_file = find_config(candidate)
+            return project_file
+        return candidate
+    return find_config(Path.cwd())
+
+
 def resolve(
     project_path: str | Path | None = None,
     *,
     env: dict[str, str] | None = None,
     cli_overrides: dict[str, Any] | None = None,
+    run_overrides: dict[str, Any] | None = None,
     policy: dict[str, Any] | None = None,
     global_config: dict[str, Any] | None = None,
+    project_config: dict[str, Any] | None = None,
+    org_config: dict[str, Any] | None = None,
 ) -> ResolvedConfig:
-    """Resolve the effective config over the seven documented layers."""
+    """Resolve the effective config over the documented layers (``LAYERS``).
+
+    ``cli_overrides`` carries CLI flag values (plan §6 layer 7); ``run_overrides``
+    carries temporary per-run overrides (plan §6 layer 8) and beats CLI flags.
+    ``project_config``/``org_config`` inject pre-loaded data (bypassing the
+    file read); ``config explain`` uses them to resolve with unknown keys
+    filtered.
+    """
     env = dict(os.environ if env is None else env)
     cli_overrides = dict(cli_overrides or {})
+    run_overrides = dict(run_overrides or {})
     policy = dict(policy or {})
 
-    project_file: Path | None = None
-    if project_path is not None:
-        candidate = Path(project_path)
-        if candidate.is_dir():
-            project_file = candidate / "opencontext.yaml"
-            if not project_file.exists():
-                project_file = find_config(candidate)
-        else:
-            project_file = candidate
-    else:
-        project_file = find_config(Path.cwd())
+    project_file = resolve_project_config_file(project_path)
 
-    project_raw = _normalize_legacy_config(_load_yaml(project_file))
+    if project_config is not None:
+        project_raw = _normalize_legacy_config(dict(project_config))
+    else:
+        project_raw = _normalize_legacy_config(_load_yaml(project_file))
     global_raw = global_config if global_config is not None else _load_yaml(_global_config_path())
+    if org_config is not None:
+        org_raw = _normalize_legacy_config(dict(org_config))
+    else:
+        org_raw = _normalize_legacy_config(_load_yaml(resolve_org_config_file(env, global_raw)))
     env_raw = _env_overrides(env)
 
     # First pass (without profile) to determine the effective profile selection,
     # honouring precedence (overrides/policy/env beat project).
     selection_layers: list[tuple[str, dict[str, Any]]] = [
         ("global", global_raw),
+        ("org", org_raw),
         ("project", project_raw),
         ("env", env_raw),
         ("overrides", cli_overrides),
+        ("run", run_overrides),
         ("policy", policy),
     ]
     profile_name, profile_layer = _pick_profile(selection_layers)
@@ -183,14 +260,17 @@ def resolve(
         profile_overlay = get_profile(profile_name)
 
     # ``profile`` is a real OpenContextConfig field, so the effective profile name
-    # is carried into the merged config (the selected overlay is layer 2).
+    # is carried into the merged config. The selected overlay sits above the
+    # workspace (project) layer per the plan order; env/overrides still beat it.
     ordered: list[tuple[str, dict[str, Any]]] = [
         ("defaults", {**default_config_data(), "profile": profile_name}),
-        ("profile", profile_overlay),
         ("global", global_raw),
+        ("org", org_raw),
         ("project", project_raw),
+        ("profile", profile_overlay),
         ("env", env_raw),
         ("overrides", cli_overrides),
+        ("run", run_overrides),
         ("policy", policy),
     ]
 
@@ -201,10 +281,30 @@ def resolve(
             continue
         for key in data:
             provenance.by_key[key] = layer_name
+        for dotted, _value in dotted_leaves(data):
+            provenance.by_dotted_key[dotted] = layer_name
+            provenance.dotted_key_layers.setdefault(dotted, []).append(layer_name)
         merged = _deep_merge(merged, data)
 
     config = OpenContextConfig.model_validate(merged)
     return ResolvedConfig(config=config, provenance=provenance, profile=profile_name, data=merged)
+
+
+def resolve_interface(project_path: str | Path | None = None) -> Any:
+    """Resolve the effective ``interface`` settings for entry-point gating (CFG-004).
+
+    CLI/TUI entry points call this to decide whether prompts, TUI screens, or
+    human-first output are allowed (the ``ci``/``local`` profiles overlay these
+    values). Fails open to the permissive :class:`InterfaceConfig` defaults when
+    resolution errors so a broken config never blocks the error-reporting paths
+    themselves.
+    """
+    from opencontext_core.config import InterfaceConfig
+
+    try:
+        return resolve(project_path).config.interface
+    except Exception:
+        return InterfaceConfig()
 
 
 def resolve_config_path(root: str | Path, explicit: str | Path | None = None) -> Path:
@@ -300,3 +400,30 @@ def resolve_active_workspace_path(root: str | Path) -> Path:
     root_path = Path(root)
     cfg = load_config_or_defaults(resolve_config_path(root_path), auto_detect=False)
     return resolve_workspace_path(root_path, cfg.storage.mode, cfg.storage.custom_path)
+
+
+def resolve_active_workspace_file(root: str | Path, name: str) -> Path:
+    """Locate workspace artifact *name* for *root* honoring the active storage mode.
+
+    Workspace analogue of :func:`resolve_active_storage_file` for execution
+    state (sessions, runs, receipts, checkpoints, learning). Precedence:
+
+    1. ``<resolved workspace path>/<name>`` when it exists
+    2. legacy in-repo ``<root>/.opencontext/<name>`` when it exists
+       (runs persisted before execution state moved to user-mode storage)
+    3. the resolved path from (1) even though it is missing, so callers report
+       the canonical location in their "not found" messages
+
+    Never creates directories or files. Robust to a malformed config: path
+    resolution delegates to ``paths.execution_state.execution_workspace``.
+    """
+    from opencontext_core.paths.execution_state import execution_workspace
+
+    root_path = Path(root)
+    resolved = execution_workspace(root_path) / name
+    if resolved.exists():
+        return resolved
+    legacy = resolve_workspace_path(root_path, StorageMode.local) / name
+    if legacy.exists():
+        return legacy
+    return resolved

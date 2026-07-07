@@ -6,9 +6,11 @@ Usage:
 
 Surfaces the advisory Runtime Brain decisions recorded for a run: each
 decision's kind, selected value, alternatives, and rationale. Reads the
-RuntimeApi session store at ``.opencontext/sessions/<session>/runs/<run>/run.json``
-(the Decision Log is attached to the run). Adaptive-but-not-opaque: the Brain
-recommends, the State Machine governs, and every choice is inspectable here.
+RuntimeApi session store at ``<sessions root>/<session>/runs/<run>/run.json``
+(the Decision Log is attached to the run), resolving the sessions root
+global-first (user-mode XDG state) with a legacy in-repo ``.opencontext``
+fallback. Adaptive-but-not-opaque: the Brain recommends, the State Machine
+governs, and every choice is inspectable here.
 """
 
 from __future__ import annotations
@@ -22,23 +24,30 @@ from opencontext_cli.output import eprint
 from opencontext_core.dx.console_styles import console
 from opencontext_core.runtime.decisions import summarize_decision_log
 from opencontext_core.runtime.run import RuntimeRun
-from opencontext_core.runtime.session_store import SessionStore
 
 
 def _root(args: Any) -> Path:
     return Path(getattr(args, "root", None) or Path.cwd())
 
 
-def _run_dirs(store: SessionStore) -> list[Path]:
-    """Every run directory on disk across all sessions (best-effort)."""
+def _run_dirs(root: Path) -> list[Path]:
+    """Every run directory on disk across all sessions (best-effort).
+
+    Scans the active (mode-resolved) sessions tree first, then the legacy
+    in-repo tree so runs persisted before the user-mode migration stay
+    inspectable.
+    """
+    from opencontext_core.paths import execution_state
+
     dirs: list[Path] = []
-    if not store.sessions_path.is_dir():
-        return dirs
-    for session_dir in sorted(store.sessions_path.glob("*")):
-        runs_dir = session_dir / "runs"
-        if not runs_dir.is_dir():
+    for sessions_path in execution_state.execution_read_roots(root, "sessions"):
+        if not sessions_path.is_dir():
             continue
-        dirs.extend(run_dir for run_dir in sorted(runs_dir.glob("*")) if run_dir.is_dir())
+        for session_dir in sorted(sessions_path.glob("*")):
+            runs_dir = session_dir / "runs"
+            if not runs_dir.is_dir():
+                continue
+            dirs.extend(run_dir for run_dir in sorted(runs_dir.glob("*")) if run_dir.is_dir())
     return dirs
 
 
@@ -99,11 +108,11 @@ def add_decisions_parser(subparsers: Any) -> None:
 def handle_decisions(args: Any) -> None:
     """Dispatch the ``decisions`` sub-command."""
     action = getattr(args, "decisions_action", None)
-    store = SessionStore(_root(args))
+    root = _root(args)
 
     if action == "list":
         rows: list[dict[str, Any]] = []
-        for run_dir in _run_dirs(store):
+        for run_dir in _run_dirs(root):
             decisions = _decisions_for(run_dir)
             if decisions:  # only runs that actually recorded decisions
                 rows.append({"run_id": run_dir.name, "decisions": len(decisions)})
@@ -122,7 +131,7 @@ def handle_decisions(args: Any) -> None:
         return
 
     if action == "show":
-        show_dir = next((d for d in _run_dirs(store) if d.name == args.run_id), None)
+        show_dir = next((d for d in _run_dirs(root) if d.name == args.run_id), None)
         if show_dir is None:
             eprint(f"Run not found: {args.run_id}")
             sys.exit(1)
@@ -149,7 +158,7 @@ def handle_decisions(args: Any) -> None:
         return
 
     if action == "explain":
-        explain_dir = next((d for d in _run_dirs(store) if d.name == args.run_id), None)
+        explain_dir = next((d for d in _run_dirs(root) if d.name == args.run_id), None)
         if explain_dir is None:
             eprint(f"Run not found: {args.run_id}")
             sys.exit(1)

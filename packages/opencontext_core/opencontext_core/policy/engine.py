@@ -28,6 +28,7 @@ from opencontext_core.policy.models import (
     POLICY_CONTRACT_VERSION,
     PolicyDecision,
 )
+from opencontext_core.policy.overlay import PoliciesOverlay
 from opencontext_core.policy.presets import (
     PolicyPreset,
     PresetPosture,
@@ -123,8 +124,13 @@ class PolicyEngine:
         command_enforcement: bool | None = None,
     ) -> None:
         self._config = config
+        # v2 ``policies:`` overlay (EXE-POLICIES): the documented yaml section is
+        # parsed once and applied over the preset posture; absent keys are inert.
+        self._overlay = PoliciesOverlay.from_mapping(
+            getattr(config, "policies", None) if config is not None else None
+        )
         self._preset = self._resolve_preset(preset, config)
-        self._posture: PresetPosture = posture_for(self._preset)
+        self._posture: PresetPosture = self._overlay.apply_to_posture(posture_for(self._preset))
         self._security_mode = self._resolve_security_mode(config)
         self._ci_mode = detect_ci() if ci_mode is None else ci_mode
         self._bus = event_bus
@@ -214,6 +220,17 @@ class PolicyEngine:
 
     def _eval_network(self, operation: PolicyOperation) -> PolicyDecision:
         """NET-1 — delegate to the fail-closed action evaluator."""
+        # EXE-POLICIES: an explicit ``policies: network: allow: false`` names the
+        # switch and short-circuits before delegation (deny either way today, but
+        # the reason is actionable and the gate survives evaluator changes).
+        if self._overlay.network_allow is False:
+            return self._decision(
+                "network",
+                "deny",
+                "network_disabled_by_policy",
+                "policy.network",
+                remediation="Network is disabled by policies.network.allow; enable it to proceed.",
+            )
         action = evaluate_action(
             ActionRequest(
                 action=ActionType.NETWORK,
@@ -309,6 +326,20 @@ class PolicyEngine:
     def _eval_command(self, operation: PolicyOperation) -> PolicyDecision:
         """CMD-1/CMD-2 — enforce the deny-list, then classify & adjudicate."""
         command = operation.command or ""
+        # EXE-002: ``policies: shell: allow: false`` is a total switch — every
+        # command is refused before deny-list matching or classification.
+        if self._overlay.shell_allow is False:
+            return self._decision(
+                "command",
+                "deny",
+                "shell_disabled",
+                "policy.command",
+                evidence=[f"command:{command}"],
+                remediation=(
+                    "Shell execution is disabled by policies.shell.allow; "
+                    "enable it to run commands."
+                ),
+            )
         if self._command_enforcement and self._classifier.is_forbidden(
             command, self._forbidden_commands
         ):
@@ -519,6 +550,10 @@ class PolicyEngine:
     ) -> PolicyPreset:
         if preset is not None:
             return resolve_preset(preset)
+        # EXE-POLICIES: the v2 ``policies.preset`` overlay wins over the typed
+        # ``policy.preset`` (the section is documented as an overlay over `policy`).
+        if self._overlay.preset:
+            return resolve_preset(self._overlay.preset)
         policy_cfg = getattr(config, "policy", None) if config is not None else None
         configured = getattr(policy_cfg, "preset", None) if policy_cfg is not None else None
         if configured:

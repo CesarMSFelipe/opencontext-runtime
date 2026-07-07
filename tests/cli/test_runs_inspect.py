@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from opencontext_cli.commands.run_cmd import handle_run_inspect
+from opencontext_cli.contracts.errors import CliContractError
 
 
 def _make_run(root: Path, run_id: str, *, status: str = "passed") -> Path:
@@ -61,11 +62,15 @@ def test_show_summary(tmp_path, capsys) -> None:
 
 
 def test_show_missing_run_exits(tmp_path) -> None:
-    with pytest.raises(SystemExit) as exc:
+    """An unknown run id raises the RUN_NOT_FOUND contract error: the
+    dispatcher renders it as a pure JSON envelope under --json and exits 1
+    (it used to print bare stderr text with EMPTY stdout — dirty JSON)."""
+    with pytest.raises(CliContractError) as exc:
         handle_run_inspect(
             SimpleNamespace(runs_action="show", run_id="ghost", root=str(tmp_path), json=True)
         )
-    assert exc.value.code == 1
+    assert exc.value.code == "RUN_NOT_FOUND"
+    assert exc.value.exit_code == 1
 
 
 def test_artifacts_lists_files(tmp_path, capsys) -> None:
@@ -80,11 +85,14 @@ def test_artifacts_lists_files(tmp_path, capsys) -> None:
 
 
 def test_artifacts_missing_run_exits(tmp_path) -> None:
-    with pytest.raises(SystemExit) as exc:
+    """An unknown run id raises the RUN_NOT_FOUND contract error (exit 1 via
+    the dispatcher, JSON envelope on stdout under --json)."""
+    with pytest.raises(CliContractError) as exc:
         handle_run_inspect(
             SimpleNamespace(runs_action="artifacts", run_id="ghost", root=str(tmp_path), json=True)
         )
-    assert exc.value.code == 1
+    assert exc.value.code == "RUN_NOT_FOUND"
+    assert exc.value.exit_code == 1
 
 
 def test_list_unions_runstore_index_and_disk(tmp_path, capsys) -> None:

@@ -21,7 +21,7 @@ from opencontext_core.oc_flow.models import Lane
 from opencontext_core.oc_flow.nodes import NodeExecutor, ProviderBackedNodeExecutor
 from opencontext_core.oc_flow.runner import OCFlowRunner
 from opencontext_core.operating_model.receipts import RunReceiptStore
-from opencontext_core.paths import StorageMode, resolve_workspace_path
+from opencontext_core.paths.execution_state import execution_read_roots
 from opencontext_core.providers.detect import detect_provider
 from opencontext_core.providers.gateway import ProviderGateway
 from opencontext_core.providers.test_stub import TestStubGateway
@@ -154,34 +154,57 @@ def run_oc_flow_cli(
 def _resolve_executor(root: Path) -> NodeExecutor | None:
     """Build a productive provider-backed executor when a real provider is detected.
 
-    Reads the ambient environment via :func:`detect_provider`. When a non-mock
-    provider is available it composes the PR-012 :class:`ProviderGateway` (run
-    receipts + bounded local-first fallback) over a base gateway bound to that
-    provider, then returns a :class:`ProviderBackedNodeExecutor` so a mutation task
-    produces a REAL ``ApplyEdit`` (VDM-005). When no provider is detected (``mock``)
-    — or the detected provider has no buildable adapter (e.g. ``google``/``mistral``)
-    — it returns ``None`` so the runner falls back to the model-free
+    Reads the ambient environment via :func:`detect_provider`, then consults the
+    formal :class:`~opencontext_core.executors.registry.ExecutorRegistry` to build
+    the executor for the resolved id (a formalization of the previously hardcoded
+    resolution — behavior for existing configs is identical). When a non-mock
+    provider is available the ``provider`` executor composes the PR-012
+    :class:`ProviderGateway` (run receipts + bounded local-first fallback) over a
+    base gateway bound to that provider, so a mutation task produces a REAL
+    ``ApplyEdit`` (VDM-005). When no provider is detected (``mock``) — or the
+    detected provider has no buildable adapter (e.g. ``google``/``mistral``) — it
+    returns ``None`` so the runner falls back to the model-free
     ``DeterministicNodeExecutor`` and a mutation task is reported honestly as
     ``needs_executor`` (never a false ``completed`` with empty ``changed_files`` —
     B1/B8). The full provider -> validate -> policy -> checkpoint -> apply -> receipt
     -> inspection -> verify pipeline lives in ``ProviderBackedNodeExecutor``.
     """
+    from opencontext_core.executors.registry import default_registry
+
+    registry = default_registry()
     det = detect_provider()
     if det.name == "mock":
         from opencontext_core.llm.sampling_gateway import get_host_sampler
-        from opencontext_core.oc_flow.mcp_executor import MCPSamplingNodeExecutor
 
         if sampler := get_host_sampler():
-            return MCPSamplingNodeExecutor(sampler=sampler, root=root)
+            return registry.build("mcp", root=root, sampler=sampler)  # type: ignore[no-any-return]
         # TEST-ONLY gate (PROD-002 / design B2): a config that EXPLICITLY declares
         # `provider: test_stub` with a resolvable `edits_file` drives the real mutation
         # pipeline credential-free. This is NEVER a production fallback — any other
         # state (no config, no `test_stub`, or a missing / out-of-root `edits_file`)
-        # returns None exactly as the pre-change path, so the runner falls back to the
-        # model-free DeterministicNodeExecutor and a mutation task stays honestly
-        # `needs_executor`.
-        return _resolve_test_stub_executor(root)
-    base = build_provider_gateway(det.name, det.model)
+        # falls through, exactly as the pre-change path.
+        if (stub := registry.build("test_stub", root=root)) is not None:
+            return stub  # type: ignore[no-any-return]
+        # EXE-004: an explicit `provider: patch` + resolvable `patch_file` drives the
+        # same real mutation pipeline from a unified-diff file. Never a fallback —
+        # without the explicit opt-in this is None and the runner keeps the
+        # model-free DeterministicNodeExecutor (`needs_executor`).
+        return registry.build("patch", root=root)  # type: ignore[no-any-return]
+    return registry.build(  # type: ignore[no-any-return]
+        "provider", root=root, provider_name=det.name, model=det.model
+    )
+
+
+def _build_detected_provider_executor(
+    root: Path, provider_name: str, model: str
+) -> NodeExecutor | None:
+    """Build the productive executor for a detected (non-mock) provider.
+
+    Returns ``None`` when the provider has no buildable adapter, preserving the
+    honest ``needs_executor`` path. Registered as the ``provider`` builder in the
+    executor registry; the construction is byte-identical to the pre-registry code.
+    """
+    base = build_provider_gateway(provider_name, model)
     if base is None:
         return None
     gateway = ProviderGateway(
@@ -191,23 +214,42 @@ def _resolve_executor(root: Path) -> NodeExecutor | None:
         adapter_factory=build_adapter,
     )
     return ProviderBackedNodeExecutor(
-        gateway=gateway, root=root, provider=det.name, model=det.model
+        gateway=gateway, root=root, provider=provider_name, model=model
     )
+
+
+def _explicit_default_executor(raw: dict[str, Any]) -> str | None:
+    """Return the ``executors.default`` id ONLY when the file declares it explicitly.
+
+    Plan §6 (PROFILES-RUNTIME): the canonical config's ``executors:`` section is an
+    executor-selection knob the runtime honors. Deliberately raw-read — the typed
+    schema's default (``test_stub``) must never count as an explicit opt-in, so a
+    config without an ``executors:`` section behaves exactly as before (B2).
+    """
+    executors = raw.get("executors")
+    if not isinstance(executors, dict):
+        return None
+    default = executors.get("default")
+    return default if isinstance(default, str) and default else None
 
 
 def _resolve_test_stub_executor(root: Path) -> NodeExecutor | None:
     """Build a ``TestStubGateway``-backed executor IFF config explicitly opts in (B2).
 
     TEST-ONLY: returns a productive :class:`ProviderBackedNodeExecutor` ONLY when the
-    resolved ``opencontext.yaml`` declares ``provider: test_stub`` AND a resolvable
-    ``edits_file`` that exists under *root*. Any other state — no config, no
-    ``test_stub``, a missing / non-string ``edits_file``, a file that does not exist,
-    or one escaping *root* — returns ``None`` so the caller behaves EXACTLY as the
-    pre-change production path. This is never a production resolver fallback; the
-    no-fallthrough invariant is asserted in ``tests/oc_flow/test_test_stub_resolution.py``.
+    resolved ``opencontext.yaml`` declares ``provider: test_stub`` (or the plan §6
+    ``executors: {default: test_stub}`` section) AND a resolvable ``edits_file`` that
+    exists under *root*. Any other state — no config, no ``test_stub``, a missing /
+    non-string ``edits_file``, a file that does not exist, or one escaping *root* —
+    returns ``None`` so the caller behaves EXACTLY as the pre-change production path.
+    This is never a production resolver fallback; the no-fallthrough invariant is
+    asserted in ``tests/oc_flow/test_test_stub_resolution.py``.
     """
     raw = _read_yaml_mapping(resolve_config_path(root, None))
-    if raw.get("provider") != "test_stub":
+    opted_in = raw.get("provider") == "test_stub" or (
+        raw.get("provider") is None and _explicit_default_executor(raw) == "test_stub"
+    )
+    if not opted_in:
         return None
     edits_file = raw.get("edits_file")
     if not edits_file or not isinstance(edits_file, str):
@@ -246,11 +288,14 @@ def _within(root: Path, candidate: Path) -> bool:
 
 
 def _latest_session(root: Path) -> str:
-    sessions = resolve_workspace_path(root, StorageMode.local) / "sessions"
-    if not sessions.is_dir():
-        return ""
-    candidates = sorted((d for d in sessions.iterdir() if d.is_dir()), key=lambda d: d.name)
-    return candidates[-1].name if candidates else ""
+    # Active sessions tree first; legacy in-repo tree covers pre-migration runs.
+    for sessions in execution_read_roots(root, "sessions"):
+        if not sessions.is_dir():
+            continue
+        candidates = sorted((d for d in sessions.iterdir() if d.is_dir()), key=lambda d: d.name)
+        if candidates:
+            return candidates[-1].name
+    return ""
 
 
 def _maybe_print(summary: dict[str, Any], as_json: bool) -> None:

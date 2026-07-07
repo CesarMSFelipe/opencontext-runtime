@@ -68,7 +68,25 @@ def _check_secrets(path: Path, scanner: SecretScanner) -> dict[str, object] | No
 
 
 def _run_command(label: str, command: list[str], root: Path) -> dict[str, object]:
-    """Run an external check; a non-zero exit is a recoverable failure."""
+    """Run an external check; a non-zero exit is a recoverable failure.
+
+    The executed command, its exit code and the capture time are recorded on the
+    gate (additive keys) so the run report can persist real GREEN evidence.
+
+    The child env is sanitized so the check leaves no residue in the user's
+    project tree (PRODUCT_CONTRACT §Storage modes / AC-031): outer ``PYTEST_*``
+    vars are stripped, ``PYTHONDONTWRITEBYTECODE=1`` suppresses ``__pycache__``,
+    and ``PYTEST_ADDOPTS='-p no:cacheprovider'`` keeps pytest from writing
+    ``.pytest_cache`` (ignored by non-pytest commands).
+    """
+    import os
+    from datetime import UTC, datetime
+
+    command_text = " ".join(str(part) for part in command)
+    captured_at = datetime.now(tz=UTC).isoformat()
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTEST_ADDOPTS"] = "-p no:cacheprovider"
     try:
         proc = subprocess.run(
             command,
@@ -77,13 +95,21 @@ def _run_command(label: str, command: list[str], root: Path) -> dict[str, object
             text=True,
             timeout=120,
             check=False,
+            env=env,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return _gate(label, _RECOVERABLE, f"{label} could not run: {exc}")
+        gate = _gate(label, _RECOVERABLE, f"{label} could not run: {exc}")
+        gate["command"] = command_text
+        return gate
     if proc.returncode != 0:
         tail = (proc.stdout + proc.stderr).strip().splitlines()[-1:] or [""]
-        return _gate(label, _RECOVERABLE, f"{label} failed: {tail[0][:200]}")
-    return _gate(label, _PASSED, f"{label} passed")
+        gate = _gate(label, _RECOVERABLE, f"{label} failed: {tail[0][:200]}")
+    else:
+        gate = _gate(label, _PASSED, f"{label} passed")
+    gate["command"] = command_text
+    gate["exit_code"] = proc.returncode
+    gate["captured_at"] = captured_at
+    return gate
 
 
 def _worst(gates: list[dict[str, object]]) -> str:

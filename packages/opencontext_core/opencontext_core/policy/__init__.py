@@ -38,6 +38,7 @@ from opencontext_core.policy.models import (
     PolicyDecision,
     PolicyReceipt,
 )
+from opencontext_core.policy.overlay import PoliciesOverlay
 from opencontext_core.policy.presets import (
     DEFAULT_PRESET,
     PRESET_TABLE,
@@ -66,6 +67,7 @@ __all__ = [
     "ChangeRisk",
     "CommandCategory",
     "CommandClassifier",
+    "PoliciesOverlay",
     "PolicyDecision",
     "PolicyEngine",
     "PolicyOperation",

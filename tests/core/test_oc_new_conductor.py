@@ -213,3 +213,9 @@ def test_mark_done_raises_when_envelope_missing(tmp_path):
         conductor.mark_done(
             state.identity.run_id, "explore", artifact_paths=["explore.artifact.json"]
         )
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

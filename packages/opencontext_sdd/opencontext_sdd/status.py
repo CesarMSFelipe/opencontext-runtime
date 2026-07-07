@@ -28,7 +28,9 @@ class Status(BaseModel):
     """Canonical SDD status envelope, ``opencontext.sdd-status@1``.
 
     Owns its own namespace (not a clone of ``gentle-ai.sdd-status``).
-    14 top-level fields per REQ-OSS-001.
+    14 core fields per REQ-OSS-001, plus additive operational fields
+    (``cycleState``, ``currentPhase``, ``gates``, ``gatesRun``) per
+    SDD_CONTRACT §State machine / §Status JSON (SDD-STATES / SDD-RULES).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -48,6 +50,11 @@ class Status(BaseModel):
     relationships: dict[str, str] = Field(default_factory=dict)
     nextRecommended: str = "select-change"
     blockedReasons: list[str] = Field(default_factory=list)
+    # Additive operational fields (never removed/renamed — additive JSON only).
+    cycleState: str = "draft"
+    currentPhase: str = "none"
+    gates: list[dict[str, Any]] = Field(default_factory=list)
+    gatesRun: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +114,8 @@ def _read_context(cwd: Path) -> dict[str, Any]:
 def _list_changes(changes_root: Path) -> list[str]:
     if not changes_root.exists():
         return []
-    return sorted(p.name for p in changes_root.iterdir() if p.is_dir())
+    # ``archive/`` holds closed changes (`sdd archive`) — never an active change.
+    return sorted(p.name for p in changes_root.iterdir() if p.is_dir() and p.name != "archive")
 
 
 def _scan_artifacts(
@@ -118,7 +126,17 @@ def _scan_artifacts(
     states: dict[str, ArtifactState] = {}
     blocked: list[str] = []
 
+    # Exploration artifact (additive): persisted by the explore phase or authored
+    # by an agent. Presence-only state — it never blocks the decision tree.
+    exploration = change_root / "exploration.md"
+    if exploration.exists():
+        paths["exploration"] = exploration.relative_to(cwd).as_posix()
+        states["exploration"] = "done"
+
     proposal = change_root / "proposal.md"
+    if not proposal.exists() and (change_root / "propose.md").exists():
+        # Back-compat: older `sdd new` scaffolds named the artifact propose.md.
+        proposal = change_root / "propose.md"
     if proposal.exists():
         paths["proposal"] = proposal.relative_to(cwd).as_posix()
         states["proposal"] = "done"
@@ -154,6 +172,13 @@ def _scan_artifacts(
     else:
         states["tasks"] = "missing"
         blocked.append("missing:tasks.md")
+
+    # Review report (additive): written by `sdd review`; presence-only state —
+    # it never blocks the phase decision tree.
+    review = change_root / "review-report.json"
+    if review.exists():
+        paths["review-report"] = review.relative_to(cwd).as_posix()
+        states["review-report"] = "done"
 
     verify = change_root / "verify-report.md"
     if verify.exists():
@@ -198,6 +223,109 @@ def _decide_next(
     return "archive", "done"
 
 
+# ---------------------------------------------------------------------------
+# Cycle state machine (SDD-STATES) + latest-run gates (SDD-RULES)
+# ---------------------------------------------------------------------------
+
+#: SDD cycle states per SDD_CONTRACT §State machine (DOC1 §8).
+CYCLE_STATES: tuple[str, ...] = (
+    "draft",
+    "explored",
+    "proposed",
+    "specified",
+    "designed",
+    "tasked",
+    "applying",
+    "verified",
+    "reviewed",
+    "archived",
+    "blocked",
+    "failed",
+)
+
+#: Cycle state → the phase the change is currently in ("fase actual").
+_CYCLE_TO_PHASE: dict[str, str] = {
+    "draft": "none",
+    "explored": "explore",
+    "proposed": "propose",
+    "specified": "spec",
+    "designed": "design",
+    "tasked": "tasks",
+    "applying": "apply",
+    "verified": "verify",
+    "failed": "verify",
+    "reviewed": "review",
+    "archived": "archive",
+    "blocked": "none",
+}
+
+
+def derive_cycle_state(artifacts: dict[str, ArtifactState], blocked: list[str]) -> str:
+    """Map disk artifact states to the SDD cycle state machine position.
+
+    Forward progression (draft → … → reviewed) is derived from which artifacts
+    are done; the exception states come from the blocked reasons: a missing or
+    ambiguous change and an inconsistent verify-report are ``blocked``, a FAIL
+    verify verdict is ``failed``.
+    """
+    if any(b.startswith(("missing:changes/", "ambiguous:")) for b in blocked):
+        return "blocked"
+    if "verify_report:missing_verdict_field" in blocked:
+        return "blocked"
+    state = "draft"
+    if artifacts.get("exploration") == "done":
+        state = "explored"
+    if artifacts.get("proposal") == "done":
+        state = "proposed"
+    if artifacts.get("specs") == "done":
+        state = "specified"
+    if artifacts.get("design") == "done":
+        state = "designed"
+    tasks = artifacts.get("tasks")
+    if tasks == "done":
+        state = "tasked"
+    elif tasks == "partial":
+        state = "applying"
+    if any(b.startswith("verify_report:FAIL") for b in blocked):
+        return "failed"
+    if artifacts.get("verify-report") == "done":
+        state = "reviewed" if artifacts.get("review-report") == "done" else "verified"
+    return state
+
+
+def current_phase_for(cycle_state: str) -> str:
+    """Return the phase the cycle is currently in for a given state."""
+    return _CYCLE_TO_PHASE.get(cycle_state, "none")
+
+
+def _load_latest_gates(cwd: Path) -> tuple[list[dict[str, Any]], str | None]:
+    """Read the newest ``.opencontext/runs/<id>/gates.json`` gate summaries.
+
+    Returns ``([], None)`` when no run evidence exists — gates are surfaced from
+    real harness runs only, never fabricated.
+    """
+    runs_root = cwd / ".opencontext" / "runs"
+    if not runs_root.is_dir():
+        return [], None
+    try:
+        candidates = sorted(runs_root.glob("*/gates.json"), key=lambda p: p.stat().st_mtime)
+    except OSError:
+        return [], None
+    if not candidates:
+        return [], None
+    latest = candidates[-1]
+    try:
+        data = json.loads(latest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return [], None
+    gates: list[dict[str, Any]] = []
+    for gate in data.get("gates", []) or []:
+        if isinstance(gate, dict):
+            keys = ("id", "phase", "status", "message")
+            gates.append({k: gate.get(k) for k in keys if k in gate})
+    return gates, latest.parent.name
+
+
 def Resolve(change: str | None, *, cwd: str) -> Status:
     """Read ``openspec/changes/<change>/`` on disk and decide the next phase.
 
@@ -208,6 +336,7 @@ def Resolve(change: str | None, *, cwd: str) -> Status:
     artifact_store = context.get("artifactStore", "hybrid")
     tdd_mode = context.get("tdd_mode", "ask")
     changes_root = cwd_path / "openspec" / "changes"
+    gates, gates_run = _load_latest_gates(cwd_path)
 
     if change is None:
         names = _list_changes(changes_root)
@@ -218,6 +347,10 @@ def Resolve(change: str | None, *, cwd: str) -> Status:
                 changeName=None,
                 nextRecommended="select-change",
                 blockedReasons=["ambiguous:select-change"],
+                cycleState="blocked",
+                currentPhase="none",
+                gates=gates,
+                gatesRun=gates_run,
             )
         change = names[0]
 
@@ -229,10 +362,15 @@ def Resolve(change: str | None, *, cwd: str) -> Status:
             actionContext={"tdd_mode": tdd_mode},
             nextRecommended="select-change",
             blockedReasons=[f"missing:changes/{change}"],
+            cycleState="blocked",
+            currentPhase="none",
+            gates=gates,
+            gatesRun=gates_run,
         )
 
     paths, artifacts, blocked = _scan_artifacts(change_root, cwd_path)
     next_rec, apply_state = _decide_next(blocked, artifacts, change_root)
+    cycle_state = derive_cycle_state(artifacts, blocked)
 
     return Status(
         changeName=change,
@@ -244,14 +382,21 @@ def Resolve(change: str | None, *, cwd: str) -> Status:
         actionContext={"tdd_mode": tdd_mode},
         nextRecommended=next_rec,
         blockedReasons=blocked,
+        cycleState=cycle_state,
+        currentPhase=current_phase_for(cycle_state),
+        gates=gates,
+        gatesRun=gates_run,
     )
 
 
 __all__ = [
+    "CYCLE_STATES",
     "ApplyState",
     "ArtifactState",
     "ArtifactStoreMode",
     "Resolve",
     "Status",
+    "current_phase_for",
+    "derive_cycle_state",
     "parse_verify_report",
 ]

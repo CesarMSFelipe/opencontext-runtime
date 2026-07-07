@@ -6,7 +6,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from opencontext_core.agentic.config import BudgetMode, FlowMode, MemoryMode
 from opencontext_core.compat import StrEnum
@@ -857,6 +864,14 @@ class MemoryPolicyConfig(BaseModel):
         default=True, description="Harvest memory automatically after each run."
     )
     require_approval: bool = Field(default=True, description="Harvested memories require approval.")
+    approval_required: bool = Field(
+        default=False,
+        description=(
+            "MEMORY_CONTRACT approval flow: when true, new memory v2 saves land as "
+            "'proposed' and are excluded from recall/search until approved "
+            "(`opencontext memory approve <id>`). Default false keeps saves 'active'."
+        ),
+    )
     store_raw: bool = Field(default=False, description="Raw memory storage disabled.")
     default_classification: str = Field(default="internal", description="Default memory class.")
     retention_days: int = Field(default=90, ge=1, description="Default retention window.")
@@ -1463,6 +1478,52 @@ class HarnessSettingsConfig(BaseModel):
     )
 
 
+class ExecutorsConfig(BaseModel):
+    """Executor selection settings (plan §6 canonical config ``executors:`` section).
+
+    ``default`` names the executor id the runtime prefers when no live provider
+    is detected (``test_stub`` per the plan's canonical config; the executor
+    still requires its own explicit opt-in inputs, e.g. ``edits_file``).
+    ``allow_shell`` is the forward-declared gate for shell-capable executors;
+    no built-in executor runs shell commands today, so ``False`` forbids
+    nothing yet but pins the documented default.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    default: str = Field(
+        default="test_stub",
+        description="Preferred executor id when no live provider is detected.",
+    )
+    allow_shell: bool = Field(
+        default=False,
+        description="Allow shell-capable executors (no built-in executor uses this yet).",
+    )
+
+
+class InterfaceConfig(BaseModel):
+    """Runtime-mode interface settings (plan §6 ci/local/agent profiles).
+
+    Drive whether the CLI may prompt, launch the TUI, or default to JSON
+    output. The ``ci``/``local`` built-in profiles overlay these.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    interactive: bool = Field(
+        default=True,
+        description="Allow interactive prompts (False for CI/agent runs).",
+    )
+    tui: bool = Field(
+        default=True,
+        description="Allow launching TUI screens (False for CI/agent runs).",
+    )
+    json_default: bool = Field(
+        default=False,
+        description="Default to machine-readable JSON output when supported.",
+    )
+
+
 class RuntimeBrainConfig(BaseModel):
     """Advisory Runtime Brain controls (PR-000.1).
 
@@ -1573,8 +1634,17 @@ class OpenContextConfig(BaseModel):
 
     # Selected built-in configuration profile (PR-013, SPEC-CLI-013-02). One of
     # balanced/low-cost/enterprise/research/performance. Resolved against the
-    # seven-level resolver (``config_resolver``); ``balanced`` is the default.
+    # layered resolver (``config_resolver``); ``balanced`` is the default.
     profile: str = Field(default="balanced", description="Active configuration profile.")
+
+    # Optional org/team config file, overlaid between the global and project
+    # layers by ``config_resolver``. Meaningful in the global config (the
+    # OPENCONTEXT_ORG_CONFIG env var takes preference); never inferred by
+    # scanning parent directories.
+    org_config_path: str | None = Field(
+        default=None,
+        description="Path to an org/team config overlaid between global and project layers.",
+    )
 
     # Test/dev provider override for deterministic OC Flow mutation without live
     # credentials (PROD-002). When ``provider == "test_stub"`` and ``edits_file``
@@ -1586,6 +1656,12 @@ class OpenContextConfig(BaseModel):
     )
     edits_file: str | None = Field(
         default=None, description="JSON ApplyEdit file used by the test_stub provider."
+    )
+    # Unified-diff executor opt-in (EXE-004). When ``provider == "patch"`` and
+    # ``patch_file`` resolves under the project root, the CLI builds a
+    # PatchGateway executor that applies the diff through the normal pipeline.
+    patch_file: str | None = Field(
+        default=None, description="Unified-diff file used by the patch executor."
     )
 
     project: ProjectConfig = Field(description="Project configuration.")
@@ -1654,6 +1730,14 @@ class OpenContextConfig(BaseModel):
         default_factory=HarnessSettingsConfig,
         description="Agentic harness governance settings (TDD / approval pre-gates).",
     )
+    interface: InterfaceConfig = Field(
+        default_factory=InterfaceConfig,
+        description="Interactive/TUI/JSON-default interface settings (ci/local profiles).",
+    )
+    executors: ExecutorsConfig = Field(
+        default_factory=ExecutorsConfig,
+        description="Executor selection settings (preferred executor id, shell gate).",
+    )
     runtime_brain: RuntimeBrainConfig = Field(
         default_factory=RuntimeBrainConfig,
         description="Advisory Runtime Brain decision-layer controls (default off).",
@@ -1707,6 +1791,27 @@ class OpenContextConfig(BaseModel):
         description="v2 studio section — reserved for PR-014 (validates, no impl required).",
     )
 
+    @model_validator(mode="after")
+    def _apply_policies_overlay(self) -> OpenContextConfig:
+        """Wire the v2 ``policies:`` section onto its typed enforcement fields.
+
+        EXE-POLICIES: ``policies.writes.require_approval`` drives the field the
+        ApplyPhase approval pre-gate reads, and ``policies.shell.allow`` drives
+        the executors shell gate (EXE-002). The posture-mapped keys (network/
+        secrets/destructive/preset) are consumed by the PolicyEngine directly.
+        Absent keys change nothing.
+        """
+        if not self.policies:
+            return self
+        from opencontext_core.policy.overlay import PoliciesOverlay
+
+        overlay = PoliciesOverlay.from_mapping(self.policies)
+        if overlay.writes_require_approval is not None:
+            self.harness.approval_required_for_writes = overlay.writes_require_approval
+        if overlay.shell_allow is not None:
+            self.executors.allow_shell = overlay.shell_allow
+        return self
+
 
 def find_config(start_dir: str | Path = ".") -> Path | None:
     """Search for ``opencontext.yaml`` in *start_dir* and parent directories.
@@ -1728,6 +1833,62 @@ def find_config(start_dir: str | Path = ".") -> Path | None:
     return None
 
 
+class LegacyConfigWarning(UserWarning):
+    """A config file used a legacy shape that was auto-migrated at load time.
+
+    CFG-008: ordinary loads must not silently normalize old configs — the user
+    gets an explicit notice naming the legacy key and its replacement so the
+    file can be updated to the canonical spelling.
+    """
+
+
+# Deprecated config keys → canonical replacement (dotted paths). Single generic
+# registry: `load_config` warns on these at load time, and `config doctor` /
+# `config explain` (via `find_deprecated_keys`) report them with a hint. The
+# legacy compression key is spelled via concatenation for the same reason
+# `_normalize_legacy_config` does: product source must not carry the old name.
+DEPRECATED_CONFIG_KEYS: dict[str, str] = {
+    "context.compression." + "cave" + "man_intensity": "context.compression.terse_intensity",
+}
+
+
+def _has_dotted_key(data: dict[str, Any], dotted: str) -> bool:
+    node: Any = data
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return False
+        node = node[part]
+    return True
+
+
+def find_deprecated_keys(raw: dict[str, Any]) -> list[dict[str, str]]:
+    """Report deprecated keys present in the raw (pre-normalization) config."""
+    findings: list[dict[str, str]] = []
+    for old, new in DEPRECATED_CONFIG_KEYS.items():
+        if _has_dotted_key(raw, old):
+            findings.append(
+                {
+                    "key": old,
+                    "replacement": new,
+                    "hint": f"Rename '{old}' to '{new}' in opencontext.yaml.",
+                }
+            )
+    return findings
+
+
+def _warn_legacy_config(raw_data: dict[str, Any], config_path: Path) -> None:
+    """Emit a :class:`LegacyConfigWarning` per legacy key found in *raw_data* (CFG-008)."""
+    import warnings
+
+    for finding in find_deprecated_keys(raw_data):
+        warnings.warn(
+            f"Legacy config key '{finding['key']}' in {config_path} was auto-migrated "
+            f"to '{finding['replacement']}'. {finding['hint']}",
+            LegacyConfigWarning,
+            stacklevel=3,
+        )
+
+
 def load_config(path: str | Path = "configs/opencontext.yaml") -> OpenContextConfig:
     """Load and validate an OpenContext YAML configuration file.
 
@@ -1747,6 +1908,7 @@ def load_config(path: str | Path = "configs/opencontext.yaml") -> OpenContextCon
     if not isinstance(raw_data, dict):
         raise ConfigurationError(f"Configuration root must be a mapping: {config_path}")
 
+    _warn_legacy_config(raw_data, config_path)
     merged_data = _deep_merge(default_config_data(), _normalize_legacy_config(raw_data))
 
     try:

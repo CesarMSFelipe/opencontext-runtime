@@ -5,6 +5,8 @@ from __future__ import annotations
 import types
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.config import OpenContextConfig, default_config_data
 from opencontext_core.learning import candidate_extractor
 from opencontext_core.learning.loop import LearningLoop
@@ -119,3 +121,9 @@ def test_post_run_evolution_skips_loop_when_flag_off(tmp_path: Path) -> None:
 
     # Legacy path writes no Decision Log artifact.
     assert not (tmp_path / ".opencontext" / "learning" / "decisions").exists()
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

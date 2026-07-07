@@ -64,6 +64,7 @@ from opencontext_core.harness.phases import (
 )
 from opencontext_core.models.trace import RunEvent
 from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
+from opencontext_core.paths.execution_state import runs_root
 from opencontext_core.workflow.delegation_validator import (
     DelegationValidationError,
     DelegationValidator,
@@ -111,6 +112,10 @@ class HarnessState:
         # PR-000 ProgramPlan attached to the run for meta-plan-aware phase scoping
         # (spec PR-004 SDD-CONV). None when no program plan is present.
         self.program_plan: Any = None
+        # True once an apply PRE-gate (approval / strict-TDD RED) blocked the
+        # run before any write — terminal for mutation: the fix-loop must not
+        # re-apply on a run that never legitimately wrote (TDD_STRICT_CONTRACT).
+        self.apply_blocked_pre_gate: bool = False
         self.ledgers: list[PhaseLedger] = []
         self.gates: list[PhaseGate] = []
         self.artifacts: list[HarnessArtifact] = []
@@ -197,6 +202,9 @@ class HarnessRunner:
         # SDD-CONV). Default off → legacy advisory scaffold reporting.
         self._sdd_strict = False
         self._workflow_registry: Any = None
+        # The state of the run currently executing (set by create_run), used by
+        # the cancellation finalizer to locate the run dir on interrupt.
+        self._active_state: HarnessState | None = None
 
         # Agent memory store. This MUST resolve to the same DB (path + provider)
         # the runtime's recall path reads, or every harvested memory lands in a
@@ -269,6 +277,7 @@ class HarnessRunner:
         delegate = self._build_executor()
         if delegate is not None:
             state.delegate = delegate
+        self._active_state = state
         return state
 
     def _load_program_plan(self) -> Any:
@@ -665,7 +674,7 @@ class HarnessRunner:
     def _write_selection_receipt(self, state: HarnessState, receipt: Any) -> None:
         """Persist the workflow-selection receipt into the run dir (spec RCPT1)."""
         try:
-            run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
+            run_dir = runs_root(self.root) / state.run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             (run_dir / "workflow-selection.json").write_text(
                 json.dumps(receipt.model_dump(mode="json"), indent=2),
@@ -684,9 +693,7 @@ class HarnessRunner:
         """
         import json as _json
 
-        events_path = (
-            resolve_workspace_path(self.root, StorageMode.local) / "runs" / run_id / "events.json"
-        )
+        events_path = runs_root(self.root) / run_id / "events.json"
         if not events_path.exists():
             return set()
         try:
@@ -704,6 +711,68 @@ class HarnessRunner:
         return done
 
     def run(
+        self,
+        workflow: str,
+        task: str,
+        budget_mode: BudgetMode = BudgetMode.WARN,
+        *,
+        apply_edits: list[Any] | None = None,
+        approved_phases: set[str] | None = None,
+        resume_from: str | None = None,
+    ) -> HarnessRunResult:
+        """Execute a workflow; an interrupt yields canonical ``cancelled``.
+
+        Thin cancellation boundary over :meth:`_run_governed`
+        (RUN_STATE_CONTRACT): a KeyboardInterrupt/SIGINT mid-run is finalized as
+        ``GateStatus.CANCELLED`` (exit code 1) and, when the run dir already
+        exists, run.json is persisted with the cancelled state — best-effort,
+        never corrupting partial artifacts.
+        """
+        try:
+            return self._run_governed(
+                workflow,
+                task,
+                budget_mode,
+                apply_edits=apply_edits,
+                approved_phases=approved_phases,
+                resume_from=resume_from,
+            )
+        except KeyboardInterrupt:
+            return self._finalize_cancelled_run(workflow, task)
+
+    def _finalize_cancelled_run(self, workflow: str, task: str) -> HarnessRunResult:
+        """Signal-safe cancellation finalizer (RUN_STATE_CONTRACT ``cancelled``)."""
+        from opencontext_core.models.canonical_status import exit_code_for_run
+
+        state = self._active_state
+        run_id = state.run_id if state is not None else f"{workflow}-cancelled"
+        result = HarnessRunResult(
+            run_id=run_id,
+            workflow=workflow,
+            task=task,
+            status=GateStatus.CANCELLED,
+            warnings=["run interrupted (SIGINT/KeyboardInterrupt)"],
+        )
+        # Best-effort: persist run.json only when the run dir already exists —
+        # a failure here must never mask the cancellation itself.
+        try:
+            run_dir = runs_root(self.root) / run_id
+            if run_dir.is_dir():
+                payload = {
+                    "run_id": run_id,
+                    "workflow": workflow,
+                    "task": task,
+                    "status": "cancelled",
+                    "canonical_status": "cancelled",
+                    "exit_code": exit_code_for_run("cancelled"),
+                    "created_at": result.created_at,
+                }
+                (run_dir / "run.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+        return result
+
+    def _run_governed(
         self,
         workflow: str,
         task: str,
@@ -754,6 +823,9 @@ class HarnessRunner:
         # A hard failure (e.g. an apply pre-gate blocking a write) must not be
         # downgraded to WARNING by subsequent non-strict phase outcomes.
         hard_failed = False
+        # A FAILED apply/verify gate under gate_policy "block" is terminal for
+        # the run (SDD_CONTRACT `failed` state) — sticky against downgrades.
+        terminal_gate_failed = False
 
         # Warn if knowledge graph has not been indexed (ExplorePhase depends on it)
         self._warn_if_kg_not_indexed(state)
@@ -830,11 +902,7 @@ class HarnessRunner:
             if self.config.privacy_profile is not PrivacyProfile.OFF:
                 privacy_rules = self._load_privacy_rules()
                 if privacy_rules:
-                    run_dir = (
-                        resolve_workspace_path(state.root, StorageMode.local)
-                        / "runs"
-                        / state.run_id
-                    )
+                    run_dir = runs_root(state.root) / state.run_id
                     for rule in privacy_rules:
                         privacy_gate = PrivacyGate()
                         # Operation is determined by phase type
@@ -872,6 +940,10 @@ class HarnessRunner:
                     )
                     final_status = GateStatus.FAILED
                     hard_failed = True
+                    # Blocked-before-write is terminal for mutation: the
+                    # fix-loop must never "repair" a run whose apply was
+                    # refused (TDD_STRICT_CONTRACT honesty).
+                    state.apply_blocked_pre_gate = True
                     # Do NOT build/run ApplyPhase — no filesystem mutation occurs.
                     continue
 
@@ -917,12 +989,24 @@ class HarnessRunner:
             # no_high_risk_exports, provider_policy_passed).
             dispatched = self._dispatch_declared_gates(state, phase_id, phase_config, result)
             state.gates.extend(dispatched)
-            if any(g.status == GateStatus.FAILED for g in dispatched):
+            # Propagate FAILED from both the phase's own gates AND config-dispatched gates.
+            # result.gates covers phase self-evaluation (e.g. verify_tests_passed);
+            # dispatched covers config-declared gates. Both can independently block.
+            all_new_gates = list(result.gates) + dispatched
+            failed_gates = [g for g in all_new_gates if g.status == GateStatus.FAILED]
+            if failed_gates:
                 # Block-by-default: a FAILED verify-phase gate is fatal regardless
                 # of budget_mode when gate_policy is "block" (the default). "warn"
                 # keeps the historical posture (FAILED blocks only under STRICT).
                 if budget_mode is BudgetMode.STRICT or self.config.gate_policy == "block":
                     final_status = GateStatus.FAILED
+                    # SDD_CONTRACT state machine: failed APPLY/VERIFY gates are
+                    # terminal for the run (state `failed`). Mark them sticky so
+                    # a later phase status can never soften the run back to
+                    # WARNING (SDD-008 regression: a failing test suite was
+                    # reported as a passed run).
+                    if any(g.phase in ("apply", "verify") for g in failed_gates):
+                        terminal_gate_failed = True
                 elif not hard_failed:
                     final_status = GateStatus.WARNING
 
@@ -951,10 +1035,18 @@ class HarnessRunner:
                     final_status = GateStatus.FAILED
                     hard_failed = True
                     break
-                if not hard_failed:
+                # SDD-008 regression guard: a terminal apply/verify gate failure
+                # (set above under gate_policy "block") must never be softened
+                # back to WARNING by this legacy posture branch. Non-terminal
+                # phase failures (e.g. explore on an empty project) keep the
+                # historical advisory WARNING.
+                if not hard_failed and not terminal_gate_failed:
                     final_status = GateStatus.WARNING
             elif result.status == GateStatus.WARNING and not hard_failed:
-                final_status = GateStatus.WARNING
+                # Same guard: a later WARNING phase never downgrades a run whose
+                # apply/verify gates already failed terminally.
+                if not terminal_gate_failed:
+                    final_status = GateStatus.WARNING
 
         # Provider-free apply detection: when the apply phase ran but produced no
         # edits because no executor was wired, the run would otherwise appear as
@@ -1314,7 +1406,7 @@ class HarnessRunner:
             from opencontext_core.harness.receipt_store import ReceiptStore
             from opencontext_core.models.receipt import PhaseReceipt
 
-            run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
+            run_dir = runs_root(self.root) / state.run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             gate_digest = {
                 g.id: (g.status.value if hasattr(g.status, "value") else str(g.status))
@@ -1398,7 +1490,7 @@ class HarnessRunner:
                 handoff, from_persona=PHASE_PERSONAS.get(phase_id, "")
             )
 
-            run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
+            run_dir = runs_root(self.root) / state.run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             ArtifactStore(run_dir).write(
                 ArtifactWriteRequest(
@@ -1436,7 +1528,7 @@ class HarnessRunner:
 
             from opencontext_core.harness.run_store import RunStore
 
-            new_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / new_run_id
+            new_dir = runs_root(self.root) / new_run_id
             new_dir.mkdir(parents=True, exist_ok=True)
             for src in RunStore(self.root).passed_phase_artifacts(resume_from, resume_completed):
                 dest = new_dir / src.name
@@ -1508,6 +1600,17 @@ class HarnessRunner:
         # TDD failing-test pre-gate (red before green). Only blocks in strict mode.
         if "failing_test_exists" in declared or tdd_mode == "strict":
             gate = FailingTestExistsGate().evaluate(state.task, state.root, tdd_mode=tdd_mode)
+            # The gate class historically tags itself phase="verify"; as an
+            # apply PRE-gate it must carry phase="apply" or the fix-loop's
+            # verify-gate replacement silently drops a FAILED strict gate from
+            # gates.json (TDD_STRICT_CONTRACT honesty).
+            gate = PhaseGate(
+                id=gate.id,
+                phase="apply",
+                status=gate.status,
+                message=gate.message,
+                metadata=gate.metadata,
+            )
             # Only strict mode enforces blocking; otherwise downgrade to WARNING.
             if tdd_mode == "strict":
                 gates.append(gate)
@@ -1627,7 +1730,12 @@ class HarnessRunner:
                 getattr(state, "context_omissions_recorded", 0),
             )
         if gate_id == "review_artifact_created":
-            run_dir = state.root / self.config.artifact_root / state.run_id
+            # The legacy default artifact_root resolves via the mode-aware runs
+            # root; an explicit config override stays project-root-relative.
+            if self.config.artifact_root == ".opencontext/runs":
+                run_dir = runs_root(state.root) / state.run_id
+            else:
+                run_dir = state.root / self.config.artifact_root / state.run_id
             return ReviewArtifactCreatedGate().evaluate(run_dir)
         if gate_id == "architecture_clean":
             return self._eval_architecture_gate(state, result)
@@ -1642,15 +1750,22 @@ class HarnessRunner:
             # so strict TDD set via opencontext.yaml's harness section — not only
             # harness.yaml workflow_defaults — activates the GREEN gate too.
             tdd_mode, _ = self._harness_governance()
-            # Discover the project's real test command instead of a bare ``pytest``,
+            # Resolve the project's real test command instead of a bare ``pytest``,
             # which fails to import project modules (exit 2) when the project has no
-            # pythonpath/rootdir config. Fall back to the interpreter's pytest module.
+            # pythonpath/rootdir config. Resolution order: configured test_command >
+            # the project's own venv interpreter > this runtime's interpreter.
             import sys as _sys
 
-            from opencontext_core.oc_flow.runner import _discover_test_command
+            from opencontext_core.oc_flow.runner import resolve_test_command
 
-            cmd = _discover_test_command(state.root) or [_sys.executable, "-m", "pytest"]
-            return TestsPassGate().evaluate(cmd=cmd, cwd=state.root, tdd_mode=tdd_mode)
+            resolved = resolve_test_command(state.root)
+            cmd = resolved.command or [_sys.executable, "-m", "pytest"]
+            runner_source = resolved.source if resolved.command else "runtime"
+            gate = TestsPassGate().evaluate(cmd=cmd, cwd=state.root, tdd_mode=tdd_mode)
+            # Additive evidence: record which source chose the verification command.
+            if isinstance(getattr(gate, "metadata", None), dict):
+                gate.metadata["runner_source"] = runner_source
+            return gate
         # Unknown / unbound declared gate: do not fabricate a result.
         return None
 
@@ -2112,6 +2227,12 @@ class HarnessRunner:
         """
         if final_status is not GateStatus.FAILED or self.config.gate_policy != "block":
             return final_status
+        if getattr(state, "apply_blocked_pre_gate", False):
+            # Apply was blocked BEFORE any write (strict-TDD RED missing or
+            # approval withheld): nothing legitimate was applied, so there is
+            # nothing to fix. A fix-loop write here would mutate the project
+            # on a blocked run and launder it into PASSED.
+            return final_status
         if getattr(state, "delegate", None) is None:
             return final_status
         failing = [g for g in state.gates if g.phase == "verify" and g.status == GateStatus.FAILED]
@@ -2187,12 +2308,48 @@ class HarnessRunner:
 
         Overridable seam (tests stub it). Returns the freshly-evaluated verify
         gates (architecture_clean / quality_standards / tests_covered / ...).
+
+        Also re-runs the test suite against any edits applied by the fix loop so
+        that ``_run_fix_loop`` cannot declare "recovered" while tests still fail.
         """
         verify_config = self.config.phases.get("verify")
-        if verify_config is None:
-            return []
-        synthetic = PhaseResult(phase="verify", status=GateStatus.PASSED)
-        return list(self._dispatch_declared_gates(state, "verify", verify_config, synthetic))
+        declared_gates: list[PhaseGate] = []
+        if verify_config is not None:
+            synthetic = PhaseResult(phase="verify", status=GateStatus.PASSED)
+            declared_gates = list(
+                self._dispatch_declared_gates(state, "verify", verify_config, synthetic)
+            )
+
+        # Re-run the test suite against the new edits from the fix loop.
+        # Without this, fix loops can claim "recovered" while tests still fail.
+        changed = [
+            e["path"] if isinstance(e, dict) else getattr(e, "path", str(e))
+            for e in (getattr(state, "apply_edits", None) or [])
+        ]
+        try:
+            from opencontext_core.harness.phases import VerifyPhase
+
+            verify_instance = VerifyPhase.__new__(VerifyPhase)
+            test_result = verify_instance._run_tests(state.root, changed_files=changed)
+            if test_result.get("exit_code", 0) != 0:
+                declared_gates.append(
+                    PhaseGate(
+                        id="verify_tests_passed",
+                        phase="verify",
+                        status=GateStatus.FAILED,
+                        message=(
+                            f"Tests exited with code {test_result['exit_code']} (fix-loop reverify)"
+                        ),
+                        metadata={
+                            "exit_code": test_result.get("exit_code"),
+                            "command": str(test_result.get("command", "")),
+                        },
+                    )
+                )
+        except Exception:
+            pass  # test runner failure is non-fatal here
+
+        return declared_gates
 
     @staticmethod
     def _fix_loop_event(
@@ -2439,9 +2596,90 @@ class HarnessRunner:
             # Never fail due to KG check failures
             pass
 
+    def _tdd_block_from_gates(
+        self, gates: list[PhaseGate], *, created_at: str
+    ) -> dict[str, Any] | None:
+        """Derive the run.json ``tdd`` block from the RED/GREEN gates that ran.
+
+        RED comes from ``failing_test_exists`` (strict mode executes the test and
+        records its exit code); GREEN from ``tests_pass`` / the fix-loop
+        ``verify_tests_passed`` reverify. When BOTH recorded exit codes, the
+        verify-phase suite re-run is the contract's step-7 regression evidence.
+        Proof requires a REAL recorded exit code — gate existence alone never
+        claims evidence.
+        """
+        red_gate = next((g for g in gates if getattr(g, "id", "") == "failing_test_exists"), None)
+        green_gate = next((g for g in gates if getattr(g, "id", "") == "tests_pass"), None)
+        regression_gate = next(
+            (g for g in gates if getattr(g, "id", "") == "verify_tests_passed"), None
+        )
+        if green_gate is None:
+            # Without an apply-phase GREEN, the verify re-run stays the green
+            # evidence (legacy behaviour) and no separate regression is claimed.
+            green_gate, regression_gate = regression_gate, None
+        if red_gate is None and green_gate is None:
+            return None
+
+        def _evidence(gate: PhaseGate | None) -> dict[str, Any] | None:
+            if gate is None:
+                return None
+            meta = getattr(gate, "metadata", None) or {}
+            exit_code = meta.get("exit_code")
+            if exit_code is None:
+                return None
+            payload: dict[str, Any] = {
+                "command": str(meta.get("command", "")),
+                "exit_code": int(exit_code),
+                "failure_summary": gate.message if int(exit_code) != 0 else "",
+                "captured_at": created_at,
+            }
+            # Additive: the RED classification recorded by the strict pre-gate
+            # (test_failure | environment_error | no_tests | already_passing).
+            if meta.get("classification"):
+                payload["classification"] = str(meta["classification"])
+            # Additive: which source chose the verification command
+            # ("configured" | "project_venv" | "runtime").
+            if meta.get("runner_source"):
+                payload["runner_source"] = str(meta["runner_source"])
+            return payload
+
+        red = _evidence(red_gate)
+        green = _evidence(green_gate)
+        # A non-zero exit proves RED only when it was a genuine executed-and-
+        # failed test — an environment/usage error never does (TDD_STRICT_CONTRACT).
+        red_classification = (red or {}).get("classification")
+        block: dict[str, Any] = {
+            "mode": self.config.tdd_mode,
+            "red": red,
+            "green": green,
+            "regression": _evidence(regression_gate),
+            "red_proven": bool(
+                red and red["exit_code"] != 0 and red_classification in (None, "test_failure")
+            ),
+            "green_proven": bool(green and green["exit_code"] == 0),
+        }
+        # Additive: a strict run whose RED gate FAILED is a TDD violation —
+        # the same vocabulary OC Flow emits (exit 6 / RUN_STATE_CONTRACT), so
+        # the two engines report the blocked condition identically.
+        if red_gate is not None and red_gate.status == GateStatus.FAILED:
+            try:
+                effective_mode = self._harness_governance()[0]
+            except Exception:
+                effective_mode = self.config.tdd_mode
+            if effective_mode == "strict":
+                from opencontext_core.tdd.red_green import TDD_RED_NOT_PROVEN
+
+                block["violation"] = TDD_RED_NOT_PROVEN
+        return block
+
     def persist_run(self, state: HarnessState, result: HarnessRunResult) -> Path:
         """Persist run artifacts to .opencontext/runs/<run_id>/."""
-        run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
+        # layering: lazy cycle-break — harness (L6) may not eagerly import the
+        # oc_flow workflow (L9); the shared gates.json evidence rule is only
+        # needed at persist time (doc-58 / tests/architecture).
+        from opencontext_core.oc_flow.run_bundle import ensure_gate_evidence
+
+        run_dir = runs_root(self.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         def _serialize(obj: Any) -> Any:
@@ -2472,14 +2710,29 @@ class HarnessRunner:
                 "broad_tokens": int(getattr(state, "explore_broad_tokens", 0) or 0),
                 "kg_available": bool(getattr(state, "explore_kg_available", False)),
             }
+        _status_text = (
+            result.status.value if hasattr(result.status, "value") else str(result.status)
+        )
+        # Canonical state + exit code + TDD evidence (RUN_STATE / TDD_STRICT
+        # contracts) — additive fields alongside the legacy status string.
+        from opencontext_core.models.canonical_status import exit_code_for_run, to_canonical
+
+        _tdd_block = self._tdd_block_from_gates(result.gates, created_at=result.created_at)
+        # Surface the evidence block on the result too (additive), so CLI
+        # consumers (`run --json`) derive the same exit code as run.json.
+        result.tdd = _tdd_block
         files = {
             "run.json": {
                 "run_id": result.run_id,
                 "workflow": result.workflow,
                 "task": result.task,
-                "status": (
-                    result.status.value if hasattr(result.status, "value") else str(result.status)
+                "status": _status_text,
+                "canonical_status": to_canonical(_status_text).value,
+                "exit_code": exit_code_for_run(
+                    _status_text,
+                    tdd_violation=bool(_tdd_block and _tdd_block.get("violation")),
                 ),
+                "tdd": _tdd_block,
                 "created_at": result.created_at,
                 "metadata": {
                     "explore": explore_meta,
@@ -2491,7 +2744,9 @@ class HarnessRunner:
                 },
             },
             "ledger.json": {"ledgers": _serialize(result.ledgers)},
-            "gates.json": {"gates": _serialize(result.gates)},
+            # GATES_CONTRACT §Evidence rule: no gate record persists without a
+            # non-empty evidence message (HARNESS-CRIT-4).
+            "gates.json": {"gates": ensure_gate_evidence(_serialize(result.gates))},
             "artifacts.json": {"artifacts": _serialize(result.artifacts)},
             "decisions.json": {"decisions": _serialize(result.decisions)},
             "events.json": {"events": _serialize(result.events)},

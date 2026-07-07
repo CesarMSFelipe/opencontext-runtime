@@ -1,8 +1,9 @@
 """Durable session/run on-disk layout + patch/manifest helpers (PR-002, L2).
 
-Materialises the book layout (doc 24 §8)::
+Materialises the book layout (doc 24 §8) under the mode-aware sessions root
+(XDG project state in user mode, ``.opencontext`` in local mode)::
 
-    .opencontext/sessions/<session_id>/runs/<run_id>/
+    <sessions root>/<session_id>/runs/<run_id>/
         artifacts/  receipts/  checkpoints/  patches/
 
 and provides the ``patch-NNN.diff`` writer, a unified-diff builder over a
@@ -28,10 +29,10 @@ from opencontext_core.models.run_manifest import (
 
 
 def sessions_root(root: Path | str) -> Path:
-    """Return the runtime sessions directory under the project workspace."""
-    from opencontext_core.paths import StorageMode, resolve_workspace_path
+    """Return the runtime sessions directory for the active storage mode."""
+    from opencontext_core.paths import execution_state
 
-    return resolve_workspace_path(root, StorageMode.local) / "sessions"
+    return execution_state.sessions_root(root)
 
 
 def session_root(root: Path | str, session_id: str) -> Path:
@@ -61,15 +62,19 @@ def find_run_root(root: Path | str, run_id: str) -> Path | None:
     """Locate a run's durable root by scanning ``sessions/*/runs/<run_id>``.
 
     Avoids a separate run->session index: there is exactly one run dir per id.
-    Returns ``None`` when no durable run exists for *run_id* (e.g. legacy run).
+    Scans the active sessions tree first, then the legacy in-repo tree (runs
+    persisted before execution state moved to user-mode storage). Returns
+    ``None`` when no durable run exists for *run_id*.
     """
-    base = sessions_root(root)
-    if not base.exists():
-        return None
-    for session_dir in base.iterdir():
-        candidate = session_dir / "runs" / run_id
-        if candidate.is_dir():
-            return candidate
+    from opencontext_core.paths import execution_state
+
+    for base in execution_state.execution_read_roots(root, "sessions"):
+        if not base.exists():
+            continue
+        for session_dir in base.iterdir():
+            candidate = session_dir / "runs" / run_id
+            if candidate.is_dir():
+                return candidate
     return None
 
 

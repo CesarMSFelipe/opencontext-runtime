@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.learning.evolution import EvolutionProposal, ImprovementProposal
 from opencontext_core.learning.evolution_store import EvolutionStore
 from opencontext_core.learning.promotion import PromotionGate
@@ -72,3 +74,9 @@ def test_reuses_pr011_gate_when_results_supplied() -> None:
         benchmark_results=failing,
     )
     assert blocked.promotable is False
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

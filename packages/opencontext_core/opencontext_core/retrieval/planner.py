@@ -394,6 +394,32 @@ class RetrievalPlanner:
 
         return _retrieve(self._memory_store, query, emitter=emitter)
 
+    def _memory_recall_items(self, query: str) -> list[ContextItem]:
+        """Memory recall as first-class pack candidates (CTX-003, DOC2 §13.2).
+
+        The pack pipeline's "memory recall" stage: budgeted retrieval over the
+        wired memory store (book order, via :meth:`retrieve_memory`) converted
+        into ``ContextItem`` candidates, so approved memory can land in
+        ``included[]`` and be counted as ``memory_hits`` — not only act as a
+        ranking boost. No store => []; any failure degrades to [] with an
+        omission marker and never blocks retrieval.
+        """
+        if self._memory_store is None:
+            return []
+        try:
+            from opencontext_core.models.memory import MemoryQuery
+
+            records = self.retrieve_memory(MemoryQuery(task=query))
+            return [
+                item
+                for item in (_memory_record_to_context_item(record) for record in records)
+                if item is not None
+            ]
+        except Exception as exc:
+            _log.warning("memory recall failed: %s", exc)
+            self.omissions.append("memory_recall_unavailable")
+            return []
+
     @classmethod
     def from_config(
         cls,
@@ -616,7 +642,11 @@ class RetrievalPlanner:
             base_items = _deduplicate(base_items)
 
         expanded_items, graph_distance_map = self._expand_with_graph(request, base_items)
-        all_items = _deduplicate([*base_items, *expanded_items])
+        # CTX-003: memory recall is a first-class candidate stage of the pack
+        # pipeline (DOC2 §13.2), not just a ranking boost — recalled records enter
+        # the candidate set as memory-sourced items.
+        memory_items = self._memory_recall_items(request.query) if top_k > 0 else []
+        all_items = _deduplicate([*base_items, *expanded_items, *memory_items])
         ranked = self.rank(
             all_items,
             memory_boost_map=self._memory_boost_map(all_items, request.query) or None,
@@ -944,6 +974,52 @@ def _personalization_map(
 def _with_source_metadata(item: ContextItem, source_name: str) -> ContextItem:
     metadata = {**item.metadata, "retrieval_source": source_name}
     return item.model_copy(update={"metadata": metadata})
+
+
+def _memory_record_to_context_item(record: Any) -> ContextItem | None:
+    """Convert a recalled ``MemoryRecord`` into a pack candidate (CTX-003).
+
+    Marked with ``source_type="memory"`` / ``retrieval_source="memory"`` so the
+    pack metrics count it as a ``memory_hit``. Returns ``None`` for records with
+    no usable content so an empty memory never produces an empty pack item.
+    """
+    content = str(getattr(record, "content", "") or "").strip()
+    if not content:
+        return None
+    key = str(getattr(record, "key", "") or getattr(record, "id", "") or "memory")
+    layer = getattr(record, "layer", "")
+    layer_value = str(getattr(layer, "value", layer) or "")
+    lifecycle = getattr(record, "lifecycle", None)
+    confidence = float(getattr(record, "confidence", 0.5) or 0.5)
+    metadata: dict[str, Any] = {
+        "retrieval_source": "memory",
+        "retrieval_rationale": [f"memory_layer:{layer_value}", f"memory_key:{key}"],
+        "source_type": "memory",
+        "freshness": "unknown",
+        "memory_provenance": {
+            "record_id": str(getattr(record, "id", "")),
+            "layer": layer_value,
+            "key": key,
+            "lifecycle": str(getattr(lifecycle, "value", lifecycle) or ""),
+        },
+    }
+    updated_at = getattr(record, "updated_at", None)
+    if updated_at is not None:
+        metadata["modified_at"] = (
+            updated_at.isoformat() if hasattr(updated_at, "isoformat") else str(updated_at)
+        )
+    return ContextItem(
+        id=f"memory:{getattr(record, 'id', key)}",
+        content=content,
+        source=f"memory:{key}",
+        source_type="memory",
+        priority=ContextPriority.P1,
+        tokens=estimate_tokens(content),
+        score=max(0.0, min(1.0, confidence)),
+        metadata=metadata,
+        trusted=True,
+        source_trust=0.75,
+    )
 
 
 def _context_item_to_evidence(item: ContextItem, surface: RetrievalSurface) -> EvidenceItem:

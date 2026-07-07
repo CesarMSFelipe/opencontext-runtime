@@ -1,113 +1,20 @@
 OpenContext Runtime — Phase 0 environment baseline
 schema_version: 1.0
-created_at: 2026-07-03T10:12:13.437686+00:00
-git_head: 71e1a766a5447c7d708c5275b25bd172cc009d1e
+created_at: 2026-07-06T19:27:12.905628+00:00
+git_head: 15665bd528a1e79e08e150bd0ea4b0917e947cc3
 python_version: 3.12.3
 platform: Linux-6.17.0-35-generic-x86_64-with-glibc2.39
 runner.py path: /home/zenix/projects/OpenContext Runtime/packages/opencontext_core/opencontext_core/harness/runner.py
-runner.py sha256: 79d9ddb8fab7f42e50d432dd10a7b088a24da04357c7dd7dbcddcb26ef6ef8d4
+runner.py sha256: 9d6b5a1154771a4f69f1773cab75557715c23ad829beae2d5120e6d62c2a6cc4
 runner.py py_compile_ok: True
 compileall_ok: True
 
 git status --short:
-M .github/workflows/security.yml
- M .github/workflows/test.yml
- M .mcp.json
- M artifacts/environment-proof.json
+M artifacts/environment-proof.json
  M artifacts/phase0-baseline.txt
- M packages/opencontext_api/opencontext_api/memory_routes.py
- M packages/opencontext_api/opencontext_api/schemas.py
- M packages/opencontext_api/opencontext_api/sdd_routes.py
- M packages/opencontext_cli/opencontext_cli/commands/architecture_cmd.py
- M packages/opencontext_cli/opencontext_cli/commands/decisions_cmd.py
- M packages/opencontext_cli/opencontext_cli/commands/skill_cmd.py
- M packages/opencontext_core/opencontext_core/agentic/context_substrate.py
- M packages/opencontext_core/opencontext_core/benchmarks/v2/suites/a11_benchmark_evidence.py
- M packages/opencontext_core/opencontext_core/benchmarks/v2/suites/a12_release_signature.py
- M packages/opencontext_core/opencontext_core/benchmarks/v2/suites/a2_oc_flow_bugfix.py
- M packages/opencontext_core/opencontext_core/benchmarks/v2/suites/a4_context_token_efficiency.py
- M packages/opencontext_core/opencontext_core/context/engine.py
- M packages/opencontext_core/opencontext_core/context/v2/budget.py
- M packages/opencontext_core/opencontext_core/context/v2/engine.py
- M packages/opencontext_core/opencontext_core/context/v2/ranking/__init__.py
- M packages/opencontext_core/opencontext_core/context/v2/ranking/score.py
- M packages/opencontext_core/opencontext_core/context/v2/receipt.py
- M packages/opencontext_core/opencontext_core/graph/v2/store.py
- M packages/opencontext_core/opencontext_core/indexing/tree_sitter_parser.py
- M packages/opencontext_core/opencontext_core/mcp/__init__.py
- M packages/opencontext_core/opencontext_core/mcp/runtime_dispatcher.py
- M packages/opencontext_core/opencontext_core/operating_model/release_gate.py
- M packages/opencontext_core/opencontext_core/quality/report.py
- M packages/opencontext_core/opencontext_core/runtime/__init__.py
- M packages/opencontext_core/opencontext_core/runtime/brain.py
- M packages/opencontext_core/opencontext_core/skills/v2/audit.py
- M packages/opencontext_core/opencontext_core/skills/v2/gates.py
- M packages/opencontext_core/opencontext_core/skills/v2/outputs.py
- M packages/opencontext_core/opencontext_core/skills/v2/persona.py
- M packages/opencontext_core/tests/agentic/test_context_substrate_compression.py
- M packages/opencontext_core/tests/architecture/test_paths_resolver_ast.py
- M packages/opencontext_core/tests/architecture/test_paths_resolver_compliance.py
- M packages/opencontext_core/tests/architecture/test_paths_resolver_context_substrate.py
- M packages/opencontext_core/tests/architecture/test_paths_resolver_meta_harness.py
- M packages/opencontext_core/tests/context/v2/test_budget_v2.py
- M packages/opencontext_core/tests/context/v2/test_context_receipt_evidence.py
- M packages/opencontext_core/tests/context/v2/test_engine_v2.py
- M packages/opencontext_core/tests/context/v2/test_l4_ranking.py
- M packages/opencontext_core/tests/context/v2/test_v2_receipt.py
- M packages/opencontext_core/tests/indexing/test_kg_indexing_truth.py
- M packages/opencontext_core/tests/oc_new/test_conductor_sdd_strict.py
- M packages/opencontext_core/tests/oc_new/test_conductor_yaml_flow_mode.py
- M packages/opencontext_core/tests/paths/test_resolve_path_only.py
- M packages/opencontext_core/tests/paths/test_resolve_path_or_str.py
- M packages/opencontext_core/tests/skills/v2/test_builtin_tier0.py
- M packages/opencontext_core/tests/skills/v2/test_skill_audit.py
- M packages/opencontext_core/tests/test_context_receipt.py
- M packages/opencontext_core/tests/test_tui_graph.py
- M packages/opencontext_sdd/opencontext_sdd/status.py
- M packages/opencontext_sdd/tests/test_adapter_sync_state.py
- M packages/opencontext_studio/opencontext_studio/redaction.py
- M packages/opencontext_studio/tests/server/test_public_contract_imports.py
- M packages/opencontext_studio/tests/server/test_v2_endpoints.py
- M scripts/environment_proof.py
- M tests/architecture/test_no_legacy_run_importers.py
- M tests/architecture/test_no_pinned_storage_mode.py
- M tests/benchmarks/test_no_stub_suites.py
- M tests/cli/test_config_show_provenance.py
- M tests/cli/test_config_show_yaml.py
- M tests/cli/test_config_yaml_key_hint.py
- M tests/cli/test_memory_v2_cmd.py
- M tests/cli/test_receipt_cli.py
- M tests/cli/test_runs_profile.py
- M tests/cli/test_sdd_cmd.py
- M tests/cli/test_storage_migrate_cmd.py
- M tests/cli/test_studio_cmd.py
- M tests/core/test_release_gates.py
- M tests/core/test_studio_readonly.py
- M tests/done_in_v1/test_validation_runner.py
- M tests/environment/test_environment_proof.py
- M tests/integration/test_decision_log_multi_kind.py
- M tests/integration/test_install_no_legacy_warning.py
- M tests/mcp/test_runtime_dispatcher.py
- M tests/release/test_b_d_evidence_injection.py
- M tests/release/test_no_ai_coauthor.py
- M tests/release/test_phase0_collects_clean.py
- M tests/release/test_publish_covers_first_party_deps.py
- M tests/release/test_pyz_cli_parity.py
- M tests/release/test_v1_behavioral.py
- M tests/runtime/test_compat_registry.py
- M tests/runtime/test_no_duplicate_spine.py
- M tests/runtime/test_runtime_api_session_contract.py
- M tests/runtime/test_spine_class.py
- M tests/runtime/test_spine_cli_routing.py
- M tests/studio/test_v2_real_state.py
- M tests/unit/test_decisions_explain_root.py
- M tests/unit/test_run_summary_alias.py
- M tests/unit/test_skill_audit_catalog_cli.py
- M tests/unit/test_storage_convergence.py
- M tests/unit/test_studio_serves_v2.py
- M tests/unit/test_uninstall_scope.py
- M tests/unit/test_verify_kg_warning_degrades_healthy.py
- M tools/done_in_v1_probes.py
+ M artifacts/test-inventory.json
+ M artifacts/test-inventory.md
+?? artifacts/test-reduction-report.md
 
 notes:
   (none)

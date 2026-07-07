@@ -9,6 +9,7 @@ from opencontext_core.models.context import (
     CompressionPackMetadata,
     ContextItem,
     ContextOmission,
+    ContextPackMetrics,
     ContextPackResult,
     ContextPriority,
 )
@@ -145,6 +146,10 @@ def _with_pack_metadata(item: ContextItem, decision: str) -> ContextItem:
         "value_per_token": item.score / max(item.tokens, 1),
         "source_trust": SOURCE_TRUST.get(item.source_type, 0.5),
     }
+    # Short human-readable reason so every pack item explains its selection.
+    if not metadata.get("reason"):
+        retrieval_source = metadata.get("retrieval_source") or item.source_type
+        metadata["reason"] = f"{decision} via {retrieval_source}"
     return item.model_copy(update={"metadata": metadata})
 
 
@@ -154,6 +159,106 @@ def _omission(item: ContextItem, reason: str) -> ContextOmission:
         reason=reason,
         tokens=item.tokens,
         score=item.score,
+    )
+
+
+_KG_RETRIEVAL_SOURCES = {"graph", "graph_expansion", "call_graph"}
+_KG_ID_PREFIXES = ("graph:", "fts:")
+
+
+def _is_kg_item(item: ContextItem) -> bool:
+    retrieval_source = str(item.metadata.get("retrieval_source", ""))
+    return retrieval_source in _KG_RETRIEVAL_SOURCES or item.id.startswith(_KG_ID_PREFIXES)
+
+
+def _is_memory_item(item: ContextItem) -> bool:
+    return item.source_type == "memory" or item.metadata.get("retrieval_source") == "memory"
+
+
+def _is_test_item(item: ContextItem) -> bool:
+    """Source-path test heuristic (mirrors retrieval-side test detection)."""
+    source = item.source or ""
+    base = source.rsplit("/", 1)[-1].lower()
+    return base.startswith("test_") or base.endswith("_test.py") or "/tests/" in source.lower()
+
+
+def _kg_edges_for(item: ContextItem) -> int:
+    """Edges justifying this item: provenance relationships, or one expansion hop."""
+    provenance = item.metadata.get("graph_provenance")
+    if isinstance(provenance, dict):
+        relationships = provenance.get("relationships")
+        if isinstance(relationships, list) and relationships:
+            return len(relationships)
+    if item.metadata.get("retrieval_source") == "graph_expansion":
+        return 1
+    return 0
+
+
+def build_pack_metrics(
+    result: ContextPackResult,
+    candidates: list[ContextItem] | None = None,
+) -> ContextPackMetrics:
+    """Build the mandatory pack metrics block from a packed result.
+
+    ``candidates`` is the full pre-pack candidate set (used for the input-token
+    estimate and pre-compression protected-span detection); when omitted, the
+    packed items themselves are used as the best available approximation.
+    """
+
+    from opencontext_core.context.protection import ProtectedSpanManager
+
+    originals = candidates if candidates is not None else [*result.included, *result.omitted]
+    input_tokens = sum(item.tokens for item in originals)
+
+    compression_ratio: float | None = None
+    if result.compression is not None and result.compression.tokens_before > 0:
+        compression_ratio = round(
+            result.compression.tokens_after / result.compression.tokens_before, 4
+        )
+        # Compression shrank candidate tokens in place; restore the pre-compression sum.
+        if candidates is None:
+            input_tokens += result.compression.tokens_before - result.compression.tokens_after
+
+    kg_nodes = sum(1 for item in result.included if _is_kg_item(item))
+    kg_edges = sum(_kg_edges_for(item) for item in result.included)
+    test_nodes = sum(1 for item in result.included if _is_kg_item(item) and _is_test_item(item))
+    memory_hits = sum(1 for item in result.included if _is_memory_item(item))
+    if kg_nodes > 0:
+        kg_reason = (
+            f"{kg_nodes} knowledge-graph node(s) selected via {kg_edges} edge(s); "
+            f"{test_nodes} related test node(s) included"
+        )
+    else:
+        kg_reason = "no knowledge-graph candidates selected"
+
+    detector = ProtectedSpanManager()
+    original_by_id = {item.id: item for item in originals}
+    protected_spans = 0
+    protected_spans_kept = 0
+    for item in result.included:
+        original = original_by_id.get(item.id, item)
+        detected = len(detector.detect(original.content))
+        if item.content == original.content:
+            kept = detected
+        else:
+            kept = len(detector.detect(item.content))
+        protected_spans += detected
+        protected_spans_kept += min(kept, detected)
+
+    return ContextPackMetrics(
+        budget_tokens=result.available_tokens,
+        input_tokens_estimated=input_tokens,
+        output_tokens_estimated=result.used_tokens,
+        compression_ratio=compression_ratio,
+        kg_used=kg_nodes > 0,
+        kg_nodes_used=kg_nodes,
+        kg_edges_used=kg_edges,
+        test_nodes_included=test_nodes,
+        kg_reason=kg_reason,
+        memory_hits=memory_hits,
+        protected_spans=protected_spans,
+        protected_spans_kept=protected_spans_kept,
+        excluded_files=len(result.omissions),
     )
 
 

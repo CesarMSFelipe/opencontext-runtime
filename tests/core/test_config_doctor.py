@@ -41,6 +41,19 @@ def test_workflow_refs_reported(tmp_path: Path) -> None:
     assert statuses.get("config.refs") == "passed"
 
 
+def test_deprecated_key_warned_with_migration_hint(tmp_path: Path) -> None:
+    legacy_key = "cave" + "man_intensity"
+    (tmp_path / "opencontext.yaml").write_text(
+        f"version: 2\nproject:\n  name: demo\ncontext:\n  compression:\n    {legacy_key}: full\n",
+        encoding="utf-8",
+    )
+    diags = validate(tmp_path)
+    deprecated = [d for d in diags if d.name.startswith("config.deprecated_key.")]
+    assert deprecated, "legacy compression key must surface a deprecation warning"
+    assert deprecated[0].status == "warning"
+    assert "terse_intensity" in (deprecated[0].recommendation or "")
+
+
 def test_valid_config_passes(tmp_path: Path) -> None:
     (tmp_path / "opencontext.yaml").write_text(
         "version: 2\nprofile: balanced\nproject:\n  name: demo\n", encoding="utf-8"

@@ -25,13 +25,18 @@ from opencontext_cli.tui.brand import DIM, PRIMARY, SUCCESS, WARNING, BrandBar
 
 
 class ConfigScreen(Screen[None]):
-    """Configuration as a 3-column Miller menu: Category · Setting · Options."""
+    """Configuration as a 3-column Miller menu: Category · Setting · Options.
+
+    ``v`` surfaces the validation panel: schema diagnostics from
+    ``config doctor``, cross-layer conflicts, and the active overrides.
+    """
 
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("q", "quit_tui", "Quit"),
         Binding("escape", "quit_tui", "Quit", show=False),
         Binding("left", "focus_left", "◀ column", show=False),
         Binding("right", "focus_right", "column ▶", show=False),
+        Binding("v", "show_validation", "Validation"),
     ]
 
     def __init__(self) -> None:
@@ -41,6 +46,14 @@ class ConfigScreen(Screen[None]):
         self.model = build_config_model()
         self.cat_idx = 0
         self.set_idx = 0
+        self._sources = _config_sources()
+
+    def _source_of(self, leaf: Any) -> str:
+        """Winning resolver layer for a leaf's config key ('' when unmapped)."""
+        key = getattr(leaf, "config_key", None)
+        if not key or not self._sources:
+            return ""
+        return self._sources.get(key, "defaults")
 
     def compose(self) -> ComposeResult:
         yield BrandBar()
@@ -68,7 +81,11 @@ class ConfigScreen(Screen[None]):
         sv = self.query_one("#settings", ListView)
         await sv.clear()  # async — must complete before re-appending
         for leaf in self.model[self.cat_idx].leaves:
-            sv.append(ListItem(Label(leaf.label)))
+            label = leaf.label
+            source = self._source_of(leaf)
+            if source:
+                label = f"{label}  [{_DIM}]({source})[/]"
+            sv.append(ListItem(Label(label)))
         sv.index = 0
         self.set_idx = 0
         await self._refresh_options()
@@ -82,12 +99,14 @@ class ConfigScreen(Screen[None]):
             info.update("")
             return
         current = leaf.current() if leaf.current else ""
+        source = self._source_of(leaf)
+        source_line = f"\n[{_DIM}]source: {source}[/]" if source else ""
         if leaf.kind == "select" and leaf.options:
             for val, label in leaf.options():
                 mark = "  ✓" if val == current else ""
                 ov.append(ListItem(Label(label + mark)))
             ov.index = 0
-            info.update(leaf.description)
+            info.update(leaf.description + source_line)
         else:
             from opencontext_cli.tui.sub_screens import NATIVE_SCREENS
 
@@ -96,6 +115,7 @@ class ConfigScreen(Screen[None]):
                 text += f"\n[{_DIM}]current:[/] {current}"
             native = leaf.key in NATIVE_SCREENS
             hint = "Enter → configure" if native else "Enter → open guided setup"
+            text += source_line
             text += f"\n\n[{_DIM}]{hint}[/]"
             info.update(text)
 
@@ -233,8 +253,65 @@ class ConfigScreen(Screen[None]):
                 return
         self.query_one(f"#{self._COLUMNS[i + 1]}", ListView).focus()
 
+    def action_show_validation(self) -> None:
+        """Render validation diagnostics + layer conflicts into the info panel."""
+        info = self.query_one("#info", Static)
+        try:
+            report = build_config_validation(".")
+        except Exception as exc:  # the panel must render, never crash the menu
+            info.update(f"[red]Validation unavailable: {exc}[/red]")
+            return
+        lines: list[str] = []
+        diags = report["diagnostics"]
+        failed = [d for d in diags if d["status"] == "failed"]
+        warned = [d for d in diags if d["status"] == "warning"]
+        lines.append(
+            f"[bold]Validation:[/] {len(diags)} check(s) — "
+            f"{len(failed)} failed · {len(warned)} warning(s)"
+        )
+        for diag in (*failed, *warned)[:8]:
+            mark = "✗" if diag["status"] == "failed" else "!"
+            lines.append(f"  {mark} {diag['name']} — {diag['message']}")
+        conflicts = report["conflicts"]
+        if conflicts:
+            lines.append(f"[bold]Conflicts:[/] {len(conflicts)} key(s) set by multiple layers")
+            for key, detail in list(conflicts.items())[:8]:
+                layers = " → ".join(detail["layers"])
+                lines.append(f"  {key}: {layers} [{_DIM}](winner: {detail['winner']})[/]")
+        else:
+            lines.append("[bold]Conflicts:[/] none")
+        overrides = report["overrides"]
+        lines.append(f"[bold]Active overrides:[/] {len(overrides)} key(s) set above defaults")
+        info.update("\n".join(lines))
+
     def action_quit_tui(self) -> None:
         self.app.exit()
+
+
+def build_config_validation(root: str | Path = ".") -> dict[str, Any]:
+    """Validation + conflict report for the config inspector (TUI-006).
+
+    Returns ``diagnostics`` (the ``config doctor`` findings), ``conflicts``
+    (dotted keys set by two or more non-default layers, with the layer list
+    and the winning layer), and ``overrides`` (dotted key → winning layer for
+    every key resolved above the defaults layer).
+    """
+    from opencontext_core.config_doctor import validate
+    from opencontext_core.config_resolver import resolve
+
+    diagnostics = [
+        {"name": d.name, "status": d.status, "message": d.message} for d in validate(root)
+    ]
+    provenance = resolve(root).provenance
+    overrides = {
+        key: layer for key, layer in provenance.by_dotted_key.items() if layer != "defaults"
+    }
+    conflicts: dict[str, dict[str, Any]] = {}
+    for key, layers in provenance.dotted_key_layers.items():
+        non_default = [layer for layer in layers if layer != "defaults"]
+        if len(non_default) > 1:
+            conflicts[key] = {"layers": layers, "winner": provenance.by_dotted_key.get(key)}
+    return {"diagnostics": diagnostics, "conflicts": conflicts, "overrides": overrides}
 
 
 class HomeScreen(Screen[None]):
@@ -246,10 +323,13 @@ class HomeScreen(Screen[None]):
     ]
     _ACTIONS: ClassVar[list[tuple[str, str]]] = [
         ("cockpit", "Main · Cockpit / active run"),
+        ("runs", "Main · Runs"),
+        ("tdd_gates", "Main · TDD Gates"),
         ("new_change", "Main · Start new change"),
         ("verified", "Main · Build verified context"),
         ("graph", "Main · Knowledge graph"),
         ("memory", "Main · Memory"),
+        ("sdd", "Main · SDD workspace"),
         ("harness", "Main · Harness & quality gates"),
         ("receipt", "Main · Receipts / audit trail"),
         ("install", "Setup · Install / reconfigure"),
@@ -257,6 +337,7 @@ class HomeScreen(Screen[None]):
         ("doctor", "Setup · Doctor"),
         ("benchmark", "Setup · Benchmark"),
         ("backups", "Setup · Backups"),
+        ("uninstall_preview", "Setup · Uninstall preview"),
         ("uninstall", "Setup · Uninstall"),
         ("quit", "Quit"),
     ]
@@ -333,6 +414,31 @@ class HomeScreen(Screen[None]):
 
             self.app.push_screen(GraphScreen(mode=GraphMode.KG, root=Path(".")))
             return
+        if key == "runs":
+            from opencontext_cli.tui.screens.runs import RunsScreen
+
+            self.app.push_screen(RunsScreen())
+            return
+        if key == "tdd_gates":
+            from opencontext_cli.tui.screens.tdd_gates import TddGatesScreen
+
+            self.app.push_screen(TddGatesScreen())
+            return
+        if key == "sdd":
+            from opencontext_cli.tui.screens.sdd import SddScreen
+
+            self.app.push_screen(SddScreen())
+            return
+        if key == "doctor":
+            from opencontext_cli.tui.screens.doctor import DoctorScreen
+
+            self.app.push_screen(DoctorScreen())
+            return
+        if key == "uninstall_preview":
+            from opencontext_cli.tui.screens.uninstall_preview import UninstallPreviewScreen
+
+            self.app.push_screen(UninstallPreviewScreen())
+            return
         if key in {"harness", "receipt"}:
             run_dir = _latest_run_dir()
             if key == "harness":
@@ -350,7 +456,6 @@ class HomeScreen(Screen[None]):
             "install": menu_cmd._run_install,
             "verified": menu_cmd._run_verified_context,
             "memory": menu_cmd._run_memory_tools,
-            "doctor": menu_cmd._run_doctor,
             "backups": menu_cmd._run_backups,
             "uninstall": menu_cmd._run_uninstall,
         }.get(key)
@@ -424,9 +529,10 @@ class OpenContextApp(App[None]):
         "home": HomeScreen,
     }
 
-    def __init__(self, start: str = "config") -> None:
+    def __init__(self, start: str = "config", root: str | Path = ".") -> None:
         super().__init__()
         self._start = start
+        self._root = Path(root)
 
     def on_mount(self) -> None:
         if self._start == "cockpit":
@@ -435,11 +541,28 @@ class OpenContextApp(App[None]):
             self.push_screen(CockpitScreen())
         elif self._start == "home":
             self.push_screen(HomeScreen())
+        elif self._start == "error":
+            from opencontext_cli.tui.screens.workspace_error import WorkspaceErrorScreen
+
+            self.push_screen(WorkspaceErrorScreen(root=self._root))
         else:
             self.push_screen(ConfigScreen())
 
 
 _DIM = "#6C757D"
+
+
+def _config_sources() -> dict[str, str]:
+    """Dotted config key → winning layer, from the layered resolver.
+
+    Best-effort: an unresolvable config must never block the settings menu.
+    """
+    try:
+        from opencontext_core.config_resolver import resolve
+
+        return dict(resolve(".").provenance.by_dotted_key)
+    except Exception:
+        return {}
 
 
 def _latest_run_dir() -> Path | None:

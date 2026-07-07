@@ -609,16 +609,9 @@ class FailingTestExistsGate:
             PhaseGate with PASSED if found (and RED-confirmed in strict mode),
             FAILED otherwise.
         """
-        tests_dir = root / "tests"
-        if not tests_dir.exists():
-            return PhaseGate(
-                id=self.id,
-                phase="verify",
-                status=GateStatus.FAILED,
-                message=f"No test found for task '{task}' — tests/ directory does not exist.",
-            )
-
-        # Build search patterns from task name
+        # Build search patterns from task name. Test files may live anywhere
+        # under the root — tests/-layout AND root-layout projects alike; a
+        # missing tests/ directory must not veto RED (TDD_STRICT_CONTRACT).
         # "add-privacy-gate" → "test_add_privacy_gate.py", "test*privacy*gate*.py"
         task_slug = task.replace("-", "_")
         patterns = [
@@ -630,32 +623,48 @@ class FailingTestExistsGate:
 
         matching_files: list[str] = []
         for pattern in patterns:
-            matching_files.extend(str(p) for p in root.glob(pattern) if p.is_file())
+            matching_files.extend(
+                str(p) for p in root.glob(pattern) if p.is_file() and self._is_candidate(p, root)
+            )
 
+        discovered_fallback = False
         if not matching_files:
-            # No exact match — try fuzzy matching to suggest alternatives
+            # No exact filename match — natural-language tasks ("fix the add
+            # function in app.py") never glob-match a filename. In strict mode
+            # fall back to the best word-overlap test file, then to the
+            # project's discovered test files (OC Flow parity: RED is proven
+            # by executing tests, not by naming conventions). Every fallback
+            # candidate is EXECUTED and must genuinely fail, so a wrong
+            # candidate can never prove RED with a passing run.
             suggestion = self._fuzzy_suggest(task, root)
-            if suggestion:
+            if suggestion and tdd_mode == "strict":
+                matching_files = [suggestion]
+            elif tdd_mode == "strict":
+                matching_files = self._discover_tests(root)
+                discovered_fallback = bool(matching_files)
+            if not matching_files:
+                if suggestion:
+                    return PhaseGate(
+                        id=self.id,
+                        phase="verify",
+                        status=GateStatus.FAILED,
+                        message=(
+                            f"No test found for task '{task}'. "
+                            f"Did you mean: {suggestion}? "
+                            f"Write a failing test first (Strict TDD)."
+                        ),
+                        metadata={"task": task, "suggestion": suggestion},
+                    )
                 return PhaseGate(
                     id=self.id,
                     phase="verify",
                     status=GateStatus.FAILED,
                     message=(
-                        f"No test found for task '{task}'. "
-                        f"Did you mean: {suggestion}? "
-                        f"Write a failing test first (Strict TDD)."
+                        f"No test found for task '{task}' — "
+                        "write a failing test first (Strict TDD)."
                     ),
-                    metadata={"task": task, "suggestion": suggestion},
+                    metadata={"task": task},
                 )
-            return PhaseGate(
-                id=self.id,
-                phase="verify",
-                status=GateStatus.FAILED,
-                message=(
-                    f"No test found for task '{task}' — write a failing test first (Strict TDD)."
-                ),
-                metadata={"task": task},
-            )
 
         # File found — in non-strict modes, filename existence is sufficient.
         if tdd_mode != "strict":
@@ -668,24 +677,58 @@ class FailingTestExistsGate:
             )
 
         # --- Strict mode: execute the test and require it to FAIL (RED). ---
-        test_path = matching_files[0]
-        return self._verify_test_is_red(task, test_path, root, matching_files)
+        # A name/word match runs the single matched file; the discovery
+        # fallback runs the discovered candidates (capped) in one invocation.
+        red_paths = matching_files if discovered_fallback else [matching_files[0]]
+        return self._verify_test_is_red(task, red_paths, root, matching_files)
 
     def _verify_test_is_red(
-        self, task: str, test_path: str, root: Path, all_matches: list[str]
+        self, task: str, test_paths: list[str], root: Path, all_matches: list[str]
     ) -> PhaseGate:
-        """Execute ``test_path`` and return PASSED only when it exits non-zero.
+        """Execute ``test_paths`` and return PASSED only on a genuine test failure.
 
-        Only the single matched file is run — never the full suite.
+        Only the matched candidates are run — never the full suite (the
+        discovery fallback caps candidates the same way OC Flow's
+        ``resolve_test_command`` does). A non-zero exit alone is NOT RED: an
+        environment/usage error ("No module named pytest", unrecognized
+        arguments, exit 5 empty collection) proves nothing
+        (TDD_STRICT_CONTRACT).
         """
+        from opencontext_core.tdd.red_green import (
+            CLASSIFICATION_ENVIRONMENT_ERROR,
+            CLASSIFICATION_TEST_FAILURE,
+            classify_test_run,
+        )
+
+        test_path = ", ".join(test_paths)
+        display = (
+            test_paths[0] if len(test_paths) == 1 else f"{len(test_paths)} discovered test files"
+        )
+        # Runner parity with the GREEN gate (TDD_STRICT_CONTRACT): bare
+        # ``pytest`` resolves sys.path differently from ``python -m pytest``
+        # (which prepends the cwd), so tests/-layout projects without a root
+        # conftest import-error and RED becomes unprovable while GREEN passes.
+        red_cmd = [*self._red_runner(root), *test_paths, "-x", "-q", "--no-header", "--tb=no"]
+        # Sanitized like the GREEN gate: no parent-pytest leakage, no cached
+        # bytecode, and (AC-031) no .pytest_cache residue in the user's project.
+        import os
+
+        _red_env = {
+            k: v
+            for k, v in os.environ.items()
+            if not (k.startswith("PYTEST_") or k.startswith("COV_"))
+        }
+        _red_env["PYTHONDONTWRITEBYTECODE"] = "1"
+        _red_env["PYTEST_ADDOPTS"] = "-p no:cacheprovider"
         try:
             proc = subprocess.run(
-                ["pytest", test_path, "-x", "-q", "--no-header", "--tb=no"],
+                red_cmd,
                 cwd=str(root),
                 capture_output=True,
                 text=True,
                 timeout=self._EXEC_TIMEOUT,
                 shell=False,
+                env=_red_env,
             )
         except subprocess.TimeoutExpired:
             return PhaseGate(
@@ -694,22 +737,61 @@ class FailingTestExistsGate:
                 status=GateStatus.FAILED,
                 message=(
                     f"Strict TDD: test execution timed out after {self._EXEC_TIMEOUT}s "
-                    f"for '{test_path}'. Ensure the test file is runnable."
+                    f"for '{display}'. Ensure the test file is runnable."
                 ),
                 metadata={"task": task, "test_path": test_path},
             )
+        except OSError as exc:
+            # Missing/broken test runner binary: blocked, never a proven RED.
+            return PhaseGate(
+                id=self.id,
+                phase="verify",
+                status=GateStatus.FAILED,
+                message=(
+                    f"Strict TDD: test runner unavailable ({exc}). Install the "
+                    "project's test runner before a strict mutation run."
+                ),
+                metadata={
+                    "task": task,
+                    "test_path": test_path,
+                    "classification": CLASSIFICATION_ENVIRONMENT_ERROR,
+                },
+            )
 
-        if proc.returncode != 0:
-            # Non-zero exit → test is RED, gate PASSES.
+        classification = classify_test_run(proc.returncode, f"{proc.stdout}\n{proc.stderr}")
+        if classification == CLASSIFICATION_TEST_FAILURE:
+            # Genuine executed-and-failed test → RED confirmed, gate PASSES.
             return PhaseGate(
                 id=self.id,
                 phase="verify",
                 status=GateStatus.PASSED,
-                message=(f"Strict TDD: RED confirmed — test '{test_path}' fails as required."),
+                message=(f"Strict TDD: RED confirmed — test '{display}' fails as required."),
                 metadata={
                     "test_files": all_matches,
                     "task": task,
                     "exit_code": proc.returncode,
+                    "command": " ".join(red_cmd),
+                    "classification": classification,
+                },
+            )
+
+        if proc.returncode != 0:
+            # Environment/usage error or empty collection: an invalid RED.
+            return PhaseGate(
+                id=self.id,
+                phase="verify",
+                status=GateStatus.FAILED,
+                message=(
+                    f"Strict TDD: test run for '{display}' did not execute-and-fail "
+                    f"({classification}, exit {proc.returncode}). An environment or "
+                    "usage error is not a valid RED."
+                ),
+                metadata={
+                    "task": task,
+                    "test_path": test_path,
+                    "exit_code": proc.returncode,
+                    "command": " ".join(red_cmd),
+                    "classification": classification,
                 },
             )
 
@@ -719,36 +801,100 @@ class FailingTestExistsGate:
             phase="verify",
             status=GateStatus.FAILED,
             message=(
-                f"Strict TDD: test '{test_path}' already passes (exit 0). "
+                f"Strict TDD: test '{display}' already passes (exit 0). "
                 "The test must be RED (failing) before apply. "
                 "Write a failing test that captures the missing behavior."
             ),
-            metadata={"task": task, "test_path": test_path, "exit_code": 0},
+            metadata={
+                "task": task,
+                "test_path": test_path,
+                "exit_code": 0,
+                "command": " ".join(red_cmd),
+                "classification": classification,
+            },
         )
+
+    @staticmethod
+    def _red_runner(root: Path) -> list[str]:
+        """The interpreter prefix used to execute the RED probe.
+
+        Mirrors ``oc_flow.runner.resolve_test_command``: prefer the project's
+        own venv interpreter (pytest importable), else the current one.
+        Imported lazily — layering: harness (L6) may not eagerly import the
+        oc_flow workflow (L9).
+        """
+        import sys
+
+        try:
+            from opencontext_core.oc_flow.runner import _project_venv_python
+
+            venv_python = _project_venv_python(root)
+        except Exception:
+            venv_python = None
+        interpreter = str(venv_python) if venv_python is not None else sys.executable
+        return [interpreter, "-m", "pytest"]
+
+    #: Cap for the discovery fallback — mirrors ``oc_flow.runner``'s
+    #: ``_discover_test_files`` NOTE (never the full suite on large repos).
+    _DISCOVERY_CAP: ClassVar[int] = 10
+
+    def _discover_tests(self, root: Path) -> list[str]:
+        """Discovered test files (capped) for the strict RED fallback.
+
+        OC Flow parity: when no filename/word match connects the task to a
+        test, RED is still provable by executing the project's own test files
+        and requiring a genuine failure (``resolve_test_command`` discovers
+        the same way).
+        """
+        tests = sorted(
+            str(p)
+            for pattern in ("test_*.py", "*_test.py")
+            for p in root.rglob(pattern)
+            if p.is_file() and self._is_candidate(p, root)
+        )
+        return tests[: self._DISCOVERY_CAP]
+
+    #: Directories never searched for candidate tests (vendored/derived trees).
+    _EXCLUDED_PARTS: ClassVar[frozenset[str]] = frozenset(
+        {"node_modules", "venv", "__pycache__", "site-packages"}
+    )
+
+    @classmethod
+    def _is_candidate(cls, path: Path, root: Path) -> bool:
+        """A test-file candidate must not live in a hidden or vendored tree."""
+        try:
+            rel_parts = path.relative_to(root).parts[:-1]
+        except ValueError:
+            rel_parts = path.parts[:-1]
+        return not any(part.startswith(".") or part in cls._EXCLUDED_PARTS for part in rel_parts)
 
     def _fuzzy_suggest(self, task: str, root: Path) -> str | None:
         """Find the most similar test file when exact matching fails.
 
-        Splits the task into words and finds test files whose names contain
-        at least half of those words.
+        Splits the task into words and ranks every test file under the root
+        (tests/-layout or root-layout) by name-word overlap.
         """
-        tests_dir = root / "tests"
-        if not tests_dir.exists():
-            return None
+        import re
 
-        all_tests = [str(p) for p in tests_dir.rglob("test_*.py")]
+        all_tests = [
+            str(p)
+            for pattern in ("test_*.py", "*_test.py")
+            for p in root.rglob(pattern)
+            if p.is_file() and self._is_candidate(p, root)
+        ]
         if not all_tests:
             return None
 
-        # Split task into words for matching
-        task_words = set(task.replace("-", "_").replace("_", " ").split())
+        # Split the task into words for matching. Punctuation-robust so
+        # natural-language tasks ("fix add in app.py") yield {app, py, ...}.
+        task_words = {w for w in re.split(r"[^a-z0-9]+", task.lower()) if w}
         if not task_words:
             return None
 
         best_match: tuple[str, int] | None = None
         for test_path in all_tests:
             test_name = Path(test_path).stem.replace("test_", "").replace("_test", "")
-            test_words = set(test_name.replace("_", " ").split())
+            test_words = {w for w in re.split(r"[^a-z0-9]+", test_name.lower()) if w}
 
             # Count overlapping words
             overlap = len(task_words & test_words)
@@ -825,6 +971,8 @@ class TestsPassGate:
         # would test the OLD code (a real correctness bug, and a flake in tests).
         # Never write/read cached bytecode for this nested run.
         _env["PYTHONDONTWRITEBYTECODE"] = "1"
+        # AC-031: no .pytest_cache residue in the user's project tree.
+        _env["PYTEST_ADDOPTS"] = "-p no:cacheprovider"
 
         try:
             proc = subprocess.run(
@@ -853,7 +1001,7 @@ class TestsPassGate:
                 phase="verify",
                 status=GateStatus.PASSED,
                 message="TestsPassGate: all tests pass (GREEN confirmed).",
-                metadata={"exit_code": 0},
+                metadata={"exit_code": 0, "command": " ".join(str(c) for c in cmd)},
             )
 
         return PhaseGate(
@@ -864,5 +1012,5 @@ class TestsPassGate:
                 f"TestsPassGate: tests failed (exit {proc.returncode}). "
                 "Fix failing tests before completing the verify phase."
             ),
-            metadata={"exit_code": proc.returncode},
+            metadata={"exit_code": proc.returncode, "command": " ".join(str(c) for c in cmd)},
         )

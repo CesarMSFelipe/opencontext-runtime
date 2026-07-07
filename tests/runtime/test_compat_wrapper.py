@@ -88,3 +88,9 @@ class TestWrapperOff:
         assert result.legacy is sentinel
         assert fake.calls == [("sdd", "do x")]
         assert not (tmp_path / ".opencontext" / "sessions").exists()
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

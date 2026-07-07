@@ -19,6 +19,8 @@ Layering (doc 58): L9, importing only the sibling OC Flow nodes (L9) downward.
 
 from __future__ import annotations
 
+import re
+
 from opencontext_core.compat import StrEnum
 from opencontext_core.oc_flow.nodes import DeterministicNodeExecutor, OCFlowContext
 
@@ -118,6 +120,28 @@ def verification_required(task: str) -> bool:
     """Return whether success requires a real test/check command."""
     lowered = task.lower()
     return "test" in lowered or "pytest" in lowered or "failing" in lowered
+
+
+# Tasks whose GOAL is authoring/adjusting tests ("add a test for X", "write unit
+# tests") — a test-only edit is legitimate there, never suspicious.
+_TEST_AUTHORING_RE = re.compile(
+    r"\b(?:add|create|write|introduce|author|extend|expand|improve|update)\s+"
+    r"(?:\w+\s+){0,3}tests?\b"
+)
+
+
+def functional_change_expected(task: str) -> bool:
+    """Whether ``task`` requires a functional (non-test) change.
+
+    Policy input for the test-only-edit detector: ``False`` for read-only tasks
+    and for explicit test-authoring tasks, where editing only test files is the
+    goal. ``True`` for every other mutation task — so a strict run that merely
+    rewrites the failing test to assert the buggy behavior can be flagged as
+    suspicious instead of passing.
+    """
+    if not mutation_required(task):
+        return False
+    return _TEST_AUTHORING_RE.search(task.lower()) is None
 
 
 def resolve_completion(

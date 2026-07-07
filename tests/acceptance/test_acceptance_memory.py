@@ -1,0 +1,230 @@
+"""AC-017 / AC-018 / AC-019: memory — save/search/get, reuse reporting, compaction.
+
+Contracts: MEMORY_CONTRACT.md, ACCEPTANCE_CONTRACT.md.
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from tests.acceptance.helpers.cli import run, run_json
+from tests.acceptance.helpers.ops import find_run_dir, install_workspace
+
+pytestmark = pytest.mark.acceptance
+
+
+def test_memory_save_search_get_roundtrip(oc_bin, workspace) -> None:
+    """AC-017: `memory save/search/get` works."""
+    ws = workspace("memory_reuse_basic")
+    install_workspace(oc_bin, ws)
+
+    proc, receipt = run_json(
+        oc_bin,
+        [
+            "memory",
+            "v2",
+            "save",
+            "--title",
+            "Fixed N+1 query in UserList",
+            "--content",
+            "Root cause: missing select_related on the user queryset.",
+            "--type",
+            "bugfix",
+        ],
+        cwd=ws.root,
+        env=ws.env,
+    )
+    assert proc.returncode == 0, proc.stderr[:400]
+    saved_id = receipt["receipt"]["id"]
+    assert isinstance(saved_id, int)
+
+    proc, results = run_json(
+        oc_bin,
+        ["memory", "v2", "search", "--query", "N+1 query UserList"],
+        cwd=ws.root,
+        env=ws.env,
+    )
+    assert proc.returncode == 0, proc.stderr[:400]
+    assert any(r["id"] == saved_id for r in results), (
+        f"saved observation {saved_id} not found by search: {results}"
+    )
+
+    proc, observation = run_json(
+        oc_bin,
+        ["memory", "v2", "get", "--id", str(saved_id)],
+        cwd=ws.root,
+        env=ws.env,
+    )
+    assert proc.returncode == 0, proc.stderr[:400]
+    assert observation["id"] == saved_id
+    assert observation["title"] == "Fixed N+1 query in UserList"
+    assert "select_related" in observation["content"]
+    assert observation["lifecycle_state"] == "active"
+
+
+def test_second_run_reports_approved_memory_as_used(stub_run) -> None:
+    """AC-018: a second run retrieves approved memory and reports it as used."""
+    # A relevant memory existed BEFORE this run (saved in the stub_run fixture).
+    assert stub_run["memory_receipt"]["receipt"]["id"]
+
+    ws = stub_run["ws"]
+    run_dir = find_run_dir(ws, stub_run["summary"]["run_id"])
+    candidates = [run_dir / "run.json", run_dir / "state.json"]
+    reports = [json.loads(p.read_text(encoding="utf-8")) for p in candidates if p.is_file()]
+    assert reports, f"no run report found in {run_dir}"
+    memory_blocks = [r.get("memory") for r in reports if isinstance(r, dict) and r.get("memory")]
+    assert memory_blocks, (
+        "MEMORY_CONTRACT rule 4: every memory hit used by a run is recorded in the run report"
+    )
+    block = memory_blocks[0]
+    assert block.get("used") is True
+    assert block.get("hits"), "the retrieved memory must be listed with id/score/used_for"
+
+
+def test_run_memory_block_reports_candidates_and_approval(stub_run) -> None:
+    """MEM-HITS-SHAPE: run.json memory block carries new_candidates + requires_approval."""
+    ws = stub_run["ws"]
+    run_dir = find_run_dir(ws, stub_run["summary"]["run_id"])
+    report = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    block = report["memory"]
+    assert isinstance(block.get("new_candidates"), int), (
+        f"MEMORY_CONTRACT rule 4: memory.new_candidates must be an int count, got {block}"
+    )
+    assert isinstance(block.get("requires_approval"), bool), (
+        f"MEMORY_CONTRACT rule 4: memory.requires_approval must be a bool, got {block}"
+    )
+
+
+def test_memory_lifecycle_verbs_dispatch_end_to_end(oc_bin, workspace) -> None:
+    """MEM-CMDS: top-level `memory approve|reject|purge` dispatch works on the real binary.
+
+    Under `memory.approval_required: true` (MEM-002 live path) a v2 save lands
+    proposed and invisible to default search; `approve` flips it to active,
+    `reject` discards a second proposed row, and `purge --yes` wipes the store.
+    """
+    ws = workspace("memory_reuse_basic")
+    (ws.root / "opencontext.yaml").write_text(
+        "memory:\n  approval_required: true\n", encoding="utf-8"
+    )
+    install_workspace(oc_bin, ws)
+
+    def save(title: str, content: str) -> int:
+        proc, receipt = run_json(
+            oc_bin,
+            ["memory", "v2", "save", "--title", title, "--content", content],
+            cwd=ws.root,
+            env=ws.env,
+        )
+        assert proc.returncode == 0, proc.stderr[:400]
+        return int(receipt["receipt"]["id"])
+
+    kept_id = save("Deploy rule", "Deploys must run behind the release feature flag.")
+    proc, results = run_json(
+        oc_bin, ["memory", "v2", "search", "--query", "feature flag"], cwd=ws.root, env=ws.env
+    )
+    assert proc.returncode == 0, proc.stderr[:400]
+    assert all(r["id"] != kept_id for r in results), (
+        f"MEM-002: proposed memory must be excluded from default search: {results}"
+    )
+
+    proc, approved = run_json(oc_bin, ["memory", "approve", str(kept_id)], cwd=ws.root, env=ws.env)
+    assert proc.returncode == 0, proc.stderr[:400]
+    assert approved["lifecycle_state"] == "active"
+    proc, results = run_json(
+        oc_bin, ["memory", "v2", "search", "--query", "feature flag"], cwd=ws.root, env=ws.env
+    )
+    assert any(r["id"] == kept_id for r in results), (
+        f"approved memory must become retrievable: {results}"
+    )
+
+    dropped_id = save("Rejected rule", "Nightly jobs may bypass the review queue.")
+    proc, rejected = run_json(
+        oc_bin, ["memory", "reject", str(dropped_id)], cwd=ws.root, env=ws.env
+    )
+    assert proc.returncode == 0, proc.stderr[:400]
+    assert rejected["lifecycle_state"] == "rejected"
+    gone = run(oc_bin, ["memory", "v2", "get", "--id", str(dropped_id)], cwd=ws.root, env=ws.env)
+    assert gone.returncode == 2, "rejected memory must never be retrieved again"
+
+    refused = run(oc_bin, ["memory", "purge"], cwd=ws.root, env=ws.env)
+    assert refused.returncode == 2, "purge must refuse without --yes"
+    proc, purged = run_json(oc_bin, ["memory", "purge", "--yes"], cwd=ws.root, env=ws.env)
+    assert proc.returncode == 0, proc.stderr[:400]
+    assert purged["purged"] is True
+    assert purged["removed_files"], "purge must report the removed store files"
+    proc, results = run_json(
+        oc_bin, ["memory", "v2", "search", "--query", "feature flag"], cwd=ws.root, env=ws.env
+    )
+    assert results == [], "after purge nothing is retrievable"
+
+
+def test_memory_compact_preserves_protected_memory(oc_bin, workspace) -> None:
+    """AC-019: `memory compact` reduces old entries without deleting protected memory.
+
+    Seeds real compactable duplicates through the CLI (save twice with distinct
+    content, then converge one entry via `memory v2 update` — save-time dedupe
+    absorbs equal-content saves, so convergence is the black-box way to create
+    duplicates) and asserts the CLI reports an actual reduction, not just exit 0.
+    """
+    ws = workspace("memory_reuse_basic")
+    install_workspace(oc_bin, ws)
+
+    def save(title: str, content: str, obs_type: str) -> int:
+        proc, receipt = run_json(
+            oc_bin,
+            ["memory", "v2", "save", "--title", title, "--content", content, "--type", obs_type],
+            cwd=ws.root,
+            env=ws.env,
+        )
+        assert proc.returncode == 0, proc.stderr[:400]
+        return int(receipt["receipt"]["id"])
+
+    protected_id = save(
+        "Protected architecture decision",
+        "We keep the hexagonal core; adapters stay in the outer ring.",
+        "decision",
+    )
+    pin = run(oc_bin, ["memory", "v2", "pin", "--id", str(protected_id)], cwd=ws.root, env=ws.env)
+    assert pin.returncode == 0, pin.stderr[:400]
+
+    duplicate_payload = "The build cache lives under .cache/build and is safe to delete."
+    keeper_id = save("Build cache note", duplicate_payload, "discovery")
+    duplicate_id = save("Build cache note (older wording)", "Old wording to converge.", "discovery")
+    update = run(
+        oc_bin,
+        ["memory", "v2", "update", "--id", str(duplicate_id), "--content", duplicate_payload],
+        cwd=ws.root,
+        env=ws.env,
+    )
+    assert update.returncode == 0, update.stderr[:400]
+
+    proc, report = run_json(oc_bin, ["memory", "compact"], cwd=ws.root, env=ws.env)
+    assert proc.returncode == 0, (
+        f"MEMORY_CONTRACT command surface: `memory compact` must exist, "
+        f"got exit {proc.returncode}: {proc.stderr[:300]}"
+    )
+
+    # The CLI path must actually reduce entries (a no-op that exits 0 fails here).
+    assert report["after"] < report["before"], (
+        f"MEMORY_CONTRACT `compact`: expected a real reduction, got {report}"
+    )
+    assert report["after"] == report["before"] - 1, report
+    assert duplicate_id in report["compacted_ids"], report
+    assert keeper_id not in report["compacted_ids"], report
+    assert protected_id not in report["compacted_ids"], report
+
+    # The oldest duplicate survives; the compacted one is gone from reads.
+    proc, keeper = run_json(
+        oc_bin, ["memory", "v2", "get", "--id", str(keeper_id)], cwd=ws.root, env=ws.env
+    )
+    assert proc.returncode == 0
+    assert keeper["deleted_at"] is None
+
+    # The pinned decision must survive compaction.
+    proc, observation = run_json(
+        oc_bin, ["memory", "v2", "get", "--id", str(protected_id)], cwd=ws.root, env=ws.env
+    )
+    assert proc.returncode == 0
+    assert observation["deleted_at"] is None

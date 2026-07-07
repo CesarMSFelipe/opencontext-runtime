@@ -4,27 +4,32 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from opencontext_core.paths import StorageMode, resolve_workspace_path
+from opencontext_core.paths import execution_state
 
 
 class RunStore:
     """Maps run IDs to artifact directory paths via a JSON index."""
 
     def __init__(self, root: Path | str = ".") -> None:
-        self.runs_path = resolve_workspace_path(root, StorageMode.local) / "runs"
+        self.runs_path = execution_state.runs_root(root)
         self.runs_path.mkdir(parents=True, exist_ok=True)
+        self._read_roots = execution_state.execution_read_roots(root, "runs")
 
     def _index_path(self) -> Path:
         return self.runs_path / "index.json"
 
     def _read(self) -> dict[str, str]:
-        p = self._index_path()
-        if not p.exists():
-            return {}
         import json
 
-        data: dict[str, str] = json.loads(p.read_text(encoding="utf-8"))
-        return data
+        # Active index first; fall back to a legacy in-repo index so runs
+        # persisted before the user-mode migration stay listable.
+        for candidate in self._read_roots:
+            p = candidate / "index.json"
+            if not p.exists():
+                continue
+            data: dict[str, str] = json.loads(p.read_text(encoding="utf-8"))
+            return data
+        return {}
 
     def _write(self, index: dict[str, str]) -> None:
         import json

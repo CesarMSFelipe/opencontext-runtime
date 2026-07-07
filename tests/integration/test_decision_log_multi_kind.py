@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.oc_flow.models import Lane
 from opencontext_core.oc_flow.runner import OCFlowRunner
 
@@ -72,3 +74,9 @@ def test_memory_promotion_decision_present(tmp_path: Path) -> None:
     assert promo[0]["selected"] in ("promote", "reject", "keep", "not_promoted"), (
         f"memory_promotion selected must be a verdict string, got: {promo[0]['selected']}"
     )
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

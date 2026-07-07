@@ -81,6 +81,26 @@ def test_gather_kg_status_unindexed_is_safe(tmp_path: Path) -> None:
     assert status.detail
 
 
+def test_gather_kg_status_never_creates_project_storage(tmp_path: Path) -> None:
+    """AC-031 clean-project promise: a status READ must not create storage.
+
+    The TUI home screen calls this on every open (including ``tui --smoke``);
+    instantiating the full runtime here used to mkdir ``.storage/opencontext``
+    with memory.db/context_graph.db/learning/ inside the user's project.
+    """
+    project = tmp_path / "repo"
+    project.mkdir()
+    (project / "app.py").write_text("x = 1\n", encoding="utf-8")
+    before = sorted(str(p.relative_to(project)) for p in project.rglob("*"))
+
+    status = gather_kg_status(project)
+
+    after = sorted(str(p.relative_to(project)) for p in project.rglob("*"))
+    assert status.indexed is False
+    residue = sorted(set(after) - set(before))
+    assert after == before, f"status read mutated the project tree: {residue}"
+
+
 def test_render_kg_header_shows_counts(tmp_path: Path) -> None:
     status = SimpleNamespace(
         indexed=True,

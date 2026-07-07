@@ -79,6 +79,9 @@ class HarnessConfig:
     # BudgetMode.STRICT). Set via workflow_defaults.gate_policy.
     gate_policy: str = "block"
     privacy_profile: PrivacyProfile = PrivacyProfile.OFF
+    # The legacy default is resolved mode-aware (paths.execution_state.runs_root):
+    # user mode places run artifacts under XDG project state, local mode keeps
+    # ``<root>/.opencontext/runs``. An explicit override stays root-relative.
     artifact_root: str = ".opencontext/runs"
     # TDD / approval pre-gate governance (decoupled from budget_mode).
     # tdd_mode: "ask" | "strict" | "off". Only "strict" gates apply on tests.
@@ -96,6 +99,10 @@ class HarnessConfig:
     # Overall retrieval/context envelope for a run (the explore widen budget). Was a
     # hardcoded 6000 in create_run; now configurable via workflow_defaults.
     max_context_tokens: int = 6000
+    # Explicit project test command (workflow_defaults.test_command). When set it
+    # wins over interpreter/pytest discovery in verification-command resolution.
+    # Accepts a shell string ("make test") or an argv list in YAML.
+    test_command: list[str] | None = None
     phases: dict[str, PhaseConfig] = field(
         default_factory=lambda: {
             "explore": PhaseConfig(
@@ -254,6 +261,13 @@ class HarnessConfig:
             config.max_context_tokens = wf_defaults.get(
                 "max_context_tokens", config.max_context_tokens
             )
+            raw_test_command = wf_defaults.get("test_command")
+            if isinstance(raw_test_command, str) and raw_test_command.strip():
+                import shlex
+
+                config.test_command = shlex.split(raw_test_command)
+            elif isinstance(raw_test_command, list) and raw_test_command:
+                config.test_command = [str(item) for item in raw_test_command]
 
         phases_data = data.get("phases", {})
         # :attr:`surgical_explore` / :attr:`surgical_coverage_floor` are

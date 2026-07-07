@@ -5,10 +5,12 @@ Usage:
   opencontext runs show <run_id> [--json]
   opencontext runs artifacts <run_id> [--json]
 
-Reads the on-disk run directories the harness writes to
-``.opencontext/runs/<run_id>/`` (run.json, gates.json, artifacts.json, ...),
-preferring the RunStore index and falling back to a directory scan so runs
-created before the index existed still appear.
+Reads the on-disk run directories the harness writes under the mode-aware
+runs/sessions roots (run.json, gates.json, artifacts.json, ...), preferring
+the RunStore index and falling back to a directory scan so runs created
+before the index existed still appear. Resolution is global-first (the XDG
+project workspace in user mode) with a legacy in-repo ``.opencontext``
+fallback for runs persisted before the user-mode migration.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from opencontext_cli.contracts.errors import CliContractError
 from opencontext_cli.output import eprint
 from opencontext_core.dx.console_styles import console
 from opencontext_core.harness.run_store import RunStore
@@ -27,39 +30,46 @@ def _root(args: Any) -> Path:
     return Path(getattr(args, "root", None) or Path.cwd())
 
 
-def _runs_dir(root: Path) -> Path:
-    return root / ".opencontext" / "runs"
+def _runs_dirs(root: Path) -> list[Path]:
+    """Flat run roots, active (mode-resolved) location first, legacy second."""
+    from opencontext_core.paths import execution_state
+
+    return execution_state.execution_read_roots(root, "runs")
 
 
 def _sessions_run_dirs(root: Path) -> list[Path]:
-    """All run directories under the sessions layout.
+    """All run directories under the sessions layout, from every read root.
 
-    Covers ``.opencontext/sessions/<session_id>/runs/<run_id>/`` — the path
-    used by OCFlowRunner and RuntimeApi._durable_apply.
+    Covers ``<sessions root>/<session_id>/runs/<run_id>/`` — the path used by
+    OCFlowRunner and RuntimeApi._durable_apply — in the active (mode-resolved)
+    tree first, then the legacy in-repo tree.
     """
-    sessions_dir = root / ".opencontext" / "sessions"
-    if not sessions_dir.is_dir():
-        return []
+    from opencontext_core.paths import execution_state
+
     dirs: list[Path] = []
-    for session_dir in sorted(sessions_dir.iterdir()):
-        if not session_dir.is_dir():
+    for sessions_dir in execution_state.execution_read_roots(root, "sessions"):
+        if not sessions_dir.is_dir():
             continue
-        runs_subdir = session_dir / "runs"
-        if runs_subdir.is_dir():
-            dirs.extend(d for d in sorted(runs_subdir.iterdir()) if d.is_dir())
+        for session_dir in sorted(sessions_dir.iterdir()):
+            if not session_dir.is_dir():
+                continue
+            runs_subdir = session_dir / "runs"
+            if runs_subdir.is_dir():
+                dirs.extend(d for d in sorted(runs_subdir.iterdir()) if d.is_dir())
     return dirs
 
 
 def _list_run_ids(root: Path) -> list[str]:
     """Run IDs from the RunStore index, unioned with both on-disk run layouts."""
     ids: set[str] = set(RunStore(root).list_run_ids())
-    # Legacy harness layout: .opencontext/runs/<run_id>/run.json
-    runs_dir = _runs_dir(root)
-    if runs_dir.is_dir():
+    # Flat harness layout: <runs root>/<run_id>/run.json (active + legacy roots)
+    for runs_dir in _runs_dirs(root):
+        if not runs_dir.is_dir():
+            continue
         for child in runs_dir.iterdir():
             if child.is_dir() and (child / "run.json").exists():
                 ids.add(child.name)
-    # OC Flow / durable-apply sessions layout: .opencontext/sessions/*/runs/*/
+    # OC Flow / durable-apply sessions layout: <sessions root>/*/runs/*/
     for run_dir in _sessions_run_dirs(root):
         # Accept dirs that contain either run.json (RuntimeApi) or state.json (oc_flow).
         if (run_dir / "run.json").exists() or (run_dir / "state.json").exists():
@@ -68,24 +78,26 @@ def _list_run_ids(root: Path) -> list[str]:
 
 
 def _find_run_dir(root: Path, run_id: str) -> Path:
-    """Locate a run directory by run_id, checking both legacy and sessions layouts.
+    """Locate a run directory by run_id, checking both flat and sessions layouts.
 
     Returns the first matching directory. Preference order:
-    1. Legacy ``.opencontext/runs/<run_id>/``
-    2. Sessions ``.opencontext/sessions/*/runs/<run_id>/``
+    1. Flat ``<runs root>/<run_id>/`` (active location first, legacy second)
+    2. Sessions ``<sessions root>/*/runs/<run_id>/`` (same root order)
 
-    If neither exists, returns the legacy path (callers check ``is_dir()``/
-    ``run.json`` existence and handle the not-found case themselves).
+    If neither exists, returns the active flat path (callers check
+    ``is_dir()``/``run.json`` existence and handle the not-found case
+    themselves).
     """
-    legacy = _runs_dir(root) / run_id
-    if legacy.is_dir():
-        return legacy
+    flat_candidates = [runs_dir / run_id for runs_dir in _runs_dirs(root)]
+    for candidate in flat_candidates:
+        if candidate.is_dir():
+            return candidate
     for run_dir in _sessions_run_dirs(root):
         if run_dir.name == run_id:
             return run_dir
-    # Not found in either layout — return the legacy path for consistent
+    # Not found in either layout — return the active path for consistent
     # "not found" error handling in callers.
-    return legacy
+    return flat_candidates[0]
 
 
 def _run_dir(root: Path, run_id: str) -> Path:
@@ -161,6 +173,12 @@ def add_run_exec_parser(subparsers: Any) -> None:
         default=None,
         help="Explicit config path (overrides <root>/opencontext.yaml).",
     )
+    run_parser.add_argument(
+        "--list-executors",
+        dest="list_executors",
+        action="store_true",
+        help="List the registered executors with their capabilities and exit.",
+    )
     run_parser.add_argument("--json", action="store_true", help="JSON output.")
 
 
@@ -178,6 +196,31 @@ def handle_run_exec(args: Any) -> int:
     from opencontext_core.runtime.api import RunRequest, RuntimeApi, StartSessionRequest
 
     root = _root(args)
+    # Executor registry visibility (EXE tests): list every registered executor
+    # with its honest capability declarations, then exit without running.
+    if getattr(args, "list_executors", False):
+        from opencontext_core.executors.registry import default_registry
+
+        specs = [spec.to_dict() for spec in default_registry().list()]
+        if getattr(args, "json", False):
+            print(json.dumps({"executors": specs}, indent=2))
+        else:
+            console.table(
+                "Executors",
+                ["ID", "Mutates", "Runs commands", "Network", "Approval", "Description"],
+                [
+                    [
+                        s["id"],
+                        "yes" if s["can_mutate"] else "no",
+                        "yes" if s["can_run_commands"] else "no",
+                        "yes" if s["requires_network"] else "no",
+                        "yes" if s["requires_approval"] else "no",
+                        s["description"],
+                    ]
+                    for s in specs
+                ],
+            )
+        return 0
     # B2 / ADR-A2: read the SAME path install writes (<root>/opencontext.yaml),
     # via the one shared resolver — never the old hardcoded configs/ subpath.
     config_path = resolve_config_path(root, getattr(args, "config", None))
@@ -200,9 +243,9 @@ def handle_run_exec(args: Any) -> int:
     # and the provider-bound context envelope — "Context redaction is applied
     # automatically" must hold for the task itself, not only provider errors.
     if task:
-        from opencontext_core.safety.secrets import SecretScanner
+        from opencontext_core.safety.redaction import redact_prose_secrets
 
-        task = SecretScanner().redact(task)
+        task = redact_prose_secrets(task)
     workflow = getattr(args, "workflow", "oc-flow")
     lane = getattr(args, "lane", "fast")
     profile = getattr(args, "profile", "balanced")
@@ -309,12 +352,47 @@ def handle_run_exec(args: Any) -> int:
         "mutation_required",
         "verified_by",
         "verification_outcome",
+        "tdd",
     ):
         _v = getattr(leg, _field, None)
         if _v is not None:
             summary[_field] = _v
     if sel.get("reason"):
         summary["selection_reason"] = sel["reason"]
+
+    # Canonical state + documented exit code (RUN_STATE_CONTRACT / CLI_CONTRACT):
+    # the JSON `status` carries the canonical final state; the raw workflow
+    # vocabulary stays available as `legacy_status` (additive fields only).
+    from opencontext_core.models.canonical_status import exit_code_for_run, to_canonical
+
+    _tdd_block = getattr(leg, "tdd", None)
+    _tdd_violation = str(oc_status) == "tdd_violation" or bool(
+        isinstance(_tdd_block, dict) and _tdd_block.get("violation")
+    )
+    _verification_failed = getattr(leg, "verification_outcome", None) == "failed"
+    canonical = to_canonical(str(oc_status)).value
+    exit_code = exit_code_for_run(
+        str(oc_status),
+        tdd_violation=_tdd_violation,
+        verification_failed=_verification_failed,
+    )
+    summary["status"] = canonical
+    summary["legacy_status"] = oc_status
+    summary["canonical_status"] = canonical
+    summary["exit_code"] = exit_code
+    if _tdd_violation:
+        _violation_code = (
+            _tdd_block.get("violation") if isinstance(_tdd_block, dict) else None
+        ) or "TDD_RED_NOT_PROVEN"
+        summary["error"] = {
+            "code": _violation_code,
+            "message": str(getattr(leg, "completion_reason", "") or "TDD strict violated."),
+            "hint": (
+                "Add or modify a relevant test, run it, and ensure it fails before "
+                "applying the fix (TDD_STRICT_CONTRACT)."
+            ),
+            "details": {"workflow": str(summary.get("workflow")), "phase": "mutate"},
+        }
     if getattr(args, "json", False):
         print(json.dumps(summary, indent=2, default=str))
     else:
@@ -339,12 +417,11 @@ def handle_run_exec(args: Any) -> int:
             "`opencontext doctor`.",
             file=sys.stderr,
         )
-    # Exit code: a genuine FAILURE (a failed run or a gate-blocked run) is nonzero so
-    # CI/scripts can detect it. Honest degraded outcomes (needs_executor/needs_provider,
-    # not_applied) stay 0 — the command did its job; the status is in --json. Returned
-    # (not sys.exit'd) so the ~6 in-process test callers never raise SystemExit; the
-    # dispatcher raises on the returned code.
-    return 1 if oc_status in {"failed", "blocked"} else 0
+    # Exit code (RUN_STATE_CONTRACT): the canonical mapping — needs_executor -> 5,
+    # verification failure -> 8, TDD strict violation -> 6, passed -> 0 — so CI can
+    # never mistake a degraded run for success. Returned (not sys.exit'd) so
+    # in-process test callers never raise SystemExit; main() raises SystemExit(rc).
+    return exit_code
 
 
 def add_simulate_parser(subparsers: Any) -> None:
@@ -545,8 +622,14 @@ def handle_run_inspect(args: Any) -> None:
         run_dir = _run_dir(root, args.run_id)
         run_json = _read_run_json(run_dir)
         if run_json is None:
-            eprint(f"Run not found: {args.run_id}")
-            sys.exit(1)
+            # JSON purity rule (CLI_CONTRACT): the dispatcher renders this as a
+            # pure JSON error envelope on stdout under --json (exit 1 either way).
+            raise CliContractError(
+                "RUN_NOT_FOUND",
+                f"Run not found: {args.run_id}",
+                hint="Run `opencontext runs list` to see the persisted run ids.",
+                details={"run_id": args.run_id},
+            )
         # Harness runs keep gates.json/artifacts.json at the run root; OC Flow keeps
         # them under artifacts/oc-flow/. Count both so `runs show` is not blind to
         # oc-flow runs (which previously reported gates:0, artifacts:0).
@@ -576,8 +659,12 @@ def handle_run_inspect(args: Any) -> None:
     if action == "artifacts":
         run_dir = _run_dir(root, args.run_id)
         if not run_dir.is_dir():
-            eprint(f"Run not found: {args.run_id}")
-            sys.exit(1)
+            raise CliContractError(
+                "RUN_NOT_FOUND",
+                f"Run not found: {args.run_id}",
+                hint="Run `opencontext runs list` to see the persisted run ids.",
+                details={"run_id": args.run_id},
+            )
         # Include the nested OC Flow artifact tree (artifacts/oc-flow/…), not just
         # top-level files — otherwise oc-flow runs looked empty. Paths are relative
         # to the run dir so the harness (flat) and oc-flow (nested) layouts read alike.

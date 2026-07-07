@@ -34,6 +34,7 @@ from opencontext_core.harness.models import (
     PhaseLedger,
 )
 from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
+from opencontext_core.paths.execution_state import runs_root
 
 
 @dataclass
@@ -390,7 +391,7 @@ class ExplorePhase(HarnessPhase):
             pack, pack_trace_id = runtime.build_context_pack_with_trace(state.task, full_budget)
 
         # Persist context pack to run directory
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         pack_path = run_dir / "context-pack.json"
         pack_path.write_text(pack.model_dump_json(indent=2), encoding="utf-8")
@@ -506,12 +507,7 @@ class ExplorePhase(HarnessPhase):
             HarnessArtifact(
                 id=f"explore-pack-{state.run_id[:8]}",
                 phase="explore",
-                path=str(
-                    resolve_workspace_path(state.root, StorageMode.local)
-                    / "runs"
-                    / state.run_id
-                    / "context-pack.json"
-                ),
+                path=str(runs_root(state.root) / state.run_id / "context-pack.json"),
                 kind="context-pack",
                 description=f"Context pack with {len(pack.included)} items",
             )
@@ -533,7 +529,12 @@ class ExplorePhase(HarnessPhase):
                 pass  # contract persistence is additive, never block explore
 
         # Record context provenance for the propose phase's provenance gates.
-        state.context_sources = {item.source for item in pack.included}
+        # Bare file paths (chunk suffixes normalized away) so the
+        # included_sources_present gate compares like against like: impact
+        # analysis produces bare paths, pack items may be per-symbol chunks.
+        state.context_sources = {
+            getattr(item, "source_path", None) or item.source for item in pack.included
+        }
         state.context_required_sources = list(dict.fromkeys(impact_affected_files))
         state.context_omitted = len(pack.omitted)
         state.context_omissions_recorded = len(pack.omissions)
@@ -567,6 +568,37 @@ class ExplorePhase(HarnessPhase):
             for item in getattr(pack, "omitted", []) or []
             if getattr(item, "source", "")
         ]
+
+        # SDD-003 / SDD_CONTRACT Current→Target: persist the exploration as a
+        # concrete artifact the propose phase reads (`exploration.md`), instead
+        # of leaving explore's findings only on the in-memory state.
+        exploration_path = run_dir / "exploration.md"
+        exploration_path.write_text(
+            _render_exploration_markdown(
+                task=state.task,
+                run_id=state.run_id,
+                arm=explore_arm,
+                expanded=explore_expanded,
+                kg_available=kg_available,
+                risk_tier=state.contract_risk_tier,
+                indexed_files=len(manifest.files),
+                indexed_symbols=len(manifest.symbols),
+                impacted_files=list(state.context_required_sources),
+                impacted_tests=list(state.impact_affected_tests),
+                required_symbols=list(state.contract_required_symbols),
+                sources=sorted(str(s) for s in state.context_sources)[:20],
+            ),
+            encoding="utf-8",
+        )
+        explore_artifacts.append(
+            HarnessArtifact(
+                id=f"exploration-{state.run_id[:8]}",
+                phase="explore",
+                path=str(exploration_path),
+                kind="exploration",
+                description="Exploration findings consumed by the propose phase",
+            )
+        )
 
         return PhaseResult(
             phase="explore",
@@ -602,6 +634,52 @@ class ExplorePhase(HarnessPhase):
         )
 
 
+def _render_exploration_markdown(
+    *,
+    task: str,
+    run_id: str,
+    arm: str,
+    expanded: bool,
+    kg_available: bool,
+    risk_tier: Any,
+    indexed_files: int,
+    indexed_symbols: int,
+    impacted_files: list[str],
+    impacted_tests: list[str],
+    required_symbols: list[str],
+    sources: list[str],
+) -> str:
+    """Render explore's real findings as the ``exploration.md`` artifact."""
+
+    def _bullets(items: list[str], empty: str) -> list[str]:
+        return [f"- {item}" for item in items] if items else [f"- {empty}"]
+
+    lines = [
+        f"# Exploration: {task}",
+        "",
+        f"- run_id: {run_id}",
+        f"- arm: {arm}",
+        f"- expanded: {expanded}",
+        f"- kg_available: {kg_available}",
+        f"- risk_tier: {risk_tier}",
+        f"- indexed_files: {indexed_files}",
+        f"- indexed_symbols: {indexed_symbols}",
+        "",
+        "## Impacted files",
+        *_bullets(impacted_files, "(none identified)"),
+        "",
+        "## Impacted tests",
+        *_bullets(impacted_tests, "(none identified)"),
+        "",
+        "## Required symbols",
+        *_bullets(required_symbols, "(none resolved)"),
+        "",
+        "## Context sources",
+        *_bullets(sources, "(no sources included)"),
+    ]
+    return "\n".join(lines) + "\n"
+
+
 class ArchivePhase(HarnessPhase):
     """Archive phase: produce all run artifacts and the archive report.
 
@@ -626,7 +704,7 @@ class ArchivePhase(HarnessPhase):
         self._memory_v2 = memory_v2
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         # run.json is finalized by the runner's persist_run() AFTER all phases,
@@ -897,10 +975,25 @@ class ProposePhase(HarnessPhase):
     id = "propose"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         proposal_path = run_dir / "proposal.json"
+
+        # SDD-003: propose READS exploration.md (the explore phase's persisted
+        # artifact) and forwards it to the executor as the prior artifact — the
+        # explore→propose handoff mirrors the spec→design→tasks chain.
+        exploration_path = run_dir / "exploration.md"
+        exploration_text = ""
+        if exploration_path.exists():
+            try:
+                exploration_text = exploration_path.read_text(encoding="utf-8")
+            except OSError:
+                exploration_text = ""
+        if exploration_text:
+            state.prior_artifact = _compact_artifact(
+                f"## Exploration from the prior phase\n{exploration_text}", state
+            )
 
         # Delegate to the wired executor for a REAL proposal narrative; fall back to the
         # structured scaffold when no model is wired (mirrors spec/design/tasks — honest,
@@ -934,24 +1027,16 @@ class ProposePhase(HarnessPhase):
         # Build an honest "evidence" pointer the spec/design phases mirror, so
         # nothing downstream has to fall back to the bare task text.
         evidence = {
-            "explore_pack": str(
-                resolve_workspace_path(state.root, StorageMode.local)
-                / "runs"
-                / state.run_id
-                / "context-pack.json"
-            ),
-            "contract_path": str(
-                resolve_workspace_path(state.root, StorageMode.local)
-                / "runs"
-                / state.run_id
-                / "contract.yaml"
-            ),
+            "explore_pack": str(runs_root(state.root) / state.run_id / "context-pack.json"),
+            "contract_path": str(runs_root(state.root) / state.run_id / "contract.yaml"),
             "affected_files": impacted_files,
             "affected_tests": impacted_tests,
             "required_symbols": required_symbols,
             "risk_tier": contract_risk,
             "kg_available": getattr(state, "explore_kg_available", None),
         }
+        if exploration_text:
+            evidence["exploration_md"] = str(exploration_path)
 
         proposal = {
             "run_id": state.run_id,
@@ -979,6 +1064,13 @@ class ProposePhase(HarnessPhase):
                 }
             ],
         }
+        # SDD-003: proposal.json carries the consumed exploration forward so a
+        # regression that stops reading exploration.md is detectable on disk.
+        if exploration_text:
+            proposal["exploration"] = {
+                "path": str(exploration_path),
+                "digest": exploration_text[:1200],
+            }
         # Honesty parity with SpecPhase/DesignPhase/TasksPhase (spec PR-004 REQ-08):
         # when no real executor produced the proposal, mark it as a scaffold so the
         # guardrail gate surfaces it as a non-PASS (and FAILs it in strict mode) and
@@ -1548,7 +1640,7 @@ class ApplyPhase(HarnessPhase):
         return [executor._resolve(e.path) for e in edits]
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         apply_manifest_path = run_dir / "apply-manifest.json"
 
@@ -1814,13 +1906,56 @@ class ApplyPhase(HarnessPhase):
         return meta
 
 
+def _extract_scenario_blocks(spec_content: str) -> list[str]:
+    """Collect the ``#### Scenario:`` blocks from a spec, verbatim."""
+    blocks: list[str] = []
+    current: list[str] | None = None
+    for line in spec_content.splitlines():
+        if line.strip().startswith("#### Scenario:"):
+            if current is not None:
+                blocks.append("\n".join(current).strip())
+            current = [line.strip()]
+        elif current is not None:
+            if line.startswith(("## ", "### ", "#### ")):
+                blocks.append("\n".join(current).strip())
+                current = None
+            else:
+                current.append(line)
+    if current is not None:
+        blocks.append("\n".join(current).strip())
+    return [b for b in blocks if b]
+
+
+def _render_acceptance(task: str, spec_content: str) -> str:
+    """Render acceptance.md from the spec's scenarios (SDD-004).
+
+    Honest by construction: only scenarios that actually exist in the spec are
+    carried over; a scenario-less spec yields an explicit pending note, never
+    fabricated criteria.
+    """
+    blocks = _extract_scenario_blocks(spec_content)
+    lines = [
+        f"# Acceptance: {task}",
+        "",
+        "> Derived from the spec's GIVEN/WHEN/THEN scenarios (spec.md).",
+        "",
+    ]
+    if blocks:
+        for block in blocks:
+            lines.append(block)
+            lines.append("")
+    else:
+        lines.append("_No scenarios found in spec.md — acceptance criteria pending._")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 class SpecPhase(HarnessPhase):
     """Spec phase: read proposal and produce structured spec with requirements and scenarios."""
 
     id = "spec"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         proposal_path = run_dir / "proposal.json"
@@ -1896,6 +2031,12 @@ _None._
         spec_path.write_text(spec_content, encoding="utf-8")
         manifest_path = _write_phase_manifest(run_dir, "spec", spec_path, task, outcome)
 
+        # SDD-004: the spec phase also produces the acceptance artifact —
+        # acceptance.md carries the spec's GIVEN/WHEN/THEN scenarios verbatim
+        # (or an honest "pending" note when the spec has none).
+        acceptance_path = run_dir / "acceptance.md"
+        acceptance_path.write_text(_render_acceptance(task, spec_content), encoding="utf-8")
+
         gates: list[PhaseGate] = [
             ArtifactPersistedGate().evaluate(spec_path),
             _guardrail_gate("spec", spec_content, strict=bool(getattr(state, "sdd_strict", False))),
@@ -1924,10 +2065,18 @@ _None._
                     path=str(spec_path),
                     kind="spec",
                     description=f"Spec for: {task}",
-                )
+                ),
+                HarnessArtifact(
+                    id=f"acceptance-{state.run_id[:8]}",
+                    phase="spec",
+                    path=str(acceptance_path),
+                    kind="acceptance",
+                    description=f"Acceptance criteria for: {task}",
+                ),
             ],
             metadata={
                 "spec_path": str(spec_path),
+                "acceptance_path": str(acceptance_path),
                 "manifest_path": str(manifest_path),
                 "executor": outcome.executor,
             },
@@ -1940,7 +2089,7 @@ class DesignPhase(HarnessPhase):
     id = "design"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         spec_path = run_dir / "spec.md"
@@ -1986,6 +2135,19 @@ class DesignPhase(HarnessPhase):
                 if requirements
                 else "- (analyze spec.md for details)"
             )
+            # SDD-005: traceability back to the spec — list the requirement
+            # headings this design must satisfy (never invented; extracted from
+            # the actual spec content).
+            requirement_titles = [
+                line.split("### Requirement:", 1)[1].strip()
+                for line in spec_content.split("\n")
+                if "### Requirement:" in line
+            ]
+            trace_lines = (
+                "\n".join(f"- Requirement: {r}" for r in requirement_titles)
+                if requirement_titles
+                else "- (no requirements found in spec.md)"
+            )
             # Static template SCAFFOLD — explicitly NOT a real AI-produced design.
             design_content = f"""# Design: {task}
 
@@ -2015,6 +2177,12 @@ This section describes the high-level architecture for implementing: {task}.
 ```
 (state) --> SpecPhase --> DesignPhase --> TasksPhase --> ApplyPhase
 ```
+
+## Traceability
+
+Spec requirements this design satisfies (from spec.md):
+
+{trace_lines}
 
 ## Testing Strategy
 
@@ -2071,7 +2239,7 @@ class TasksPhase(HarnessPhase):
     id = "tasks"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         design_path = run_dir / "design.md"
@@ -2226,7 +2394,7 @@ class VerifyPhase(HarnessPhase):
     id = "verify"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         verify_report_path = run_dir / "verify-report.json"
@@ -2277,15 +2445,38 @@ class VerifyPhase(HarnessPhase):
             budget_mode=self.budget_mode,
         )
 
-        # If tests failed, mark as WARNING (not FAILED, since verify is about
-        # reporting — FAILED is reserved for budget/gate violations)
+        # Test failure is a real verification failure — FAILED so the runner
+        # propagates it to final_status and triggers fix loops when a delegate
+        # is wired. WARNING is not strong enough: it never updates final_status,
+        # so a failing test suite would silently report the run as passed.
         if test_result["exit_code"] != 0:
             gates.append(
                 PhaseGate(
                     id="verify_tests_passed",
                     phase="verify",
-                    status=GateStatus.WARNING,
+                    status=GateStatus.FAILED,
                     message=f"Tests exited with code {test_result['exit_code']}",
+                    metadata={
+                        "exit_code": test_result.get("exit_code"),
+                        "command": str(test_result.get("command", "")),
+                    },
+                )
+            )
+        elif tests_executed and test_result.get("command"):
+            # Contract step 7 (regression evidence): the verify phase's suite
+            # re-run is the run's regression proof — persist a PASSED gate with
+            # the real command + exit code so the run.json ``tdd.regression``
+            # block can carry it instead of a hardcoded null.
+            gates.append(
+                PhaseGate(
+                    id="verify_tests_passed",
+                    phase="verify",
+                    status=GateStatus.PASSED,
+                    message=summary,
+                    metadata={
+                        "exit_code": test_result.get("exit_code"),
+                        "command": str(test_result.get("command", "")),
+                    },
                 )
             )
         elif not tests_executed and had_changes:
@@ -2497,6 +2688,27 @@ class VerifyPhase(HarnessPhase):
                 "error_output": "",
             }
         args = [sys.executable, "-m", "pytest", "-q", "--tb=short", *targets]
+        # EXE-002: ``policies: shell: allow: false`` in opencontext.yaml disables
+        # this command-execution path entirely — the command is refused before
+        # ``subprocess.run`` is ever reached. An absent key changes nothing.
+        from opencontext_core.config import load_config_or_defaults
+        from opencontext_core.policy.overlay import PoliciesOverlay
+
+        try:
+            _root_cfg = load_config_or_defaults(root / "opencontext.yaml", auto_detect=False)
+            _shell_allow = PoliciesOverlay.from_mapping(_root_cfg.policies).shell_allow
+        except Exception:
+            _shell_allow = None  # config is optional; absence means no shell gate
+        if _shell_allow is False:
+            return {
+                "exit_code": -3,
+                "passed": 0,
+                "failed": 0,
+                "errors": 1,
+                "tests_executed": False,
+                "output": "",
+                "error_output": "command blocked by policy: shell_disabled",
+            }
         # CMD-1: route the command through the policy deny-list before executing.
         # Until PR-005 ``forbidden_commands`` was loaded but read by no execution
         # path; this is the wiring that makes it actually enforce. The harness only
@@ -2531,6 +2743,7 @@ class VerifyPhase(HarnessPhase):
                 "failed": failed,
                 "errors": errors,
                 "tests_executed": True,
+                "command": " ".join(args),
                 "output": result.stdout[-2000:],
                 "error_output": result.stderr[-1000:],
             }
@@ -2576,7 +2789,7 @@ class ReviewPhase(HarnessPhase):
     id = "review"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         review_path = run_dir / "review.json"
@@ -2718,7 +2931,7 @@ class JudgmentDayPhase(HarnessPhase):
     id = "judgment"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         apply_artifacts = [a for a in state.artifacts if a.phase == "apply"]
@@ -2879,7 +3092,7 @@ class GGARulesPhase(HarnessPhase):
         return paths
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         rules = self._load_rules(state.root)
