@@ -63,7 +63,6 @@ from opencontext_core.harness.phases import (
     VerifyPhase,
 )
 from opencontext_core.models.trace import RunEvent
-from opencontext_core.oc_flow.run_bundle import ensure_gate_evidence
 from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.workflow.delegation_validator import (
     DelegationValidationError,
@@ -2637,6 +2636,11 @@ class HarnessRunner:
 
     def persist_run(self, state: HarnessState, result: HarnessRunResult) -> Path:
         """Persist run artifacts to .opencontext/runs/<run_id>/."""
+        # layering: lazy cycle-break — harness (L6) may not eagerly import the
+        # oc_flow workflow (L9); the shared gates.json evidence rule is only
+        # needed at persist time (doc-58 / tests/architecture).
+        from opencontext_core.oc_flow.run_bundle import ensure_gate_evidence
+
         run_dir = resolve_workspace_path(self.root, StorageMode.local) / "runs" / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 

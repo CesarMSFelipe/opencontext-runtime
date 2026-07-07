@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from enum import IntEnum
 from typing import Any
 
@@ -128,6 +129,38 @@ class ContextItem(BaseModel):
         le=1.0,
         description="Normalized trust score for source provenance.",
     )
+
+    @property
+    def source_path(self) -> str:
+        """Bare source path with any ``path:line`` chunk suffix removed.
+
+        Graph-symbol pack items carry chunk-suffixed sources (``src/auth.py:2``)
+        internally, but public surfaces — API ``included_sources``, trace
+        ``quality_inputs``, harness provenance gates — report bare file paths.
+        This property is the single normalization point: it prefers the item's
+        ``graph_provenance.file_path``, falls back to stripping a numeric
+        ``:line`` suffix, and leaves non-chunked sources (files, ``memory:key``
+        identifiers, tool names) untouched.
+        """
+        provenance = self.metadata.get("graph_provenance")
+        if isinstance(provenance, dict):
+            file_path = provenance.get("file_path")
+            if isinstance(file_path, str) and file_path:
+                return file_path
+        base, sep, suffix = self.source.rpartition(":")
+        if sep and suffix.isdigit():
+            return base
+        return self.source
+
+
+def unique_source_paths(items: Iterable[ContextItem]) -> list[str]:
+    """Order-preserving unique bare source paths for a sequence of pack items.
+
+    The projection used by every surface bound to the public bare-path contract
+    (``included_sources`` / ``omitted_sources``): chunks of the same file
+    collapse to one entry, first-seen order wins.
+    """
+    return list(dict.fromkeys(item.source_path for item in items))
 
 
 class ContextOmission(BaseModel):

@@ -38,7 +38,7 @@ from opencontext_core.llm.gateway import LLMGateway
 from opencontext_core.llm.mock import MockLLMGateway
 from opencontext_core.memory.stores import LocalProjectMemoryStore, ProjectMemoryStore
 from opencontext_core.memory_usability.context_repository import ContextRepository
-from opencontext_core.models.context import ContextItem, ContextPackResult
+from opencontext_core.models.context import ContextItem, ContextPackResult, unique_source_paths
 from opencontext_core.models.llm import LLMRequest, LLMResponse
 from opencontext_core.models.project import ProjectManifest
 from opencontext_core.models.trace import RuntimeTrace, TraceEvent, TraceSpan
@@ -866,8 +866,11 @@ class OpenContextRuntime:
             query=query,
             trace_id=trace.run_id,
             context=self._render_adapter_context(pack),
-            included_sources=[item.source for item in pack.included],
-            omitted_sources=[item.source for item in pack.omitted],
+            # Public contract: bare file paths, chunks of one file deduped.
+            # Chunk-level ids stay on the pack items (persisted in the trace's
+            # ``context_pack`` metadata), never on this surface.
+            included_sources=unique_source_paths(pack.included),
+            omitted_sources=unique_source_paths(pack.omitted),
             token_usage=trace.token_estimates,
             trust_decision=plan.trust_decision.model_dump(mode="json"),
             fallback_actions=plan.fallback_actions,
@@ -1453,8 +1456,12 @@ class OpenContextRuntime:
                 "quality_inputs": {
                     "candidate_count": len(candidates),
                     "ranked_count": len(ranked),
-                    "included_sources": [item.source for item in pack_result.included],
-                    "omitted_sources": [item.source for item in pack_result.omitted],
+                    # Bare-path contract (same as PreparedContext.included_sources);
+                    # chunk-suffixed item ids keep their own keys below.
+                    "included_sources": unique_source_paths(pack_result.included),
+                    "omitted_sources": unique_source_paths(pack_result.omitted),
+                    "included_items": [item.source for item in pack_result.included],
+                    "omitted_items": [item.source for item in pack_result.omitted],
                 },
             },
         )

@@ -533,7 +533,12 @@ class ExplorePhase(HarnessPhase):
                 pass  # contract persistence is additive, never block explore
 
         # Record context provenance for the propose phase's provenance gates.
-        state.context_sources = {item.source for item in pack.included}
+        # Bare file paths (chunk suffixes normalized away) so the
+        # included_sources_present gate compares like against like: impact
+        # analysis produces bare paths, pack items may be per-symbol chunks.
+        state.context_sources = {
+            getattr(item, "source_path", None) or item.source for item in pack.included
+        }
         state.context_required_sources = list(dict.fromkeys(impact_affected_files))
         state.context_omitted = len(pack.omitted)
         state.context_omissions_recorded = len(pack.omissions)
