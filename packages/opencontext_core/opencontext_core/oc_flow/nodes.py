@@ -141,6 +141,13 @@ class OCFlowContext:
     # B1 / AVH-015: reason the run produced no usable edits (invalid/blocked edit
     # set, policy denial), surfaced by the completion gate and the CLI summary.
     block_reason: str | None = None
+    # Policy-gate outcome (RUN_STATE_CONTRACT / DOC2 §10.4): ``policy_blocked`` is
+    # True once the action policy refused this run's edits (deny OR unapproved
+    # ask); it forbids the repair loop. ``policy_approval_required`` narrows it to
+    # the approval flavor — the runner surfaces that terminal as canonical
+    # ``needs_approval``.
+    policy_blocked: bool = False
+    policy_approval_required: bool = False
 
 
 # --------------------------------------------------------------------- executor seam
@@ -361,6 +368,26 @@ def _invalid_edit_contract_reason(edit: ApplyEdit) -> str | None:
     return None
 
 
+def _write_approval_granted(root: Path) -> bool:
+    """Whether writes are pre-approved for non-interactive runs at ``root``.
+
+    EXE-POLICIES: ``policies.writes.require_approval`` (overlaid onto
+    ``harness.approval_required_for_writes``) is the supported opt-in. When the
+    config demands approval, `opencontext run` has no interactive approval gate,
+    so the write policy evaluates as ASK-not-approved and the run surfaces
+    canonical ``needs_approval``. A missing/invalid config keeps the default
+    (approved — OC Flow mutates under a rollback checkpoint).
+    """
+    try:
+        from opencontext_core.config import load_config_or_defaults
+        from opencontext_core.config_resolver import resolve_config_path
+
+        config = load_config_or_defaults(resolve_config_path(root), auto_detect=False)
+        return not bool(getattr(config.harness, "approval_required_for_writes", False))
+    except Exception:
+        return True
+
+
 def _unsafe_edit_reason(edit: ApplyEdit) -> str | None:
     """Pre-apply denylist + proposed-content secret scan."""
     path = Path(edit.path)
@@ -401,6 +428,7 @@ class ProviderBackedNodeExecutor:
         security_mode: SecurityMode = SecurityMode.PRIVATE_PROJECT,
         is_allowed_path: Any = None,
         max_output_tokens: int = 6000,
+        approval_granted: bool | None = None,
     ) -> None:
         self._gateway = gateway
         self._root = Path(root)
@@ -411,6 +439,13 @@ class ProviderBackedNodeExecutor:
         self._max_output_tokens = max_output_tokens
         self._fallback = DeterministicNodeExecutor()
         self.block_reason: str | None = None
+        # Policy-gate flags read by node_mutate (RUN_STATE_CONTRACT): approval
+        # resolves from the project config unless the caller decides explicitly.
+        self._approval_granted = (
+            _write_approval_granted(self._root) if approval_granted is None else approval_granted
+        )
+        self.policy_blocked = False
+        self.policy_approval_required = False
 
     # gather / plan / diagnose: honest, model-free artifacts (mutation is the model job)
     def gather_context(self, task: str, seed_paths: Sequence[str], depth: int) -> ContextEnvelope:
@@ -432,6 +467,8 @@ class ProviderBackedNodeExecutor:
     def mutate(self, contract: TaskContract, envelope: ContextEnvelope) -> list[ApplyEdit]:
         self.block_reason = None
         self.provider_available = True
+        self.policy_blocked = False
+        self.policy_approval_required = False
         prompt = (
             f"{_APPLY_EDIT_INSTRUCTION}\n\nTask: {contract.scope}\n"
             f"Acceptance: {'; '.join(contract.acceptance_criteria)}"
@@ -473,9 +510,21 @@ class ProviderBackedNodeExecutor:
         for edit in edits:
             decision = self._policy_decision(edit)
             if not decision.allowed:
-                self.block_reason = f"policy denied write to {edit.path}: {decision.reason}"
+                self.policy_blocked = True
+                if bool(getattr(decision, "requires_approval", False)):
+                    # RUN_STATE_CONTRACT: the policy demands HUMAN APPROVAL before
+                    # this write — an approval outcome, not a hard denial. The
+                    # runner surfaces it as canonical ``needs_approval``.
+                    self.policy_approval_required = True
+                    self.block_reason = (
+                        f"policy requires human approval before writing to {edit.path}: "
+                        f"{decision.reason}"
+                    )
+                else:
+                    self.block_reason = f"policy denied write to {edit.path}: {decision.reason}"
                 return []
             if reason := _unsafe_edit_reason(edit):
+                self.policy_blocked = True
                 self.block_reason = f"policy denied write to {edit.path}: {reason}"
                 return []
         # Carry a reason + acceptance-criterion ref on every edit (FLOW-7).
@@ -492,7 +541,10 @@ class ProviderBackedNodeExecutor:
             action=ActionType.WRITE_FILE,
             sandbox_enabled=True,  # OC Flow mutates under a rollback checkpoint.
             explicitly_allowlisted=allowlisted,
-            approved=True,
+            # Approval is real, not hardcoded: when the project config demands
+            # write approval (policies.writes.require_approval) a non-interactive
+            # run is NOT approved and the ASK gate blocks (needs_approval).
+            approved=self._approval_granted,
         )
         return evaluate_action(request, security_mode=self._security_mode)
 
@@ -707,9 +759,21 @@ def node_gather_context(ctx: OCFlowContext) -> NodeResult:
             OC_FLOW_BUDGETS["gather_context"][1],
         )
     )
+    # RUN_STATE_CONTRACT needs_context producer: an envelope with ZERO items is
+    # unusable for `plan` (ContextEnvelope.has_items) — the flow could not build
+    # sufficient context for the task. The runner terminates such a run as
+    # canonical ``needs_context`` instead of planning on nothing.
+    outcome = NodeOutcome.OK
+    if not envelope.has_items:
+        outcome = NodeOutcome.NEEDS_CONTEXT
+        if not ctx.block_reason:
+            ctx.block_reason = (
+                "insufficient context: gathering produced an empty context envelope "
+                "for the task; index the project or pass seed paths and re-run"
+            )
     return NodeResult(
         node="gather_context",
-        outcome=NodeOutcome.OK,
+        outcome=outcome,
         outputs={
             "items": len(envelope.items),
             "omissions": len(envelope.omissions),
@@ -1090,6 +1154,13 @@ def node_mutate(ctx: OCFlowContext) -> NodeResult:
     executor_block = getattr(ctx.executor, "block_reason", None)
     if executor_block and not edits:
         ctx.block_reason = executor_block
+    # Policy-gate outcome (RUN_STATE_CONTRACT / DOC2 §10.4): thread the executor's
+    # policy flags into the run context so the repair loop is forbidden and the
+    # approval flavor surfaces as canonical ``needs_approval``.
+    if bool(getattr(ctx.executor, "policy_blocked", False)):
+        ctx.policy_blocked = True
+    if bool(getattr(ctx.executor, "policy_approval_required", False)):
+        ctx.policy_approval_required = True
 
     # Validate the surgical-mutation contract: every edit has a reason + criterion.
     for edit in edits:
@@ -1274,8 +1345,64 @@ def node_local_inspection(ctx: OCFlowContext) -> NodeResult:
     )
 
 
+def _repair_forbidden(ctx: OCFlowContext) -> tuple[NodeOutcome, str, str] | None:
+    """DOC2 §10.4 ``forbidden_when`` guard for the diagnosis/repair loop.
+
+    Returns ``(outcome, condition, reason)`` when the loop must NOT run at all:
+
+    * ``policy_blocked`` — the policy gate already blocked this run; repairing
+      around a policy refusal is never allowed.
+    * ``tdd_red_not_proven`` — a strict mutation run without proven RED evidence
+      (no red run, or an already-green one) has nothing legitimate to repair.
+    * ``missing_executor`` — a mutation run that produced no edits with no
+      productive executor: retrying diagnosis can never yield an applicable fix.
+
+    Returns ``None`` when repair is allowed (e.g. recoverable verification/lint
+    failure on a mutated run — the ``allowed_when`` cases).
+    """
+    if ctx.policy_blocked:
+        return (
+            NodeOutcome.POLICY_BLOCKED,
+            "policy_blocked",
+            "repair loop forbidden: the policy gate already blocked this run",
+        )
+    red_proven = ctx.tdd_red_exit_code is not None and ctx.tdd_red_exit_code != 0
+    if ctx.tdd_mode == "strict" and ctx.mutation_required and not red_proven:
+        return (
+            NodeOutcome.ATTEMPTS_EXHAUSTED,
+            "tdd_red_not_proven",
+            "repair loop forbidden: strict TDD test-first (RED) evidence is absent",
+        )
+    if (
+        ctx.mutation_required
+        and not ctx.changed_files
+        and not bool(getattr(ctx.executor, "provider_available", False))
+    ):
+        return (
+            NodeOutcome.ATTEMPTS_EXHAUSTED,
+            "missing_executor",
+            "repair loop forbidden: no productive executor is available to apply a fix",
+        )
+    return None
+
+
 def node_diagnose(ctx: OCFlowContext) -> NodeResult:
-    """Bounded, evidence-driven diagnosis loop (book §12, FLOW-5, FLOW-6)."""
+    """Bounded, evidence-driven diagnosis loop (book §12, FLOW-5, FLOW-6).
+
+    DOC2 §10.4: the loop is bounded by ``ctx.max_attempts`` and refuses to run at
+    all under the :func:`_repair_forbidden` conditions — recording ZERO attempts.
+    """
+    forbidden = _repair_forbidden(ctx)
+    if forbidden is not None:
+        outcome, condition, reason = forbidden
+        if not ctx.block_reason:
+            ctx.block_reason = reason
+        return NodeResult(
+            node="diagnose",
+            outcome=outcome,
+            outputs={"attempts": 0, "forbidden": condition, "reason": reason},
+            llm_tokens=0,
+        )
     if len(ctx.diagnosis_attempts) >= ctx.max_attempts:
         return NodeResult(
             node="diagnose",

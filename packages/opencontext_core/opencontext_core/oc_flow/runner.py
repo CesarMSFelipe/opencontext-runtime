@@ -294,11 +294,19 @@ class OCFlowRunner:
                 kg_v2_enabled = bool(getattr(runtime_cfg, "kg_v2_enabled", False))
         self._context_engine_enabled = bool(context_engine_enabled)
         self._kg_v2_enabled = bool(kg_v2_enabled)
+        # RUN_STATE_CONTRACT needs_configuration pre-gate (OC-004): resolve the
+        # config-load error ONCE. When the workspace declares an opencontext.yaml
+        # that cannot load, the run terminates as canonical needs_configuration
+        # (exit 3) instead of crashing or silently degrading to defaults.
+        self._config_error_detail = self._resolve_config_error()
         # Always locate the KG index regardless of the kg_v2_enabled flag. When the
         # index is present and no seed paths are given, node_gather_context uses the
         # path for opportunistic KG grounding even without kg_v2_enabled=True. On an
         # unindexed project _resolve_graph_db_path() returns None so no seeding occurs.
-        self._graph_db_path = self._resolve_graph_db_path()
+        # An invalid config cannot resolve a storage path — skip (the pre-gate fires).
+        self._graph_db_path = (
+            None if self._config_error_detail is not None else self._resolve_graph_db_path()
+        )
         # Memory + compression parity (SDD harness/context substrate): resolve the
         # agent memory store and the compression config from the project config so
         # gather_context reads memory / compresses oversized content and
@@ -351,6 +359,27 @@ class OCFlowRunner:
             return "ask"
 
     # -- config / kg resolution ----------------------------------------------
+    def _resolve_config_error(self) -> str | None:
+        """The config-load failure for an EXISTING config file, or ``None``.
+
+        A missing config is NOT an error — zero-config defaults apply and the run
+        proceeds (needs_executor semantics stay intact). An opencontext.yaml that
+        exists but cannot load (unparseable YAML, schema-invalid section) means
+        required configuration is invalid: the run must terminate as canonical
+        ``needs_configuration`` (RUN_STATE_CONTRACT), naming what to fix.
+        """
+        try:
+            from opencontext_core.config import load_config_or_defaults
+            from opencontext_core.config_resolver import resolve_config_path
+
+            path = resolve_config_path(self.root)
+            if not path.exists():
+                return None
+            load_config_or_defaults(path, auto_detect=False)
+            return None
+        except Exception as exc:
+            return str(exc)
+
     def _load_runtime_config(self) -> Any:
         """Load the project's RuntimeMigration flags from ``<root>/opencontext.yaml``.
 
@@ -523,6 +552,85 @@ class OCFlowRunner:
             exit_code=exit_code,
         )
 
+    def _finalize_needs_configuration(
+        self, task: str, *, session_id: str, run_id: str
+    ) -> OCFlowRunResult:
+        """Terminate a run whose required configuration is invalid (OC-004).
+
+        Persists the run.json/gates.json evidence bundle with a failed
+        ``config_valid`` gate and returns the canonical ``needs_configuration``
+        result (exit 3), with a reason naming the configuration to fix.
+        """
+        from opencontext_core.models.canonical_status import exit_code_for_run
+
+        detail = self._config_error_detail or "project configuration failed to load"
+        reason = (
+            f"required configuration is invalid: {detail} — fix the named file/keys "
+            "(see `opencontext config doctor`) or remove the file to run with defaults"
+        )
+        status = "needs_configuration"
+        exit_code = exit_code_for_run(status)
+        finished_at = datetime.now(tz=UTC).isoformat()
+        manifest = {
+            "schema_version": "opencontext.oc_flow.run_manifest.v1",
+            "run_id": run_id,
+            "session_id": session_id,
+            "workflow": "oc-flow",
+            "task": task,
+            "status": status,
+            "canonical_status": status,
+            "exit_code": exit_code,
+            "created_at": finished_at,
+            "started_at": finished_at,
+            "finished_at": finished_at,
+            "completion_reason": reason,
+            "mutation_required": mutation_required(task),
+            "changed_files": [],
+            "verification": {
+                "executed": False,
+                "commands": [],
+                "outcome": "not_run",
+                "passed": False,
+                "runner_source": None,
+            },
+            "tdd": None,
+            "memory": memory_block([]),
+        }
+        gates = evaluate_oc_flow_gates(
+            workspace_valid=self.root.is_dir(),
+            config_valid=False,
+            context_pack_created=None,
+            executor_available=None,
+            tdd_red_proven_if_strict=None,
+            mutation_performed_if_required=None,
+            verification_executed=None,
+            verification_passed=None,
+        )
+        write_run_bundle(
+            self._run_dir(session_id, run_id),
+            manifest=manifest,
+            gates=gates,
+            verification={
+                "run_id": run_id,
+                "commands": [],
+                "outcome": "not_run",
+                "exit_code": None,
+                "runner_source": None,
+                "summary": reason,
+            },
+        )
+        return OCFlowRunResult(
+            run_id=run_id,
+            session_id=session_id,
+            status=status,
+            final_node="init",
+            graph_status="not_run",
+            completion_reason=reason,
+            mutation_required=mutation_required(task),
+            canonical_status=status,
+            exit_code=exit_code,
+        )
+
     def _run_governed(
         self,
         task: str,
@@ -552,6 +660,12 @@ class OCFlowRunner:
         lane_enum = Lane(str(lane))
         session_id = session_id or new_session_id()
         run_id = run_id or new_run_id()
+
+        # needs_configuration pre-gate (OC-004 / RUN_STATE_CONTRACT): an existing
+        # config that cannot load terminates the run BEFORE the graph walks.
+        if self._config_error_detail is not None:
+            return self._finalize_needs_configuration(task, session_id=session_id, run_id=run_id)
+
         artifacts_dir = self._artifacts_dir(session_id, run_id)
         artifacts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -819,6 +933,18 @@ class OCFlowRunner:
             if not can_exit(node, ctx):
                 raise OCFlowError(f"exit conditions not satisfied for node {node!r}")
 
+            # Terminal outcomes without graph edges (RUN_STATE_CONTRACT):
+            # gather_context reporting NEEDS_CONTEXT means re-gathering cannot help
+            # (gathering itself found nothing) — the run ends needs_context; a
+            # POLICY_BLOCKED refusal from the repair guard ends the walk so the
+            # policy outcome surfaces as canonical needs_approval, never `failed`.
+            if node == "gather_context" and result.outcome is NodeOutcome.NEEDS_CONTEXT:
+                status = "needs_context"
+                break
+            if result.outcome is NodeOutcome.POLICY_BLOCKED:
+                status = "policy_blocked"
+                break
+
             target = self._next_node(node, result.outcome, ctx, decisions, guard, events)
             if target is None:
                 status = "failed"
@@ -838,6 +964,16 @@ class OCFlowRunner:
             graph_status = "not_run"
             status = "tdd_violation"
             reason = ctx.block_reason or tdd_evidence.violation
+        elif status in ("needs_context", "policy_blocked"):
+            # Terminal states produced by the graph walk itself (RUN_STATE_CONTRACT):
+            # insufficient context / policy-gate block. The completion gate would
+            # misreport them as needs_executor/blocked, so they pass through.
+            graph_status = status
+            reason = ctx.block_reason or (
+                "the flow could not build sufficient context for the task"
+                if status == "needs_context"
+                else "the policy gate blocked this run before it could proceed"
+            )
         else:
             graph_status = status
             completion = resolve_completion(
@@ -853,6 +989,14 @@ class OCFlowRunner:
                 if completion is not CompletionStatus.completed and ctx.block_reason
                 else completion_reason(completion, mutation_required=mut_required)
             )
+            if ctx.policy_approval_required and completion is not CompletionStatus.completed:
+                # DOC1 §10 / RUN_STATE_CONTRACT: the policy gate demands human
+                # approval before the write — surface the policy outcome as the
+                # terminal state (canonical ``needs_approval``, exit 4).
+                status = "policy_blocked"
+                reason = ctx.block_reason or (
+                    "policy requires human approval before edits can be applied"
+                )
 
         # GREEN evidence (TDD_STRICT_CONTRACT): the post-mutation targeted-tests run
         # already executed inside local inspection — reuse its recorded command/exit.
@@ -901,7 +1045,11 @@ class OCFlowRunner:
         gates = evaluate_oc_flow_gates(
             workspace_valid=self.root.is_dir(),
             config_valid=self._config_valid(),
-            context_pack_created=None if short_circuited else ctx.envelope is not None,
+            # An empty envelope is not a usable pack (needs_context runs fail this
+            # gate honestly); normal executors always produce at least one item.
+            context_pack_created=(
+                None if short_circuited else (ctx.envelope is not None and ctx.envelope.has_items)
+            ),
             executor_available=(
                 None
                 if (short_circuited or not mut_required)

@@ -237,7 +237,13 @@ class _OCFlowHarness:
                 ),
             )
 
-        executor = _resolve_executor(self._root)
+        try:
+            executor = _resolve_executor(self._root)
+        except Exception:
+            # An invalid config cannot resolve an executor; run with the model-free
+            # default so the runner's config pre-gate reports needs_configuration
+            # (OC-004) instead of crashing into a generic failure envelope.
+            executor = None
         return OCFlowRunner(root=self._root, executor=executor).run(task)
 
     def run_resume(self, session_id: str, run_id: str, task: str = "") -> Any:
@@ -1287,6 +1293,9 @@ class RuntimeApi:
             "needs_provider",
             "needs_verification",
             "needs_user_edit",
+            "needs_configuration",
+            "needs_context",
+            "policy_blocked",
             "escalated",
             "tdd_violation",
             "cancelled",

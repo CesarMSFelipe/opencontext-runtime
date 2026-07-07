@@ -117,13 +117,13 @@ Named closure tests confirmed present-and-passing by name in the acceptance juni
 | OC-001 | Run sin executor devuelve `needs_executor` | met | `tests/acceptance/test_acceptance_oc_flow.py::test_run_without_executor_reports_needs_executor` + `::test_run_without_executor_exits_5`; live-confirmed. |
 | OC-002 | Con executor correcto muta y verifica | met | `test_acceptance_oc_flow.py::test_run_with_correct_executor_mutates_and_verifies` + canonical-passed pin; `tests/workflows/test_oc_flow_executor.py`; `tests/e2e/test_flow_systems_integration.py` PATH A. |
 | OC-003 | Con executor malo falla | met | `test_acceptance_oc_flow.py::test_run_with_wrong_executor_never_reports_success` + exit pin; e2e negative branch. |
-| OC-004 | Sin config necesaria devuelve `needs_configuration` | open (closure agent failed) | Audit gap stands: no OC Flow `run` path returns needs_configuration when required config is missing (only `status` produces it — `test_acceptance_workspace.py`, `tests/cli/test_status_exit_codes.py`); live bare-dir `run` ends needs_executor. Needed: run pre-gate mapping missing workspace/config to needs_configuration + acceptance test for `run`. |
+| OC-004 | Sin config necesaria devuelve `needs_configuration` | met (closed this round) | Run pre-gate implemented: `OCFlowRunner._resolve_config_error` + `_finalize_needs_configuration` (`oc_flow/runner.py`) terminate the run as canonical `needs_configuration` (exit 3) when an existing opencontext.yaml cannot load (unparseable YAML or schema-invalid section), persisting run.json + failed `config_valid` gate and naming the file to fix; `_OCFlowHarness.run` no longer crashes into a generic envelope (`runtime/api.py`). A missing config stays zero-config (needs_executor semantics pinned by OC-001 unchanged). `tests/cli/test_run_needs_configuration.py` (3 tests, in-process `handle_run_exec` pattern). |
 | OC-005 | Con TDD strict exige RED/GREEN | met | AC-012/AC-013 acceptance tests; `tests/oc_flow/test_red_first_posture.py`; `tdd_red_proven_if_strict` gate in `test_run_bundle_gates.py`. |
 | OC-006 | Genera memory_delta y graph_delta | met | `oc_flow/nodes.py` consolidation writers; `tests/e2e/test_flow_systems_integration.py` (both deltas asserted live) + `tests/workflows/test_oc_flow_escalation_consolidation.py`. |
 | OC-007 | Reporta tokens, KG y memoria usados | met | state.json total_tokens pins + cost-report.json (e2e); run.json memory block (`tests/oc_flow/test_run_bundle_memory.py`); KG provenance assertions in e2e. |
 | OC-008 | Se ve correctamente en TUI | met | `tests/cli/test_tui_command.py` (rows + run detail via Textual pilot); `tests/cli/test_tui_tdd_gates.py`; `tests/core/test_studio_reader.py`; strengthened this round by TUI-AC-003/TUI-FLOW-002 closures (real phase breakdown + logs). |
-| OC-STATES | DOC1 §10 estados: passed(mutation_required=false), needs_executor, passed, failed, needs_approval, needs_configuration, needs_context | open (closure agent failed) | Covered rows: read-only completed/passed, needs_executor, passed, failed (see OC-001..003 + completion-gate tests). Still missing producers + tests for needs_approval (policy denial ends `blocked`), run-level needs_configuration (see OC-004), and terminal needs_context / diagnose->gather_context edge pin. Mapping/exit-code layer only (`tests/cli/test_contracts_truth_layer.py`, `tests/core/test_run_exit_derivation.py`). |
-| OC-REPAIR-BOUNDS | DOC2 §10.4 repair loop: max_attempts bound, allowed_when, forbidden_when | open (closure agent failed) | Bound implemented and pinned (`tests/workflows/test_oc_flow_diagnosis.py`, exhaustion -> escalation edge); allowed_when covered via recoverable-failure routing. Still missing: tests asserting diagnosis_attempts == 0 under policy-denied / executor-less / red-not-proven runs; declarative `repair.allowed_when/forbidden_when` contract does not exist in code. |
+| OC-STATES | DOC1 §10 estados: passed(mutation_required=false), needs_executor, passed, failed, needs_approval, needs_configuration, needs_context | met (closed this round) | All producers now exist and are CLI-pinned. needs_approval: `ProviderBackedNodeExecutor` write-policy gate evaluates real approval (`policies.writes.require_approval` -> ASK-not-approved), the runner surfaces the outcome as `policy_blocked` -> canonical `needs_approval`, exit 4 (`tests/cli/test_run_state_producers.py::test_policy_approval_required_reports_needs_approval`; hard denial stays `blocked` per `tests/workflows/test_oc_flow_executor.py`). needs_context: an empty context envelope terminates via `NodeOutcome.NEEDS_CONTEXT` as canonical `needs_context`, exit 1 (`::test_empty_context_envelope_reports_needs_context`). needs_configuration: OC-004 pre-gate. Prior rows OC-001..003 unchanged; mapping layer still pinned by `tests/cli/test_contracts_truth_layer.py`, `tests/core/test_run_exit_derivation.py`. |
+| OC-REPAIR-BOUNDS | DOC2 §10.4 repair loop: max_attempts bound, allowed_when, forbidden_when | met (closed this round) | `_repair_forbidden` guard in `oc_flow/nodes.py::node_diagnose` encodes the §10.4 `forbidden_when` set: `policy_blocked` (POLICY_BLOCKED outcome, run ends canonical needs_approval), `tdd_red_not_proven` (strict mutation run without RED evidence), `missing_executor` (no edits + no productive executor) — each returns with ZERO attempts recorded. Bound: `ctx.max_attempts` ceiling + `resolve_max_attempts <= MAX_DIAGNOSIS_ATTEMPTS` pinned. `tests/oc_flow/test_repair_loop_bounds.py` (6 tests: one per forbidden condition asserting `diagnosis_attempts == []`, ceiling pin, allowed_when control) + existing `tests/workflows/test_oc_flow_diagnosis.py`. |
 
 ## Area: kg (knowledge graph)
 
@@ -263,7 +263,7 @@ Coverage note: audit rows for TUI-AC-001, TUI-AC-002, TUI-AC-004..TUI-AC-008 wer
 | ac-smoke | 43 | 42 | 1 | 0 |
 | cfg | 13 | 10 | 3 | 0 |
 | tdd | 15 | 15 | 0 | 0 |
-| oc-flow | 10 | 7 | 0 | 3 |
+| oc-flow | 10 | 10 | 0 | 0 |
 | kg | 12 | 9 | 3 | 0 |
 | ctx | 6 | 4 | 2 | 0 |
 | mem | 7 | 6 | 1 | 0 |
@@ -274,15 +274,17 @@ Coverage note: audit rows for TUI-AC-001, TUI-AC-002, TUI-AC-004..TUI-AC-008 wer
 | cli-states | 4 | 2 | 2 | 0 |
 | harness | 2 | 1 | 1 | 0 |
 | release-dod | 7 | 6 | 1 | 0 |
-| **Total** | **146** | **120** | **23** | **3** |
+| **Total** | **146** | **123** | **23** | **0** |
 
-All 23 deviation-documented items and all 120 met items were re-verified on 2026-07-07: every closure-named test file exists and passes (see Re-verification table; acceptance lane exit 0).
+All 23 deviation-documented items and 120 of the met items were re-verified on 2026-07-07: every closure-named test file exists and passes (see Re-verification table; acceptance lane exit 0). The three remaining oc-flow rows (OC-004, OC-STATES, OC-REPAIR-BOUNDS) were closed on 2026-07-07 by the follow-up round below (new tests RED-first, then green; `tests/oc_flow tests/cli tests/harness` 1173 tests 0 failures; acceptance lane exit 0).
 
-### Open items (closure agent failed — follow-up required)
+### Open items
 
-1. **OC-004** — OC Flow `run` never returns `needs_configuration`; needs a run pre-gate + acceptance test.
-2. **OC-STATES** — no producers/tests for terminal `needs_approval`, run-level `needs_configuration`, or `needs_context` as OC Flow run outcomes.
-3. **OC-REPAIR-BOUNDS** — `forbidden_when` repair semantics unpinned (no diagnosis_attempts==0 tests for policy-denied / executor-less / red-not-proven runs); declarative `repair.allowed_when/forbidden_when` contract absent from code.
+None — 0 open. The oc-flow follow-up round closed the last three:
+
+1. **OC-004** — run pre-gate maps an invalid existing config to canonical `needs_configuration` (exit 3); pinned by `tests/cli/test_run_needs_configuration.py`.
+2. **OC-STATES** — producers + CLI pins landed for `needs_approval` (policy approval gate, exit 4) and `needs_context` (empty envelope, exit 1); pinned by `tests/cli/test_run_state_producers.py`.
+3. **OC-REPAIR-BOUNDS** — `forbidden_when` guard (`policy_blocked` / `tdd_red_not_proven` / `missing_executor`) records zero diagnosis attempts; pinned by `tests/oc_flow/test_repair_loop_bounds.py`.
 
 ### Recorded deviations (all test-pinned and documented)
 
@@ -314,4 +316,4 @@ All 23 deviation-documented items and all 120 met items were re-verified on 2026
 
 - **Input coverage:** the aggregated audit input for this matrix was truncated after CTX-003; for areas ctx (partial), mem, exe, inst, sdd, tui, cli-states, harness, and release-dod the tables list all closure-addressed items, and per-area coverage notes name the remaining checklist IDs (with cross-references to the acceptance rows that exercise them). None of those remaining IDs were flagged open by the closure round.
 - **Pre-existing failures observed by closure agents, unrelated to closure work:** `tests/core/test_verification.py::TestRunAllChecks::test_healthy_if_no_failures` (environment flake from stale live-repo KG state; reproduces on untouched HEAD) and `tests/architecture/test_no_upward_imports.py::test_no_new_eager_upward_imports` (harness->oc_flow eager import introduced by commit `189444d`; flagged by the release-dod agent as follow-up).
-- **Closure commits are all on this branch** (`cb326e2`..`002f6bf`); the oc-flow area produced no commit (agent failed) and its three items remain the only open rows.
+- **Closure commits are all on this branch** (`cb326e2`..`002f6bf`); the oc-flow area's original agent produced no commit, and its three items were closed by the 2026-07-07 follow-up commit (`feat(oc-flow)` — run-state producers + repair-loop bounds), leaving zero open rows.
