@@ -400,3 +400,30 @@ def resolve_active_workspace_path(root: str | Path) -> Path:
     root_path = Path(root)
     cfg = load_config_or_defaults(resolve_config_path(root_path), auto_detect=False)
     return resolve_workspace_path(root_path, cfg.storage.mode, cfg.storage.custom_path)
+
+
+def resolve_active_workspace_file(root: str | Path, name: str) -> Path:
+    """Locate workspace artifact *name* for *root* honoring the active storage mode.
+
+    Workspace analogue of :func:`resolve_active_storage_file` for execution
+    state (sessions, runs, receipts, checkpoints, learning). Precedence:
+
+    1. ``<resolved workspace path>/<name>`` when it exists
+    2. legacy in-repo ``<root>/.opencontext/<name>`` when it exists
+       (runs persisted before execution state moved to user-mode storage)
+    3. the resolved path from (1) even though it is missing, so callers report
+       the canonical location in their "not found" messages
+
+    Never creates directories or files. Robust to a malformed config: path
+    resolution delegates to ``paths.execution_state.execution_workspace``.
+    """
+    from opencontext_core.paths.execution_state import execution_workspace
+
+    root_path = Path(root)
+    resolved = execution_workspace(root_path) / name
+    if resolved.exists():
+        return resolved
+    legacy = resolve_workspace_path(root_path, StorageMode.local) / name
+    if legacy.exists():
+        return legacy
+    return resolved

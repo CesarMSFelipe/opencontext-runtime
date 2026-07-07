@@ -136,3 +136,9 @@ def test_decisions_show_with_root(tmp_path: Path, capsys: pytest.CaptureFixture[
     )
     code = _run_decisions(["decisions", "show", "run_b", "--root", str(tmp_path)])
     assert code == 0
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import opencontext_core.runtime as runtime_pkg
 import opencontext_core.runtime.run as runtime_run
 from opencontext_core.agentic.receipt import AgenticReceipt
@@ -48,3 +50,9 @@ class TestRunStoreUntouched:
         # SessionStore writes only under .opencontext/sessions/.
         session_index = tmp_path / ".opencontext" / "sessions" / "sess-1" / "runs" / "index.json"
         assert not session_index.exists()
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

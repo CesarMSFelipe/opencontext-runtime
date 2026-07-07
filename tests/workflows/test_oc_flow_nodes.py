@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.harness.checkpoint import CheckpointStore
 from opencontext_core.oc_flow.models import Lane
 from opencontext_core.oc_flow.nodes import (
@@ -143,3 +145,9 @@ def test_checkpoint_restore_reverts_mutation(tmp_path: Path) -> None:
     target.write_text("changed = 2\n", encoding="utf-8")
     cp.restore()
     assert target.read_text() == "original = 1\n"
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

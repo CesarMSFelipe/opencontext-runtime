@@ -10,18 +10,23 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from opencontext_core.paths import StorageMode, resolve_workspace_path
+from opencontext_core.paths.execution_state import execution_read_roots
 
 
 def locate_run_context_pack(root: Path, run_id: str) -> Path | None:
-    """Return the run's ``context-pack.json`` path, or None when not persisted."""
+    """Return the run's ``context-pack.json`` path, or None when not persisted.
 
-    workspace = resolve_workspace_path(root, StorageMode.local)
-    direct = workspace / "runs" / run_id / "context-pack.json"
-    if direct.is_file():
-        return direct
-    sessions = workspace / "sessions"
-    if sessions.is_dir():
+    Scans the active (mode-resolved) run trees first, then the legacy in-repo
+    ``.opencontext`` trees for runs persisted before the user-mode migration.
+    """
+
+    for runs_dir in execution_read_roots(root, "runs"):
+        direct = runs_dir / run_id / "context-pack.json"
+        if direct.is_file():
+            return direct
+    for sessions in execution_read_roots(root, "sessions"):
+        if not sessions.is_dir():
+            continue
         for session_dir in sorted(sessions.iterdir()):
             candidate = session_dir / "runs" / run_id / "context-pack.json"
             if candidate.is_file():

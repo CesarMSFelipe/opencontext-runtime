@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from tests.acceptance.helpers.cli import run_json
-from tests.acceptance.helpers.ops import find_run_dir, read_json
+from tests.acceptance.helpers.ops import execution_state_roots, find_run_dir, read_json
 
 pytestmark = pytest.mark.acceptance
 
@@ -62,10 +62,16 @@ def test_resume_continues_without_duplicating_artifacts(oc_bin, stub_run) -> Non
     summary = stub_run["summary"]
     resume_ref = f"{summary['session_id']}/{summary['run_id']}"
 
-    sessions_dir = ws.root / ".opencontext" / "sessions"
-    run_dirs_before = sorted(
-        str(p) for p in sessions_dir.rglob("*") if p.is_dir() and p.parent.name == "runs"
-    )
+    def _session_run_dirs() -> list[str]:
+        return sorted(
+            str(p)
+            for base in execution_state_roots(ws)
+            for p in (base / "sessions").rglob("*")
+            if p.is_dir() and p.parent.name == "runs"
+        )
+
+    run_dirs_before = _session_run_dirs()
+    assert run_dirs_before, "the stub run must have persisted at least one session run dir"
 
     proc, resumed = run_json(
         oc_bin,
@@ -80,9 +86,7 @@ def test_resume_continues_without_duplicating_artifacts(oc_bin, stub_run) -> Non
     assert resumed.get("session_id") == summary["session_id"], resumed
     assert resumed.get("run_id") == summary["run_id"], resumed
 
-    run_dirs_after = sorted(
-        str(p) for p in sessions_dir.rglob("*") if p.is_dir() and p.parent.name == "runs"
-    )
+    run_dirs_after = _session_run_dirs()
     assert run_dirs_after == run_dirs_before, (
         f"resume duplicated run artifacts: {set(run_dirs_after) - set(run_dirs_before)}"
     )

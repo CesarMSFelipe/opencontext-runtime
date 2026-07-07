@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.oc_new.conductor import OcNewConductor
 from opencontext_core.workflow.phase_result import PhaseResultEnvelope
 
@@ -174,3 +176,9 @@ def test_mark_done_passes_when_required_artifacts_present(tmp_path: Path) -> Non
     # propose should be passed since explore.artifact.json is present.
     propose_phase = state.phase("propose")  # type: ignore[arg-type]
     assert propose_phase.status == "passed"
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

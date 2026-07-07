@@ -34,6 +34,7 @@ from opencontext_core.harness.models import (
     PhaseLedger,
 )
 from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
+from opencontext_core.paths.execution_state import runs_root
 
 
 @dataclass
@@ -390,7 +391,7 @@ class ExplorePhase(HarnessPhase):
             pack, pack_trace_id = runtime.build_context_pack_with_trace(state.task, full_budget)
 
         # Persist context pack to run directory
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         pack_path = run_dir / "context-pack.json"
         pack_path.write_text(pack.model_dump_json(indent=2), encoding="utf-8")
@@ -506,12 +507,7 @@ class ExplorePhase(HarnessPhase):
             HarnessArtifact(
                 id=f"explore-pack-{state.run_id[:8]}",
                 phase="explore",
-                path=str(
-                    resolve_workspace_path(state.root, StorageMode.local)
-                    / "runs"
-                    / state.run_id
-                    / "context-pack.json"
-                ),
+                path=str(runs_root(state.root) / state.run_id / "context-pack.json"),
                 kind="context-pack",
                 description=f"Context pack with {len(pack.included)} items",
             )
@@ -708,7 +704,7 @@ class ArchivePhase(HarnessPhase):
         self._memory_v2 = memory_v2
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         # run.json is finalized by the runner's persist_run() AFTER all phases,
@@ -979,7 +975,7 @@ class ProposePhase(HarnessPhase):
     id = "propose"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         proposal_path = run_dir / "proposal.json"
@@ -1031,18 +1027,8 @@ class ProposePhase(HarnessPhase):
         # Build an honest "evidence" pointer the spec/design phases mirror, so
         # nothing downstream has to fall back to the bare task text.
         evidence = {
-            "explore_pack": str(
-                resolve_workspace_path(state.root, StorageMode.local)
-                / "runs"
-                / state.run_id
-                / "context-pack.json"
-            ),
-            "contract_path": str(
-                resolve_workspace_path(state.root, StorageMode.local)
-                / "runs"
-                / state.run_id
-                / "contract.yaml"
-            ),
+            "explore_pack": str(runs_root(state.root) / state.run_id / "context-pack.json"),
+            "contract_path": str(runs_root(state.root) / state.run_id / "contract.yaml"),
             "affected_files": impacted_files,
             "affected_tests": impacted_tests,
             "required_symbols": required_symbols,
@@ -1654,7 +1640,7 @@ class ApplyPhase(HarnessPhase):
         return [executor._resolve(e.path) for e in edits]
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         apply_manifest_path = run_dir / "apply-manifest.json"
 
@@ -1969,7 +1955,7 @@ class SpecPhase(HarnessPhase):
     id = "spec"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         proposal_path = run_dir / "proposal.json"
@@ -2103,7 +2089,7 @@ class DesignPhase(HarnessPhase):
     id = "design"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         spec_path = run_dir / "spec.md"
@@ -2253,7 +2239,7 @@ class TasksPhase(HarnessPhase):
     id = "tasks"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         design_path = run_dir / "design.md"
@@ -2408,7 +2394,7 @@ class VerifyPhase(HarnessPhase):
     id = "verify"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         verify_report_path = run_dir / "verify-report.json"
@@ -2803,7 +2789,7 @@ class ReviewPhase(HarnessPhase):
     id = "review"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         review_path = run_dir / "review.json"
@@ -2945,7 +2931,7 @@ class JudgmentDayPhase(HarnessPhase):
     id = "judgment"
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         apply_artifacts = [a for a in state.artifacts if a.phase == "apply"]
@@ -3106,7 +3092,7 @@ class GGARulesPhase(HarnessPhase):
         return paths
 
     def run(self, state: Any) -> PhaseResult:
-        run_dir = resolve_workspace_path(state.root, StorageMode.local) / "runs" / state.run_id
+        run_dir = runs_root(state.root) / state.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
         rules = self._load_rules(state.root)

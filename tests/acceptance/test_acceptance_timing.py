@@ -15,7 +15,9 @@ Guard meta-tests are excluded from the scenario counts they assert on.
 
 from __future__ import annotations
 
+import re
 import time
+from pathlib import Path
 
 import pytest
 
@@ -25,7 +27,35 @@ pytestmark = pytest.mark.acceptance
 SMOKE_BUDGET_SECONDS = 60.0
 SMOKE_SIZE_BAND = (8, 12)
 FULL_BUDGET_SECONDS = 300.0
-FULL_SIZE_BAND = (25, 50)
+FULL_SIZE_BAND = (25, 55)
+
+_CONTRACT_PATH = (
+    Path(__file__).resolve().parents[2] / "docs" / "product-contract" / "ACCEPTANCE_CONTRACT.md"
+)
+
+
+def test_size_bands_match_acceptance_contract() -> None:
+    """The enforcing constants track the ACCEPTANCE_CONTRACT.md timing table.
+
+    Guards the drift that let AC-031 update the contract while the enforcing
+    constant stayed behind: any band change must land in BOTH the contract
+    table and this module, in the same commit.
+    """
+    if not _CONTRACT_PATH.exists():
+        pytest.skip("contract doc not present (packaged/standalone run)")
+    text = _CONTRACT_PATH.read_text(encoding="utf-8")
+    dash = "[\u2013-]"  # the contract table separates band bounds with an en dash
+    smoke = re.search(rf"\|\s*Smoke[^|]*\|\s*(\d+)\s*{dash}\s*(\d+) scenario tests", text)
+    full = re.search(rf"\|\s*Full acceptance[^|]*\|\s*(\d+)\s*{dash}\s*(\d+) scenario tests", text)
+    assert smoke and full, "ACCEPTANCE_CONTRACT.md timing-budget table rows not found"
+    assert (int(smoke.group(1)), int(smoke.group(2))) == SMOKE_SIZE_BAND, (
+        f"SMOKE_SIZE_BAND {SMOKE_SIZE_BAND} out of sync with contract "
+        f"{smoke.group(1)}-{smoke.group(2)} — update both together"
+    )
+    assert (int(full.group(1)), int(full.group(2))) == FULL_SIZE_BAND, (
+        f"FULL_SIZE_BAND {FULL_SIZE_BAND} out of sync with contract "
+        f"{full.group(1)}-{full.group(2)} — update both together"
+    )
 
 
 def _lane_accounting(request: pytest.FixtureRequest) -> tuple[dict[str, int | bool], float]:
@@ -72,7 +102,7 @@ def test_smoke_lane_meets_size_and_time_budget(request: pytest.FixtureRequest) -
 
 
 def test_full_acceptance_lane_meets_size_and_time_budget(request: pytest.FixtureRequest) -> None:
-    """TIME-FULL-ACC: the full acceptance lane runs 25-50 scenario tests in under 5 min.
+    """TIME-FULL-ACC: the full acceptance lane runs 25-55 scenario tests in under 5 min.
 
     Applies to the documented lane invocation (`pytest tests/acceptance`):
     only acceptance items are selected and at least the lower size band is

@@ -11,6 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar
 
+import pytest
+
 
 def test_harness_config_surgical_defaults(tmp_path: Path) -> None:
     from opencontext_core.harness.config import HarnessConfig
@@ -135,3 +137,9 @@ def test_sdd_runs_outside_tree(tmp_path: Path, monkeypatch) -> None:
     # Artifacts landed under the project root, not the foreign cwd.
     assert (project / ".opencontext" / "runs").exists()
     assert not (elsewhere / ".opencontext").exists()
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

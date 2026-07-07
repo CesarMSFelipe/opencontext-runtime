@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from opencontext_cli.commands.run_cmd import handle_run_exec
 
 
@@ -89,3 +91,9 @@ def test_needs_configuration_run_persists_canonical_evidence(
     gates = json.loads(gates_path.read_text(encoding="utf-8"))["gates"]
     config_gate = next(g for g in gates if g["id"] == "config_valid")
     assert config_gate["status"] == "failed"
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

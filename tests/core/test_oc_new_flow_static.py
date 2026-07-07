@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from opencontext_core.oc_new.conductor import OcNewConductor
 from opencontext_core.oc_new.flow import OC_NEW_FLOW
 from opencontext_core.workflow.phase_result import PhaseResultEnvelope
@@ -112,3 +114,9 @@ def test_full_10_phase_static_flow(tmp_path):
     assert state.next_action is not None
     assert state.next_action.kind == "done"
     assert state.current_phase is None
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

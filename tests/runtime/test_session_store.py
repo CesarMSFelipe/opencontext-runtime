@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.runtime.run import RuntimeRun
 from opencontext_core.runtime.session import LiveState, RuntimeSession
 from opencontext_core.runtime.session_store import SessionStore
@@ -58,3 +60,9 @@ class TestLiveState:
         assert live.node == "apply"
         assert live.status == "running"
         assert live.last_event_id == "evt-123"
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

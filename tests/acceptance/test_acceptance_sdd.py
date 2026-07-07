@@ -13,6 +13,8 @@ import pytest
 from tests.acceptance.helpers.cli import run, run_json
 from tests.acceptance.helpers.ops import (
     WORKFLOW_TIMEOUT,
+    find_flat_run_dir,
+    find_session_run_manifests,
     index_workspace,
     install_workspace,
 )
@@ -165,11 +167,11 @@ def test_sdd_harness_run_executes_real_gates(oc_bin, workspace) -> None:
     assert summary.get("workflow") == "sdd", summary
     assert summary.get("status") not in {"failed", "blocked", "cancelled"}, summary
 
-    # Real gate evidence: the harness bundle under .opencontext/runs/<run_id>/
-    # (SDD_CONTRACT artifact layout) with executed, non-empty gate results.
+    # Real gate evidence: the harness bundle under the workspace's execution
+    # state (user-mode XDG state, or legacy .opencontext/runs/ in local mode)
+    # per the SDD_CONTRACT artifact layout, with executed, non-empty gates.
     run_id = summary["run_id"]
-    run_dir = ws.root / ".opencontext" / "runs" / run_id
-    assert run_dir.is_dir(), f"SDD harness bundle missing at {run_dir}"
+    run_dir = find_flat_run_dir(ws, run_id)
     assert (run_dir / "run.json").is_file(), "SDD run must persist run.json"
     gates_file = run_dir / "gates.json"
     assert gates_file.is_file(), "SDD run must persist gates.json"
@@ -181,9 +183,7 @@ def test_sdd_harness_run_executes_real_gates(oc_bin, workspace) -> None:
     assert (run_dir / "receipts" / "receipts.jsonl").is_file(), "SDD apply must persist receipts"
 
     # The AER session manifest for the same run also exists.
-    session_manifests = list(
-        (ws.root / ".opencontext" / "sessions").glob(f"*/runs/{run_id}/manifest.json")
-    )
+    session_manifests = find_session_run_manifests(ws, run_id)
     assert session_manifests, "SDD run must persist its session run manifest"
 
     # The apply gate did real work: the mutation landed.

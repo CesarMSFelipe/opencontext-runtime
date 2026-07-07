@@ -124,3 +124,9 @@ def test_decisions_show_missing_run_still_errors(tmp_path: Path, capsys) -> None
 def test_decisions_list_empty_reports_clearly(tmp_path: Path, capsys) -> None:
     handle_decisions(SimpleNamespace(decisions_action="list", root=str(tmp_path), json=False))
     assert "No runs with recorded decisions" in capsys.readouterr().out
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

@@ -49,15 +49,55 @@ def read_json(path: Path) -> object:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def execution_state_roots(ws: Workspace) -> list[Path]:
+    """Where the CLI persists execution state: user-mode XDG first, legacy in-repo second.
+
+    Mirrors the product's path scheme without importing it (black-box):
+    ``$XDG_STATE_HOME/opencontext/projects/<sha256(root)[:12]>/workspace``.
+    """
+    import hashlib
+
+    project_hash = hashlib.sha256(str(ws.root.resolve()).encode()).hexdigest()[:12]
+    roots = []
+    xdg_state = ws.env.get("XDG_STATE_HOME")
+    if xdg_state:
+        roots.append(Path(xdg_state) / "opencontext" / "projects" / project_hash / "workspace")
+    roots.append(ws.root / ".opencontext")
+    return roots
+
+
 def find_run_dir(ws: Workspace, run_id: str) -> Path:
-    """Locate the persisted run directory for *run_id* under the workspace."""
+    """Locate the persisted run directory for *run_id* for the workspace."""
+    search_roots = [root for root in execution_state_roots(ws) if root.is_dir()]
     matches = [
         p
-        for p in (ws.root / ".opencontext").rglob(run_id)
+        for root in search_roots
+        for p in root.rglob(run_id)
         if p.is_dir() and p.parent.name == "runs"
     ]
     assert matches, (
         f"RUN_STATE_CONTRACT: no persisted run directory for {run_id} under "
-        f"{ws.root / '.opencontext'}"
+        f"{' or '.join(str(r) for r in execution_state_roots(ws))}"
     )
     return matches[0]
+
+
+def find_flat_run_dir(ws: Workspace, run_id: str) -> Path:
+    """Locate the flat harness bundle ``<state>/runs/<run_id>`` for the workspace."""
+    candidates = [base / "runs" / run_id for base in execution_state_roots(ws)]
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    raise AssertionError(
+        f"RUN_STATE_CONTRACT: no harness bundle for {run_id} under "
+        f"{' or '.join(str(c) for c in candidates)}"
+    )
+
+
+def find_session_run_manifests(ws: Workspace, run_id: str) -> list[Path]:
+    """All AER session run manifests for *run_id* across the state roots."""
+    return [
+        manifest
+        for base in execution_state_roots(ws)
+        for manifest in (base / "sessions").glob(f"*/runs/{run_id}/manifest.json")
+    ]

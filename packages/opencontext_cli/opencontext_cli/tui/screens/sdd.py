@@ -1,8 +1,10 @@
 """SddScreen — SDD workspace: per-change artifacts and the next step.
 
-Reads ``.opencontext/sdd/context.json`` plus ``openspec/changes/*/`` and
-reuses the canonical disk-state resolver (``opencontext_sdd.status.Resolve``)
-to report each change's artifact states and recommended next phase.
+Reads the SDD ``context.json`` (active workspace location first, legacy
+in-repo ``.opencontext/sdd/context.json`` fallback) plus
+``openspec/changes/*/`` and reuses the canonical disk-state resolver
+(``opencontext_sdd.status.Resolve``) to report each change's artifact states
+and recommended next phase.
 """
 
 from __future__ import annotations
@@ -44,9 +46,15 @@ def next_phase_action(next_recommended: str) -> str:
 
 
 def read_sdd_context(root: Path) -> dict[str, Any]:
-    """Read ``.opencontext/sdd/context.json``; empty dict on miss."""
-    context_path = root / ".opencontext" / "sdd" / "context.json"
+    """Read the SDD ``context.json``; empty dict on miss.
+
+    Resolves the active (mode-aware) workspace location first and falls back
+    to the legacy in-repo ``.opencontext/sdd/context.json``.
+    """
+    from opencontext_core.config_resolver import resolve_active_workspace_file
+
     try:
+        context_path = resolve_active_workspace_file(root, "sdd/context.json")
         data = json.loads(context_path.read_text(encoding="utf-8"))
         return dict(data) if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError):

@@ -1,10 +1,12 @@
 """RunsScreen / RunDetailScreen — browse persisted runs from both layouts.
 
-Runs live under ``<root>/.opencontext/runs/<run_id>/`` (harness) and
-``<root>/.opencontext/sessions/<session_id>/runs/<run_id>/`` (OC Flow /
-durable apply). The list shows every run newest first; Enter opens the
-evidence detail (phase breakdown, gates, verification, TDD block, changed
-files, and the run log from events.json/events.jsonl) with a raw JSON toggle.
+Runs live under ``<runs root>/<run_id>/`` (harness) and
+``<sessions root>/<session_id>/runs/<run_id>/`` (OC Flow / durable apply),
+resolved global-first (the XDG project workspace in user mode) with a legacy
+in-repo ``.opencontext`` fallback for pre-migration runs. The list shows
+every run newest first; Enter opens the evidence detail (phase breakdown,
+gates, verification, TDD block, changed files, and the run log from
+events.json/events.jsonl) with a raw JSON toggle.
 """
 
 from __future__ import annotations
@@ -42,13 +44,16 @@ def _canonical(status: str) -> str:
 
 
 def _run_dir_candidates(root: Path) -> list[Path]:
-    """Run directories from both on-disk layouts."""
+    """Run directories from both on-disk layouts, active roots first."""
+    from opencontext_core.paths import execution_state
+
     candidates: list[Path] = []
-    runs_dir = root / ".opencontext" / "runs"
-    if runs_dir.is_dir():
-        candidates.extend(d for d in sorted(runs_dir.iterdir()) if d.is_dir())
-    sessions_dir = root / ".opencontext" / "sessions"
-    if sessions_dir.is_dir():
+    for runs_dir in execution_state.execution_read_roots(root, "runs"):
+        if runs_dir.is_dir():
+            candidates.extend(d for d in sorted(runs_dir.iterdir()) if d.is_dir())
+    for sessions_dir in execution_state.execution_read_roots(root, "sessions"):
+        if not sessions_dir.is_dir():
+            continue
         for session_dir in sorted(sessions_dir.iterdir()):
             runs_subdir = session_dir / "runs"
             if runs_subdir.is_dir():

@@ -38,7 +38,8 @@ from opencontext_core.learning.evolution_engine import EvolutionEngine
 from opencontext_core.learning.evolution_store import EvolutionStore
 from opencontext_core.learning.feedback import RuntimeFeedback
 from opencontext_core.learning.promotion import PromotionGate, harden_proposal
-from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
+from opencontext_core.paths import StorageMode, resolve_storage_path
+from opencontext_core.paths.execution_state import learning_root
 from opencontext_core.runtime.decision_log import DecisionRecorder, SelectionKind
 
 _log = logging.getLogger("opencontext")
@@ -157,12 +158,7 @@ class LearningLoop:
 
     def _build_decision_log(self, run_result: Any, result: LearningLoopResult) -> DecisionRecorder:
         run_id = str(getattr(run_result, "run_id", "") or "")
-        path = (
-            resolve_workspace_path(self.root, StorageMode.local)
-            / "learning"
-            / "decisions"
-            / f"{run_id or 'run'}.jsonl"
-        )
+        path = learning_root(self.root) / "decisions" / f"{run_id or 'run'}.jsonl"
         log = DecisionRecorder(path=path)
         try:
             for decision in list(getattr(run_result, "decisions", None) or []):
@@ -275,12 +271,7 @@ class LearningLoop:
             return
         try:
             run_id = result.run_id or "run"
-            path = (
-                resolve_workspace_path(self.root, StorageMode.local)
-                / "learning"
-                / "candidates"
-                / f"{run_id}.json"
-            )
+            path = learning_root(self.root) / "candidates" / f"{run_id}.json"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(
                 json.dumps(

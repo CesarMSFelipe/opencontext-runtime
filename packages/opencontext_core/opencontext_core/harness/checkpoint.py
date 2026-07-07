@@ -133,9 +133,9 @@ class CheckpointStore:
 
     def __init__(self, root: Path) -> None:
         # Checkpoints live alongside other run artifacts, scoped to this root.
-        from opencontext_core.paths import StorageMode, resolve_workspace_path
+        from opencontext_core.paths import execution_state
 
-        self.root = resolve_workspace_path(root, StorageMode.local) / "checkpoints"
+        self.root = execution_state.checkpoints_root(root)
 
     def create(self, paths: Iterable[Path], *, source: str = "apply") -> Checkpoint | None:
         """Snapshot ``paths`` before they change. Return ``None`` if empty.

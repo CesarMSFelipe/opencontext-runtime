@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.oc_new.archive_gate import OcNewArchiveGate
 from opencontext_core.oc_new.conductor import OcNewConductor
 from opencontext_core.oc_new.models import OcNewRunState
@@ -140,3 +142,9 @@ def test_archive_blocked_when_harness_report_missing(tmp_path: Path) -> None:
     assert any("harness-report.json" in w for w in warnings), (
         f"Expected warning mentioning harness-report.json, got: {warnings}"
     )
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

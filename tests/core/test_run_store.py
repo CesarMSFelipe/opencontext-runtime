@@ -55,3 +55,9 @@ def test_index_file_is_valid_json(tmp_path):
     data = json.loads(index_file.read_text())
     assert isinstance(data, dict)
     assert "run-json" in data
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

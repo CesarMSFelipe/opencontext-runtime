@@ -9,8 +9,8 @@ Verified by: AC-003, AC-022, AC-023, INST-001..INST-009, SMOKE-003, SMOKE-010.
 
 | Scope | What it owns | Real commands today |
 |---|---|---|
-| `product` | The OpenContext binary + HOME state (`~/.config/opencontext`, `~/.opencontext`) | `pipx install opencontext-cli` / `pip install` / `install.sh` / `install.ps1`; removal via `pipx uninstall` + `uninstall --full --global-state` |
-| `workspace` | Per-repo state: `.opencontext/`, `opencontext.yaml`, indexes, runs, memory | `init` (wizard), `install` (quick setup); removal via `clean` or `uninstall --scope workspace --purge` |
+| `product` | The OpenContext binary + HOME state (`~/.config/opencontext`, `~/.opencontext`, the whole XDG state root `~/.local/state/opencontext` — per-project hash dirs included — and the XDG cache dir) | `pipx install opencontext-cli` / `pip install` / `install.sh` / `install.ps1`; removal via `pipx uninstall` + `uninstall --full --global-state` |
+| `workspace` | Per-repo state: `opencontext.yaml`, the in-repo `.opencontext/` config subdirs, plus THIS project's XDG state dir (`~/.local/state/opencontext/projects/<hash>/` — indexes, runs, memory in user mode) | `init` (wizard), `install` (quick setup); removal via `clean` or `uninstall --scope workspace --purge` |
 | `agents` | Agent client config: MCP entries, instruction blocks, generated agent files | `setup [AGENT...]`; removal via `uninstall [AGENT...]` |
 
 > The `product|workspace|agents` top-level commands exist as preview aliases: each exposes
@@ -54,7 +54,7 @@ Verified by: AC-003, AC-022, AC-023, INST-001..INST-009, SMOKE-003, SMOKE-010.
   "modified_files": [],
   "shell_profile_blocks": [],
   "symlinks": [],
-  "state_paths": [".opencontext/runs", ".opencontext/context-repository", ".opencontext/sdd"],
+  "state_paths": [".opencontext", "/home/user/.local/state/opencontext/projects/<hash>"],
   "agent_configs": [],
   "timestamp": "2026-07-06T00:00:00Z"
 }
@@ -66,6 +66,18 @@ Verified by: AC-003, AC-022, AC-023, INST-001..INST-009, SMOKE-003, SMOKE-010.
 > via `install`, the product scope at `~/.opencontext/` via `product install`, the full
 > `install` global step, and install.sh/install.ps1. The workspace scope never writes
 > shell profile blocks, symlinks, or env vars, so those stay `[]` there.
+
+> `state_paths` follows the storage mode (PRODUCT_CONTRACT §Storage modes): in `user` mode
+> (default) the install records the ABSOLUTE XDG project state dir
+> (`~/.local/state/opencontext/projects/<hash>/`) — where execution state (sessions, runs,
+> checkpoints, receipts, decision logs, learning) actually lives — alongside any in-repo
+> config dirs it created. Legacy in-repo state entries (`.opencontext/runs`, ...) appear
+> only for `local`-mode or pre-migration installs. Safety gate: an absolute `state_paths`
+> entry is only purged when it is OpenContext-named or carries the OpenContext ownership
+> manifest (`is_owned`). The workspace purge removes only THIS project's hash dir; the
+> global purge removes the whole XDG state root, project hash dirs included. A
+> workspace-scope `--verify` never reports HOME-level/XDG global state as residue — that
+> state belongs to the `global` scope scan.
 
 ## Uninstall algorithm
 

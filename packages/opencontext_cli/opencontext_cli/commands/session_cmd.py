@@ -2,7 +2,10 @@
 
 ``opencontext session list|status <id>|resume <id>|archive <id>`` over the
 shared :class:`~opencontext_core.runtime.api.RuntimeApi` / ``SessionStore``. The
-runtime session tree lives under ``.opencontext/sessions/<id>/``.
+runtime session tree lives under the mode-aware sessions root (user-mode XDG
+state by default); reads fall back to the legacy in-repo
+``.opencontext/sessions/<id>/`` tree for sessions persisted before the
+user-mode migration.
 """
 
 from __future__ import annotations
@@ -83,18 +86,33 @@ def _oc_flow_session_row(session_dir: Path) -> dict[str, Any] | None:
 
 
 def _oc_flow_sessions(root: Path) -> list[dict[str, Any]]:
-    """List sessions from the ``.opencontext/sessions/`` tree ``run`` writes."""
-    sessions_path = root / ".opencontext" / "sessions"
+    """List sessions from the sessions trees ``run`` writes (active + legacy)."""
+    from opencontext_core.paths import execution_state
+
     rows: list[dict[str, Any]] = []
-    if not sessions_path.is_dir():
-        return rows
-    for session_dir in sorted(sessions_path.glob("*")):
-        if not session_dir.is_dir():
+    seen: set[str] = set()
+    for sessions_path in execution_state.execution_read_roots(root, "sessions"):
+        if not sessions_path.is_dir():
             continue
-        row = _oc_flow_session_row(session_dir)
-        if row is not None:
-            rows.append(row)
+        for session_dir in sorted(sessions_path.glob("*")):
+            if not session_dir.is_dir() or session_dir.name in seen:
+                continue
+            row = _oc_flow_session_row(session_dir)
+            if row is not None:
+                rows.append(row)
+                seen.add(session_dir.name)
     return rows
+
+
+def _oc_flow_session_fallback(root: Path, session_id: str) -> dict[str, Any] | None:
+    """Resolve one session id across the read roots (active first, legacy second)."""
+    from opencontext_core.paths import execution_state
+
+    for sessions_path in execution_state.execution_read_roots(root, "sessions"):
+        row = _oc_flow_session_row(sessions_path / session_id)
+        if row is not None:
+            return row
+    return None
 
 
 def add_session_parser(subparsers: Any) -> None:
@@ -191,8 +209,9 @@ def handle_session(args: Any) -> None:
                 report = api.inspect(sid)
                 data = report.model_dump()
             except FileNotFoundError:
-                # Fall back to the oc_flow on-disk session tree (`opencontext run`).
-                fallback_row = _oc_flow_session_row(root / ".opencontext" / "sessions" / sid)
+                # Fall back to the oc_flow on-disk session trees (`opencontext run`),
+                # active location first, legacy in-repo second.
+                fallback_row = _oc_flow_session_fallback(root, sid)
                 if fallback_row is None:
                     raise
                 data = fallback_row

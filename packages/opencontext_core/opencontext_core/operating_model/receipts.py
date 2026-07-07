@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from opencontext_core.compat import UTC
 from opencontext_core.operating_model.team import RunReceipt
-from opencontext_core.paths import StorageMode, resolve_workspace_path
+from opencontext_core.paths import StorageMode, execution_state, resolve_workspace_path
 from opencontext_core.runtime.ids import new_id
 
 # NOTE: pruning strategy not yet implemented (Phase 2+)
@@ -58,10 +58,23 @@ class RunReceiptStore:
     """Append-only JSONL store for RunReceipt objects."""
 
     def __init__(self, root: Path | str = ".") -> None:
-        # ``root`` is the PROJECT root; receipts live at ``.opencontext/receipts``.
-        # Created lazily on first save so an unused store leaves no empty dir.
-        self.base_path = resolve_workspace_path(Path(root), StorageMode.local) / "receipts"
+        # ``root`` is the PROJECT root; receipts live under the active workspace
+        # (user-mode XDG by default; legacy ``.opencontext/receipts`` in local
+        # mode). Created lazily on first save so an unused store leaves no
+        # empty dir. Reads fall back to the legacy in-repo ledger for receipts
+        # persisted before execution state moved to user-mode storage.
+        self.base_path = execution_state.receipts_root(Path(root))
         self._store = self.base_path / "receipts.jsonl"
+        self._legacy_store = (
+            resolve_workspace_path(Path(root), StorageMode.local) / "receipts" / "receipts.jsonl"
+        )
+
+    def _ledgers(self) -> builtins.list[Path]:
+        """Existing receipt ledgers, active location first, legacy fallback second."""
+        candidates = [self._store]
+        if self._legacy_store != self._store:
+            candidates.append(self._legacy_store)
+        return [p for p in candidates if p.exists()]
 
     def save(self, receipt: RunReceipt) -> Path:
         self.base_path.mkdir(parents=True, exist_ok=True)
@@ -70,43 +83,41 @@ class RunReceiptStore:
         return self._store
 
     def load(self, run_id: str) -> RunReceipt:
-        if not self._store.exists():
-            raise FileNotFoundError(f"Run receipt not found: {run_id}")
         import json
 
-        with self._store.open(encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if data.get("run_id") == run_id:
-                    return RunReceipt.model_validate(data)
+        for ledger in self._ledgers():
+            with ledger.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if data.get("run_id") == run_id:
+                        return RunReceipt.model_validate(data)
         raise FileNotFoundError(f"Run receipt not found: {run_id}")
 
     def list(self) -> list[RunReceipt]:
-        if not self._store.exists():
-            return []
         receipts: list[RunReceipt] = []
         seen: set[str] = set()
         import json
 
-        with self._store.open(encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                    rid = data.get("run_id", "")
-                    if rid not in seen:
-                        seen.add(rid)
-                        receipts.append(RunReceipt.model_validate(data))
-                except Exception:
-                    continue
+        for ledger in self._ledgers():
+            with ledger.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        rid = data.get("run_id", "")
+                        if rid not in seen:
+                            seen.add(rid)
+                            receipts.append(RunReceipt.model_validate(data))
+                    except Exception:
+                        continue
         return receipts
 
     def verify(self, run_id: str) -> dict[str, object]:

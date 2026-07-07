@@ -282,3 +282,8 @@ class HarnessRunResult:
     # REG-CONV: a noisy harness must be measurable. Fraction of gate findings later
     # judged false positives (0.0 default; populated by the benchmark loop in PR-017).
     false_positive_rate: float = 0.0
+    # TDD_STRICT_CONTRACT evidence block (additive; populated at persist time by
+    # ``HarnessRunner.persist_run``): mode, red/green evidence, red_proven /
+    # green_proven, and ``violation`` when a strict run was blocked on RED —
+    # the same block run.json carries, so `run --json` derives exit-6 parity.
+    tdd: dict[str, Any] | None = None

@@ -6,6 +6,8 @@ import json
 import sys
 from unittest.mock import patch
 
+import pytest
+
 from opencontext_cli.main import main
 
 
@@ -123,3 +125,9 @@ def test_oc_new_resume(tmp_path, monkeypatch, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "explore" in out
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

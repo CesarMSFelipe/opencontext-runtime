@@ -30,7 +30,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from opencontext_core.paths import StorageMode, resolve_workspace_path
+from opencontext_core.paths.execution_state import execution_read_roots
 from opencontext_core.runtime_intelligence import events as ri_events
 from opencontext_core.runtime_intelligence import telemetry_layout
 
@@ -99,11 +99,12 @@ def _recorded_decisions(root: Path) -> list[SimpleNamespace]:
     Reused by :func:`decision_quality_metrics` to compute selector accuracy from
     the real ``next_node`` selections persisted by the OC Flow runner.
     """
-    base = resolve_workspace_path(root, StorageMode.local) / "sessions"
-    if not base.exists():
-        return []
+    decision_files: list[Path] = []
+    for base in execution_read_roots(root, "sessions"):
+        if base.exists():
+            decision_files.extend(base.glob("*/runs/*/decisions.json"))
     out: list[SimpleNamespace] = []
-    for decisions_json in base.glob("*/runs/*/decisions.json"):
+    for decisions_json in decision_files:
         try:
             data = json.loads(decisions_json.read_text(encoding="utf-8"))
         except (OSError, ValueError):

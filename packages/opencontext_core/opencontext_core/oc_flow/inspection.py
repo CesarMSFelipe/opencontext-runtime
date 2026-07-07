@@ -72,11 +72,21 @@ def _run_command(label: str, command: list[str], root: Path) -> dict[str, object
 
     The executed command, its exit code and the capture time are recorded on the
     gate (additive keys) so the run report can persist real GREEN evidence.
+
+    The child env is sanitized so the check leaves no residue in the user's
+    project tree (PRODUCT_CONTRACT §Storage modes / AC-031): outer ``PYTEST_*``
+    vars are stripped, ``PYTHONDONTWRITEBYTECODE=1`` suppresses ``__pycache__``,
+    and ``PYTEST_ADDOPTS='-p no:cacheprovider'`` keeps pytest from writing
+    ``.pytest_cache`` (ignored by non-pytest commands).
     """
+    import os
     from datetime import UTC, datetime
 
     command_text = " ".join(str(part) for part in command)
     captured_at = datetime.now(tz=UTC).isoformat()
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTEST_ADDOPTS"] = "-p no:cacheprovider"
     try:
         proc = subprocess.run(
             command,
@@ -85,6 +95,7 @@ def _run_command(label: str, command: list[str], root: Path) -> dict[str, object
             text=True,
             timeout=120,
             check=False,
+            env=env,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         gate = _gate(label, _RECOVERABLE, f"{label} could not run: {exc}")

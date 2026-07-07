@@ -705,15 +705,9 @@ class RuntimeApi:
     @staticmethod
     def _oc_flow_run_dir(root: Path, flow_session_id: str, flow_run_id: str) -> Path:
         """The OC Flow run tree (mirrors ``OCFlowRunner._run_dir``)."""
-        from opencontext_core.paths import StorageMode, resolve_workspace_path
+        from opencontext_core.paths.execution_state import sessions_root
 
-        return (
-            resolve_workspace_path(root, StorageMode.local)
-            / "sessions"
-            / flow_session_id
-            / "runs"
-            / flow_run_id
-        )
+        return sessions_root(root) / flow_session_id / "runs" / flow_run_id
 
     @staticmethod
     def _write_oc_flow_completion(

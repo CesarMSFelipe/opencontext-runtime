@@ -12,6 +12,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from opencontext_core.agentic.config import AgenticFlowConfig, FlowMode
 from opencontext_core.oc_new.conductor import OcNewConductor
 
@@ -110,3 +112,9 @@ def test_post_archive_never_writes_to_claude_skills(tmp_path: Path, monkeypatch)
     for f in fake_home.rglob("*"):
         if f.is_file():
             assert ".claude" not in f.parts, f"unexpected leak to {f}"
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

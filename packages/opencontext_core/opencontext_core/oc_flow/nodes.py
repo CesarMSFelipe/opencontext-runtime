@@ -1185,6 +1185,8 @@ def node_mutate(ctx: OCFlowContext) -> NodeResult:
             # test imports the project's own modules.
             _red_env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
             _red_env["PYTHONDONTWRITEBYTECODE"] = "1"
+            # AC-031: no .pytest_cache residue in the user's project tree.
+            _red_env["PYTEST_ADDOPTS"] = "-p no:cacheprovider"
             _red_env["PYTHONPATH"] = str(ctx.root) + (
                 os.pathsep + _red_env["PYTHONPATH"] if _red_env.get("PYTHONPATH") else ""
             )

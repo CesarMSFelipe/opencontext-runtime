@@ -118,3 +118,9 @@ def test_workflow_status_uses_projection_no_extra_writes(
     assert _run(["workflow", "status"], monkeypatch, tmp_path) == 0
     after = set((tmp_path / ".opencontext" / "runs" / run_id).iterdir())
     assert before == after
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

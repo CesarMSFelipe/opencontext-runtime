@@ -14,6 +14,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.oc_flow.runner import (
     ResolvedTestCommand,
     _discover_test_command,
@@ -143,3 +145,9 @@ def test_runner_source_recorded_in_verification_evidence(tmp_path: Path, monkeyp
     assert manifest["verification"]["runner_source"] == "runtime"
     verification = json.loads((run_dirs[0] / "verification.json").read_text(encoding="utf-8"))
     assert verification["runner_source"] == "runtime"
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

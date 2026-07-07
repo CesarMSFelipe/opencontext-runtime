@@ -16,6 +16,8 @@ import textwrap
 from collections.abc import Sequence
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.oc_flow.nodes import DeterministicNodeExecutor
 from opencontext_core.oc_flow.runner import OCFlowRunner
 
@@ -147,3 +149,9 @@ def test_sigint_subprocess_smoke(tmp_path: Path) -> None:
     run_json = tmp_path / ".opencontext" / "sessions" / "sess-sig" / "runs" / "run-sig" / "run.json"
     assert run_json.is_file()
     assert json.loads(run_json.read_text(encoding="utf-8"))["status"] == "cancelled"
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

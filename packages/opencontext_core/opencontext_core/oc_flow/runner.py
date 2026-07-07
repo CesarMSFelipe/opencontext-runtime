@@ -454,13 +454,24 @@ class OCFlowRunner:
 
     # -- paths ----------------------------------------------------------------
     def _run_dir(self, session_id: str, run_id: str) -> Path:
-        return (
-            resolve_workspace_path(self.root, StorageMode.local)
-            / "sessions"
-            / session_id
-            / "runs"
-            / run_id
-        )
+        from opencontext_core.paths.execution_state import sessions_root
+
+        return sessions_root(self.root) / session_id / "runs" / run_id
+
+    def _locate_run_dir(self, session_id: str, run_id: str) -> Path:
+        """Find a persisted run dir: active tree first, legacy in-repo fallback.
+
+        Readers (resume) must still see runs persisted before execution state
+        moved to user-mode storage. Returns the active-mode path when the run
+        exists nowhere, so error messages name the canonical location.
+        """
+        from opencontext_core.paths.execution_state import execution_read_roots
+
+        for sessions in execution_read_roots(self.root, "sessions"):
+            candidate = sessions / session_id / "runs" / run_id
+            if candidate.is_dir():
+                return candidate
+        return self._run_dir(session_id, run_id)
 
     def _artifacts_dir(self, session_id: str, run_id: str) -> Path:
         return self._run_dir(session_id, run_id) / "artifacts" / "oc-flow"
@@ -1413,8 +1424,8 @@ class OCFlowRunner:
         inspection report and diagnosis attempts. If a required artifact (the task
         contract) is missing, resume fails without executing any further node.
         """
-        run_dir = self._run_dir(session_id, run_id)
-        artifacts_dir = self._artifacts_dir(session_id, run_id)
+        run_dir = self._locate_run_dir(session_id, run_id)
+        artifacts_dir = run_dir / "artifacts" / "oc-flow"
         if not run_dir.is_dir():
             raise OCFlowError(f"no run to resume: {session_id}/{run_id}")
 

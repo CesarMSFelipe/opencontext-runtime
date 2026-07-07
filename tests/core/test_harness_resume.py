@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.harness.runner import HarnessRunner
 
 
@@ -96,3 +98,9 @@ def test_no_resume_runs_all_phases(tmp_path: Path) -> None:
     runner = HarnessRunner(root=tmp_path)
     result = runner.run("explore-only", "demo task")
     assert not any(e.action == "skip_phase" for e in result.events)
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

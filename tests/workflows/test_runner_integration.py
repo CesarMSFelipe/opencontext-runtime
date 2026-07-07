@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.harness.runner import HarnessRunner
 
 _CONFIG_TEMPLATE = """\
@@ -186,3 +188,9 @@ def test_no_generic_workflow_runner_introduced(tmp_path: Path) -> None:
     result = runner.run("quick", "demo task")
     actions = _ledger_actions(tmp_path, result.run_id)
     assert "run_phase" in actions
+
+
+@pytest.fixture(autouse=True)
+def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This module asserts the legacy in-repo layout; pin local storage mode."""
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")

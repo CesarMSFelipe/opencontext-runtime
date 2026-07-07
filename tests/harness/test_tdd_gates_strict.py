@@ -176,6 +176,156 @@ class TestFailingTestExistsGateStrictMode:
 
 
 # ---------------------------------------------------------------------------
+# FailingTestExistsGate — RED provability on canonical project layouts
+# ---------------------------------------------------------------------------
+
+
+class TestFailingTestExistsGateRedProvability:
+    """RED must be provable on real layouts, not only under a narrow conjunction.
+
+    Three confirmed gaps (TDD_STRICT_CONTRACT): (1) the gate shelled bare
+    ``pytest`` which import-errors on tests/-layout projects without a root
+    conftest (classified environment_error) while the GREEN gate uses the
+    resolved ``python -m pytest``; (2) it hard-required a ``tests/`` directory,
+    failing root-layout projects; (3) task-name glob matching never matched
+    natural-language tasks.
+    """
+
+    def _write_failing_module_and_test(self, root: Path) -> None:
+        (root / "app.py").write_text(
+            "def add(a, b):\n    return a - b\n",
+            encoding="utf-8",
+        )
+        tests_dir = root / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_app.py").write_text(
+            textwrap.dedent("""\
+                import app
+
+
+                def test_add():
+                    assert app.add(2, 3) == 5
+            """),
+            encoding="utf-8",
+        )
+
+    def test_strict_red_provable_on_tests_layout_without_conftest(self, tmp_path: Path) -> None:
+        """tests/-layout with no root conftest: RED must execute-and-fail, not env-error."""
+        self._write_failing_module_and_test(tmp_path)
+
+        result = FailingTestExistsGate().evaluate("app", tmp_path, tdd_mode="strict")
+
+        assert result.status == GateStatus.PASSED, result.message
+        assert result.metadata.get("classification") == "test_failure"
+
+    def test_strict_red_command_has_runner_parity_with_green(self, tmp_path: Path) -> None:
+        """The recorded RED command uses the resolved interpreter, not bare ``pytest``."""
+        self._write_failing_module_and_test(tmp_path)
+
+        result = FailingTestExistsGate().evaluate("app", tmp_path, tdd_mode="strict")
+
+        command = str(result.metadata.get("command", ""))
+        assert "-m pytest" in command, command
+
+    def test_strict_red_provable_with_root_level_test_no_tests_dir(self, tmp_path: Path) -> None:
+        """Root-layout projects (no tests/ dir) can still prove RED."""
+        (tmp_path / "calc.py").write_text(
+            "def add(a, b):\n    return a - b\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "test_calc.py").write_text(
+            textwrap.dedent("""\
+                from calc import add
+
+
+                def test_add():
+                    assert add(2, 3) == 5
+            """),
+            encoding="utf-8",
+        )
+
+        result = FailingTestExistsGate().evaluate("calc", tmp_path, tdd_mode="strict")
+
+        assert result.status == GateStatus.PASSED, result.message
+
+    def test_strict_natural_language_task_matches_test_by_words(self, tmp_path: Path) -> None:
+        """A natural-language task resolves to the best word-overlap test file.
+
+        Execution still requires a genuine failure, so a wrong candidate can
+        never prove RED with a passing run.
+        """
+        self._write_failing_module_and_test(tmp_path)
+
+        result = FailingTestExistsGate().evaluate(
+            "fix the add function in app.py so it sums correctly",
+            tmp_path,
+            tdd_mode="strict",
+        )
+
+        assert result.status == GateStatus.PASSED, result.message
+        assert result.metadata.get("classification") == "test_failure"
+
+    def test_strict_discovery_fallback_proves_red_when_names_never_match(
+        self, tmp_path: Path
+    ) -> None:
+        """No filename/word overlap at all: strict falls back to executing the
+        project's discovered test files (OC Flow parity) — a genuinely failing
+        test proves RED regardless of what the file is called."""
+        (tmp_path / "calc.py").write_text(
+            "def add(a, b):\n    return a - b\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "test_calc.py").write_text(
+            textwrap.dedent("""\
+                from calc import add
+
+
+                def test_add():
+                    assert add(2, 3) == 5
+            """),
+            encoding="utf-8",
+        )
+
+        result = FailingTestExistsGate().evaluate(
+            "resolve the regression: sums must be correct", tmp_path, tdd_mode="strict"
+        )
+
+        assert result.status == GateStatus.PASSED, result.message
+        assert result.metadata.get("classification") == "test_failure"
+
+    def test_strict_discovery_fallback_rejects_already_passing_suite(self, tmp_path: Path) -> None:
+        """Discovery fallback keeps the RED requirement: a passing suite is not RED."""
+        (tmp_path / "calc.py").write_text(
+            "def add(a, b):\n    return a + b\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "test_calc.py").write_text(
+            textwrap.dedent("""\
+                from calc import add
+
+
+                def test_add():
+                    assert add(2, 3) == 5
+            """),
+            encoding="utf-8",
+        )
+
+        result = FailingTestExistsGate().evaluate(
+            "resolve the regression: sums must be correct", tmp_path, tdd_mode="strict"
+        )
+
+        assert result.status == GateStatus.FAILED
+
+    def test_strict_still_fails_when_no_test_exists_anywhere(self, tmp_path: Path) -> None:
+        """Widened discovery must not weaken the gate: no test file → FAILED."""
+        (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+        result = FailingTestExistsGate().evaluate("app", tmp_path, tdd_mode="strict")
+
+        assert result.status == GateStatus.FAILED
+
+
+# ---------------------------------------------------------------------------
 # FailingTestExistsGate — non-strict mode: filename-existence unchanged
 # ---------------------------------------------------------------------------
 

@@ -733,8 +733,9 @@ def _handle_explain_pack(args: Any) -> None:
             "RUN_NOT_FOUND",
             f"No persisted context pack for run: {run_id}",
             hint=(
-                "Packs live under .opencontext/runs/<id>/ or "
-                ".opencontext/sessions/<sid>/runs/<id>/."
+                "Packs live under the project's runs/<id>/ or "
+                "sessions/<sid>/runs/<id>/ state dirs (user-mode XDG storage "
+                "by default; in-repo .opencontext in local mode)."
             ),
             details={"run_id": run_id},
         )

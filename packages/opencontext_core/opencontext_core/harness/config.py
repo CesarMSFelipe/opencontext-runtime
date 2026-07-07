@@ -79,6 +79,9 @@ class HarnessConfig:
     # BudgetMode.STRICT). Set via workflow_defaults.gate_policy.
     gate_policy: str = "block"
     privacy_profile: PrivacyProfile = PrivacyProfile.OFF
+    # The legacy default is resolved mode-aware (paths.execution_state.runs_root):
+    # user mode places run artifacts under XDG project state, local mode keeps
+    # ``<root>/.opencontext/runs``. An explicit override stays root-relative.
     artifact_root: str = ".opencontext/runs"
     # TDD / approval pre-gate governance (decoupled from budget_mode).
     # tdd_mode: "ask" | "strict" | "off". Only "strict" gates apply on tests.

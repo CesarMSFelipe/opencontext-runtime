@@ -6,7 +6,7 @@ It is the primary measure of product completion.
 
 Verified by: this file DEFINES the acceptance IDs referenced by every other contract.
 
-## Full acceptance suite (AC-001..AC-030)
+## Full acceptance suite (AC-001..AC-031)
 
 | ID | Scenario | Priority |
 |---|---|---:|
@@ -40,6 +40,7 @@ Verified by: this file DEFINES the acceptance IDs referenced by every other cont
 | AC-028 | Secret redaction strips tokens/secrets from reports and memory. | P0 |
 | AC-029 | The release artifact contains no `.git`, `.venv`, caches, or local state. | P0 |
 | AC-030 | The acceptance harness passes against a cleanly installed package. | P0 |
+| AC-031 | Executions leave no artifacts in the project: after install + index + a user-mode run, the project tree gains nothing beyond the intended mutation and install-created config. | P0 |
 
 ## Smoke suite (SMOKE-001..010) — runs on every PR
 
@@ -76,16 +77,21 @@ developer-local state; every failure message names the contract it broke.
 | Suite | Size | Budget |
 |---|---:|---:|
 | Smoke (every PR) | 8–12 scenario tests | < 60 s |
-| Full acceptance (main/release) | 25–50 scenario tests | < 5 min |
+| Full acceptance (main/release) | 25–55 scenario tests | < 5 min |
 
 Both budgets are enforced in-lane by the guard meta-tests in
 `tests/acceptance/test_acceptance_timing.py` (TIME-SMOKE / TIME-FULL-ACC): they run
 last in the lane and fail when the selected scenario count leaves the size band or the
 lane's wall clock exceeds its budget. Guard meta-tests are excluded from the scenario
-counts. The full-acceptance band was widened from the original 25–35 to 25–50: several
-AC IDs are honestly pinned by more than one scenario (the suite sits at 43), and the
-growth cap below still freezes the scenario list itself.
+counts. The full-acceptance band was widened from the original 25–35 to 25–50 (several
+AC IDs are honestly pinned by more than one scenario), then to 25–55 when AC-031 added
+the two clean-project scenarios (the suite sits at 52). Any band change must update the
+table above AND the enforcing constants in `test_acceptance_timing.py` in the same
+commit (the sync guard fails otherwise); the growth cap below still freezes the
+scenario list itself.
 
 > Current → Target: `tests/acceptance/` with `--oc-bin` does not exist yet; today's suite is
 > in-process pytest. This file freezes the scenario list so the harness can be built against it
-> without renegotiating scope. Suite growth cap: no new AC IDs until AC-001..AC-030 pass.
+> without renegotiating scope. Suite growth cap: no new AC IDs until AC-001..AC-031 pass
+> (AC-031 was added by the approved clean-project storage decision — see
+> PRODUCT_CONTRACT §Storage modes).

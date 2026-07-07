@@ -21,7 +21,7 @@ from opencontext_core.oc_flow.models import Lane
 from opencontext_core.oc_flow.nodes import NodeExecutor, ProviderBackedNodeExecutor
 from opencontext_core.oc_flow.runner import OCFlowRunner
 from opencontext_core.operating_model.receipts import RunReceiptStore
-from opencontext_core.paths import StorageMode, resolve_workspace_path
+from opencontext_core.paths.execution_state import execution_read_roots
 from opencontext_core.providers.detect import detect_provider
 from opencontext_core.providers.gateway import ProviderGateway
 from opencontext_core.providers.test_stub import TestStubGateway
@@ -288,11 +288,14 @@ def _within(root: Path, candidate: Path) -> bool:
 
 
 def _latest_session(root: Path) -> str:
-    sessions = resolve_workspace_path(root, StorageMode.local) / "sessions"
-    if not sessions.is_dir():
-        return ""
-    candidates = sorted((d for d in sessions.iterdir() if d.is_dir()), key=lambda d: d.name)
-    return candidates[-1].name if candidates else ""
+    # Active sessions tree first; legacy in-repo tree covers pre-migration runs.
+    for sessions in execution_read_roots(root, "sessions"):
+        if not sessions.is_dir():
+            continue
+        candidates = sorted((d for d in sessions.iterdir() if d.is_dir()), key=lambda d: d.name)
+        if candidates:
+            return candidates[-1].name
+    return ""
 
 
 def _maybe_print(summary: dict[str, Any], as_json: bool) -> None:

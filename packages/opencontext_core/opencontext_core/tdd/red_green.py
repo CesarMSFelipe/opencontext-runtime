@@ -255,6 +255,9 @@ def capture_test_run(
         k: v for k, v in os.environ.items() if not (k.startswith("PYTEST_") or k.startswith("COV_"))
     }
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    # AC-031 (PRODUCT_CONTRACT §Storage modes): evidence runs execute inside the
+    # user's project — keep pytest from writing .pytest_cache residue there.
+    env["PYTEST_ADDOPTS"] = "-p no:cacheprovider"
     existing_pp = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = str(root) + (os.pathsep + existing_pp if existing_pp else "")
     captured_at = datetime.now(tz=UTC).isoformat()

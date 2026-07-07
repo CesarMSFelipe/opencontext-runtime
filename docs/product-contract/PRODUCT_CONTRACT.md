@@ -5,7 +5,7 @@ into a knowledge graph, builds token-budgeted context packs, persists agentic me
 verifiable engineering workflows (OC Flow, SDD, TDD strict) through a gated harness. It runs on
 the user's machine, uses the agent client's provider, and produces evidence for every run.
 
-Verified by: AC-001..AC-030, SMOKE-001..SMOKE-010.
+Verified by: AC-001..AC-031, SMOKE-001..SMOKE-010.
 
 ## Command maturity tiers
 
@@ -53,11 +53,33 @@ no logic of their own, so the stable set above stays at 17 until they are promot
 `needs_configuration`, `not_applicable`, `cancelled`. No stable command may emit any other
 final state. Full semantics: see `RUN_STATE_CONTRACT.md`.
 
+## Storage modes — execution state stays out of the project
+
+Execution artifacts must not accumulate inside project roots.
+
+- **`user` mode (default)**: ALL execution state — sessions, runs, run bundles, checkpoints,
+  receipts, decision logs, learning state, caches, telemetry — is written under the XDG
+  project state dir (`$XDG_STATE_HOME/opencontext/projects/<hash>/`, platformdirs
+  equivalent on other OSes). The project tree keeps ONLY user-facing configuration
+  (`opencontext.yaml`, the `.opencontext` config subdirs created by install, agent files)
+  and committable SDD deliverables (`openspec/`).
+- **`local` mode** (`OPENCONTEXT_STORAGE_MODE=local` or `storage.mode: local`): the legacy
+  in-repo layout (`.opencontext/`, `.storage/opencontext/`) — byte-identical to the
+  pre-migration behavior.
+- **Readers are global-first with legacy fallback**: every read surface (`runs`, `receipt`,
+  `decisions`, `session`, `knowledge-graph explain-pack`, TUI screens) resolves the active
+  mode's location first and falls back to the legacy in-repo tree, so pre-migration runs
+  stay visible.
+
+Verified by: AC-031 ("executions leave no artifacts in the project").
+
 ## Evidence requirements
 
-- Every run persists artifacts under `.opencontext/runs/<run_id>/` (see `SDD_CONTRACT.md` §Runs
-  and the harness artifact list): `run.json`, `gates.json`, `context-pack.json`,
-  `memory_delta.json`, `graph_delta.json`, `events.json`, `receipts/`.
+- Every run persists artifacts under `<runs root>/<run_id>/`, where the runs root is the
+  mode-aware execution-state root (see "Storage modes"; `.opencontext/runs/` in local
+  mode). See `SDD_CONTRACT.md` §Runs and the harness artifact list: `run.json`,
+  `gates.json`, `context-pack.json`, `memory_delta.json`, `graph_delta.json`,
+  `events.json`, `receipts/`.
 - `passed` requires evidence: executed verification commands, gate results, and (when mutation
   was required) the applied diff. No evidence → the state is not `passed`.
 - `report` artifacts and `run.json` must tell the same story (same status, same changed files).

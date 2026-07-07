@@ -27,7 +27,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from opencontext_core.paths import StorageMode, resolve_workspace_path
+from opencontext_core.config_resolver import resolve_active_workspace_file
+from opencontext_core.paths.execution_state import execution_read_roots
 from opencontext_core.studio.views import (
     StudioBenchmarkCoverageView,
     StudioBenchmarkSuiteCoverage,
@@ -105,10 +106,16 @@ class StudioReader:
         return OcNewStore(self._root)
 
     def _session_ids(self) -> list[str]:
-        path = resolve_workspace_path(self._root, StorageMode.local) / "sessions"
-        if not path.exists():
-            return []
-        return [p.name for p in path.iterdir() if (p / "session.json").exists()]
+        # Active sessions tree first; the legacy in-repo tree keeps
+        # pre-migration sessions visible. Dedupe by session id.
+        names: dict[str, None] = {}
+        for base in execution_read_roots(self._root, "sessions"):
+            if not base.exists():
+                continue
+            for p in base.iterdir():
+                if (p / "session.json").exists():
+                    names.setdefault(p.name, None)
+        return list(names)
 
     def _resolve(self, sid: str) -> tuple[str | None, Any]:
         """Return ``("session", session)``, ``("run", state)``, or ``(None, None)``."""
@@ -127,11 +134,13 @@ class StudioReader:
         """Directories that may hold ``receipt.json`` / ``harness-report.json``."""
         if kind == "run":
             return [self._oc_store().run_dir(sid)]
-        base = resolve_workspace_path(self._root, StorageMode.local) / "sessions" / sid
-        dirs = [base]
-        runs = base / "runs"
-        if runs.exists():
-            dirs.extend(p for p in runs.iterdir() if p.is_dir())
+        dirs: list[Path] = []
+        for sessions in execution_read_roots(self._root, "sessions"):
+            base = sessions / sid
+            dirs.append(base)
+            runs = base / "runs"
+            if runs.exists():
+                dirs.extend(p for p in runs.iterdir() if p.is_dir())
         return dirs
 
     def _find_artifact(self, sid: str, kind: str, filename: str) -> Path | None:
@@ -285,12 +294,7 @@ class StudioReader:
         )
 
     def _read_events(self, sid: str) -> list[dict[str, Any]]:
-        path = (
-            resolve_workspace_path(self._root, StorageMode.local)
-            / "sessions"
-            / sid
-            / "events.jsonl"
-        )
+        path = resolve_active_workspace_file(self._root, f"sessions/{sid}/events.jsonl")
         if not path.exists():
             return []
         events: list[dict[str, Any]] = []
@@ -563,12 +567,16 @@ class StudioReader:
         kind, _ = self._resolve(sid)
         if kind != "session":
             return None
-        base = resolve_workspace_path(self._root, StorageMode.local) / "sessions" / sid / "runs"
-        if not base.exists():
+        run_jsons: list[Path] = []
+        for sessions in execution_read_roots(self._root, "sessions"):
+            base = sessions / sid / "runs"
+            if base.exists():
+                run_jsons.extend(base.glob("*/run.json"))
+        if not run_jsons:
             return None
         out: list[StudioDecision] = []
         found = False
-        for run_json in base.glob("*/run.json"):
+        for run_json in run_jsons:
             data = self._load_json(run_json)
             if not isinstance(data, dict):
                 continue
@@ -655,9 +663,7 @@ class StudioReader:
     # ------------------------------------------------------------- learning
     def learning(self, sid: str) -> StudioLearningView:
         """Learning candidates view with benchmark evidence (STU-CONV)."""
-        path = (
-            resolve_workspace_path(self._root, StorageMode.local) / "learning" / "candidates.jsonl"
-        )
+        path = resolve_active_workspace_file(self._root, "learning/candidates.jsonl")
         if not path.exists():
             return StudioLearningView(session_id=sid, available=False)
         candidates: list[StudioLearningCandidate] = []
@@ -745,10 +751,13 @@ class StudioReader:
         Reads the OC Flow per-run ``state.json`` (B1/AVH-011) across every session
         so a no-op mutation run is surfaced honestly with its blocking reason.
         """
-        base = resolve_workspace_path(self._root, StorageMode.local) / "sessions"
+        state_jsons: list[Path] = []
+        for base in execution_read_roots(self._root, "sessions"):
+            if base.exists():
+                state_jsons.extend(base.glob("*/runs/*/state.json"))
         tasks: list[StudioTaskStatus] = []
-        if base.exists():
-            for state_json in base.glob("*/runs/*/state.json"):
+        if state_jsons:
+            for state_json in state_jsons:
                 data = self._load_json(state_json)
                 if not isinstance(data, dict):
                     continue
@@ -780,7 +789,7 @@ class StudioReader:
         Reads the persisted ``.opencontext/reports/acceptance.json`` snapshot; a
         missing snapshot degrades to ``available=False`` (no fabricated verdict).
         """
-        path = resolve_workspace_path(self._root, StorageMode.local) / "reports" / "acceptance.json"
+        path = resolve_active_workspace_file(self._root, "reports/acceptance.json")
         data = self._load_json(path) if path.exists() else None
         if not isinstance(data, dict):
             return StudioReleaseGateView(available=False)

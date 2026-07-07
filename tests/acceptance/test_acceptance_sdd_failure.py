@@ -16,6 +16,7 @@ import pytest
 from tests.acceptance.helpers.cli import run_json
 from tests.acceptance.helpers.ops import (
     WORKFLOW_TIMEOUT,
+    find_flat_run_dir,
     index_workspace,
     install_workspace,
 )
@@ -71,7 +72,7 @@ def test_sdd_workflow_fails_when_tests_fail(sdd_failing_run) -> None:
 
     # Gate evidence: gates.json records the failing test suite as a FAILED
     # verify-phase gate (never a silently-passed run).
-    run_dir = ws.root / ".opencontext" / "runs" / summary["run_id"]
+    run_dir = find_flat_run_dir(ws, summary["run_id"])
     gates = json.loads((run_dir / "gates.json").read_text(encoding="utf-8"))["gates"]
     verify_gates = [g for g in gates if g.get("phase") == "verify"]
     assert verify_gates, f"no verify gates recorded: {gates}"

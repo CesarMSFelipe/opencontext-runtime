@@ -1,10 +1,11 @@
 """On-disk session store and live-state projection (SPEC RC-006).
 
-Materialises ``.opencontext/sessions/<session_id>/`` containing ``session.json``,
-``live-state.json``, ``events.jsonl``, and ``runs/<run_id>/run.json``. All
-writes are atomic (tmp + ``replace``). The store never writes
-``.opencontext/runs/`` — that namespace stays with the legacy ``RunStore``
-(RC-016).
+Materialises ``<sessions root>/<session_id>/`` containing ``session.json``,
+``live-state.json``, ``events.jsonl``, and ``runs/<run_id>/run.json``. The
+sessions root is mode-aware (``paths.execution_state.sessions_root``): XDG
+project state in user mode, legacy ``.opencontext/sessions`` in local mode.
+All writes are atomic (tmp + ``replace``). The store never writes the flat
+``runs/`` namespace — that stays with the legacy ``RunStore`` (RC-016).
 """
 
 from __future__ import annotations
@@ -20,10 +21,10 @@ class SessionStore:
     """File-backed store for sessions, runs, events, and live state."""
 
     def __init__(self, root: Path | str = ".") -> None:
-        from opencontext_core.paths import StorageMode, resolve_workspace_path
+        from opencontext_core.paths import execution_state
 
         self.root = Path(root)
-        self.sessions_path = resolve_workspace_path(self.root, StorageMode.local) / "sessions"
+        self.sessions_path = execution_state.sessions_root(self.root)
 
     # ----------------------------------------------------------------- paths
     def session_dir(self, session_id: str) -> Path:

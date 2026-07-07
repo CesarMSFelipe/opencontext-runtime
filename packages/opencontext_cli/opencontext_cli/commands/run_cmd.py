@@ -5,10 +5,12 @@ Usage:
   opencontext runs show <run_id> [--json]
   opencontext runs artifacts <run_id> [--json]
 
-Reads the on-disk run directories the harness writes to
-``.opencontext/runs/<run_id>/`` (run.json, gates.json, artifacts.json, ...),
-preferring the RunStore index and falling back to a directory scan so runs
-created before the index existed still appear.
+Reads the on-disk run directories the harness writes under the mode-aware
+runs/sessions roots (run.json, gates.json, artifacts.json, ...), preferring
+the RunStore index and falling back to a directory scan so runs created
+before the index existed still appear. Resolution is global-first (the XDG
+project workspace in user mode) with a legacy in-repo ``.opencontext``
+fallback for runs persisted before the user-mode migration.
 """
 
 from __future__ import annotations
@@ -28,39 +30,46 @@ def _root(args: Any) -> Path:
     return Path(getattr(args, "root", None) or Path.cwd())
 
 
-def _runs_dir(root: Path) -> Path:
-    return root / ".opencontext" / "runs"
+def _runs_dirs(root: Path) -> list[Path]:
+    """Flat run roots, active (mode-resolved) location first, legacy second."""
+    from opencontext_core.paths import execution_state
+
+    return execution_state.execution_read_roots(root, "runs")
 
 
 def _sessions_run_dirs(root: Path) -> list[Path]:
-    """All run directories under the sessions layout.
+    """All run directories under the sessions layout, from every read root.
 
-    Covers ``.opencontext/sessions/<session_id>/runs/<run_id>/`` — the path
-    used by OCFlowRunner and RuntimeApi._durable_apply.
+    Covers ``<sessions root>/<session_id>/runs/<run_id>/`` — the path used by
+    OCFlowRunner and RuntimeApi._durable_apply — in the active (mode-resolved)
+    tree first, then the legacy in-repo tree.
     """
-    sessions_dir = root / ".opencontext" / "sessions"
-    if not sessions_dir.is_dir():
-        return []
+    from opencontext_core.paths import execution_state
+
     dirs: list[Path] = []
-    for session_dir in sorted(sessions_dir.iterdir()):
-        if not session_dir.is_dir():
+    for sessions_dir in execution_state.execution_read_roots(root, "sessions"):
+        if not sessions_dir.is_dir():
             continue
-        runs_subdir = session_dir / "runs"
-        if runs_subdir.is_dir():
-            dirs.extend(d for d in sorted(runs_subdir.iterdir()) if d.is_dir())
+        for session_dir in sorted(sessions_dir.iterdir()):
+            if not session_dir.is_dir():
+                continue
+            runs_subdir = session_dir / "runs"
+            if runs_subdir.is_dir():
+                dirs.extend(d for d in sorted(runs_subdir.iterdir()) if d.is_dir())
     return dirs
 
 
 def _list_run_ids(root: Path) -> list[str]:
     """Run IDs from the RunStore index, unioned with both on-disk run layouts."""
     ids: set[str] = set(RunStore(root).list_run_ids())
-    # Legacy harness layout: .opencontext/runs/<run_id>/run.json
-    runs_dir = _runs_dir(root)
-    if runs_dir.is_dir():
+    # Flat harness layout: <runs root>/<run_id>/run.json (active + legacy roots)
+    for runs_dir in _runs_dirs(root):
+        if not runs_dir.is_dir():
+            continue
         for child in runs_dir.iterdir():
             if child.is_dir() and (child / "run.json").exists():
                 ids.add(child.name)
-    # OC Flow / durable-apply sessions layout: .opencontext/sessions/*/runs/*/
+    # OC Flow / durable-apply sessions layout: <sessions root>/*/runs/*/
     for run_dir in _sessions_run_dirs(root):
         # Accept dirs that contain either run.json (RuntimeApi) or state.json (oc_flow).
         if (run_dir / "run.json").exists() or (run_dir / "state.json").exists():
@@ -69,24 +78,26 @@ def _list_run_ids(root: Path) -> list[str]:
 
 
 def _find_run_dir(root: Path, run_id: str) -> Path:
-    """Locate a run directory by run_id, checking both legacy and sessions layouts.
+    """Locate a run directory by run_id, checking both flat and sessions layouts.
 
     Returns the first matching directory. Preference order:
-    1. Legacy ``.opencontext/runs/<run_id>/``
-    2. Sessions ``.opencontext/sessions/*/runs/<run_id>/``
+    1. Flat ``<runs root>/<run_id>/`` (active location first, legacy second)
+    2. Sessions ``<sessions root>/*/runs/<run_id>/`` (same root order)
 
-    If neither exists, returns the legacy path (callers check ``is_dir()``/
-    ``run.json`` existence and handle the not-found case themselves).
+    If neither exists, returns the active flat path (callers check
+    ``is_dir()``/``run.json`` existence and handle the not-found case
+    themselves).
     """
-    legacy = _runs_dir(root) / run_id
-    if legacy.is_dir():
-        return legacy
+    flat_candidates = [runs_dir / run_id for runs_dir in _runs_dirs(root)]
+    for candidate in flat_candidates:
+        if candidate.is_dir():
+            return candidate
     for run_dir in _sessions_run_dirs(root):
         if run_dir.name == run_id:
             return run_dir
-    # Not found in either layout — return the legacy path for consistent
+    # Not found in either layout — return the active path for consistent
     # "not found" error handling in callers.
-    return legacy
+    return flat_candidates[0]
 
 
 def _run_dir(root: Path, run_id: str) -> Path:
