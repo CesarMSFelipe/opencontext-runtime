@@ -90,6 +90,12 @@ jobs:
               json.dump(gates, fh, indent=2)
           print(json.dumps(gates, indent=2))
           PY
+      - name: Build the pyz before acceptance so pyz-artifact-smoke can measure it
+        # AcceptanceEvaluator's pyz-artifact-smoke gate looks for dist/opencontext.pyz.
+        # A missing pyz is NOT_MEASURED, which blocks `ready` in RELEASE mode (it is not
+        # a deferred provider-CI gate). Build it BEFORE acceptance; the full wheel/sdist
+        # build below still runs afterwards for publish and rebuilds it idempotently.
+        run: python scripts/build_binary.py
       - name: Release acceptance (RELEASE mode — NOT_MEASURED mandatory gate fails)
         run: opencontext release acceptance --root . --release
       - name: Build release artifacts — wheels + sdists + pyz
