@@ -38,8 +38,22 @@ if [[ -z "${VIRTUAL_ENV:-}" ]]; then
     fi
 fi
 
-OC_BIN="${VIRTUAL_ENV:-$REPO_ROOT/.venv}/bin/opencontext"
-PYTHON_BIN="${VIRTUAL_ENV:-$REPO_ROOT/.venv}/bin/python"
+# Prefer a venv binary when one is present (dev machines / pre-activated envs);
+# otherwise fall back to whatever is on PATH. CI installs the package into the
+# runner's interpreter with `opencontext` on PATH and NO $REPO_ROOT/.venv, so a
+# hardcoded venv path would point at a nonexistent file and break every OC_BIN
+# check (K-4b, K-5, K-8).
+_VENV_BIN="${VIRTUAL_ENV:-$REPO_ROOT/.venv}/bin"
+if [[ -x "$_VENV_BIN/opencontext" ]]; then
+    OC_BIN="$_VENV_BIN/opencontext"
+else
+    OC_BIN="$(command -v opencontext || echo opencontext)"
+fi
+if [[ -x "$_VENV_BIN/python" ]]; then
+    PYTHON_BIN="$_VENV_BIN/python"
+else
+    PYTHON_BIN="$(command -v python3 || command -v python || echo python3)"
+fi
 
 echo "=== Gate K — Release Validation ==="
 echo "Repo: $REPO_ROOT"
@@ -88,7 +102,7 @@ TMPD="$(mktemp -d)"
 MH_EMPTY_OUT="$(cd "$TMPD" && "$OC_BIN" doctor metaharness 2>&1 || true)"
 rm -rf "$TMPD"
 # Extract score from "score=NN/100" in the first line
-MH_EMPTY_SCORE="$(echo "$MH_EMPTY_OUT" | grep -oP 'score=\K[0-9]+(?=/)' | head -1 || echo 0)"
+MH_EMPTY_SCORE="$(echo "$MH_EMPTY_OUT" | grep -oP 'score[= ]\K[0-9]+(?=/)' | head -1 || echo 0)"
 if [[ "${MH_EMPTY_SCORE:-0}" -lt 90 ]]; then
     check_pass "$LABEL"
 else
@@ -96,8 +110,13 @@ else
 fi
 
 LABEL="K-4b: metaharness repo-root scores at or above gate"
+# Precondition: the repo-root metaharness score requires a POPULATED KG
+# (kg_snapshot_path + context_substrate checks). K-3's full suite runs under the
+# same HOME and can overwrite the shared project state, so (re)index the repo root
+# here to guarantee the precondition. Idempotent and cheap on an indexed repo.
+"$OC_BIN" index "$REPO_ROOT" >/dev/null 2>&1 || true
 MH_REPO_OUT="$(cd "$REPO_ROOT" && "$OC_BIN" doctor metaharness 2>&1 || true)"
-MH_REPO_SCORE="$(echo "$MH_REPO_OUT" | grep -oP 'score=\K[0-9]+(?=/)' | head -1 || echo 0)"
+MH_REPO_SCORE="$(echo "$MH_REPO_OUT" | grep -oP 'score[= ]\K[0-9]+(?=/)' | head -1 || echo 0)"
 if [[ "${MH_REPO_SCORE:-0}" -ge 90 ]]; then
     check_pass "$LABEL"
 else
