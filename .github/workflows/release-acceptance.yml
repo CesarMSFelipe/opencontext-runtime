@@ -49,6 +49,13 @@ jobs:
         # VDM-006/007: writes .opencontext/e2e/dod-proof.json + release-evidence.json
         # at the repo root from a genuine journey; `release acceptance` reads them.
         run: python scripts/collect_release_evidence.py --root .
+      - name: Restore tracked sources dirtied by the DoD journey
+        # The DoD sequence runs `opencontext run` against the tracked golden fixture,
+        # fixing tests/golden/oc_flow_bugfix_python/buggy_add.py IN PLACE. The full
+        # suite below must run on pristine sources — fixture-precondition tests assert
+        # the shipped fixture is still buggy (`return a - b`). Untracked evidence under
+        # .opencontext/ (gitignored) is preserved by a tracked-only restore.
+        run: git checkout -- .
       - name: CI regression gates — write .opencontext/reports/ci-gates.json
         # VDM-006: the five externally-measured C gates. Each check's exit code (0=pass)
         # becomes a boolean the acceptance evaluator reads as MET/FAILED.
