@@ -1,11 +1,11 @@
 """README + SVG product-surface gate (Amendment-2 / DoD #12).
 
-The README must reference all five canonical product-surface SVGs
+The README must reference all four canonical product-surface SVGs
 under ``docs/assets/``. Each SVG must exist, be non-empty (>1KB),
 parse as valid SVG XML, and carry a ``<title>`` element whose
 text content matches the diagram name.
 
-The test asserts the canonical 5-name set is exactly what the
+The test asserts the canonical 4-name set is exactly what the
 README references — no aliasing or partial substitution allowed.
 """
 
@@ -17,14 +17,13 @@ from pathlib import Path
 
 import pytest
 
-# Canonical 5-name set (Amendment-2). The test compares both
+# Canonical 4-name set (Amendment-2). The test compares both
 # directions against this frozenset so aliases are rejected.
 CANONICAL_SVGS: frozenset[str] = frozenset(
     {
         "docs/assets/tui-cockpit.svg",
         "docs/assets/config-menu.svg",
         "docs/assets/graph-viewer.svg",
-        "docs/assets/release-candidate-status.svg",
         "docs/assets/user-flows.svg",
     }
 )
@@ -34,7 +33,6 @@ CANONICAL_DIAGRAM_NAMES: frozenset[str] = frozenset(
         "TUI Cockpit",
         "Config Menu",
         "Graph Viewer",
-        "Release Candidate Status",
         "User Flows",
     }
 )
@@ -55,8 +53,8 @@ def _referenced_svg_paths(readme: str) -> set[str]:
     return set(pattern.findall(readme))
 
 
-def test_readme_references_all_five_required_svgs() -> None:
-    """README references all five canonical SVG names (subset of total)."""
+def test_readme_references_all_four_required_svgs() -> None:
+    """README references all four canonical SVG names (subset of total)."""
     referenced = _referenced_svg_paths(_readme_text())
     missing = CANONICAL_SVGS - referenced
     assert not missing, f"README is missing canonical SVG references: {missing!r}"
@@ -91,7 +89,6 @@ def test_each_svg_has_title_matching_diagram() -> None:
         "TUI Cockpit": "docs/assets/tui-cockpit.svg",
         "Config Menu": "docs/assets/config-menu.svg",
         "Graph Viewer": "docs/assets/graph-viewer.svg",
-        "Release Candidate Status": "docs/assets/release-candidate-status.svg",
         "User Flows": "docs/assets/user-flows.svg",
     }
     for title, relpath in title_to_path.items():
