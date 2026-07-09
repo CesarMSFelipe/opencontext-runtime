@@ -128,7 +128,12 @@ def _assess(root: Path) -> dict[str, Any]:
 
 
 def _commands_report() -> dict[str, Any]:
-    from opencontext_cli.command_maturity import COMMAND_MATURITY
+    # Read the CANONICAL Sprint 2 truth layer (17 stable), the same table
+    # main._apply_maturity_help_policy uses for the (preview) --help suffix.
+    # The older, wider visibility map in opencontext_cli.command_maturity is
+    # intentionally superseded; reading it here made `opencontext maturity`
+    # disagree with --help (e.g. mcp/verify/session shown stable vs preview).
+    from opencontext_cli.contracts.command_registry import COMMAND_MATURITY
 
     by_level: dict[str, list[str]] = {"stable": [], "preview": [], "internal": []}
     for cmd, level in sorted(COMMAND_MATURITY.items()):
