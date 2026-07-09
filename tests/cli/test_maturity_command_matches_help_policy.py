@@ -70,9 +70,7 @@ def test_maturity_commands_json_reflects_canonical_stable_count() -> None:
 
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
-        handle_maturity(
-            SimpleNamespace(maturity_command="commands", json=True, output=None)
-        )
+        handle_maturity(SimpleNamespace(maturity_command="commands", json=True, output=None))
     data = json.loads(buffer.getvalue().strip())
 
     canonical_stable = sorted(c for c, lvl in CANONICAL.items() if lvl == "stable")
