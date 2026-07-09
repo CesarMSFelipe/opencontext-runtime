@@ -81,7 +81,6 @@ LAYER: dict[str, int] = {
     "harness": 6,
     "workflows": 6,
     "workflow": 6,
-    "workflow_packs": 6,
     "tdd": 6,
     # L7 providers
     "providers": 7,

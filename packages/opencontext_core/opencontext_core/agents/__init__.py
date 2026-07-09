@@ -1,54 +1,16 @@
-"""Agent system for OpenContext Runtime.
+"""Agent subsystem for OpenContext Runtime.
 
-This module provides an agent-based interface to OpenContext without requiring CLI.
-Agents are configured via YAML profiles in .agents/profiles/ and handle:
-- Automatic token management
-- Memory persistence
-- Index caching
-- Analysis orchestration
+The legacy in-process "agent SDK" (BaseAgent / AgentOrchestrator and the five
+concrete agents) was removed for the 2.0 cut — it had no live readers. The live
+surface now lives in focused submodules that callers import directly:
 
-Example usage (no CLI required):
+- ``opencontext_core.agents.executor`` — the agent executor spine
+- ``opencontext_core.agents.artifact_store`` — SDD artifact persistence
+- ``opencontext_core.agents.sdd_orchestrator`` — the module-level
+  ``WORKFLOW_TRACKS`` / ``PHASE_ORDER`` / ``PHASE_DEPENDENCIES`` tables and the
+  ``phase_required_harnesses`` helper consumed by the harness runner + explain
+- ``opencontext_core.agents.template_renderer`` — phase contract rendering
+- ``opencontext_core.agents.sdd_guardrails`` — phase guardrail evaluation
 
-    from opencontext_core.agents import AgentOrchestrator
-
-    orchestrator = AgentOrchestrator(project_root=".")
-
-    result = orchestrator.run_agent("code-review")
-    print(result.report)
-
-    result = orchestrator.run_agent("security-audit")
-    print(result.metrics)
+Import those submodules directly; this package no longer re-exports anything.
 """
-
-from .base import BaseAgent
-from .code_review_agent import CodeReviewAgent
-from .context_planner_agent import ContextPlannerAgent
-from .loader import list_available_agents, load_agent_config
-from .mutation_analyst_agent import MutationAnalystAgent
-from .orchestrator import AgentOrchestrator, AgentResult
-from .security_audit_agent import SecurityAuditAgent
-from .tdd_enforcer_agent import TDDEnforcerAgent
-
-# DEPRECATED(2.0): dead registry of the deprecated agent SDK
-# (no reader outside this package/tests). Remove in 2.0.
-AGENT_REGISTRY: dict[str, type] = {
-    "context-planner": ContextPlannerAgent,
-    "tdd-enforcer": TDDEnforcerAgent,
-    "mutation-analyst": MutationAnalystAgent,
-    "security-audit": SecurityAuditAgent,
-    "code-review": CodeReviewAgent,
-}
-
-__all__ = [
-    "AGENT_REGISTRY",
-    "AgentOrchestrator",
-    "AgentResult",
-    "BaseAgent",
-    "CodeReviewAgent",
-    "ContextPlannerAgent",
-    "MutationAnalystAgent",
-    "SecurityAuditAgent",
-    "TDDEnforcerAgent",
-    "list_available_agents",
-    "load_agent_config",
-]

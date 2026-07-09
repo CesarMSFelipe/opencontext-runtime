@@ -1,20 +1,52 @@
 OpenContext Runtime — Phase 0 environment baseline
 schema_version: 1.0
-created_at: 2026-07-06T19:27:12.905628+00:00
-git_head: 15665bd528a1e79e08e150bd0ea4b0917e947cc3
+created_at: 2026-07-09T12:33:25.889010+00:00
+git_head: 68dc2050377cdd6fe8d92778dbbd3174b733ede0
 python_version: 3.12.3
 platform: Linux-6.17.0-35-generic-x86_64-with-glibc2.39
 runner.py path: /home/zenix/projects/OpenContext Runtime/packages/opencontext_core/opencontext_core/harness/runner.py
-runner.py sha256: 9d6b5a1154771a4f69f1773cab75557715c23ad829beae2d5120e6d62c2a6cc4
+runner.py sha256: f04ac55e18725171cb0f603c4d2d123792f424bf605d4d914022bc080ddf3d57
 runner.py py_compile_ok: True
 compileall_ok: True
 
 git status --short:
 M artifacts/environment-proof.json
  M artifacts/phase0-baseline.txt
- M artifacts/test-inventory.json
- M artifacts/test-inventory.md
-?? artifacts/test-reduction-report.md
+D  packages/opencontext_cli/opencontext_cli/command_maturity.py
+ M packages/opencontext_core/opencontext_core/adapters/__init__.py
+ M packages/opencontext_core/opencontext_core/agents/__init__.py
+D  packages/opencontext_core/opencontext_core/agents/base.py
+D  packages/opencontext_core/opencontext_core/agents/code_review_agent.py
+D  packages/opencontext_core/opencontext_core/agents/context_planner_agent.py
+D  packages/opencontext_core/opencontext_core/agents/hook_handlers.py
+D  packages/opencontext_core/opencontext_core/agents/hooks.py
+D  packages/opencontext_core/opencontext_core/agents/loader.py
+D  packages/opencontext_core/opencontext_core/agents/memory_manager.py
+D  packages/opencontext_core/opencontext_core/agents/mutation_analyst_agent.py
+D  packages/opencontext_core/opencontext_core/agents/orchestrator.py
+D  packages/opencontext_core/opencontext_core/agents/registry.py
+ M packages/opencontext_core/opencontext_core/agents/sdd_orchestrator.py
+D  packages/opencontext_core/opencontext_core/agents/security_audit_agent.py
+D  packages/opencontext_core/opencontext_core/agents/tdd_enforcer_agent.py
+D  packages/opencontext_core/opencontext_core/agents/token_manager.py
+D  packages/opencontext_core/opencontext_core/context/providers.py
+ M packages/opencontext_core/opencontext_core/dx/brand_mark.py
+ M packages/opencontext_core/opencontext_core/dx/console_styles.py
+D  packages/opencontext_core/opencontext_core/sdd/generated_skills.py
+D  packages/opencontext_core/opencontext_core/workflow_packs/signing.py
+D  tests/agents/test_concrete_agents.py
+D  tests/agents/test_orchestrator_no_mock.py
+ M tests/architecture/test_no_upward_imports.py
+D  tests/cli/test_command_maturity_completeness.py
+D  tests/cli/test_generated_skills.py
+ M tests/cli/test_scope_hierarchy_cmds.py
+ M tests/core/test_adapters.py
+D  tests/core/test_agent_registry.py
+ M tests/core/test_console_styles_brand.py
+D  tests/core/test_hooks.py
+ M tests/core/test_model_roles_and_providers.py
+ M tests/core/test_sdd_orchestrator.py
+D  tests/core/test_workflow_pack_signing.py
 
 notes:
   (none)

@@ -1,4 +1,10 @@
-"""Tests for the SDD orchestrator."""
+"""Tests for the SDD artifact store, DAG state, and phase result.
+
+The legacy ``SDDOrchestrator`` class was removed for the 2.0 cut; its tests
+(``TestWorkflowTracks`` / ``TestSDDOrchestrator``) went with it. The
+module-level SDD graph tables it used are exercised under
+``tests/harness`` and ``tests/workflows``.
+"""
 
 from __future__ import annotations
 
@@ -10,8 +16,6 @@ from opencontext_core.agents.artifact_store import (
 )
 from opencontext_core.agents.dag_state import DAGState
 from opencontext_core.agents.result_contract import PhaseResult
-from opencontext_core.agents.sdd_orchestrator import SDDOrchestrator
-from opencontext_core.config import ArtifactStoreMode, SDDConfig
 
 
 class TestArtifactStore:
@@ -118,188 +122,3 @@ class TestPhaseResult:
         }
         restored = PhaseResult.from_dict(data)
         assert restored.warnings == []
-
-
-class TestWorkflowTracks:
-    """Test workflow track support."""
-
-    def test_quick_track_three_phases(self, tmp_path: Path) -> None:
-        config = SDDConfig(
-            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}, track="quick"
-        )
-        orch = SDDOrchestrator(config=config)
-        orch.start_change("test")
-        assert orch._track == "quick"
-
-        # Quick track: explore -> apply -> verify
-        assert orch.get_next_phases() == ["explore"]
-        orch.run_phase("explore", "# Explore\n")
-        assert "apply" in orch.get_next_phases()
-        assert "spec" not in orch.get_next_phases()  # not in quick track
-        orch.run_phase("apply", "# Apply\n")
-        orch.run_phase("verify", "# Verify\n")
-        assert orch.is_complete()
-
-    def test_standard_track_includes_propose_so_spec_and_design_can_run(
-        self, tmp_path: Path
-    ) -> None:
-        # Regression: standard omitted propose, but spec/design require proposal.json,
-        # so they were never schedulable and per-phase model routing never fired.
-        config = SDDConfig(
-            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}},
-            track="standard",
-        )
-        orch = SDDOrchestrator(config=config)
-        orch.start_change("test")
-
-        assert orch._track == "standard"
-        # propose precedes spec/design; spec is not schedulable until propose is done.
-        orch.run_phase("explore", "# explore\n")
-        assert "propose" in orch.get_next_phases()
-        assert "spec" not in orch.get_next_phases()
-        orch.run_phase("propose", "# propose\n")
-        assert "spec" in orch.get_next_phases()
-        assert "design" in orch.get_next_phases()
-
-        for phase in ["spec", "design", "apply", "verify"]:
-            orch.run_phase(phase, f"# {phase}\n")
-        assert orch.is_complete()
-
-    def test_full_track_all_phases(self, tmp_path: Path) -> None:
-        config = SDDConfig(
-            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}, track="full"
-        )
-        orch = SDDOrchestrator(config=config)
-        orch.start_change("test")
-
-        for phase in [
-            "explore",
-            "propose",
-            "spec",
-            "design",
-            "tasks",
-            "apply",
-            "verify",
-            "review",
-            "archive",
-        ]:
-            orch.run_phase(phase, f"# {phase}\n")
-        assert orch.is_complete()
-
-    def test_invalid_phase_rejected(self, tmp_path: Path) -> None:
-        config = SDDConfig(
-            artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}}, track="quick"
-        )
-        orch = SDDOrchestrator(config=config)
-        orch.start_change("test")
-        orch.run_phase("explore", "# Explore\n")
-
-        # propose is not in quick track
-        result = orch.run_phase("propose", "# Propose\n")
-        assert result.is_blocked()
-        assert "not in the active track" in result.executive_summary
-
-    def test_full_track_regression(self, tmp_path: Path) -> None:
-        """Pre-existing orchestrator tests pass with full track."""
-        config = SDDConfig(artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}})
-        orch = SDDOrchestrator(config=config)
-        orch.start_change("test")
-
-        assert not orch.is_complete()
-        for phase in [
-            "explore",
-            "propose",
-            "spec",
-            "design",
-            "tasks",
-            "apply",
-            "verify",
-            "review",
-            "archive",
-        ]:
-            orch.run_phase(phase, f"# {phase}\n")
-        assert orch.is_complete()
-
-
-class TestSDDOrchestrator:
-    def test_start_change(self) -> None:
-        orch = SDDOrchestrator()
-        state = orch.start_change("my-change")
-
-        assert state.change == "my-change"
-        assert orch.get_state() is state
-
-    def test_can_run_phase_no_deps(self) -> None:
-        orch = SDDOrchestrator()
-        orch.start_change("test")
-
-        assert orch.can_run_phase("explore")
-
-    def test_can_run_phase_with_deps(self) -> None:
-        orch = SDDOrchestrator()
-        orch.start_change("test")
-
-        assert not orch.can_run_phase("propose")
-
-        orch.state.mark_completed("explore")  # type: ignore[union-attr]
-        assert orch.can_run_phase("propose")
-
-    def test_run_phase_success(self, tmp_path: Path) -> None:
-        config = SDDConfig(artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}})
-        orch = SDDOrchestrator(config=config)
-        orch.start_change("test-change")
-
-        result = orch.run_phase("explore", "# Exploration\n")
-
-        assert result.is_success()
-        assert "explore" in result.executive_summary
-        assert orch.state.is_phase_completed("explore")  # type: ignore[union-attr]
-
-    def test_run_phase_blocked(self) -> None:
-        orch = SDDOrchestrator()
-        orch.start_change("test")
-
-        result = orch.run_phase("propose", "# Proposal\n")
-
-        assert result.is_blocked()
-        assert "Dependencies" in result.executive_summary
-
-    def test_is_complete(self, tmp_path: Path) -> None:
-        config = SDDConfig(artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}})
-        orch = SDDOrchestrator(config=config)
-        orch.start_change("test")
-
-        assert not orch.is_complete()
-
-        for phase in [
-            "explore",
-            "propose",
-            "spec",
-            "design",
-            "tasks",
-            "apply",
-            "verify",
-            "review",
-            "archive",
-        ]:
-            orch.run_phase(phase, f"# {phase}\n")
-
-        assert orch.is_complete()
-
-    def test_get_next_phases(self, tmp_path: Path) -> None:
-        config = SDDConfig(artifact_store={"mode": "openspec", "openspec": {"path": str(tmp_path)}})
-        orch = SDDOrchestrator(config=config)
-        orch.start_change("test")
-
-        # Initially only explore is ready
-        assert orch.get_next_phases() == ["explore"]
-
-        orch.run_phase("explore", "# Explore\n")
-        # After explore, propose is ready
-        assert "propose" in orch.get_next_phases()
-
-    def test_config_modes(self) -> None:
-        for mode in [ArtifactStoreMode.NONE, ArtifactStoreMode.ENGRAM]:
-            config = SDDConfig(artifact_store={"mode": mode.value})
-            orch = SDDOrchestrator(config=config)
-            assert orch.store is not None

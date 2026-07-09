@@ -47,12 +47,10 @@ def test_hierarchy_commands_registered() -> None:
         assert cmd in sub.choices, f"'{cmd}' not registered as a top-level command"
 
 
-def test_hierarchy_commands_are_preview_in_both_maturity_maps() -> None:
-    from opencontext_cli.command_maturity import COMMAND_MATURITY as visibility_map
+def test_hierarchy_commands_are_preview_in_maturity_registry() -> None:
     from opencontext_cli.contracts.command_registry import COMMAND_MATURITY as contract_map
 
     for cmd in ("product", "workspace", "agents"):
-        assert visibility_map.get(cmd) == "preview"
         assert contract_map.get(cmd) == "preview"
 
 
