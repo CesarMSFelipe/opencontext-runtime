@@ -26,7 +26,7 @@ def _action_header(title: str) -> None:
         console.clear()
     except Exception:
         pass
-    show_logo(compact=True)
+    show_logo()
     console.print(f"  [dim]>[/dim] [bold]{title}[/bold]")
     console.print()
 
