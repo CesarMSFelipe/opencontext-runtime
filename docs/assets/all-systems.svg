@@ -26,43 +26,37 @@
         font-size="10" font-weight="600" fill="#2DC4A4" letter-spacing="1.2">OPENCONTEXT RUNTIME  ·  THE LAYER BETWEEN YOUR AGENT AND YOUR CODEBASE</text>
 
   <!-- Card a: Context + Code Graph -->
-  <rect x="44" y="140" width="200" height="80" rx="9" fill="#111821" stroke="rgba(0,201,167,0.30)" stroke-width="1"/>
-  <rect x="44" y="140" width="4" height="80" rx="2" fill="#2DC4A4"/>
+  <rect x="44" y="140" width="200" height="80" rx="9" fill="#111821" stroke="rgba(45,196,164,0.5)" stroke-width="1.25"/>
   <text x="62" y="170" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12.5" font-weight="700" fill="#2DC4A4">Context + Code Graph</text>
   <text x="62" y="190" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#9DA6B0">Call-graph-traced packs</text>
   <text x="62" y="205" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#606978">SQLite + FTS5 · offline</text>
 
   <!-- Card b: Controlled SDD Loop -->
-  <rect x="260" y="140" width="200" height="80" rx="9" fill="#111821" stroke="rgba(0,168,232,0.30)" stroke-width="1"/>
-  <rect x="260" y="140" width="4" height="80" rx="2" fill="#35ADE5"/>
+  <rect x="260" y="140" width="200" height="80" rx="9" fill="#111821" stroke="rgba(53,173,229,0.5)" stroke-width="1.25"/>
   <text x="278" y="170" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12.5" font-weight="700" fill="#35ADE5">Controlled SDD Loop</text>
   <text x="278" y="190" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#9DA6B0">explore &#8594; … &#8594; archive</text>
   <text x="278" y="205" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#606978">gates · human-in-loop · TDD</text>
 
   <!-- Card c: Model per Persona -->
-  <rect x="476" y="140" width="200" height="80" rx="9" fill="#111821" stroke="rgba(132,92,194,0.30)" stroke-width="1"/>
-  <rect x="476" y="140" width="4" height="80" rx="2" fill="#8A6BBF"/>
+  <rect x="476" y="140" width="200" height="80" rx="9" fill="#111821" stroke="rgba(138,107,191,0.5)" stroke-width="1.25"/>
   <text x="494" y="170" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12.5" font-weight="700" fill="#8A6BBF">Model per Persona</text>
   <text x="494" y="190" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#9DA6B0">Pick the model per phase</text>
   <text x="494" y="205" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#606978">sent as MCP sampling hint</text>
 
   <!-- Card d: Persistent Memory -->
-  <rect x="44" y="234" width="200" height="80" rx="9" fill="#111821" stroke="rgba(0,201,167,0.30)" stroke-width="1"/>
-  <rect x="44" y="234" width="4" height="80" rx="2" fill="#2DC4A4"/>
+  <rect x="44" y="234" width="200" height="80" rx="9" fill="#111821" stroke="rgba(45,196,164,0.5)" stroke-width="1.25"/>
   <text x="62" y="264" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12.5" font-weight="700" fill="#2DC4A4">Persistent Memory</text>
   <text x="62" y="284" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#9DA6B0">7 layers · local-first</text>
   <text x="62" y="299" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#606978">Engram coexistence opt-in</text>
 
   <!-- Card e: Security by Default -->
-  <rect x="260" y="234" width="200" height="80" rx="9" fill="#111821" stroke="rgba(227,179,65,0.30)" stroke-width="1"/>
-  <rect x="260" y="234" width="4" height="80" rx="2" fill="#D4A840"/>
+  <rect x="260" y="234" width="200" height="80" rx="9" fill="#111821" stroke="rgba(212,168,64,0.5)" stroke-width="1.25"/>
   <text x="278" y="264" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12.5" font-weight="700" fill="#D4A840">Security by Default</text>
   <text x="278" y="284" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#9DA6B0">Redaction · secret scan</text>
   <text x="278" y="299" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#606978">fail-closed · offline-first</text>
 
   <!-- Card f: 32 MCP Tools -->
-  <rect x="476" y="234" width="200" height="80" rx="9" fill="#0D2220" stroke="rgba(0,168,232,0.35)" stroke-width="1.5"/>
-  <rect x="476" y="234" width="4" height="80" rx="2" fill="#35ADE5"/>
+  <rect x="476" y="234" width="200" height="80" rx="9" fill="#0D2220" stroke="rgba(53,173,229,0.5)" stroke-width="1.25"/>
   <text x="494" y="264" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12.5" font-weight="700" fill="#35ADE5">32 MCP Tools</text>
   <text x="494" y="284" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#9DA6B0">read · edit · run</text>
   <text x="494" y="299" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="9.5" fill="#606978">memory · quality</text>
