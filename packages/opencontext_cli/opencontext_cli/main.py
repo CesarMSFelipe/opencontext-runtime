@@ -5235,23 +5235,31 @@ def _pack(
         # Pack payload — print raw so rich never parses its brackets.
         print(rendered)
 
-    # Record telemetry — estimate naive tokens from all project text files
+    # Record telemetry — headline savings compare the pack against reading only the
+    # files it drew from, whole (docs/benchmarks methodology). The whole-repo total is
+    # kept only as a labeled ceiling.
     try:
         import time
 
         from opencontext_core.evaluation.telemetry import (
             TelemetryEvent,
+            estimate_included_files_tokens,
             estimate_naive_tokens,
             record_event,
         )
 
-        # Estimate the naive baseline from the project being packed, not the cwd
-        # (otherwise --root would measure the wrong tree and overstate the win).
+        # Resolve the project being packed, not the cwd (otherwise --root would
+        # measure the wrong tree and overstate the win).
         naive_root = Path(root)
         naive_root = naive_root if naive_root.exists() else Path.cwd()
+        # Honest headline baseline (matches docs/benchmarks): reading ONLY the files
+        # the pack drew from, whole. The whole-repo total is a labeled ceiling, never
+        # the headline — no agent reads the entire tree for one task, so comparing
+        # against it inflates the % by orders of magnitude.
+        baseline_tokens = estimate_included_files_tokens(naive_root, pack)
         naive_tokens = estimate_naive_tokens(naive_root)
         optimized_tokens = pack.used_tokens or 1
-        reduction_pct = round(max(0.0, 1.0 - optimized_tokens / naive_tokens) * 100, 1)
+        reduction_pct = round(max(0.0, 1.0 - optimized_tokens / baseline_tokens) * 100, 1)
         # Show the win on every pack. stderr keeps stdout clean for --copy / JSON / pipes.
         # Cap the displayed percent below 100 — "100% fewer" reads as fake even when
         # the rounding is honest; the absolute counts carry the real story.
@@ -5265,7 +5273,7 @@ def _pack(
                 "  ! no content fit the token budget — raise --max-tokens or narrow the query",
                 file=_sys.stderr,
             )
-        elif reduction_pct > 0 and naive_tokens > optimized_tokens:
+        elif reduction_pct > 0 and baseline_tokens > optimized_tokens:
             shown_pct = min(reduction_pct, 99.9)
             mem_indicator = ""
             try:
@@ -5280,15 +5288,19 @@ def _pack(
             except Exception:
                 pass
             print(
-                f"  ↓ {shown_pct}% fewer tokens than reading the whole project "
-                f"({naive_tokens:,} → {optimized_tokens:,}){mem_indicator}",
+                f"  ↓ {shown_pct}% fewer tokens than reading the relevant files whole "
+                f"({baseline_tokens:,} → {optimized_tokens:,}){mem_indicator}",
+                file=_sys.stderr,
+            )
+            print(
+                f"    whole-repo ceiling (if an agent read everything): {naive_tokens:,} tokens",
                 file=_sys.stderr,
             )
         record_event(
             TelemetryEvent(
                 timestamp=time.time(),
                 task=query[:80],
-                naive_tokens=naive_tokens,
+                naive_tokens=baseline_tokens,
                 optimized_tokens=optimized_tokens,
                 reduction_pct=reduction_pct,
                 scenario="pack",

@@ -1,8 +1,10 @@
 """Demo CLI — the 30-second "aha" on the user's own repo.
 
 `opencontext demo` shows the before/after that makes the value undeniable: how
-many tokens an agent would read by ingesting the whole project, versus the
-handful of files OpenContext hands it for a real task — measured, on THIS repo.
+many tokens it takes to read the relevant files whole, versus the handful of
+symbols OpenContext hands the agent for a real task — measured, on THIS repo. The
+whole-repo total is shown only as a labeled upper-bound ceiling, never as the
+headline savings (no agent reads the entire tree for one task).
 """
 
 from __future__ import annotations
@@ -18,7 +20,10 @@ from opencontext_core.dx.console_styles import (
     BRAND_SUCCESS,
     console,
 )
-from opencontext_core.evaluation.telemetry import estimate_naive_tokens
+from opencontext_core.evaluation.telemetry import (
+    estimate_included_files_tokens,
+    estimate_naive_tokens,
+)
 
 _DEFAULT_QUERY = "How does this project work?"
 
@@ -56,24 +61,30 @@ def handle_demo(runtime: Any, args: Any) -> int:
         console.dim("Indexing the project… (run once, faster next time)")
         runtime.index_project(root)
 
-    naive = estimate_naive_tokens(root)
     pack = runtime.build_context_pack(args.query)
     optimized = pack.used_tokens or 1
     files = list(pack.included)
-    ratio = optimized / naive if naive else 1.0
+    # Honest headline baseline (matches docs/benchmarks): reading ONLY the files the
+    # pack drew from, whole — NOT the whole repo. No agent ingests the entire tree for
+    # one task, so the whole-repo number would inflate the % by orders of magnitude.
+    baseline = estimate_included_files_tokens(root, pack)
+    # Whole-repo total kept as a clearly-labeled upper-bound ceiling, never the headline.
+    naive = estimate_naive_tokens(root)
+    ratio = optimized / baseline if baseline else 1.0
     # Don't claim a saving that isn't there: on a tiny project the focused pack can
-    # exceed a whole-project read, and the reduction only shows at real scale.
+    # exceed reading its own files whole, and the reduction only shows at real scale.
     if ratio < 1.0:
         delta_label = f"[bold]{min(99.9, round((1 - ratio) * 100, 1))}% less[/]"
     else:
         delta_label = "[dim]no reduction at this size — the win grows with the codebase[/]"
 
-    console.print("\n[bold]Without OpenContext[/] — the agent reads the whole project:")
-    console.print(f"   [{BRAND_ERROR}]{naive:,} tokens[/]")
+    console.print("\n[bold]Without OpenContext[/] — read the relevant files whole:")
+    console.print(f"   [{BRAND_ERROR}]{baseline:,} tokens[/]")
     console.print(f"\n[bold]With OpenContext[/] — task: [italic]{args.query}[/]")
     console.print(
         f"   [{BRAND_SUCCESS}]{len(files)} files · {optimized:,} tokens[/]  ({delta_label})"
     )
+    console.dim(f"Whole-repo ceiling (if an agent read everything): {naive:,} tokens")
 
     if files:
         console.dim("The files it chose, and why:")
