@@ -226,7 +226,7 @@ Run the demo on your actual repository, then wire OpenContext into your editor.
 curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh | bash
 cd your-project
 opencontext install            # stack detection · editor setup · index repo
-opencontext demo               # see the token + call reduction on your repo
+opencontext demo               # see the call-graph-traced, verified context pack for a task
 ```
 
 **Windows PowerShell**
@@ -254,10 +254,12 @@ Prefer Python tooling? Use `pipx install opencontext-cli` instead.
 
 Every benchmark runs on a public repository. No hidden dataset. No hosted service. No benchmark-only path. Fully reproducible with `opencontext pack` (see [`docs/benchmarks/`](docs/benchmarks/) for the exact commands and pinned commits).
 
-**Benchmark methodology:** each case clones a public repo at a pinned commit, runs `opencontext index`, then compares OpenContext's one-call pack against reading the relevant files whole — the same token counter on both sides. Measured reductions: **42–87% fewer tokens** (psf/requests, tiangolo/fastapi, django/django). This measures context tokens, not model quality or end-task success — real agent behavior varies by model, editor, and tool strategy. Full numbers, pinned commits, and a one-command reproduction live in [`docs/benchmarks/`](docs/benchmarks/).
+**What you get, in one call:** call-graph-traced context — the symbols that actually reach your task, ranked, with the files it left out listed explicitly (it never silently drops content). Deterministic: the same pinned commit and query produce the same pack every run, reproducible on public repos at pinned commits (see [`docs/benchmarks/`](docs/benchmarks/) for the exact commands).
+
+**On packing size:** each case clones a public repo at a pinned commit, runs `opencontext index`, then compares OpenContext's one-call pack against reading the relevant files whole — the same token counter on both sides. The relevant symbol-level pack is **42–87% smaller** than opening those files whole (psf/requests, tiangolo/fastapi, django/django). That is a context-packing measurement, **not** an end-to-end token, latency, or task-success win — on a small surgical edit, a targeted file read can cost fewer tokens than a full pack. Reach for OpenContext when you want verified context and impact analysis on a large repo, not as a blanket token-saver. Full numbers, pinned commits, and a one-command reproduction live in [`docs/benchmarks/`](docs/benchmarks/).
 
 <p align="center">
-  <img src="docs/assets/stats-bar.svg" alt="42–87% fewer tokens than reading the relevant files whole · one ranked call · call graph included · deterministic · measured on 3 public repos" width="100%">
+  <img src="docs/assets/stats-bar.svg" alt="One call · call-graph-traced · ranked symbols · omitted files listed · deterministic — and the pack is 42–87% smaller than reading those files whole · measured on 3 public repos" width="100%">
 </p>
 
 <p align="center">

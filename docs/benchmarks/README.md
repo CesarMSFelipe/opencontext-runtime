@@ -1,8 +1,12 @@
-# Token-efficiency benchmarks
+# Context-packing size benchmarks
 
-Real, reproducible measurements behind the README's efficiency claims. Every
-number here comes from running OpenContext against public repositories at pinned
-commits — nothing is hand-authored. Raw data: [`results.json`](results.json).
+Real, reproducible measurements of context-packing size: OpenContext's one-call
+pack vs. reading the relevant files whole. Every number here comes from running
+OpenContext against public repositories at pinned commits — nothing is
+hand-authored. This is a packing-size comparison, **not** an end-to-end token,
+latency, or task-success claim; on a small surgical task a targeted read of one
+file can cost fewer tokens than a full pack. Raw data:
+[`results.json`](results.json).
 
 ## Results
 
@@ -17,7 +21,8 @@ sides of every comparison).
 | [tiangolo/fastapi](https://github.com/tiangolo/fastapi) `@702fea8` | 1,129 | add OAuth2 bearer token authentication | 12,932 | 22,477 | **42%** |
 | [django/django](https://github.com/django/django) `@7b09ce8` | 2,924 | how the ORM compiles a QuerySet into SQL | 14,728 | 117,057 | **87%** |
 
-Range across these tasks: **42–87% fewer tokens.** The reduction grows with repo
+Range across these tasks: the pack is **42–87% smaller** than reading those files
+whole. The reduction grows with repo
 and file size — a small library (requests) and a focused feature (fastapi OAuth2,
 where the relevant files are already small) gain less; a large codebase with big
 modules (django's ORM: `query.py`, `sql/compiler.py`, `sql/query.py` are
