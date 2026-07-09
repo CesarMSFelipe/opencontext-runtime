@@ -25,21 +25,23 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/runtime-strip.svg" alt="offline-first · call-graph traced · deterministic · MCP ready · claims tested" width="100%">
+  <img src="docs/assets/systems-map.svg" alt="OpenContext, one runtime with six wired systems: your coding agent sends a request and gets a verified pack back in one call; the runtime holds Context + Code Graph, Controlled SDD Loop, Model per Persona, Persistent Memory, Security by Default, and 32 MCP Tools, and indexes your codebase once to query it offline." width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/release-candidate-status.svg" alt="OpenContext product status: stable, release candidate, host dependent, opt-in" width="100%">
+  <img src="docs/assets/runtime-strip.svg" alt="offline-first · call-graph traced · deterministic · MCP ready · claims tested" width="100%">
 </p>
 
 ## Product surface
 
-The five canonical diagrams below show the user-facing surface of the 1.0 release. Every
-SVG has a matching `<title>` element and is referenced by an exact filename in this README.
+The four canonical diagrams below show the user-facing surface. Each SVG is referenced by
+an exact filename in this README.
 
 ### TUI Cockpit
 
-![TUI Cockpit](docs/assets/tui-cockpit.svg)
+<p align="center">
+  <img src="docs/assets/tui-cockpit.svg" alt="TUI Cockpit — runtime state, run phase, and the next action, with the keyboard hints that drive the four-key workflow" width="100%">
+</p>
 
 The interactive TUI cockpit — runtime state, run phase, and the next action the agent
 will take, with the keyboard hints (g Graph, h Harness, r Receipt, n New change, k Context,
@@ -47,7 +49,9 @@ b Budget) that drive the four-key workflow.
 
 ### Config Menu
 
-![Config Menu](docs/assets/config-menu.svg)
+<p align="center">
+  <img src="docs/assets/config-menu.svg" alt="Config Menu — each option shows its downstream effect on a real run before it asks for input" width="100%">
+</p>
 
 The configuration menu that explains impact before it asks for input — project setup,
 runtime posture, workflow strictness, memory location, and maintenance. Each option shows
@@ -55,33 +59,23 @@ its downstream effect on a real run, not a marketing blurb.
 
 ### Graph Viewer
 
-![Graph Viewer](docs/assets/graph-viewer.svg)
+<p align="center">
+  <img src="docs/assets/graph-viewer.svg" alt="Graph Viewer — nodes for symbols, files, and run phases; edges for calls, imports, and evidence" width="100%">
+</p>
 
 The local code-graph viewer — nodes for symbols, files, and run phases; edges for
 calls, imports, and evidence. Built from the index the runtime produces during
 `opencontext index`, queryable from the TUI and the CLI.
 
-### Release Candidate Status
-
-![Release Candidate Status](docs/assets/release-candidate-status.svg)
-
-What is stable, what is a release candidate, what is host-dependent, and what is opt-in
-in the 1.0 release. The status is enforced by the 12-gate release verdict
-(`opencontext benchmark release --profile balanced`).
-
 ### User Flows
 
-![User Flows](docs/assets/user-flows.svg)
+<p align="center">
+  <img src="docs/assets/user-flows.svg" alt="User Flows — Explore, Propose, Apply, Verify, Archive, plus the seed-test, run, re-run verification loop" width="100%">
+</p>
 
 The five primary user flows: **Explore → Propose → Apply → Verify → Archive**. The bottom
 panel shows the verification loop from commit 021: seed a failing test, run pytest,
 invoke OpenContext, re-run pytest, and pass or honestly block.
-
-### Product status
-
-| Stable | Release candidate | Host dependent | Opt-in |
-|---|---|---|---|
-| index · KG · pack · verified-context · memory · uninstall | `oc-new` · TUI cockpit · graph viewer · learning signals | MCP sampling · generative phases | Engram · providers · semantic/vector |
 
 <p align="center">
   <img src="docs/assets/hero-runtime.svg" alt="From agent request to verified context in one call: an AI coding agent asks; OpenContext Runtime traces the call graph, ranks symbols, locks a token budget and checks gates; a verified context pack is returned in one call" width="100%">
@@ -648,14 +642,6 @@ pytest tests/smoke/test_readme_claims.py -v
 ```
 
 They check the contract risk tiers and token budgets, the AICX bytecode round-trip, the loop dry-run phases, the SDK contract, and that the README's MCP-tool count matches the running server. The benchmark numbers are real — measured on public repos at pinned commits and reproducible per [`docs/benchmarks/`](docs/benchmarks/).
-
-<p align="center">
-  <img src="docs/assets/release-trust.svg" alt="Release 1.6.0 status: stable — code graph, context packs, MCP read tools, local memory; opt-in — Engram, external providers, symbol-edit tools, semantic search; host-agent dependent — opencontext_run and standalone generative phases; scaffolded and fail-closed — egress, tool forwarding, raw traces. Claims guarded by pytest tests/smoke/test_readme_claims.py" width="100%">
-</p>
-
-<p align="center">
-  <sub>Status · stable / opt-in / host-dependent / fail-closed · every quantified claim guarded by a smoke test</sub>
-</p>
 
 <!-- ─────────────── DOCS INDEX ─────────────── -->
 
