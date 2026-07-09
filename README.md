@@ -36,51 +36,6 @@
   <img src="docs/assets/runtime-strip.svg" alt="offline-first · call-graph traced · deterministic · MCP ready · claims tested" width="100%">
 </p>
 
-## Product surface
-
-The four canonical diagrams below show the user-facing surface. Each SVG is referenced by
-an exact filename in this README.
-
-### TUI Cockpit
-
-<p align="center">
-  <img src="docs/assets/tui-cockpit.svg" alt="TUI Cockpit — runtime state, run phase, and the next action, with the keyboard hints that drive the four-key workflow" width="100%">
-</p>
-
-The interactive TUI cockpit — runtime state, run phase, and the next action the agent
-will take, with the keyboard hints (g Graph, h Harness, r Receipt, n New change, k Context,
-b Budget) that drive the four-key workflow.
-
-### Config Menu
-
-<p align="center">
-  <img src="docs/assets/config-menu.svg" alt="Config Menu — each option shows its downstream effect on a real run before it asks for input" width="100%">
-</p>
-
-The configuration menu that explains impact before it asks for input — project setup,
-runtime posture, workflow strictness, memory location, and maintenance. Each option shows
-its downstream effect on a real run, not a marketing blurb.
-
-### Graph Viewer
-
-<p align="center">
-  <img src="docs/assets/graph-viewer.svg" alt="Graph Viewer — nodes for symbols, files, and run phases; edges for calls, imports, and evidence" width="100%">
-</p>
-
-The local code-graph viewer — nodes for symbols, files, and run phases; edges for
-calls, imports, and evidence. Built from the index the runtime produces during
-`opencontext index`, queryable from the TUI and the CLI.
-
-### User Flows
-
-<p align="center">
-  <img src="docs/assets/user-flows.svg" alt="User Flows — Explore, Propose, Apply, Verify, Archive, plus the seed-test, run, re-run verification loop" width="100%">
-</p>
-
-The five primary user flows: **Explore → Propose → Apply → Verify → Archive**. The bottom
-panel shows the verification loop from commit 021: seed a failing test, run pytest,
-invoke OpenContext, re-run pytest, and pass or honestly block.
-
 <p align="center">
   <img src="docs/assets/hero-runtime.svg" alt="From agent request to verified context in one call: an AI coding agent asks; OpenContext Runtime traces the call graph, ranks symbols, locks a token budget and checks gates; a verified context pack is returned in one call" width="100%">
 </p>
