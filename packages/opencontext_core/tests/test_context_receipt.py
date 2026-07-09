@@ -15,20 +15,8 @@ class TestContextSavingsReportDegradedPath:
     def test_build_without_builder_returns_degraded(self) -> None:
         report = ContextSavingsReport.build()
         assert report.degraded is True
-        assert report.estimated_savings_ratio == 0.0
         assert report.tokens_saved == 0
-
-    def test_degraded_no_exception(self) -> None:
-        # Must not raise
-        report = ContextSavingsReport.build()
-        assert report is not None
-
-    def test_degraded_warning_non_empty(self) -> None:
-        report = ContextSavingsReport.build()
-        assert report.warning
-
-    def test_estimated_savings_ratio_zero_not_none(self) -> None:
-        report = ContextSavingsReport.build()
+        assert report.warning  # non-empty degraded warning
         assert report.estimated_savings_ratio == 0.0
         assert isinstance(report.estimated_savings_ratio, float)
 

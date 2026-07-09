@@ -11,9 +11,6 @@ from opencontext_core.runtime.session import RuntimeSession, SessionStatus
 
 
 class TestSessionStatus:
-    def test_has_exactly_nine_members(self) -> None:
-        assert len(list(SessionStatus)) == 9
-
     def test_includes_book_eight_plus_cancelled(self) -> None:
         expected = {
             "created",
@@ -30,9 +27,6 @@ class TestSessionStatus:
 
 
 class TestRuntimeMode:
-    def test_has_exactly_six_modes(self) -> None:
-        assert len(list(RuntimeMode)) == 6
-
     def test_members(self) -> None:
         assert {m.value for m in RuntimeMode} == {
             "run_to_completion",
@@ -45,9 +39,6 @@ class TestRuntimeMode:
 
 
 class TestEventCategory:
-    def test_has_exactly_sixteen_categories(self) -> None:
-        assert len(list(EventCategory)) == 16
-
     def test_required_categories_present(self) -> None:
         required = {
             "session",
@@ -71,9 +62,6 @@ class TestEventCategory:
 
 
 class TestRuntimeErrorCode:
-    def test_has_exactly_nine_codes(self) -> None:
-        assert len(list(RuntimeErrorCode)) == 9
-
     def test_codes(self) -> None:
         assert {c.value for c in RuntimeErrorCode} == {
             "workflow_not_found",

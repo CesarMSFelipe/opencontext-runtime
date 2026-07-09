@@ -8,9 +8,8 @@ from opencontext_core.harness.runner import HarnessRunner
 
 
 class TestHarnessRunnerV2:
-    def test_initializes_without_crash(self, tmp_path: Path) -> None:
-        runner = HarnessRunner(root=tmp_path)
-        assert runner is not None
+    # NOTE: bare "constructs without crash" smoke was cut — construction is
+    # exercised by test_explore_only_run_completes (and every other runner test).
 
     def test_has_memory_store_attribute(self, tmp_path: Path) -> None:
         runner = HarnessRunner(root=tmp_path)

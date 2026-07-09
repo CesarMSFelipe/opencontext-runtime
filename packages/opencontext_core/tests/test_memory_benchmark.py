@@ -53,14 +53,10 @@ class TestPrecisionAtK:
 
 
 class TestReciprocalRank:
-    def test_first_hit_at_position_1(self) -> None:
+    def test_rr_is_one_over_first_hit_position(self) -> None:
+        # RR = 1 / (1-based position of the first relevant hit).
         assert reciprocal_rank(["a", "b", "c"], ["a"]) == pytest.approx(1.0)
-
-    def test_first_hit_at_position_2(self) -> None:
-        # 0-based index 1 → 1-based position 2 → RR = 0.5
         assert reciprocal_rank(["x", "a", "b"], ["a"]) == pytest.approx(0.5)
-
-    def test_first_hit_at_position_3(self) -> None:
         assert reciprocal_rank(["x", "y", "a"], ["a"]) == pytest.approx(1 / 3)
 
     def test_no_hit_returns_0(self) -> None:

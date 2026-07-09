@@ -31,23 +31,14 @@ def _proposal(**kwargs) -> EvolutionProposal:
 
 
 class TestEvolutionProposalDefaults:
-    def test_status_defaults_to_proposed(self):
-        assert _proposal().status == "proposed"
-
-    def test_confidence_defaults_to_0_5(self):
-        assert _proposal().confidence == 0.5
-
-    def test_auto_applicable_defaults_to_false(self):
-        assert _proposal().auto_applicable is False
-
-    def test_requires_approval_defaults_to_true(self):
-        assert _proposal().requires_approval is True
-
-    def test_evidence_refs_defaults_to_empty_list(self):
-        assert _proposal().evidence_refs == []
-
-    def test_payload_defaults_to_empty_dict(self):
-        assert _proposal().payload == {}
+    def test_field_defaults(self):
+        p = _proposal()
+        assert p.status == "proposed"
+        assert p.confidence == 0.5
+        assert p.auto_applicable is False
+        assert p.requires_approval is True
+        assert p.evidence_refs == []
+        assert p.payload == {}
 
 
 class TestEvolutionProposalValidation:

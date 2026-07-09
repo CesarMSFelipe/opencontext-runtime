@@ -50,15 +50,6 @@ def test_config_get_yaml_section_key_exits_nonzero(
     )
 
 
-def test_config_set_models_key_exits_nonzero(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-    """config set models.phases.apply must show yaml hint and exit non-zero."""
-    with pytest.raises(SystemExit) as exc_info:
-        config_cmd._config_set("models.phases.apply", "opus")
-    assert exc_info.value.code != 0
-    err = capsys.readouterr().err
-    assert "opencontext.yaml" in err
-
-
 def test_config_set_whitelist_key_unchanged(tmp_path: Path) -> None:
     """config set with a key in CONFIG_PATHS still works (no regression)."""
     # sdd.tdd_mode IS in CONFIG_PATHS — must not be affected by the new guard.

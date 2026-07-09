@@ -9,22 +9,13 @@ from opencontext_core.compat import UTC, StrEnum
 
 
 def test_utc_is_timezone_utc() -> None:
-    """UTC constant must equal datetime.timezone.utc."""
+    """UTC constant must equal (and be an instance of) datetime.timezone.utc."""
+    assert isinstance(UTC, timezone)
     assert UTC == timezone.utc  # noqa: UP017
 
 
-def test_utc_is_timezone_instance() -> None:
-    """UTC must be an instance of datetime.timezone."""
-    assert isinstance(UTC, timezone)
-
-
-def test_strenum_is_subclass_of_str() -> None:
-    """StrEnum must be a subclass of str."""
-    assert issubclass(StrEnum, str)
-
-
 def test_strenum_is_subclass_of_enum() -> None:
-    """StrEnum must be a subclass of enum.Enum."""
+    """StrEnum must be a subclass of enum.Enum (str-ness covered by members test)."""
     assert issubclass(StrEnum, enum.Enum)
 
 

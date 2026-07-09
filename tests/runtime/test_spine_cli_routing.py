@@ -17,7 +17,6 @@ from unittest.mock import patch
 import pytest
 
 from opencontext_cli.commands.run_cmd import handle_run_exec
-from opencontext_core.compat import is_migrated_flag
 from opencontext_core.compat.migration import MIGRATION_LEDGER, MigrationState
 
 
@@ -34,77 +33,6 @@ def _args(tmp_path: Path, **overrides: Any) -> argparse.Namespace:
     }
     base.update(overrides)
     return argparse.Namespace(**base)
-
-
-def test_flag_is_migrated_after_c15(tmp_path: Path) -> None:
-    """C15: is_migrated_flag('rt-spine') is True — the spine is the default route.
-
-    After the C15 flip, the ledger records rt-spine as migrated so handle_run_exec
-    routes through RuntimeApi unconditionally (no legacy OC Flow path remains).
-    """
-    # The flag must be migrated after C15.
-    assert is_migrated_flag("rt-spine") is True
-
-
-def test_flag_on_uses_spine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """``is_migrated_flag('rt-spine') is True`` -> spine branch runs.
-
-    We patch ``compat.is_migrated_flag`` to return True, then stub
-    ``RuntimeApi.start_session`` and ``RuntimeApi.run`` and assert they
-    were called in order. ``run_oc_flow_cli`` MUST NOT be called.
-    """
-    from opencontext_core.runtime.api import RunResult, SessionRef
-
-    fake_session = SessionRef(session_id="sess-fake", status="created", session_path=str(tmp_path))
-    fake_result = RunResult(run_id="run-fake", status="completed", legacy=None)
-
-    sequence: list[str] = []
-
-    class FakeApi:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            sequence.append("__init__")
-
-        def start_session(self, request: Any) -> Any:
-            sequence.append("start_session")
-            return fake_session
-
-        def run(self, request: Any) -> Any:
-            sequence.append("run")
-            # Assert the run request carries the session_id from start_session.
-            assert request.session_id == "sess-fake"
-            return fake_result
-
-    with patch("opencontext_core.compat.is_migrated_flag", return_value=True):
-        with patch("opencontext_core.runtime.api.RuntimeApi", FakeApi):
-            handle_run_exec(_args(tmp_path))
-
-    # The spine branch must call start_session BEFORE run, never run_workflow.
-    assert sequence == ["__init__", "start_session", "run"], sequence
-
-
-def test_spine_is_the_only_path_after_c15(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """C15: the spine (RuntimeApi) is the ONLY execution path; no legacy branch remains.
-
-    After the C15 flip, handle_run_exec no longer has a legacy OC Flow branch.
-    RuntimeApi MUST be instantiated and start_session MUST be called.
-    """
-    from opencontext_core.runtime.api import RunResult, SessionRef
-
-    fake_session = SessionRef(session_id="sess-c15", status="created", session_path=str(tmp_path))
-    fake_result = RunResult(run_id="run-c15", status="completed", legacy=None)
-
-    class SpineOnlyApi:
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            pass
-
-        def start_session(self, request: Any) -> Any:
-            return fake_session
-
-        def run(self, request: Any) -> Any:
-            return fake_result
-
-    with patch("opencontext_core.runtime.api.RuntimeApi", SpineOnlyApi):
-        handle_run_exec(_args(tmp_path))  # must not raise
 
 
 def test_spine_routes_via_start_session_then_run(

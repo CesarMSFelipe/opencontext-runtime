@@ -40,15 +40,8 @@ class TestBuildBinaryPackages:
             "opencontext_sdd is missing from scripts/build_binary.py _PACKAGES. "
             "The pyz will crash with ModuleNotFoundError on a clean machine."
         )
-
-    def test_opencontext_sdd_source_path_exists(self) -> None:
-        """The source path recorded for opencontext_sdd must actually exist."""
-        import scripts.build_binary as bb
-
-        if "opencontext_sdd" not in bb._PACKAGES:
-            pytest.skip("opencontext_sdd not in _PACKAGES yet (CRIT-1a fix pending)")
-        src = bb._PACKAGES["opencontext_sdd"]
-        assert src.is_dir(), f"opencontext_sdd source not found at {src}"
+        # The recorded source path must actually exist (self-contained pyz).
+        assert bb._PACKAGES["opencontext_sdd"].is_dir()
 
 
 # ---------------------------------------------------------------------------

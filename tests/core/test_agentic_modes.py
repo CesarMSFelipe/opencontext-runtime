@@ -42,37 +42,21 @@ def test_hybrid_pauses_at_review_checkpoints() -> None:
         assert not should_pause_after_phase(FlowMode.HYBRID, phase), f"should not pause at {phase}"
 
 
-def test_observe_only_disables_code_execution() -> None:
-    assert not should_execute_code(FlowMode.OBSERVE_ONLY)
+def test_code_execution_disabled_for_read_only_modes() -> None:
+    for mode in (FlowMode.OBSERVE_ONLY, FlowMode.ENGRAM_ONLY, FlowMode.OPENSPEC_ONLY):
+        assert not should_execute_code(mode), f"{mode} must not execute code"
 
 
-def test_engram_only_disables_code_execution() -> None:
-    assert not should_execute_code(FlowMode.ENGRAM_ONLY)
+def test_code_execution_enabled_for_active_modes() -> None:
+    for mode in (FlowMode.AUTOMATIC, FlowMode.STEPWISE):
+        assert should_execute_code(mode), f"{mode} must execute code"
 
 
-def test_openspec_only_disables_code_execution() -> None:
-    assert not should_execute_code(FlowMode.OPENSPEC_ONLY)
+def test_openspec_writes_suppressed_for_engram_and_observe_modes() -> None:
+    for mode in (FlowMode.ENGRAM_ONLY, FlowMode.OBSERVE_ONLY):
+        assert not should_write_openspec(mode), f"{mode} must not write openspec"
 
 
-def test_automatic_enables_code_execution() -> None:
-    assert should_execute_code(FlowMode.AUTOMATIC)
-
-
-def test_stepwise_enables_code_execution() -> None:
-    assert should_execute_code(FlowMode.STEPWISE)
-
-
-def test_engram_only_suppresses_openspec_writes() -> None:
-    assert not should_write_openspec(FlowMode.ENGRAM_ONLY)
-
-
-def test_observe_only_suppresses_openspec_writes() -> None:
-    assert not should_write_openspec(FlowMode.OBSERVE_ONLY)
-
-
-def test_openspec_only_allows_openspec_writes() -> None:
-    assert should_write_openspec(FlowMode.OPENSPEC_ONLY)
-
-
-def test_automatic_allows_openspec_writes() -> None:
-    assert should_write_openspec(FlowMode.AUTOMATIC)
+def test_openspec_writes_allowed_for_openspec_and_automatic_modes() -> None:
+    for mode in (FlowMode.OPENSPEC_ONLY, FlowMode.AUTOMATIC):
+        assert should_write_openspec(mode), f"{mode} must write openspec"

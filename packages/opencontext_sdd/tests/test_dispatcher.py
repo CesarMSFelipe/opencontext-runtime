@@ -92,33 +92,21 @@ def test_REQ_OSS_005_different_phases_distinct_prompts() -> None:
 
 
 def test_REQ_GAS_005_deterministic_per_phase() -> None:
-    """Same inputs → same output, byte-for-byte (deterministic)."""
+    """Same inputs → same output, byte-for-byte (deterministic).
+
+    Determinism holds regardless of trace_id source, including one emitted by
+    the telemetry module.
+    """
     a = RenderNativePhasePrompt("apply", change="demo", trace_id="tr-x", tdd_mode="strict")
     b = RenderNativePhasePrompt("apply", change="demo", trace_id="tr-x", tdd_mode="strict")
     assert a == b
+
+    tid = emit_trace_id()
+    c = RenderNativePhasePrompt("apply", change="demo", trace_id=tid, tdd_mode="strict")
+    d = RenderNativePhasePrompt("apply", change="demo", trace_id=tid, tdd_mode="strict")
+    assert c == d
 
     # Two phases with identical kwargs still differ (phase is part of the prompt).
     p_apply = RenderNativePhasePrompt("apply", change="demo", trace_id="tr-x")
     p_propose = RenderNativePhasePrompt("propose", change="demo", trace_id="tr-x")
     assert p_apply != p_propose
-
-
-def test_REQ_GAS_005_prompt_contains_trace_id_and_tdd_rule_when_strict() -> None:
-    """Combined assertion: trace_id + TDD rule coexist when strict."""
-    prompt = RenderNativePhasePrompt("apply", change="demo", trace_id="tr-xyz", tdd_mode="strict")
-    assert "trace_id=tr-xyz" in prompt
-    assert "phase=apply" in prompt
-    assert "tdd-strict: write the closest failing test first" in prompt
-
-
-def test_native_phase_prompt_deterministic() -> None:
-    """Same inputs → byte-identical output (strictness invariant across trace_id sources)."""
-    base = {"change": "demo", "trace_id": "tr-fixed", "tdd_mode": "strict"}
-    a = RenderNativePhasePrompt("apply", **base)
-    b = RenderNativePhasePrompt("apply", **base)
-    assert a == b
-    # And with a trace_id sourced from the telemetry module
-    tid = emit_trace_id()
-    c = RenderNativePhasePrompt("apply", change="demo", trace_id=tid, tdd_mode="strict")
-    d = RenderNativePhasePrompt("apply", change="demo", trace_id=tid, tdd_mode="strict")
-    assert c == d

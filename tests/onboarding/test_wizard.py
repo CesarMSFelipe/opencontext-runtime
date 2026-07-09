@@ -120,31 +120,13 @@ class TestOnboardingWizard:
         # stdout is captured so isatty() returns False
         assert wizard.is_interactive() is False
 
-    def test_wizard_creates_config(self, tmp_path: Path) -> None:
-        """Wizard should create opencontext.yaml."""
+    def test_wizard_materialises_expected_artifacts(self, tmp_path: Path) -> None:
+        """A default wizard run creates the .opencontext tree and its core files."""
         wizard = InteractiveOnboardingWizard(root=tmp_path)
         wizard.run(non_interactive=True)
-        config = tmp_path / "opencontext.yaml"
-        assert config.exists()
 
-    def test_wizard_creates_sdd_context(self, tmp_path: Path) -> None:
-        """Wizard should create SDD context."""
-        wizard = InteractiveOnboardingWizard(root=tmp_path)
-        wizard.run(non_interactive=True)
-        sdd = tmp_path / ".opencontext" / "sdd" / "context.json"
-        assert sdd.exists()
-
-    def test_wizard_creates_harness(self, tmp_path: Path) -> None:
-        """Wizard should create harness.yaml."""
-        wizard = InteractiveOnboardingWizard(root=tmp_path)
-        wizard.run(non_interactive=True)
-        harness = tmp_path / ".opencontext" / "harness.yaml"
-        assert harness.exists()
-
-    def test_wizard_creates_opencontext_directory(self, tmp_path: Path) -> None:
-        """Wizard should create .opencontext directory."""
-        wizard = InteractiveOnboardingWizard(root=tmp_path)
-        wizard.run(non_interactive=True)
         oc_dir = tmp_path / ".opencontext"
-        assert oc_dir.exists()
         assert oc_dir.is_dir()
+        assert (tmp_path / "opencontext.yaml").exists()
+        assert (oc_dir / "sdd" / "context.json").exists()
+        assert (oc_dir / "harness.yaml").exists()
