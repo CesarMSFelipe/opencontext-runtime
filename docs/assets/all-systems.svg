@@ -20,8 +20,7 @@
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="16" fill="#2DC4A4">&#8595;</text>
 
   <!-- Runtime container -->
-  <rect x="24" y="104" width="672" height="224" rx="12" fill="#0E141B" stroke="rgba(0,201,167,0.30)" stroke-width="1.5"/>
-  <rect x="24" y="104" width="672" height="4" rx="2" fill="#2DC4A4"/>
+  <rect x="24" y="104" width="672" height="224" rx="12" fill="#0E141B" stroke="rgba(0,201,167,0.50)" stroke-width="1.5"/>
   <text x="360" y="130" text-anchor="middle"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
         font-size="10" font-weight="600" fill="#2DC4A4" letter-spacing="1.2">OPENCONTEXT RUNTIME  ·  THE LAYER BETWEEN YOUR AGENT AND YOUR CODEBASE</text>

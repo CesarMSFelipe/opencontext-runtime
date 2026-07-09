@@ -20,7 +20,6 @@
 
   <!-- Tier 2: runtime container -->
   <rect x="26" y="112" width="668" height="214" rx="12" fill="#0E141B" stroke="#2DC4A4" stroke-width="1.5"/>
-  <rect x="34" y="112" width="652" height="3" fill="#2DC4A4"/>
   <text x="44" y="132" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="10" font-weight="600" letter-spacing="1.2" fill="#2DC4A4">OPENCONTEXT RUNTIME · THE LAYER BETWEEN YOUR AGENT AND YOUR CODEBASE</text>
 
   <!-- vertical connectors row1 -> row2 -->
