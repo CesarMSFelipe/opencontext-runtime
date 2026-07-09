@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-09
+
+Major release. Removes the long-deprecated standalone agent SDK and the
+deprecated package façades (breaking for any code that imported them), refreshes
+the brand/positioning, and trims the test suite of genuine redundancy.
+
+### Removed (breaking)
+
+- **Standalone agent SDK**: `AgentOrchestrator`, `BaseAgent`, the five built-in
+  mock agents (code-review, context-planner, mutation-analyst, security-audit,
+  tdd-enforcer), and the SDK helpers (memory/token managers, hooks, hook
+  handlers, loader) — superseded by `opencontext_core.harness`. The
+  `SDDOrchestrator` class is removed; its module-level `WORKFLOW_TRACKS` /
+  `PHASE_*` tables remain.
+- **Deprecated package façades**: the `opencontext_core.adapters` package-level
+  re-export shim and the `opencontext_core.agents` SDK registry. Import the live
+  submodules directly (e.g. `opencontext_core.adapters.aider`).
+- **Legacy `command_maturity` map**: superseded by
+  `opencontext_cli.contracts.command_registry`, already the single source of
+  truth for command maturity.
+- The dead `workflow_packs` package, the `context.providers` scaffolds,
+  `sdd.generated_skills`, and the compact terminal-logo variant.
+
+### Changed
+
+- **Positioning unified** across the README masthead, the `opencontext-cli` PyPI
+  description, the docs landing, and `mkdocs` — one line: "The local runtime
+  that gives your AI coding agent verified context."
+- **Benchmark honesty**: `opencontext demo`/`pack` now report savings against
+  reading the relevant files whole (not the whole repo); README reframes the
+  42–87% figure as a context-packing-size measurement, not an end-to-end win.
+- **Brand refresh**: the terminal/CLI logo and every demo recording use the
+  current node-mark; SVG accents moved into integrated borders.
+- **Test suite consolidated**: dead-code and genuinely-redundant tests removed
+  (~6.7k → ~5.6k) with every distinct behavior, branch, and ship-gate retained.
+
 ## [1.7.0] - 2026-07-06
 
 ### Added
