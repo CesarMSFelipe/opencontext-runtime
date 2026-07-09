@@ -9,9 +9,22 @@ from __future__ import annotations
 from pathlib import Path
 
 from opencontext_core.evaluation.telemetry import (
+    _bare_source_path,
     estimate_included_files_tokens,
     estimate_naive_tokens,
 )
+
+
+def test_bare_source_path_strips_symbol_suffix_not_windows_drive() -> None:
+    # Bare paths and ":line" / ":line:name" symbol suffixes.
+    assert _bare_source_path("a.py") == "a.py"
+    assert _bare_source_path("a.py:12") == "a.py"
+    assert _bare_source_path("a.py:12:my_symbol") == "a.py"
+    assert _bare_source_path("/tmp/pkg/a.py:5") == "/tmp/pkg/a.py"
+    # A Windows drive-letter colon must NOT be treated as a line suffix (regression:
+    # split(":") turned "C:\\proj\\a.py" into "C" and the file was never counted).
+    assert _bare_source_path(r"C:\proj\a.py") == r"C:\proj\a.py"
+    assert _bare_source_path(r"C:\proj\a.py:12:func") == r"C:\proj\a.py"
 
 
 class _Item:

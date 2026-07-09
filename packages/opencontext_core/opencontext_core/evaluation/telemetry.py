@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -82,6 +83,16 @@ def estimate_naive_tokens(root: Path) -> int:
     return max(chars // 4, 1)
 
 
+def _bare_source_path(source: str) -> str:
+    r"""Strip a trailing ``:line`` / ``:line:name`` symbol suffix from a pack source.
+
+    A pack source is either a bare file path or ``path:line`` / ``path:line:name``.
+    Only that numeric symbol suffix is removed — a Windows drive-letter colon
+    (``C:\proj\a.py``) is preserved, so absolute Windows paths are not mangled.
+    """
+    return re.sub(r":\d+(?::[^:]*)?$", "", source)
+
+
 def estimate_included_files_tokens(root: Path, pack: object) -> int:
     """Honest per-task baseline: whole-file tokens of ONLY the files the pack drew from.
 
@@ -103,7 +114,7 @@ def estimate_included_files_tokens(root: Path, pack: object) -> int:
     for item in getattr(pack, "included", []) or []:
         source = getattr(item, "source", "") or ""
         # graph items are "path:line" / "path:line:name"; file items are the bare path.
-        raw = source.split(":", 1)[0]
+        raw = _bare_source_path(source)
         if not raw:
             continue
         candidate = Path(raw)
