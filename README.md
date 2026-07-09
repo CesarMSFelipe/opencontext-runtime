@@ -5,12 +5,16 @@
 <h1 align="center">OpenContext Runtime</h1>
 
 <p align="center">
-  <strong>Local control plane for AI software engineering agents.</strong>
+  <strong>The local runtime that gives your AI coding agent verified context.</strong>
 </p>
 
 <p align="center">
-  Verified context · governed workflows · secure MCP tools · project memory<br>
-  · quality gates · auditable receipts — across your existing coding agents.
+  <em>Small context. Full trace. Verified execution.</em>
+</p>
+
+<p align="center">
+  Not another agent — the governed layer <strong>on top of</strong> the coding agent you already use.<br>
+  Verified context · governed workflows · secure MCP tools · project memory · quality gates · auditable receipts.
 </p>
 
 <p align="center">
