@@ -100,7 +100,12 @@ from opencontext_cli.commands.verify_cmd import add_verify_parser, handle_verify
 from opencontext_cli.contracts.errors import CliContractError
 from opencontext_cli.output import add_output_flag, eprint
 from opencontext_core.adapters.agent_manifest import AgentIntegrationGenerator, AgentTarget
-from opencontext_core.config import SecurityMode, default_config_data, load_config
+from opencontext_core.config import (
+    SecurityMode,
+    default_config_data,
+    find_config,
+    load_config,
+)
 from opencontext_core.context.modes import ContextMode
 from opencontext_core.doctor.checks import run_doctor, run_security_doctor
 from opencontext_core.dx.checkpoints import ContextCheckpoint, fingerprint
@@ -4260,7 +4265,22 @@ def _mcp_serve(db_path: str, workflow_tools: bool = False) -> None:
     try:
         from opencontext_core.runtime import OpenContextRuntime
 
-        runtime = OpenContextRuntime(storage_path=Path(db_path).parent)
+        # Honor the project's ./opencontext.yaml. Without a config_path the
+        # runtime only checks the literal configs/opencontext.yaml and silently
+        # ignores the project config (security mode, gates, memory, harness).
+        # find_config returns Path|None; None keeps the default behavior.
+        project_config = find_config(Path.cwd())
+        # Storage location is decided by the explicit ``db_path`` the caller
+        # passed (its parent). That db_path is the *outer* CLI runtime's already
+        # -resolved storage_path, which honors storage.mode / OPENCONTEXT_STORAGE
+        # _MODE / opencontext.yaml at command time. Passing storage_path here
+        # bypasses the resolver on purpose so the server and the CLI share one
+        # location. XDG persistence (mode=user, the default) is a legitimate
+        # location, not a bug; see tests/mcp/test_mcp_storage_resolution_rule.py.
+        runtime = OpenContextRuntime(
+            config_path=project_config,
+            storage_path=Path(db_path).parent,
+        )
     except Exception:
         runtime = None
 
