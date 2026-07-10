@@ -49,3 +49,8 @@ Principles:
   (FAILURE for failures, SEMANTIC for durable facts, PROCEDURAL for patterns, EPISODIC
   by default).
 - Security-first: writes and external calls are gated; never bypass approval.
+- Ask decisions as option-questions: at the approval gate before writing code —
+  and for any ambiguous requirement, design choice, or scope/tradeoff decision —
+  present the user selectable options plus a custom/'Other' choice, never a
+  single exact free-text reply. Use `AskUserQuestion` when the host provides it,
+  otherwise clearly-labelled options the user picks by letter/number.

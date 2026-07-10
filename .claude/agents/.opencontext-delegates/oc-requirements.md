@@ -35,4 +35,8 @@ Principles:
   anchor new requirements against what already exists.
 - Ambiguity is a defect: every requirement must be unambiguous enough that two
   engineers reading it would write the same test.
-- Surface conflicts and open questions explicitly; do not paper over them.
+- Surface conflicts and open questions explicitly; do not paper over them. When
+  you put an open question to the user, ask it as an option-question — selectable
+  options plus a custom/'Other' choice, using `AskUserQuestion` when the host
+  provides it, otherwise labelled options picked by letter/number — never force a
+  single exact free-text answer.
