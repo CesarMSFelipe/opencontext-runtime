@@ -49,6 +49,13 @@ class CompositeMemoryStore:
     def __init__(self, local: AgentMemoryStore, engram: AgentMemoryStore) -> None:
         self._local = local
         self._engram = engram
+        # Records whether the most recent engram-routed write actually persisted
+        # to Engram (True) or transparently fell back to the local store because
+        # the Engram write did not persist (False). ``None`` means the last write
+        # was a local-routed layer (Engram was never asked). Backend reporting
+        # (mcp_stdio._resolve_backend) reads this so a failed Engram persist is
+        # never reported as a clean ``backend:engram, degraded:false`` success.
+        self._last_engram_write_persisted: bool | None = None
 
     def _store_for_layer(self, layer: MemoryLayer | None) -> AgentMemoryStore:
         if layer in _ENGRAM_LAYERS:
@@ -77,16 +84,24 @@ class CompositeMemoryStore:
 
     def write(self, memory: MemoryRecord) -> str:
         store = self._store_for_layer(memory.layer)
+        if store is not self._engram:
+            # Local-routed layer: Engram was never involved in this write.
+            self._last_engram_write_persisted = None
+            return store.write(memory)
+
         handle = store.write(memory)
         # Durability fallback: if the engram-routed write did not persist (empty
-        # handle), keep the memory locally rather than silently dropping it.
-        if store is self._engram and not handle:
+        # handle), keep the memory locally rather than silently dropping it — and
+        # remember that the Engram leg failed so backend reporting stays honest.
+        if not handle:
             _log.warning(
                 "engram write did not persist (key=%r, layer=%s); falling back to local store",
                 memory.key,
                 memory.layer.value,
             )
+            self._last_engram_write_persisted = False
             return self._local.write(memory)
+        self._last_engram_write_persisted = True
         return handle
 
     def reinforce(self, memory_id: str, evidence: EvidenceRef) -> None:

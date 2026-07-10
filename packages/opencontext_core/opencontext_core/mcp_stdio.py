@@ -363,7 +363,16 @@ def _make_memory_record(params: dict[str, Any]) -> Any:
         MemoryRecord,
     )
 
-    layer_value = params.get("layer") or _DEFAULT_MEMORY_LAYER_VALUE
+    raw_layer = params.get("layer")
+    # Normalize case: the agent-facing docs / context pack list layers UPPERCASE
+    # (SEMANTIC / EPISODIC / FAILURE) while ``MemoryLayer`` is lowercase. Accept
+    # any case (and stray whitespace) so an agent that copies the documented
+    # spelling isn't rejected with ``invalid layer 'SEMANTIC'``.
+    layer_value = (
+        raw_layer.strip().lower()
+        if isinstance(raw_layer, str) and raw_layer.strip()
+        else _DEFAULT_MEMORY_LAYER_VALUE
+    )
     try:
         layer = MemoryLayer(layer_value)
     except ValueError as exc:
@@ -442,6 +451,14 @@ def _resolve_backend(store: Any, layer_value: str) -> tuple[str, bool]:
     if not engram_owned:
         return "local", False
     if _store_has_live_engram(store):
+        # A live engram leg exists — but did the actual write persist? A
+        # composite records the outcome of its last engram-routed write. When
+        # that write failed and fell back to local, reporting a clean
+        # ``backend:engram, degraded:false`` would hide a dropped durable write.
+        # The store's doc contract: "if Engram unreachable, degraded:true".
+        persisted = getattr(store, "_last_engram_write_persisted", None)
+        if persisted is False:
+            return "local", True
         return "engram", False
     # Engram-owned layer with no live engram. Only a composite store (one that
     # *has* an engram leg) is "degraded"; a plain local store is simply local.
