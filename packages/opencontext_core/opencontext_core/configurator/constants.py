@@ -206,7 +206,11 @@ OPENCONTEXT_COMMANDS: tuple[tuple[str, str, str], ...] = (
         "end with `opencontext_memory_save` (`key`/`tags` = `change:<slug>`; layer "
         "SEMANTIC for facts, PROCEDURAL for patterns, FAILURE for errors).\n"
         "Build context with `opencontext_context` and check `opencontext_impact` "
-        "before any edit; pause for approval before writing code.\n\n"
+        "before any edit; pause for approval before writing code. Present the "
+        "approval gate (and any ambiguous/scope/design decision) as an "
+        "option-question — selectable options plus a custom/'Other' choice, "
+        "using `AskUserQuestion` when the host provides it, else letter/number "
+        "options — never a single exact free-text reply.\n\n"
         "Change: $ARGUMENTS",
     ),
 )

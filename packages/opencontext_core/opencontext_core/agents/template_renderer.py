@@ -336,6 +336,28 @@ work that needs a tracked change with artifacts at every phase.
 """
 
 
+# Canonical directive (single source of truth): user-facing questions and
+# approval gates are option-questions, host-aware. Both OC Flow and SDD inherit
+# this managed block, so the standard is stated once here and referenced (not
+# duplicated verbatim) at the SDD approval gate and the OC Flow handoff.
+_USER_QUESTIONS_SECTION = """## User-facing questions — ask with selectable options
+
+When you need a decision from the user — an approval gate, an ambiguous
+requirement, a design choice, or a scope/tradeoff decision — present it as
+**selectable options plus a custom / "Other" choice**, never as a single exact
+free-text string. This is host-aware:
+
+- If your host provides a structured question tool (Claude Code's
+  `AskUserQuestion`), USE it — one question, clearly-labelled options, and a
+  free-form "Other" so the user is never boxed in.
+- Otherwise, present clearly-labelled options the user can pick by letter or
+  number, and always allow a free-form custom answer.
+
+Never force the user into one exact free-text string (e.g. "reply
+'approved'"). Options first, custom/"Other" always available.
+"""
+
+
 _SECURITY_SECTION = """## Security
 
 - All tool executions require approval by default.
@@ -362,6 +384,7 @@ SECTIONS: tuple[tuple[str, str], ...] = (
     ("memory", _MEMORY_PROTOCOL_SECTION),
     ("setup_scope", _SETUP_SCOPE_SECTION),
     ("sdd", _SDD_SECTION),
+    ("user_questions", _USER_QUESTIONS_SECTION),
     ("security", _SECURITY_SECTION),
 )
 
@@ -429,6 +452,8 @@ def render_agent_instructions(
         parts.append(_SETUP_SCOPE_SECTION.rstrip())
     if keep("sdd"):
         parts.append(_SDD_SECTION.rstrip())
+    if keep("user_questions"):
+        parts.append(_USER_QUESTIONS_SECTION.rstrip())
     if keep("security"):
         parts.append(_SECURITY_SECTION.rstrip())
 

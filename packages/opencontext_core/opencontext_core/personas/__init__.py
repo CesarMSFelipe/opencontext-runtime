@@ -96,7 +96,12 @@ Principles:
   decisions inform it), then SAVE its outcome with `opencontext_memory_save` AFTER
   (FAILURE for failures, SEMANTIC for durable facts, PROCEDURAL for patterns, EPISODIC
   by default).
-- Security-first: writes and external calls are gated; never bypass approval.""",
+- Security-first: writes and external calls are gated; never bypass approval.
+- Ask decisions as option-questions: at the approval gate before writing code —
+  and for any ambiguous requirement, design choice, or scope/tradeoff decision —
+  present the user selectable options plus a custom/'Other' choice, never a
+  single exact free-text reply. Use `AskUserQuestion` when the host provides it,
+  otherwise clearly-labelled options the user picks by letter/number.""",
     tools=_ORCHESTRATOR_TOOLS,
 )
 
@@ -364,7 +369,11 @@ Principles:
   anchor new requirements against what already exists.
 - Ambiguity is a defect: every requirement must be unambiguous enough that two
   engineers reading it would write the same test.
-- Surface conflicts and open questions explicitly; do not paper over them.""",
+- Surface conflicts and open questions explicitly; do not paper over them. When
+  you put an open question to the user, ask it as an option-question — selectable
+  options plus a custom/'Other' choice, using `AskUserQuestion` when the host
+  provides it, otherwise labelled options picked by letter/number — never force a
+  single exact free-text answer.""",
     tools=_READ_ONLY_TOOLS,
 )
 

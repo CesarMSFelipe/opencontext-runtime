@@ -54,3 +54,18 @@ def test_oc_new_command_wires_the_memory_loop() -> None:
     assert "opencontext_memory_context" in body, "oc-new must prime from change memory"
     assert "opencontext_memory_save" in body, "oc-new must save change memory"
     assert "change:<slug>" in body, "oc-new must scope memory to the change"
+
+
+def test_oc_new_approval_gate_is_an_option_question() -> None:
+    """The approval gate must be a selectable option-question, not free text.
+
+    When the flow pauses for approval before writing code it must present the
+    decision as SELECTABLE OPTIONS with a custom/'Other' escape (host-aware:
+    Claude Code's AskUserQuestion when present) — never a single exact
+    free-text string like "reply 'approved'".
+    """
+    body = _oc_new_body()
+    low = body.lower()
+    assert "approval" in low, "oc-new must pause for approval before writing code"
+    assert "AskUserQuestion" in body, "oc-new approval gate must name AskUserQuestion"
+    assert "option" in low, "oc-new approval gate must be presented as options"

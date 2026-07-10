@@ -159,6 +159,37 @@ def test_render_is_idempotent() -> None:
     assert a == b
 
 
+def test_render_contains_user_question_option_directive() -> None:
+    """RED: the managed block must carry the canonical option-question directive.
+
+    Every host inherits this block. When the agent needs a decision from the
+    user (approval gates, ambiguous requirements, design/scope/tradeoff
+    choices) it must present SELECTABLE OPTIONS plus a custom/'Other' escape —
+    never force one exact free-text string. The directive is host-aware: use
+    Claude Code's ``AskUserQuestion`` structured tool when present, otherwise
+    labelled options the user picks by letter/number.
+    """
+    renderer = _try_import_renderer()
+    assert renderer is not None
+    render, _, _ = renderer
+    for agent_id in ("claude-code", "codex", "opencode", "cursor"):
+        body = render(agent_id)
+        low = body.lower()
+        assert "AskUserQuestion" in body, (
+            f"{agent_id}: managed block must name Claude Code's AskUserQuestion tool"
+        )
+        assert "selectable option" in low or "selectable options" in low, (
+            f"{agent_id}: managed block must direct selectable options for decisions"
+        )
+        # Host-agnostic fallback + a custom/Other escape hatch.
+        assert "custom" in low and ("other" in low or '"other"' in low), (
+            f"{agent_id}: managed block must always allow a custom/'Other' answer"
+        )
+        assert "letter" in low or "number" in low, (
+            f"{agent_id}: fallback must let the user pick options by letter/number"
+        )
+
+
 def test_render_does_not_emit_stale_opencode_slash_commands() -> None:
     """RED: spec 8.16 — opencode profile must not claim /context /impact /search."""
     renderer = _try_import_renderer()

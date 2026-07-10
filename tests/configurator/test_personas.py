@@ -67,6 +67,24 @@ def test_every_persona_prompt_primes_memory_and_stays_kg_first() -> None:
         assert "Glob" not in persona.tools, f"{persona.id} leaks native Glob"
 
 
+def test_decision_surfacing_personas_reference_option_questions() -> None:
+    """Personas that surface user decisions must direct option-questions.
+
+    The OC Orchestrator drives the approval gate and the OC Requirements
+    engineer surfaces open questions to the user. Both must present those
+    decisions as SELECTABLE OPTIONS with a custom/'Other' escape (host-aware:
+    Claude Code's AskUserQuestion tool when present), never a single exact
+    free-text string.
+    """
+    for persona_id in ("oc-orchestrator", "oc-requirements"):
+        prompt = get_persona(persona_id).system_prompt
+        low = prompt.lower()
+        assert "AskUserQuestion" in prompt, (
+            f"{persona_id} must name Claude Code's AskUserQuestion for user decisions"
+        )
+        assert "option" in low, f"{persona_id} must present user decisions as options"
+
+
 def test_get_persona() -> None:
     assert get_persona("oc-professor").name == "OC Professor"
     assert get_persona("nope") is None

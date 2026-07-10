@@ -143,6 +143,13 @@ def _instructions(*, has_flow_run: bool) -> list[str]:
             "within the contract's changed_areas and constraints."
         ),
         (
+            "If you need a decision from the user (ambiguous scope, a design/tradeoff "
+            "choice, or an approval gate), ask it as an option-question: selectable "
+            "options plus a custom/'Other' choice. Use AskUserQuestion when your host "
+            "provides it, otherwise labelled options the user picks by letter/number — "
+            "never force a single exact free-text reply."
+        ),
+        (
             "Optionally record findings while you work via opencontext_session_observe "
             "(same session_id, type='agent.note')."
         ),
