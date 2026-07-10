@@ -1465,6 +1465,19 @@ class HarnessSettingsConfig(BaseModel):
             "failing test exists for the task; 'ask'/'off' do not block."
         ),
     )
+
+    @field_validator("tdd_mode", mode="before")
+    @classmethod
+    def _coerce_yaml_off(cls, value: Any) -> Any:
+        # YAML "Norway problem": an unquoted ``off`` parses as the boolean
+        # ``False`` before it ever reaches this model. Coerce that single
+        # collision back to the string "off" so a hand-authored
+        # ``tdd_mode: off`` does not crash config load / MCP startup. Genuine
+        # strings pass through unchanged; unknown values still fail the Literal.
+        if value is False:
+            return "off"
+        return value
+
     strict_tdd: bool = Field(
         default=False,
         description="Whether a strict test harness was detected/required for this project.",

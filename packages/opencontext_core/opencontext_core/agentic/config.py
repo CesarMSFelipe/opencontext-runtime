@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from opencontext_core.compat import StrEnum
 
@@ -107,6 +107,18 @@ class AgenticFlowConfig(BaseModel, extra="forbid"):
     phase_budget: int | None = 8000
     tdd_mode: Literal["strict", "ask", "off"] = "ask"
     approval_before_apply: bool = True
+
+    @field_validator("tdd_mode", mode="before")
+    @classmethod
+    def _coerce_yaml_off(cls, value: Any) -> Any:
+        # YAML "Norway problem": an unquoted ``off`` parses as the boolean
+        # ``False`` before validation. Coerce that single collision back to the
+        # string "off" so a hand-authored ``tdd_mode: off`` does not crash flow
+        # config load. Strings pass through; unknown values still fail.
+        if value is False:
+            return "off"
+        return value
+
     install_engram_if_missing: bool = True
     allow_automatic_archive: bool = False
     allow_background_indexing: bool = True
