@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, patch
 
+import pytest
+
 from opencontext_core.oc_new.conductor import OcNewConductor
 from opencontext_core.oc_new.flow import OC_NEW_FLOW
 from opencontext_core.oc_new.models import ChangeIdentity, OcNewRunState, PhaseState
@@ -72,8 +74,13 @@ def test_spawn_acquires_lease_and_emits_started(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_mark_done_releases_lease(tmp_path: Path) -> None:
+def test_mark_done_releases_lease(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """mark_done must call release_by_run_phase on the coord store."""
+    # Force local storage so store.run_dir(run_id) resolves under tmp_path
+    # instead of the global XDG state dir. Must be set before the conductor is
+    # constructed / any run_dir is resolved.
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
+
     conductor = OcNewConductor(root=tmp_path)
     # Start a real run to get a run_id
     state = conductor.start("lease-release-test")
@@ -82,8 +89,9 @@ def test_mark_done_releases_lease(tmp_path: Path) -> None:
 
     mock_store = MagicMock(spec=AgentCoordinationStore)
 
-    # Write the required phase envelope so mark_done doesn't raise on missing file
-    run_dir = tmp_path / ".opencontext" / "runs" / run_id
+    # Write the required phase envelope at the path the conductor reads
+    # (store.run_dir) so mark_done doesn't raise on a missing file.
+    run_dir = conductor.store.run_dir(run_id)
     run_dir.mkdir(parents=True, exist_ok=True)
     envelope = {
         "run_id": run_id,

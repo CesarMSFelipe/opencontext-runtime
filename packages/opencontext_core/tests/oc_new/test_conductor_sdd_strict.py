@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.agentic.config import AgenticFlowConfig
 from opencontext_core.oc_new.conductor import OcNewConductor
 from opencontext_core.oc_new.flow import OC_NEW_FLOW
@@ -22,10 +24,17 @@ from opencontext_core.oc_new.models import ChangeIdentity, OcNewRunState, PhaseS
 
 def _make_pre_apply_state(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     *,
     tdd_mode: str = "ask",
 ) -> tuple[OcNewConductor, OcNewRunState, str]:
     """Build conductor + state where all phases before 'apply' are passed."""
+    # Force local storage so runs_root(tmp_path) stays under tmp_path — the
+    # conductor reads artifacts via store.run_dir(), which resolves to the
+    # global XDG state dir otherwise. Must be set before constructing the
+    # conductor / resolving any run_dir.
+    monkeypatch.setenv("OPENCONTEXT_STORAGE_MODE", "local")
+
     config = AgenticFlowConfig(tdd_mode=tdd_mode)  # type: ignore[call-arg]
     conductor = OcNewConductor(root=tmp_path)
 
@@ -37,8 +46,10 @@ def _make_pre_apply_state(
     identity = ChangeIdentity.from_task("sdd-strict-test")
     state = OcNewRunState(identity=identity, task="sdd-strict-test", phases=phases, config=config)
 
-    # Seed required artifacts for 'apply' so _missing_artifacts passes.
-    run_dir = tmp_path / ".opencontext" / "runs" / identity.run_id
+    # Seed required artifacts for 'apply' so _missing_artifacts passes. Seed at
+    # the path the conductor actually reads (store.run_dir), not a hardcoded
+    # tmp_path/.opencontext/runs path.
+    run_dir = conductor.store.run_dir(identity.run_id)
     run_dir.mkdir(parents=True, exist_ok=True)
     for artifact in ["approval.json", "tasks.md"]:
         (run_dir / artifact).write_text(json.dumps({"status": "approved"}), encoding="utf-8")
@@ -46,9 +57,11 @@ def _make_pre_apply_state(
     return conductor, state, identity.run_id
 
 
-def test_strict_mode_blocks_apply_without_failing_test(tmp_path: Path) -> None:
+def test_strict_mode_blocks_apply_without_failing_test(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """strict on + no failing_test.json → conductor blocks at apply."""
-    conductor, state, _run_id = _make_pre_apply_state(tmp_path, tdd_mode="strict")
+    conductor, state, _run_id = _make_pre_apply_state(tmp_path, monkeypatch, tdd_mode="strict")
 
     result = conductor._advance(state)
 
@@ -67,12 +80,14 @@ def test_strict_mode_blocks_apply_without_failing_test(tmp_path: Path) -> None:
     )
 
 
-def test_strict_mode_proceeds_when_failing_test_present(tmp_path: Path) -> None:
+def test_strict_mode_proceeds_when_failing_test_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """strict on + failing_test.json exists → conductor advances past the block."""
-    conductor, state, run_id = _make_pre_apply_state(tmp_path, tdd_mode="strict")
+    conductor, state, run_id = _make_pre_apply_state(tmp_path, monkeypatch, tdd_mode="strict")
 
-    # Seed the failing test evidence file
-    run_dir = tmp_path / ".opencontext" / "runs" / run_id
+    # Seed the failing test evidence file at the path the conductor reads.
+    run_dir = conductor.store.run_dir(run_id)
     (run_dir / "failing_test.json").write_text(
         json.dumps({"test": "test_foo", "status": "failing"}), encoding="utf-8"
     )
@@ -87,9 +102,11 @@ def test_strict_mode_proceeds_when_failing_test_present(tmp_path: Path) -> None:
     )
 
 
-def test_non_strict_mode_proceeds_without_failing_test(tmp_path: Path) -> None:
+def test_non_strict_mode_proceeds_without_failing_test(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """tdd_mode='ask' (default) → conductor is not blocked at apply."""
-    conductor, state, _run_id = _make_pre_apply_state(tmp_path, tdd_mode="ask")
+    conductor, state, _run_id = _make_pre_apply_state(tmp_path, monkeypatch, tdd_mode="ask")
 
     result = conductor._advance(state)
 
