@@ -6,6 +6,9 @@
 ruff==0.15.20
 mypy==2.1.0
 pytest==9.1.1
+# Parallel test execution (`pytest -n auto`) so the ~15-min serial suite runs in
+# ~5 min across all cores. CI runs the full suite in parallel; nothing is skipped.
+pytest-xdist==3.8.0
 # Surfaces pytest failures as GitHub annotations (readable via the public API),
 # so a failure on a runner we can't reproduce locally (e.g. Windows) is
 # diagnosable without log access. No-op outside GitHub Actions.

@@ -53,7 +53,10 @@ jobs:
       - name: Type check (core + api + cli + profiles)
         run: mypy packages/opencontext_core packages/opencontext_api packages/opencontext_cli packages/opencontext_profiles
       - name: Test
-        run: pytest
+        # Parallel across all runner cores (pytest-xdist). Runs the full suite —
+        # `-n auto` only distributes tests, it never skips any (the `slow` marker
+        # is opt-out for local dev, not applied here).
+        run: pytest -n auto
       - name: Build distributions
         # Mirrors the publish.yml matrix so a packaging break in any published
         # package fails here, before a release is attempted.
