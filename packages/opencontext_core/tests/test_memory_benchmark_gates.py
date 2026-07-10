@@ -31,37 +31,18 @@ FIXTURE_PATH = (
 
 
 class TestRunBenchmarkStructure:
-    def test_returns_benchmark_result(self) -> None:
+    def test_empty_db_returns_valid_result_within_latency_gate(self) -> None:
+        """run_benchmark on an empty DB returns a well-formed result with sane latency."""
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "mem.db"
             backend = SQLiteMemoryBackend(db)
             result = run_benchmark(FIXTURE_PATH, backend)
             assert isinstance(result, MemoryBenchmarkResult)
-
-    def test_result_has_required_keys(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            db = Path(tmp) / "mem.db"
-            backend = SQLiteMemoryBackend(db)
-            result = run_benchmark(FIXTURE_PATH, backend)
             assert hasattr(result, "recall_at_5")
             assert hasattr(result, "mrr")
             assert hasattr(result, "p50_ms")
             assert hasattr(result, "num_questions")
-
-    def test_latency_non_negative(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            db = Path(tmp) / "mem.db"
-            backend = SQLiteMemoryBackend(db)
-            result = run_benchmark(FIXTURE_PATH, backend)
-            assert result.p50_ms >= 0.0
-
-    def test_p50_ms_within_threshold_for_empty_db(self) -> None:
-        """Empty DB queries should complete well within 100ms."""
-        with tempfile.TemporaryDirectory() as tmp:
-            db = Path(tmp) / "mem.db"
-            backend = SQLiteMemoryBackend(db)
-            result = run_benchmark(FIXTURE_PATH, backend)
-            assert result.p50_ms <= 100.0
+            assert 0.0 <= result.p50_ms <= 100.0
 
 
 class TestRunBenchmarkWithData:

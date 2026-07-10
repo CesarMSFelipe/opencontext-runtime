@@ -1,20 +1,55 @@
 OpenContext Runtime — Phase 0 environment baseline
 schema_version: 1.0
-created_at: 2026-07-06T19:27:12.905628+00:00
-git_head: 15665bd528a1e79e08e150bd0ea4b0917e947cc3
+created_at: 2026-07-09T13:36:14.916827+00:00
+git_head: 4604f902206fb09500ec8283514f00c3110d0df6
 python_version: 3.12.3
 platform: Linux-6.17.0-35-generic-x86_64-with-glibc2.39
 runner.py path: /home/zenix/projects/OpenContext Runtime/packages/opencontext_core/opencontext_core/harness/runner.py
-runner.py sha256: 9d6b5a1154771a4f69f1773cab75557715c23ad829beae2d5120e6d62c2a6cc4
+runner.py sha256: f04ac55e18725171cb0f603c4d2d123792f424bf605d4d914022bc080ddf3d57
 runner.py py_compile_ok: True
 compileall_ok: True
 
 git status --short:
 M artifacts/environment-proof.json
  M artifacts/phase0-baseline.txt
- M artifacts/test-inventory.json
- M artifacts/test-inventory.md
-?? artifacts/test-reduction-report.md
+ M packages/opencontext_core/tests/test_context_receipt.py
+ M packages/opencontext_core/tests/test_evolution_engine.py
+ M packages/opencontext_core/tests/test_evolution_proposal.py
+ M packages/opencontext_core/tests/test_memory_benchmark.py
+ M packages/opencontext_core/tests/test_memory_benchmark_gates.py
+ D packages/opencontext_memory/tests/test_uvd024_full_flow.py
+ M packages/opencontext_sdd/tests/test_dispatcher.py
+ D packages/opencontext_studio/tests/tui/test_s10_provider_health_present.py
+ D packages/opencontext_studio/tests/tui/test_s11_benchmark_status_present.py
+ D packages/opencontext_studio/tests/tui/test_s12_settings_present.py
+ D packages/opencontext_studio/tests/tui/test_s1_dashboard_present.py
+ D packages/opencontext_studio/tests/tui/test_s2_workflows_present.py
+ D packages/opencontext_studio/tests/tui/test_s3_decision_log_present.py
+ D packages/opencontext_studio/tests/tui/test_s4_brain_scheduler_present.py
+ D packages/opencontext_studio/tests/tui/test_s5_capability_graph_present.py
+ D packages/opencontext_studio/tests/tui/test_s6_context_budget_present.py
+ D packages/opencontext_studio/tests/tui/test_s7_cache_metrics_present.py
+ D packages/opencontext_studio/tests/tui/test_s8_learning_candidates_present.py
+ D packages/opencontext_studio/tests/tui/test_s9_plugin_panel_present.py
+ M tests/cli/test_audit_remediation_g.py
+ M tests/cli/test_benchmark_no_suite.py
+ M tests/cli/test_config_show_provenance.py
+ M tests/cli/test_config_yaml_key_hint.py
+ M tests/cli/test_first_run_offer_gating.py
+ M tests/cli/test_wizard_non_interactive.py
+ M tests/core/test_agentic_modes.py
+ M tests/core/test_boundary.py
+ M tests/core/test_compat.py
+ M tests/core/test_errors.py
+ M tests/harness/test_harness_phases_full.py
+ M tests/harness/test_runner_v2.py
+ M tests/onboarding/test_config_validation.py
+ M tests/onboarding/test_wizard.py
+ M tests/runtime/test_models.py
+ M tests/runtime/test_spine_cli_routing.py
+ M tests/workflows/test_oc_flow_confidence.py
+ M tests/workflows/test_oc_flow_selector_parity.py
+?? packages/opencontext_studio/tests/tui/test_screens_present.py
 
 notes:
   (none)

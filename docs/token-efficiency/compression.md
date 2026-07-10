@@ -4,7 +4,9 @@ OpenContext applies compression at two levels: context packs delivered to agents
 
 ## Strategies
 
-Four strategies, applied automatically by risk tier:
+Four strategies, applied automatically by risk tier. The `Reduction` column is the
+compression ratio of each strategy on the text it processes — how much smaller the compressed span
+is versus its input — not a product-level token-savings promise for a whole session:
 
 | Strategy | Tier | Reduction | What it does |
 |----------|------|-----------|-------------|
@@ -81,7 +83,9 @@ class UserService:
 
 ### efficient
 
-Maximum compression — chains compact → terse → extended dictionary:
+Maximum compression — chains compact → terse → extended dictionary. Its ~70–85% figure is the
+compression ratio for this mode on loop-output text, measured on the span it compresses; it is not a
+per-session token-savings guarantee.
 
 Extended dictionary adds 30+ substitutions on top of terse:
 - `function` → `fn`

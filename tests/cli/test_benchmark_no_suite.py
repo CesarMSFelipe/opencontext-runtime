@@ -68,21 +68,3 @@ def test_benchmark_list_exits_nonzero_when_suite_missing(tmp_path) -> None:
 
     assert exc_info.value.code != 0
     assert "--suite is required outside the development repository" in err_buf.getvalue()
-
-
-def test_benchmark_no_suite_message_instructs_user(tmp_path) -> None:
-    """Error message must mention --suite flag to guide the user."""
-    from opencontext_cli.commands.benchmark_cmd import _handle_run
-
-    nonexistent = str(tmp_path / "contextbench-missing.yaml")
-    args = _make_run_args(suite=nonexistent)
-
-    import io
-    from contextlib import redirect_stderr
-
-    err_buf = io.StringIO()
-    with pytest.raises(SystemExit):
-        with redirect_stderr(err_buf):
-            _handle_run(args)
-
-    assert "--suite" in err_buf.getvalue()

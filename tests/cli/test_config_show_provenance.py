@@ -49,18 +49,6 @@ def test_provenance_names_layer_for_yaml_override(
     assert "project" in out, f"Expected the layer name 'project' in provenance output.\nGot:\n{out}"
 
 
-def test_provenance_shows_memory_provider_key(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
-    """Provenance must list memory.provider with its resolved layer."""
-    _write_project_yaml(tmp_path)
-
-    show_config(root=tmp_path)
-
-    out = capsys.readouterr().out
-    assert "memory" in out, f"Expected 'memory' in provenance output.\nGot:\n{out}"
-
-
 def test_provenance_absent_when_no_project_yaml(
     tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:

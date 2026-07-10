@@ -38,42 +38,14 @@ class TestProposePhase:
         assert len(phase_result.artifacts) >= 1
         assert phase_result.artifacts[0].kind == "proposal"
 
-    def test_propose_artifact_persisted(self, tmp_path: Path) -> None:
-        runner = HarnessRunner(root=tmp_path)
-        state = runner.create_run("sdd", "persist test")
-        cfg = runner.config.phases.get("propose")
-        phase = ProposePhase(cfg, BudgetMode.OFF)
-        phase_result = phase.run(state)
-
-        # The artifact path should point to a real file
-        artifact_path = Path(phase_result.artifacts[0].path)
-        assert artifact_path.exists()
-        proposal_data = json.loads(artifact_path.read_text(encoding="utf-8"))
-        assert proposal_data["task"] == "persist test"
-        # No model wired here, so propose honestly reports a planned scaffold (not a
-        # fabricated "draft"); it delegates to a real proposal when an executor exists.
-        assert proposal_data["status"] == "planned"
+    # NOTE: propose honesty (planned scaffold, no fabricated draft) is owned by
+    # test_propose_phase_honest.py; the artifact-persistence duplicate was cut.
 
 
 class TestApplyPhase:
-    def test_apply_creates_manifest(self, tmp_path: Path) -> None:
-        runner = HarnessRunner(root=tmp_path)
-        state = runner.create_run("sdd", "apply test")
-        cfg = runner.config.phases.get("apply")
-        phase = ApplyPhase(cfg, BudgetMode.OFF)
-        phase_result = phase.run(state)
-
-        assert phase_result.phase == "apply"
-        assert phase_result.status == GateStatus.PASSED
-
-        manifest_path = Path(phase_result.artifacts[0].path)
-        assert manifest_path.exists()
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        assert manifest["task"] == "apply test"
-        # Honest contract: with no executor edits, status is "planned" (never
-        # "applied" over an empty changes list) and no files are mutated.
-        assert manifest["status"] == "planned"
-        assert manifest["changes"] == []
+    # NOTE: apply honesty (planned/no-mutation, never "applied" over empty
+    # changes) is owned by test_apply_phase_honest.py; the manifest duplicate
+    # was cut. Only the artifact-kind check is kept here.
 
     def test_apply_artifact_kind(self, tmp_path: Path) -> None:
         runner = HarnessRunner(root=tmp_path)

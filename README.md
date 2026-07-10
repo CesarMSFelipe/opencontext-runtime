@@ -5,12 +5,16 @@
 <h1 align="center">OpenContext Runtime</h1>
 
 <p align="center">
-  <strong>Local control plane for AI software engineering agents.</strong>
+  <strong>The local runtime that gives your AI coding agent verified context.</strong>
 </p>
 
 <p align="center">
-  Verified context · governed workflows · secure MCP tools · project memory<br>
-  · quality gates · auditable receipts — across your existing coding agents.
+  <em>Small context. Full trace. Verified execution.</em>
+</p>
+
+<p align="center">
+  Not another agent — the governed layer <strong>on top of</strong> the coding agent you already use.<br>
+  Verified context · governed workflows · secure MCP tools · project memory · quality gates · auditable receipts.
 </p>
 
 <p align="center">
@@ -25,63 +29,12 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/runtime-strip.svg" alt="offline-first · call-graph traced · deterministic · MCP ready · claims tested" width="100%">
+  <img src="docs/assets/systems-map.svg" alt="OpenContext, one runtime with six wired systems: your coding agent sends a request and gets a verified pack back in one call; the runtime holds Context + Code Graph, Controlled SDD Loop, Model per Persona, Persistent Memory, Security by Default, and 32 MCP Tools, and indexes your codebase once to query it offline." width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/release-candidate-status.svg" alt="OpenContext product status: stable, release candidate, host dependent, opt-in" width="100%">
+  <img src="docs/assets/runtime-strip.svg" alt="offline-first · call-graph traced · deterministic · MCP ready · claims tested" width="100%">
 </p>
-
-## Product surface
-
-The five canonical diagrams below show the user-facing surface of the 1.0 release. Every
-SVG has a matching `<title>` element and is referenced by an exact filename in this README.
-
-### TUI Cockpit
-
-![TUI Cockpit](docs/assets/tui-cockpit.svg)
-
-The interactive TUI cockpit — runtime state, run phase, and the next action the agent
-will take, with the keyboard hints (g Graph, h Harness, r Receipt, n New change, k Context,
-b Budget) that drive the four-key workflow.
-
-### Config Menu
-
-![Config Menu](docs/assets/config-menu.svg)
-
-The configuration menu that explains impact before it asks for input — project setup,
-runtime posture, workflow strictness, memory location, and maintenance. Each option shows
-its downstream effect on a real run, not a marketing blurb.
-
-### Graph Viewer
-
-![Graph Viewer](docs/assets/graph-viewer.svg)
-
-The local code-graph viewer — nodes for symbols, files, and run phases; edges for
-calls, imports, and evidence. Built from the index the runtime produces during
-`opencontext index`, queryable from the TUI and the CLI.
-
-### Release Candidate Status
-
-![Release Candidate Status](docs/assets/release-candidate-status.svg)
-
-What is stable, what is a release candidate, what is host-dependent, and what is opt-in
-in the 1.0 release. The status is enforced by the 12-gate release verdict
-(`opencontext benchmark release --profile balanced`).
-
-### User Flows
-
-![User Flows](docs/assets/user-flows.svg)
-
-The five primary user flows: **Explore → Propose → Apply → Verify → Archive**. The bottom
-panel shows the verification loop from commit 021: seed a failing test, run pytest,
-invoke OpenContext, re-run pytest, and pass or honestly block.
-
-### Product status
-
-| Stable | Release candidate | Host dependent | Opt-in |
-|---|---|---|---|
-| index · KG · pack · verified-context · memory · uninstall | `oc-new` · TUI cockpit · graph viewer · learning signals | MCP sampling · generative phases | Engram · providers · semantic/vector |
 
 <p align="center">
   <img src="docs/assets/hero-runtime.svg" alt="From agent request to verified context in one call: an AI coding agent asks; OpenContext Runtime traces the call graph, ranks symbols, locks a token budget and checks gates; a verified context pack is returned in one call" width="100%">
@@ -226,7 +179,7 @@ Run the demo on your actual repository, then wire OpenContext into your editor.
 curl -fsSL https://raw.githubusercontent.com/CesarMSFelipe/OpenContext-Runtime/main/install.sh | bash
 cd your-project
 opencontext install            # stack detection · editor setup · index repo
-opencontext demo               # see the token + call reduction on your repo
+opencontext demo               # see the call-graph-traced, verified context pack for a task
 ```
 
 **Windows PowerShell**
@@ -254,10 +207,12 @@ Prefer Python tooling? Use `pipx install opencontext-cli` instead.
 
 Every benchmark runs on a public repository. No hidden dataset. No hosted service. No benchmark-only path. Fully reproducible with `opencontext pack` (see [`docs/benchmarks/`](docs/benchmarks/) for the exact commands and pinned commits).
 
-**Benchmark methodology:** each case clones a public repo at a pinned commit, runs `opencontext index`, then compares OpenContext's one-call pack against reading the relevant files whole — the same token counter on both sides. Measured reductions: **42–87% fewer tokens** (psf/requests, tiangolo/fastapi, django/django). This measures context tokens, not model quality or end-task success — real agent behavior varies by model, editor, and tool strategy. Full numbers, pinned commits, and a one-command reproduction live in [`docs/benchmarks/`](docs/benchmarks/).
+**What you get, in one call:** call-graph-traced context — the symbols that actually reach your task, ranked, with the files it left out listed explicitly (it never silently drops content). Deterministic: the same pinned commit and query produce the same pack every run, reproducible on public repos at pinned commits (see [`docs/benchmarks/`](docs/benchmarks/) for the exact commands).
+
+**On packing size:** each case clones a public repo at a pinned commit, runs `opencontext index`, then compares OpenContext's one-call pack against reading the relevant files whole — the same token counter on both sides. The relevant symbol-level pack is **42–87% smaller** than opening those files whole (psf/requests, tiangolo/fastapi, django/django). That is a context-packing measurement, **not** an end-to-end token, latency, or task-success win — on a small surgical edit, a targeted file read can cost fewer tokens than a full pack. Reach for OpenContext when you want verified context and impact analysis on a large repo, not as a blanket token-saver. Full numbers, pinned commits, and a one-command reproduction live in [`docs/benchmarks/`](docs/benchmarks/).
 
 <p align="center">
-  <img src="docs/assets/stats-bar.svg" alt="42–87% fewer tokens than reading the relevant files whole · one ranked call · call graph included · deterministic · measured on 3 public repos" width="100%">
+  <img src="docs/assets/stats-bar.svg" alt="One call · call-graph-traced · ranked symbols · omitted files listed · deterministic — and the pack is 42–87% smaller than reading those files whole · measured on 3 public repos" width="100%">
 </p>
 
 <p align="center">
@@ -646,14 +601,6 @@ pytest tests/smoke/test_readme_claims.py -v
 ```
 
 They check the contract risk tiers and token budgets, the AICX bytecode round-trip, the loop dry-run phases, the SDK contract, and that the README's MCP-tool count matches the running server. The benchmark numbers are real — measured on public repos at pinned commits and reproducible per [`docs/benchmarks/`](docs/benchmarks/).
-
-<p align="center">
-  <img src="docs/assets/release-trust.svg" alt="Release 1.6.0 status: stable — code graph, context packs, MCP read tools, local memory; opt-in — Engram, external providers, symbol-edit tools, semantic search; host-agent dependent — opencontext_run and standalone generative phases; scaffolded and fail-closed — egress, tool forwarding, raw traces. Claims guarded by pytest tests/smoke/test_readme_claims.py" width="100%">
-</p>
-
-<p align="center">
-  <sub>Status · stable / opt-in / host-dependent / fail-closed · every quantified claim guarded by a smoke test</sub>
-</p>
 
 <!-- ─────────────── DOCS INDEX ─────────────── -->
 

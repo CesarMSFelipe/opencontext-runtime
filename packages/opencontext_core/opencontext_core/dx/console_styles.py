@@ -8,10 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from opencontext_core.dx.brand_mark import (
-    README_LOGO_TERMINAL,
-    README_LOGO_TERMINAL_COMPACT,
-)
+from opencontext_core.dx.brand_mark import README_LOGO_TERMINAL
 
 try:
     from rich.console import Console
@@ -64,12 +61,6 @@ _RICH_LOGO: list[str] = [
     f"[bold {BRAND_SECONDARY}]{README_LOGO_TERMINAL[2]}[/]",
     f"[{BRAND_DIM}]{README_LOGO_TERMINAL[3]}[/]",
     f"[bold {BRAND_ACCENT}]{README_LOGO_TERMINAL[4]}[/]",
-]
-
-_RICH_COMPACT_LOGO: list[str] = [
-    f"[bold {BRAND_PRIMARY}]{README_LOGO_TERMINAL_COMPACT[0]}[/]",
-    f"[{BRAND_DIM}]{README_LOGO_TERMINAL_COMPACT[1]}[/]",
-    f"[bold {BRAND_SECONDARY}]{README_LOGO_TERMINAL_COMPACT[2]}[/]",
 ]
 
 
@@ -322,16 +313,15 @@ def section(title: str) -> None:
     console.section(title)
 
 
-def show_logo(*, compact: bool = False) -> list[str]:
-    """Print the OpenContext logo and return the rendered lines.
+def show_logo() -> list[str]:
+    """Print the full OpenContext logo and return the rendered lines.
 
     Glyphs are sourced from ``opencontext_core.dx.brand_mark`` (the same
-    single-source tuples the TUI uses) so README, TUI and CLI stay in lockstep.
-    ``compact=True`` returns the 3-line form; otherwise the full 5-line form is
-    used. Existing call sites that treat ``show_logo`` as a side-effecting print
-    keep working because the lines are still echoed to the brand console.
+    single-source tuple the TUI uses) so README, TUI and CLI stay in lockstep.
+    Renders the full 5-line mark. Existing call sites that treat ``show_logo``
+    as a side-effecting print keep working because the lines are still echoed
+    to the brand console.
     """
-    lines = _RICH_COMPACT_LOGO if compact else _RICH_LOGO
-    for line in lines:
+    for line in _RICH_LOGO:
         console.print(line)
-    return list(lines)
+    return list(_RICH_LOGO)

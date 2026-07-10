@@ -1,4 +1,4 @@
-# Memory Token Savings
+# Memory: Progressive, Ranked Recall
 
 ## Purpose
 Progressive memory injects pinned and relevant compact memory only, while omitted and expandable items remain available by id.
@@ -10,7 +10,9 @@ multi-signal and traceable, and memory content is redacted before storage.
 
 ## Recursive summarization at rehydration
 Memory recall over-fetches candidate items (3x the prompt budget) and then compresses them back to
-the budget, so more signal fits the same rehydration tokens. Compression uses the cheap `summarize`
+the budget. Because items are ranked before compression, the highest-signal memories survive within
+the same rehydration budget — the mechanism is better ranked recall, not a net token cut.
+Compression uses the cheap `summarize`
 role when a model is bound, and a deterministic line-boundary trim otherwise (items are ranked, so
 the trim keeps the top ones). It is a no-op when recall already fits, and never raises. Implemented
 in `memory/rehydration.py`, wired into `OpenContextRuntime._recall_memory_for_prompt`.

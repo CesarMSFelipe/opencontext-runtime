@@ -133,14 +133,10 @@ class TestProposeHarnessGates:
     def test_returns_empty_for_none_run_result(self, engine):
         assert engine._propose_harness_gates(None) == []
 
-    def test_harness_gate_proposal_auto_applicable_is_false(self, engine):
+    def test_harness_gate_proposal_defaults_to_manual_approval(self, engine):
         run = _run(gates=[_gate("failing_test_exists", "failed")])
         proposal = engine._propose_harness_gates(run)[0]
         assert proposal.auto_applicable is False
-
-    def test_harness_gate_proposal_requires_approval(self, engine):
-        run = _run(gates=[_gate("failing_test_exists", "failed")])
-        proposal = engine._propose_harness_gates(run)[0]
         assert proposal.requires_approval is True
 
     def test_multiple_failed_gates_generate_multiple_proposals(self, engine):

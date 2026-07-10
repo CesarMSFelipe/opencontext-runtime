@@ -9,8 +9,7 @@
         font-size="10" font-weight="600" fill="#606978" letter-spacing="1.2">SECURITY DEFAULTS  ·  NO CONFIGURATION REQUIRED</text>
 
   <!-- Card 1: External providers -->
-  <rect x="16" y="34" width="162" height="78" rx="8" fill="#111821" stroke="rgba(255,123,114,0.25)" stroke-width="1"/>
-  <rect x="16" y="34" width="162" height="4" rx="2" fill="#E8706A"/>
+  <rect x="16" y="34" width="162" height="78" rx="8" fill="#111821" stroke="rgba(232,112,106,0.5)" stroke-width="1"/>
   <text x="97" y="63" text-anchor="middle"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
         font-size="11" font-weight="700" fill="#E8706A">Disabled</text>
@@ -22,8 +21,7 @@
         font-size="9" fill="#606978">no egress by default</text>
 
   <!-- Card 2: Secrets -->
-  <rect x="192" y="34" width="162" height="78" rx="8" fill="#111821" stroke="rgba(0,201,167,0.25)" stroke-width="1"/>
-  <rect x="192" y="34" width="162" height="4" rx="2" fill="#2DC4A4"/>
+  <rect x="192" y="34" width="162" height="78" rx="8" fill="#111821" stroke="rgba(45,196,164,0.5)" stroke-width="1"/>
   <text x="273" y="63" text-anchor="middle"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
         font-size="11" font-weight="700" fill="#2DC4A4">Auto-Redacted</text>
@@ -35,8 +33,7 @@
         font-size="9" fill="#606978">keys, tokens, passwords</text>
 
   <!-- Card 3: MCP tools -->
-  <rect x="368" y="34" width="162" height="78" rx="8" fill="#111821" stroke="rgba(227,179,65,0.25)" stroke-width="1"/>
-  <rect x="368" y="34" width="162" height="4" rx="2" fill="#D4A840"/>
+  <rect x="368" y="34" width="162" height="78" rx="8" fill="#111821" stroke="rgba(212,168,64,0.5)" stroke-width="1"/>
   <text x="449" y="63" text-anchor="middle"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
         font-size="11" font-weight="700" fill="#D4A840">Blocked</text>
@@ -48,8 +45,7 @@
         font-size="9" fill="#606978">until explicitly allow-listed</text>
 
   <!-- Card 4: Missing policy -->
-  <rect x="544" y="34" width="160" height="78" rx="8" fill="#111821" stroke="rgba(255,123,114,0.25)" stroke-width="1"/>
-  <rect x="544" y="34" width="160" height="4" rx="2" fill="#E8706A"/>
+  <rect x="544" y="34" width="160" height="78" rx="8" fill="#111821" stroke="rgba(232,112,106,0.5)" stroke-width="1"/>
   <text x="624" y="63" text-anchor="middle"
         font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
         font-size="11" font-weight="700" fill="#E8706A">Fail Closed</text>

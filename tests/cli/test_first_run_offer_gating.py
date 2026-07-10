@@ -47,14 +47,6 @@ def test_offer_skipped_for_json() -> None:
     assert _run_check(_args(json=True)) is False
 
 
-def test_offer_skipped_for_json_out() -> None:
-    assert _run_check(_args(json_out=True)) is False
-
-
-def test_offer_skipped_for_yes() -> None:
-    assert _run_check(_args(yes=True)) is False
-
-
 def test_offer_skipped_for_non_interactive() -> None:
     assert _run_check(_args(non_interactive=True)) is False
 

@@ -22,8 +22,9 @@ import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from opencontext_core.dx.brand_mark import README_LOGO_TERMINAL_COMPACT
+from opencontext_core.dx.brand_mark import README_LOGO_TERMINAL
 from opencontext_core.dx.console_styles import (
+    BRAND_ACCENT,
     BRAND_DIM,
     BRAND_PRIMARY,
     BRAND_SECONDARY,
@@ -92,17 +93,19 @@ def wizard_status_line(root: str | Path = ".") -> str:
 def frame_lines(step_index: int, total: int, step: WizardStep, status_line: str = "") -> list[str]:
     """Build the frame as rich-markup lines (pure — no printing, no TTY check).
 
-    Layout: compact logo with the status line beside it, a bold step title with
+    Layout: the brand logo with the status line beside it, a bold step title with
     progress dots and ``Step N/M``, then the detail card (dim labels, plain
     values) — visually the same info pane the config TUI shows.
     """
-    logo = README_LOGO_TERMINAL_COMPACT
+    logo = README_LOGO_TERMINAL
     width = max(len(line) for line in logo)
     cell = [line.ljust(width) for line in logo]
     lines = [
         f"[bold {BRAND_PRIMARY}]{cell[0]}[/]  [bold]OpenContext Runtime[/]",
         f"[{BRAND_DIM}]{cell[1]}[/]  [{BRAND_DIM}]{status_line}[/]",
         f"[bold {BRAND_SECONDARY}]{cell[2]}[/]",
+        f"[{BRAND_DIM}]{cell[3]}[/]",
+        f"[bold {BRAND_ACCENT}]{cell[4]}[/]",
         "",
     ]
     dots = "  ".join(

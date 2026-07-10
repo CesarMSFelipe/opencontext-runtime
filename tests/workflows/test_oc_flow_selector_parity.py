@@ -40,13 +40,9 @@ def test_simulate_and_run_auto_agree(task: str, expected: str) -> None:
     )
 
 
-def test_zero_disagreements_across_matrix() -> None:
-    disagreements = [
-        task
-        for task, _ in _MATRIX
-        if RuntimeSimulator().simulate(task).recommended_workflow != run_select_workflow(task)
-    ]
-    assert disagreements == []
+# NOTE: the standalone "zero disagreements across matrix" test was cut — the
+# parametrized test above already asserts sim == run for every matrix entry,
+# so the aggregate check was a strict subset (redundant variation).
 
 
 def test_run_auto_cli_recommends_sdd_for_redesign(tmp_path: Path) -> None:

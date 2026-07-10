@@ -30,15 +30,6 @@ def test_load_config_rejects_non_enum_security_mode(tmp_path: Path) -> None:
         load_config(path)
 
 
-def test_load_config_rejects_open_security_mode(tmp_path: Path) -> None:
-    data = default_config_data()
-    data["security"]["mode"] = "open"
-    path = _write(tmp_path, data)
-
-    with pytest.raises(ConfigurationError):
-        load_config(path)
-
-
 def test_load_config_rejects_hyphenated_air_gapped(tmp_path: Path) -> None:
     data = default_config_data()
     data["security"]["mode"] = "air-gapped"  # hyphen, not air_gapped

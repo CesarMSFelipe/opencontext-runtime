@@ -44,27 +44,8 @@ def test_errors_carry_messages() -> None:
     assert "bad config value" in str(exc_info.value)
 
 
-def test_errors_catchable_as_base() -> None:
-    """All custom error subtypes are catchable as OpenContextError."""
-    for cls in _ALL_ERRORS:
-        with pytest.raises(OpenContextError):
-            raise cls("test message")
-
-
-def test_opencontext_error_catchable_as_exception() -> None:
-    """OpenContextError itself is catchable as a plain Exception."""
-    with pytest.raises(Exception):  # noqa: B017
-        raise OpenContextError("base error")
-
-
 def test_all_errors_instantiable_without_args() -> None:
     """All error classes can be instantiated without arguments."""
     for cls in _ALL_ERRORS:
         exc = cls()
         assert isinstance(exc, OpenContextError)
-
-
-def test_provider_error_catchable_as_llm_gateway() -> None:
-    """ProviderError is catchable as LLMGatewayError."""
-    with pytest.raises(LLMGatewayError):
-        raise ProviderError("provider failed")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -55,11 +56,16 @@ _NAIVE_SKIP_DIRS = {
 
 
 def estimate_naive_tokens(root: Path) -> int:
-    """Rough token count an agent would read by ingesting the whole project.
+    """Rough token count for ingesting the WHOLE project — a ceiling, not a headline.
 
-    The honest "before" baseline: every source/text file's bytes (~4 chars/token),
-    skipping vcs/build/vendored dirs. Shared by `pack`'s savings line and the
-    `demo` so both report the same number. Returns at least 1.
+    Sums every source/text file's bytes (~4 chars/token), skipping vcs/build/vendored
+    dirs. This is the whole-repo *upper bound*: what an agent would read if it dumped
+    the entire tree. It is NOT the honest per-task before baseline (no agent reads the
+    whole repo for one task) — for a user-facing savings headline use
+    :func:`estimate_included_files_tokens`, which counts only the files the pack drew
+    from, whole (the same methodology as ``docs/benchmarks``). The internal evaluator
+    (``evaluation/evaluator.py``) uses this deliberately as a labeled ceiling. Returns
+    at least 1.
     """
     chars = 0
     for path in root.rglob("*"):
@@ -72,6 +78,58 @@ def estimate_naive_tokens(root: Path) -> int:
             continue
         try:
             chars += path.stat().st_size
+        except OSError:
+            pass
+    return max(chars // 4, 1)
+
+
+def _bare_source_path(source: str) -> str:
+    r"""Strip a trailing ``:line`` / ``:line:name`` symbol suffix from a pack source.
+
+    A pack source is either a bare file path or ``path:line`` / ``path:line:name``.
+    Only that numeric symbol suffix is removed — a Windows drive-letter colon
+    (``C:\proj\a.py``) is preserved, so absolute Windows paths are not mangled.
+    """
+    return re.sub(r":\d+(?::[^:]*)?$", "", source)
+
+
+def estimate_included_files_tokens(root: Path, pack: object) -> int:
+    """Honest per-task baseline: whole-file tokens of ONLY the files the pack drew from.
+
+    This mirrors ``docs/benchmarks`` ("read the relevant files whole"): take the unique
+    source files the pack included, and sum the cost of reading each one in full
+    (~4 chars/token, the same heuristic used for the pack side of the display so both
+    sides of the ratio use one estimator). Symbol pack items carry ``path:line`` or
+    ``path:line:name`` sources; only the bare file path is used, and each file is
+    counted once. Returns at least 1 so callers can divide safely.
+
+    Unlike :func:`estimate_naive_tokens` (a whole-repo ceiling), this is the number a
+    user-facing savings headline must use — no agent reads the entire repository to do
+    one task, so comparing against the whole tree inflates the percentage by orders of
+    magnitude.
+    """
+    root = Path(root)
+    seen: set[Path] = set()
+    chars = 0
+    for item in getattr(pack, "included", []) or []:
+        source = getattr(item, "source", "") or ""
+        # graph items are "path:line" / "path:line:name"; file items are the bare path.
+        raw = _bare_source_path(source)
+        if not raw:
+            continue
+        candidate = Path(raw)
+        path = candidate if candidate.is_absolute() else (root / candidate)
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if not resolved.is_file() or resolved.suffix not in _NAIVE_TEXT_EXTS:
+            continue
+        try:
+            chars += resolved.stat().st_size
         except OSError:
             pass
     return max(chars // 4, 1)

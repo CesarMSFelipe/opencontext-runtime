@@ -13,9 +13,3 @@ README_LOGO_TERMINAL: tuple[str, ...] = (
     "│  │",
     "◉──◉",
 )
-
-README_LOGO_TERMINAL_COMPACT: tuple[str, ...] = (
-    "◉──◉──◉",
-    "◉──◉  ◉",
-    "◉──◉",
-)

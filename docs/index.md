@@ -1,6 +1,6 @@
 ---
 title: OpenContext Runtime
-description: Context engineering runtime for AI coding agents.
+description: The local runtime that gives your AI coding agent verified context.
 hide:
   - navigation
   - feedback
@@ -9,7 +9,7 @@ hide:
 
 # OpenContext Runtime
 
-Context engineering runtime for AI coding agents. Index your project into a queryable knowledge graph. Retrieves relevant, ranked, redacted context for each task.
+The local runtime that gives your AI coding agent verified context. Small context, full trace, verified execution — index your project into a queryable knowledge graph and retrieve relevant, ranked, redacted context for each task.
 
 ## Quick Start
 

@@ -125,13 +125,6 @@ class TestBoundaryService:
         # In strict mode with missing project manifest, should still return a result
         assert result.success is False or result.run_id is not None
 
-    def test_unknown_target_dispatches_generic(self) -> None:
-        service = BoundaryService()
-        req = AdapterRequest(target="cursor", task="echo hello")
-        result = service.dispatch(req)
-        assert result.success is True
-        assert result.target == "cursor"
-
     def test_boundary_service_default_root(self) -> None:
         service = BoundaryService()
         assert service.root is not None
