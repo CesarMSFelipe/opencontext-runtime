@@ -18,7 +18,10 @@ from tests.acceptance.helpers.cli import run_json
 from tests.acceptance.helpers.ops import install_workspace
 from tests.acceptance.helpers.workspace import make_workspace
 
-pytestmark = pytest.mark.acceptance
+# All tests here share the module-scoped `manifest_run` fixture, whose real
+# `install` run dominates wall time (>=25s of setup). Mark the whole module slow
+# so `-m "not slow"` actually skips that fixture cost, not just one test.
+pytestmark = [pytest.mark.acceptance, pytest.mark.slow]
 
 
 @pytest.fixture(scope="module")

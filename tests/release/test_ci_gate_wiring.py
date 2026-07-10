@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.evaluation.models import GateStatus
 from opencontext_core.operating_model.release_gate import (
     CI_GATES_PATH,
@@ -93,6 +95,7 @@ def test_dod_baseline_regression_blocks() -> None:
     assert gate.status is GateStatus.FAILED
 
 
+@pytest.mark.slow
 def test_e2e_dod_gate_met_from_proof_artifact(tmp_path: Path) -> None:
     write_dod_proof(tmp_path, passed=True, steps=[{"step": "all", "ok": True}])
     proof = read_dod_proof(tmp_path)

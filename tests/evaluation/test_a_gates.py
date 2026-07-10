@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.evaluation.golden import GOLDEN_ROOT, GoldenSuite, clear_golden_cache
 from opencontext_core.evaluation.models import GateStatus
 from opencontext_core.evaluation.runner import RunnerConfig, build_default_runner
@@ -60,6 +62,7 @@ def test_provider_ci_gates_not_measured_never_failed() -> None:
         assert report.status is not GateStatus.FAILED
 
 
+@pytest.mark.slow
 def test_deferred_gates_do_not_block_ready() -> None:
     """With every other gate MET and only the two deferred gates NOT_MEASURED, the
     verdict is ready=True (Option A) — and the deferred gates are annotated as such."""

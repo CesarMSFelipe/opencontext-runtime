@@ -585,8 +585,24 @@ def test_gates_never_touch_the_model_delegate(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_gate_run_does_not_touch_real_or_repo_opencontext(tmp_path: Path) -> None:
+def test_gate_run_does_not_touch_real_or_repo_opencontext(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The whole gate path stays under tmp_path; real/repo .opencontext untouched."""
+    # Redirect HOME to a private per-test sentinel BEFORE snapshotting. The real
+    # ``~/.opencontext`` is process-shared, so under ``-n auto`` a concurrent worker
+    # writing/pruning it (e.g. ``~/.opencontext/backups``) would flip the "after"
+    # snapshot and falsely blame this test. A private HOME makes ``home_oc`` a dir no
+    # other worker shares, while still catching any write the gate makes under HOME.
+    home_sentinel = tmp_path / "_home"
+    home_sentinel.mkdir()
+    monkeypatch.setenv("HOME", str(home_sentinel))
+    monkeypatch.setenv("USERPROFILE", str(home_sentinel))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(home_sentinel / ".config"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(home_sentinel / ".local" / "state"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(home_sentinel / ".cache"))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home_sentinel))
+
     repo_oc = Path(__file__).resolve().parents[2] / ".opencontext"
     home_oc = Path.home() / ".opencontext"
 

@@ -38,6 +38,18 @@ def test_install_methods_never_counted_as_residue(monkeypatch, tmp_path: Path) -
     """The advisory must not leak into the residue lists that decide `passed`."""
     from opencontext_cli.commands.uninstall_cmd import verify_no_global_traces
 
+    # Fully isolate HOME state resolution. `verify_no_global_traces` reaches HOME
+    # both via `Path.home()` AND via `global_state_roots()`, which resolves the XDG
+    # state/config/cache dirs through `platformdirs`/`os.path.expanduser` — these
+    # honor the `$HOME`/`XDG_*` env vars, NOT the `Path.home` monkeypatch. Without
+    # redirecting the env too, this test reads the REAL `~/.local/state/opencontext`
+    # etc., so a concurrent (-n auto) test that touches those global dirs makes the
+    # residue list non-empty and this assertion flakes. Pin every root into tmp.
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / ".local" / "state"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
     # A clean HOME → no residue, regardless of how the package is installed.
     assert verify_no_global_traces([]) == []

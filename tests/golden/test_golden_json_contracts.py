@@ -204,6 +204,7 @@ def test_memory_search_json_contract(oc_bin: str, ws: Workspace) -> None:
             assert key in hit, f"memory search hit missing {key}: {sorted(hit)}"
 
 
+@pytest.mark.slow
 def test_run_passed_json_contract(passed_run: dict[str, Any]) -> None:
     """GOLD-011: a PASSED `run --json` summary carries the verification truth
     fields — `passed` may only appear with real verification evidence."""

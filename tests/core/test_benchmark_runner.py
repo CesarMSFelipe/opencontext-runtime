@@ -55,6 +55,7 @@ _MEASURED_GATES = {
 _PROVIDER_CI_GATES = {"context-token-efficiency", "kg-retrieval-precision"}
 
 
+@pytest.mark.slow
 def test_default_runner_measures_golden_gates_and_versions_all() -> None:
     reports = build_default_runner().run_all(".")
     assert len(reports) == 10

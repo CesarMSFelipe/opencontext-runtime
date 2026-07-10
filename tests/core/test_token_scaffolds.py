@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from opencontext_cli.main import _tokens
 from opencontext_core.dx.tokens import build_token_report, suggest_opencontextignore
 
@@ -11,6 +13,7 @@ def test_token_report_scaffold_shape() -> None:
     assert "**/dist/**" in suggest_opencontextignore()
 
 
+@pytest.mark.slow
 def test_tokens_tree_view(capsys) -> None:
     _tokens("tree")
     payload = json.loads(capsys.readouterr().out)

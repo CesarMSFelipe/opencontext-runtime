@@ -57,16 +57,31 @@ _REPO_OC = _REPO_ROOT / ".opencontext"
 
 
 @pytest.fixture(autouse=True)
-def _real_dirs_untouched():
-    """Assert the run touches neither the real ``~/.opencontext`` nor repo ``.opencontext``.
+def _real_dirs_untouched(monkeypatch: pytest.MonkeyPatch, tmp_path_factory):
+    """Assert the run touches neither ``~/.opencontext`` nor the repo ``.opencontext``.
 
-    The shim must derive every path from the project root it is handed. Rather
-    than redirect HOME (which breaks user-site console scripts like the
-    ``~/.local/bin/mypy`` shim and would make the language layer crash), we
-    snapshot the two real OpenContext config dirs around every test and assert
-    they are byte-for-byte unchanged. A stray read is harmless; a stray write
-    fails loudly.
+    The shim must derive every path from the project root it is handed. We snapshot
+    the two OpenContext config dirs around every test and assert they are
+    byte-for-byte unchanged: a stray read is harmless; a stray write fails loudly.
+
+    Parallel-safety (``-n auto``): both the real ``~/.opencontext`` and the repo
+    ``.opencontext`` are process-shared, so a *concurrent* worker writing there
+    would flip this invariant and falsely blame this test. To keep the check
+    hermetic we redirect HOME (and the XDG dirs) to a private, per-test sentinel
+    before snapshotting — ``~/.opencontext`` then resolves to an empty dir no other
+    worker shares, while the shim's own writes under HOME are still caught. Tool
+    discovery is unaffected (console scripts resolve via PATH/the active venv, not
+    HOME), and the sibling ``_deterministic_language_layer`` fixture stubs out the
+    subprocess language layer, so no user-site shim is exercised.
     """
+    sentinel_home = tmp_path_factory.mktemp("home_sentinel")
+    monkeypatch.setenv("HOME", str(sentinel_home))
+    monkeypatch.setenv("USERPROFILE", str(sentinel_home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(sentinel_home / ".config"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(sentinel_home / ".local" / "state"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(sentinel_home / ".cache"))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: sentinel_home))
+
     home_oc = Path.home() / ".opencontext"
     before_home = _snapshot_with_text(home_oc)
     before_repo = _snapshot_with_text(_REPO_OC)

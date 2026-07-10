@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from opencontext_cli.main import (
     _agent_context,
     _checkpoint,
@@ -56,6 +58,7 @@ def test_eval_run_handles_missing_path(capsys) -> None:
     assert "eval file" in out.lower() or "no eval" in out.lower() or "path" in out.lower()
 
 
+@pytest.mark.slow
 def test_tokens_report(capsys) -> None:
     _tokens("report")
     payload = json.loads(capsys.readouterr().out)
@@ -68,6 +71,7 @@ def test_agent_context_copy_fallback(capsys) -> None:
     assert "Agent Context" in out
 
 
+@pytest.mark.slow
 def test_doctor_tokens_suggest_ignore(tmp_path: Path, capsys) -> None:
     from opencontext_core.runtime import OpenContextRuntime
 

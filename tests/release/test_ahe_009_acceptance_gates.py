@@ -91,6 +91,7 @@ class TestGateRegistry:
                     missing.append(file_part)
         assert not missing, f"selector files missing on disk: {missing}"
 
+    @pytest.mark.slow
     def test_registry_selectors_collect_at_least_one_test(self, repo_root: Path) -> None:
         """Every selector must yield ≥1 collected test.
 
@@ -190,6 +191,7 @@ class TestAcceptanceCommandExitCode:
             timeout=300,
         )
 
+    @pytest.mark.slow
     def test_ready_true_exits_zero(self, repo_root: Path) -> None:
         """When every gate is MET the verdict is ready=true and exit code is 0."""
         completed = self._run_cli(repo_root)
@@ -209,6 +211,7 @@ class TestAcceptanceCommandExitCode:
                 f"stdout=\n{completed.stdout[:1500]}\nstderr=\n{completed.stderr[:1500]}"
             )
 
+    @pytest.mark.slow
     def test_json_includes_every_gate(self, repo_root: Path) -> None:
         """Every gate in GATES must appear in the verdict JSON."""
         completed = self._run_cli(repo_root)

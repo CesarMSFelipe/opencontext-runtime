@@ -35,7 +35,16 @@ _DEFERRED = (
 )
 
 
-@pytest.mark.parametrize("name", GOLDEN_SUITE_NAMES)
+# Only the "first-run" suite runs a full harness pass (>=25s); the rest are fast.
+# Mark just that param slow so `-m "not slow"` skips the one heavy instance without
+# quarantining the cheap suites.
+_MEASURE_SUITE_PARAMS = [
+    pytest.param(name, marks=pytest.mark.slow) if name == "first-run" else name
+    for name in GOLDEN_SUITE_NAMES
+]
+
+
+@pytest.mark.parametrize("name", _MEASURE_SUITE_PARAMS)
 def test_each_golden_suite_measures(name: str) -> None:
     # A present fixture must produce a verdict — MET or FAILED, never NOT_MEASURED.
     report = GoldenSuite(name, GOLDEN_ROOT).run(Path("."))

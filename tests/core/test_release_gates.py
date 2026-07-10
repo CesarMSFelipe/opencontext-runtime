@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.evaluation.models import (
     BenchmarkSuiteReport,
     CostTriple,
@@ -97,6 +99,7 @@ def test_baseline_store_roundtrip(tmp_path: Path) -> None:
 # ── doc-57 acceptance verdict (A ∧ B ∧ C ∧ D) ─────────────────────────────────
 
 
+@pytest.mark.slow
 def test_acceptance_verdict_is_honestly_not_ready_today() -> None:
     verdict = AcceptanceEvaluator(repo_root=PROJECT_ROOT).evaluate()
     assert verdict.ready is False

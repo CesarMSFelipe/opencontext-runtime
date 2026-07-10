@@ -35,6 +35,7 @@ def test_workflow_execution_persists_trace(tmp_path: Path) -> None:
     assert trace_logger.load(state.trace.run_id).run_id == state.trace.run_id
 
 
+@pytest.mark.slow
 def test_sdd_workflow_execution(tmp_path: Path) -> None:
     """Test SDD (Specification-Driven Development) workflow execution."""
     project_root = tmp_path / "project"
@@ -61,6 +62,7 @@ def test_sdd_workflow_execution(tmp_path: Path) -> None:
     assert trace_logger.load(state.trace.run_id).run_id == state.trace.run_id
 
 
+@pytest.mark.slow
 def test_sdd_apply_workflow_execution(tmp_path: Path) -> None:
     """Test SDD apply workflow execution with all steps."""
     project_root = tmp_path / "project"

@@ -43,6 +43,7 @@ def _runtime_factory(tmp_path: Path, project_root: Path):
     return factory
 
 
+@pytest.mark.slow
 def test_api_diagnostics_endpoints() -> None:
     pytest.importorskip("fastapi")
     pytest.importorskip("httpx")

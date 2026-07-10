@@ -35,6 +35,7 @@ markers = [
   "acceptance: black-box acceptance tests driving the opencontext binary via --oc-bin (AC-001..AC-030)",
   "smoke: fast acceptance subset equivalent to SMOKE-001..010, run on every PR",
   "quarantine: skip-marked tests parked under tests/quarantine (archived or flaky; excluded from default signal)",
+  "slow: tests whose own call/setup runtime is >= 25s (heavy e2e/subprocess). CI still runs them; a dev can skip them locally with `pytest -n auto -m 'not slow'` for fast iteration.",
 ]
 pythonpath = [
   ".",

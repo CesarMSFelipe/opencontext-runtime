@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.evaluation.models import GateStatus
 from opencontext_core.operating_model.release_gate import (
     FUNCTIONAL_BEHAVIOURS,
@@ -112,6 +114,7 @@ def test_missing_evidence_file_keeps_non_derivable_not_measured(tmp_path: Path) 
         assert statuses[name] is GateStatus.NOT_MEASURED, name
 
 
+@pytest.mark.slow
 def test_failed_evidence_entry_is_honest_failed_not_met(tmp_path: Path) -> None:
     write_release_evidence(
         tmp_path,

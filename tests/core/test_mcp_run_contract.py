@@ -28,9 +28,28 @@ _CONTRACT_KEYS = {
 
 
 @pytest.fixture
-def server(tmp_path: Path) -> MCPServer:
+def server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> MCPServer:
     s = MCPServer(db_path=tmp_path / "kg.db")
     s.policy = ToolPermissionPolicy(allowed_tools=set(s.tools.keys()))
+
+    # Pin `_handle_run` onto the direct-harness path (runtime.session_wrapper=False)
+    # instead of the session-store-first path. The wrapper flag flows from layered
+    # config resolution, which reads process-global state; under `-n auto` a leaked
+    # global from another worker's test can flip that resolution so `RuntimeApi.run`
+    # raises a RuntimeFailure BEFORE reaching the (monkeypatched) `HarnessRunner.run`,
+    # which silently swallows into an error dict and starves these contract asserts.
+    # Forcing the direct path makes the harness call deterministic; the run metadata
+    # these tests check is derived from `legacy.events`, identical on either path.
+    _real_resolve = MCPServer._resolve_config
+
+    def _resolve_direct(root: Path):  # type: ignore[no-untyped-def]
+        resolved = _real_resolve(root)
+        runtime_cfg = getattr(resolved.config, "runtime", None)
+        if runtime_cfg is not None and hasattr(runtime_cfg, "session_wrapper"):
+            object.__setattr__(runtime_cfg, "session_wrapper", False)
+        return resolved
+
+    monkeypatch.setattr(MCPServer, "_resolve_config", staticmethod(_resolve_direct))
     return s
 
 

@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.compat.flags import flag_catalog
 from opencontext_core.compat.flip_evidence import (
     FLIP_BASELINE_DIR,
@@ -163,6 +165,7 @@ def test_each_missing_artifact_named() -> None:
 # ── release acceptance reads the bundles ──────────────────────────────────────
 
 
+@pytest.mark.slow
 def test_release_acceptance_rejects_incomplete_bundle(tmp_path: Path) -> None:
     _bundle(tmp_path, "artifact_store", rollback_flag="")
     verdict = AcceptanceEvaluator(repo_root=tmp_path).evaluate()

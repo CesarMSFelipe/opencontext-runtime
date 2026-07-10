@@ -16,6 +16,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 _CLAIM = re.compile(r"%|reduction_pct|\bbadge\b|fewer tokens", re.IGNORECASE)
 
@@ -61,6 +63,7 @@ class TestBenchmarkCliSurface:
 
 
 class TestBenchmarkCliRun:
+    @pytest.mark.slow
     def test_run_single_case_json_reports_con_and_sin(self) -> None:
         result = _run_cli(
             "benchmark",

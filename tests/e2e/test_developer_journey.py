@@ -27,6 +27,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from opencontext_core.context.planning.workflow_selector import select_workflow
 from opencontext_core.evaluation.models import GateStatus
 from opencontext_core.models.llm import LLMResponse
@@ -417,6 +419,7 @@ def run_dod_journey(
     return steps, summary
 
 
+@pytest.mark.slow
 def test_dod_journey_proves_and_meets_e2e_gate(
     isolated_env: tuple[Path, dict[str, str]],
 ) -> None:
