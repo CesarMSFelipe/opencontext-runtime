@@ -42,6 +42,25 @@ the brand/positioning, and trims the test suite of genuine redundancy.
   current node-mark; SVG accents moved into integrated borders.
 - **Test suite consolidated**: dead-code and genuinely-redundant tests removed
   (~6.7k → ~5.6k) with every distinct behavior, branch, and ship-gate retained.
+- **User-facing questions ask with options**: approval gates and decision points
+  in both the SDD flow and OC Flow now present selectable options plus a
+  custom/"Other" choice (`AskUserQuestion` when the host provides it, else
+  labelled options), instead of requiring one exact free-text reply.
+
+### Fixed
+
+- **MCP server reads the project `opencontext.yaml`**: the MCP runtime was built
+  without a config path and only ever read `configs/opencontext.yaml`, silently
+  ignoring the project-root `./opencontext.yaml` for its context and memory
+  tools. Per-project model/context/memory settings now take effect on the agent
+  path, matching the CLI.
+- **Memory layer case + honest Engram fallback**: `opencontext_memory_save`
+  accepts layer names case-insensitively (the injected docs use uppercase); and
+  a failed Engram write now reports `degraded: true` and falls back to local
+  instead of claiming a `backend: engram` success it did not achieve.
+- **`tdd_mode: off` no longer crashes config load**: written unquoted it parses
+  as the YAML boolean `False`; it is now coerced back to `"off"` so config load
+  and MCP startup no longer fail.
 
 ## [1.7.0] - 2026-07-06
 
