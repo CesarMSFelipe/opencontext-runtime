@@ -76,7 +76,7 @@ def _multi_phase_instructions(budget: int = 3000) -> dict[str, str]:
         ),
         "archive": (
             "Persist decisions, omitted context reasons, and verification evidence "
-            "to `.opencontext/memory/` via `opencontext memory save`."
+            "to memory via `opencontext memory v2 save`."
         ),
     }
 
@@ -114,7 +114,7 @@ def _subagent_native_instructions(budget: int = 3000) -> dict[str, str]:
         ),
         "archive": (
             "Coordinator archives all sub-agent outputs to memory. "
-            "Use `opencontext memory save` with full trace id."
+            "Use `opencontext memory v2 save` with full trace id."
         ),
     }
 
@@ -146,7 +146,8 @@ def _solo_compact_instructions(budget: int = 3000) -> dict[str, str]:
             "Run test capabilities from `.opencontext/sdd/context.json`. Report pass/fail inline."
         ),
         "archive": (
-            "Save a one-paragraph session summary to memory: `opencontext memory save --brief`."
+            "Save a one-paragraph session summary to memory with "
+            "`opencontext memory v2 save --title <slug> --content <summary>`."
         ),
     }
 
