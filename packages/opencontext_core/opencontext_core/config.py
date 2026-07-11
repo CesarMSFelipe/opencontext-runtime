@@ -16,7 +16,7 @@ from pydantic import (
 )
 
 from opencontext_core.agentic.config import BudgetMode, FlowMode, MemoryMode
-from opencontext_core.compat import StrEnum
+from opencontext_core.compat import StrEnum, coerce_yaml_off
 from opencontext_core.errors import ConfigurationError
 from opencontext_core.models.context import CompressionStrategy, ContextProfile
 from opencontext_core.paths import StorageMode
@@ -1469,14 +1469,11 @@ class HarnessSettingsConfig(BaseModel):
     @field_validator("tdd_mode", mode="before")
     @classmethod
     def _coerce_yaml_off(cls, value: Any) -> Any:
-        # YAML "Norway problem": an unquoted ``off`` parses as the boolean
-        # ``False`` before it ever reaches this model. Coerce that single
-        # collision back to the string "off" so a hand-authored
-        # ``tdd_mode: off`` does not crash config load / MCP startup. Genuine
-        # strings pass through unchanged; unknown values still fail the Literal.
-        if value is False:
-            return "off"
-        return value
+        # YAML "Norway problem": unquoted ``off`` parses as ``False`` before it
+        # reaches this model, so a hand-authored ``tdd_mode: off`` would crash
+        # config load / MCP startup. Coerce the collision; unknown values still
+        # fail the Literal. See opencontext_core.compat.coerce_yaml_off.
+        return coerce_yaml_off(value)
 
     strict_tdd: bool = Field(
         default=False,

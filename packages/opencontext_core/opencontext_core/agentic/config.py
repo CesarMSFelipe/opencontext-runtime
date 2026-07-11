@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from opencontext_core.compat import StrEnum
+from opencontext_core.compat import StrEnum, coerce_yaml_off
 
 
 class ComponentId(StrEnum):
@@ -108,16 +108,14 @@ class AgenticFlowConfig(BaseModel, extra="forbid"):
     tdd_mode: Literal["strict", "ask", "off"] = "ask"
     approval_before_apply: bool = True
 
-    @field_validator("tdd_mode", mode="before")
+    @field_validator("tdd_mode", "economy_mode", mode="before")
     @classmethod
     def _coerce_yaml_off(cls, value: Any) -> Any:
-        # YAML "Norway problem": an unquoted ``off`` parses as the boolean
-        # ``False`` before validation. Coerce that single collision back to the
-        # string "off" so a hand-authored ``tdd_mode: off`` does not crash flow
-        # config load. Strings pass through; unknown values still fail.
-        if value is False:
-            return "off"
-        return value
+        # YAML "Norway problem": unquoted ``off`` parses as the boolean ``False``
+        # before validation. Both these Literals include "off"; coerce so a
+        # hand-authored ``tdd_mode: off`` / ``economy_mode: off`` does not crash
+        # flow config load. Strings pass through; unknown values still fail.
+        return coerce_yaml_off(value)
 
     install_engram_if_missing: bool = True
     allow_automatic_archive: bool = False

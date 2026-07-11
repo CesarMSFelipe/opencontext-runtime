@@ -60,6 +60,19 @@ from opencontext_core.compat.seams import (
 # Python-version compatibility shim (folded from the former compat.py).
 UTC = timezone.utc  # noqa: UP017
 
+
+def coerce_yaml_off(value: object) -> object:
+    """Map YAML's unquoted ``off`` (parsed as ``False``) back to the string "off".
+
+    YAML's "Norway problem": an unquoted ``off`` parses as the boolean ``False``,
+    so any config field whose ``Literal`` includes ``"off"`` fails validation when
+    a user hand-writes ``field: off``. Coerce that one collision back to the
+    string; genuine strings and every other value pass through untouched. Attach
+    with ``field_validator("<field>", mode="before")`` on each such field.
+    """
+    return "off" if value is False else value
+
+
 __all__ = [
     "COLLISION_REGISTRY",
     "MIGRATION_LEDGER",
@@ -83,6 +96,7 @@ __all__ = [
     "TwoSpineDecision",
     "assert_parity",
     "check_parity",
+    "coerce_yaml_off",
     "collision",
     "direct_legacy_importers",
     "flag_catalog",

@@ -8,10 +8,12 @@ whether absence is fatal.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+from opencontext_core.compat import coerce_yaml_off
 
 
 class TDDSection(BaseModel):
@@ -21,6 +23,13 @@ class TDDSection(BaseModel):
 
     mode: Literal["off", "lite", "strict"] = "strict"
     """strict = RED-first enforced; lite = test-required but not RED-first; off = advisory."""
+
+    @field_validator("mode", mode="before")
+    @classmethod
+    def _coerce_yaml_off(cls, value: Any) -> Any:
+        # YAML "Norway problem": a hand-authored ``mode: off`` in openspec/config.yaml
+        # parses as ``False``; coerce it back so config load does not crash.
+        return coerce_yaml_off(value)
 
 
 class QualityGatesSection(BaseModel):
