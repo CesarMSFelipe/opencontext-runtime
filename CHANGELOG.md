@@ -58,9 +58,22 @@ the brand/positioning, and trims the test suite of genuine redundancy.
   accepts layer names case-insensitively (the injected docs use uppercase); and
   a failed Engram write now reports `degraded: true` and falls back to local
   instead of claiming a `backend: engram` success it did not achieve.
-- **`tdd_mode: off` no longer crashes config load**: written unquoted it parses
-  as the YAML boolean `False`; it is now coerced back to `"off"` so config load
-  and MCP startup no longer fail.
+- **An unquoted `off` no longer crashes config load**: YAML's "Norway problem"
+  parses an unquoted `off` as the boolean `False`. Every config field whose
+  `Literal` includes `"off"` — `tdd_mode` (harness and flow config),
+  `economy_mode`, and the openspec `tdd.mode` — is now coerced back to `"off"`
+  by one shared `coerce_yaml_off` helper, so config load and MCP startup no
+  longer fail on a hand-authored `field: off`.
+- **Agent instructions reference real memory commands**: the SDD profile phase
+  instructions told agents to run `opencontext memory save` / `memory save
+  --brief`, neither of which exists (the direct save lives under
+  `opencontext memory v2 save`). Corrected so an agent following the archive
+  instruction no longer hits an "invalid choice" error.
+- **Docs match the 2.0 code**: removed stale references to agents and packages
+  deleted in this release — the "five-agent loop" harness table, the
+  `tdd-enforcer`/`security-audit`/`mutation-analyst` verify-phase agents, and the
+  `workflow_packs/signing.py` module — and corrected the local-memory layer count
+  (7, not 5).
 
 ## [1.7.0] - 2026-07-06
 
