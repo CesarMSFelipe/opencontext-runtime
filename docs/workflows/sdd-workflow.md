@@ -104,11 +104,13 @@ opencontext harness run --workflow sdd --task "..." --json    # CI-friendly
 ### verify
 
 **What happens:**
-1. Run test suite (`tdd-enforcer` agent)
+1. Run the test suite (a ContextContract `must_verify` item)
 2. Run lint + type-check
-3. Run security scan (`security-audit` agent)
-4. Run mutation analysis if enabled (`mutation-analyst` agent)
+3. Run the security scan (secret patterns) — the `security-scan-passed` gate
+4. Run mutation analysis if enabled (contract `must_verify`, reported in `gates.json`)
 5. Evaluate all 15 quality gates
+
+Verification is driven by the run's ContextContract `must_verify` items and the harness gates, executed by the configured tools/executors — not by dedicated local agents.
 
 **Outputs:** `verify-report.json`  
 **Gates:** All 15 (see [Quality Gates](../quality/quality-gates.md))
@@ -178,7 +180,7 @@ testing:
     fail_on_low_score: false
 ```
 
-When enabled, `mutation-analyst` runs at verify. Score below threshold:
+When enabled, mutation analysis runs at verify as a contract `must_verify` item. Score below threshold:
 - `fail_on_low_score: false` → WARNING (default)
 - `fail_on_low_score: true` → blocks archive
 

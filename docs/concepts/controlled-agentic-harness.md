@@ -12,19 +12,16 @@ The harness wraps every phase of the SDD workflow with:
 - **Memory integration** — ExplorePhase builds a ContextContract; ArchivePhase harvests memory
 - **Permission model** — writes require explicit approval; network calls are denied by default
 
-## The Five-Agent Loop
+## How Verification Runs
 
-The harness orchestrates five built-in agents, each in the right mode:
+The harness does not run dedicated local agents. Each phase runs through a wired executor (`run_phase_executor` in `harness/phases.py`) — the host's AI agent, or a registered executor — and its output is checked against the phase's gates. When no executor is wired, a work-producing phase reports a WARNING scaffold instead of pretending it ran.
 
-| Agent | Mode | Runs at |
-|-------|------|---------|
-| `context-planner` | Local | Explore |
-| `tdd-enforcer` | Local | Verify |
-| `mutation-analyst` | Local | Verify (if enabled) |
-| `security-audit` | Local | Verify |
-| `code-review` | Hybrid | Review |
+Verification itself is driven by two mechanisms:
 
-Local agents run pure Python — no LLM, no API key. The `code-review` agent does graph analysis locally and emits a structured prompt for the host LLM to execute.
+- **ContextContract `must_verify` items** — each run's contract lists the checks that must pass for its risk tier (e.g. run-tests, security-scan, mutation), resolved from `contract.py` `TIER_GATES`. These are executed by the configured tools/executors, not by local agent classes.
+- **PhaseGates** — the harness-level gates (see [Quality Gates](#quality-gates)) that guard each phase transition and block archive when they fail.
+
+Local, deterministic checks (secret scanning, budget, artifact persistence) run in pure Python — no LLM, no API key. Work that needs generation (proposals, code, review narratives) is delegated to the wired executor / host LLM.
 
 ## Phases
 
