@@ -11,9 +11,11 @@ in the test environment).
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -21,9 +23,26 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 _CLAIM = re.compile(r"%|reduction_pct|\bbadge\b|fewer tokens", re.IGNORECASE)
 
+# The subprocess CLI must not read the shared repo/user OpenContext storage: a
+# concurrent xdist worker mutating that state made `benchmark run` flake under
+# `-n auto`. A module-level dir means one private HOME/XDG per worker process
+# (isolated from other workers, no per-call leak); OPENCONTEXT_STORAGE_MODE is
+# dropped so storage resolves under the isolated XDG dirs, not the repo's cwd.
+_ISOLATED_HOME = tempfile.mkdtemp(prefix="oc-benchmark-cli-home-")
+
 
 def _run_cli(*args: str, timeout: int = 180) -> subprocess.CompletedProcess:
     """Run the opencontext CLI as a subprocess from the project root."""
+    env = {
+        **os.environ,
+        "HOME": _ISOLATED_HOME,
+        "USERPROFILE": _ISOLATED_HOME,
+        "XDG_STATE_HOME": f"{_ISOLATED_HOME}/state",
+        "XDG_CONFIG_HOME": f"{_ISOLATED_HOME}/config",
+        "XDG_DATA_HOME": f"{_ISOLATED_HOME}/data",
+        "XDG_CACHE_HOME": f"{_ISOLATED_HOME}/cache",
+    }
+    env.pop("OPENCONTEXT_STORAGE_MODE", None)
     return subprocess.run(
         [sys.executable, "-m", "opencontext_cli", *args],
         capture_output=True,
@@ -32,6 +51,7 @@ def _run_cli(*args: str, timeout: int = 180) -> subprocess.CompletedProcess:
         errors="replace",
         cwd=str(PROJECT_ROOT),
         timeout=timeout,
+        env=env,
     )
 
 
