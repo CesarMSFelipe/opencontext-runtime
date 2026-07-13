@@ -10,7 +10,7 @@ pytest==9.1.1
 # so a failure on a runner we can't reproduce locally (e.g. Windows) is
 # diagnosable without log access. No-op outside GitHub Actions.
 pytest-github-actions-annotate-failures==0.4.2
-build==1.5.0
+build==1.5.1
 types-PyYAML==6.0.12.20260518
 types-requests==2.33.0.20260518
 types-pyperclip==1.11.0.20260508
