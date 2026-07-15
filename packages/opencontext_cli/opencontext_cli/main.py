@@ -4363,7 +4363,11 @@ def _release(args: argparse.Namespace) -> None:
             ReleaseMetrics,
         )
 
-        report = ReleaseLeakScanner().scan(".")
+        # Audit BUILT release artifacts (dist/), not the source tree: a security
+        # tool's own source and fixtures contain secret patterns by design, and
+        # source secret-scanning is gitleaks' job (security.yml). No dist to audit
+        # => an empty, non-blocking report.
+        report = ReleaseLeakScanner().scan("dist")
         # The four DoD regression gates vs a stored baseline (first run seeds it).
         store = ReleaseBaselineStore(Path(".opencontext/release-baseline.json"))
         baseline = store.load()

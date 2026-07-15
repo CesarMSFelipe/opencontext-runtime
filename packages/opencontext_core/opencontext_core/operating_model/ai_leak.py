@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from fnmatch import fnmatch
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -239,11 +240,24 @@ def _iter_files(root: Path) -> list[Path]:
         return [root]
     if not root.exists():
         return []
-    ignored_parts = {".git", ".venv", "__pycache__", ".mypy_cache", ".ruff_cache"}
+    # Prune VCS/cache dirs and any virtualenv or vendored-dependency tree — the
+    # release leak scan audits OUR artifacts, never third-party site-packages.
+    # '*venv*' matches .venv/.ci-venv/oc-audit-venv (house convention, see
+    # config.py); 'site-packages'/'node_modules' catch deps inside any such tree.
+    ignored_parts = {
+        ".git",
+        "__pycache__",
+        ".mypy_cache",
+        ".ruff_cache",
+        "site-packages",
+        "node_modules",
+    }
     return sorted(
         path
         for path in root.rglob("*")
-        if path.is_file() and not ignored_parts.intersection(path.parts)
+        if path.is_file()
+        and not ignored_parts.intersection(path.parts)
+        and not any(fnmatch(part, "*venv*") for part in path.parts)
     )
 
 
