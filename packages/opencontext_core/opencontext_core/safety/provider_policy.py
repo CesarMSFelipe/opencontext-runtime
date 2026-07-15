@@ -72,17 +72,6 @@ class ProviderPolicyEnforcer:
                     )
         allowed = {DataClassification(value) for value in policy.allowed_classifications}
         for item in items:
-            if self._security.mode is SecurityMode.ENTERPRISE and item.classification not in {
-                DataClassification.PUBLIC,
-                DataClassification.INTERNAL,
-                DataClassification.CONFIDENTIAL,
-                DataClassification.SECRET,
-                DataClassification.REGULATED,
-            }:
-                return ProviderPolicyDecision(
-                    allowed=False,
-                    reason="enterprise_unknown_classification_blocked",
-                )
             if item.classification not in allowed:
                 return ProviderPolicyDecision(
                     allowed=False,
