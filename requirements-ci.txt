@@ -3,7 +3,7 @@
 # exact same tools at the exact same versions. A new ruff/mypy release changing
 # format rules or adding checks can no longer break CI out of nowhere; bump these
 # deliberately (and re-run `make ci`) instead.
-ruff==0.15.21
+ruff==0.15.22
 mypy==2.3.0
 pytest==9.1.1
 # Surfaces pytest failures as GitHub annotations (readable via the public API),
