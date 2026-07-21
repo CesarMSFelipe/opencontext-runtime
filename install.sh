@@ -4,8 +4,6 @@
 
 set -euo pipefail
 
-# NOTE: bump this when cutting a release; the PyPI publish must precede merging the version bump.
-OPENCONTEXT_VERSION="1.6.0"
 REPO_URL="https://github.com/CesarMSFelipe/OpenContext-Runtime"
 VENV_DIR="${HOME}/.opencontext/venv"
 BIN_DIR="${HOME}/.local/bin"
@@ -21,7 +19,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help|-h)
-            echo "OpenContext Runtime Installer v${OPENCONTEXT_VERSION}"
+            echo "OpenContext Runtime Installer"
             echo ""
             echo "Usage: bash install.sh [OPTIONS]"
             echo ""
@@ -164,16 +162,15 @@ detect_pipx() {
 }
 
 install_via_pipx() {
-    echo "  Installing via pipx..."
-    pipx install "opencontext-cli==${OPENCONTEXT_VERSION}" || \
-        pipx upgrade opencontext-cli || return 1
+    echo "  Installing via pipx (latest)..."
+    pipx install opencontext-cli || pipx upgrade opencontext-cli || return 1
     return 0
 }
 
 install_via_pip() {
     local pip_cmd="$1"
     echo "  Installing via pip..."
-    $pip_cmd install --upgrade --upgrade-strategy eager "opencontext-cli==${OPENCONTEXT_VERSION}" --quiet || return 1
+    $pip_cmd install --upgrade --upgrade-strategy eager opencontext-cli --quiet || return 1
     return 0
 }
 
@@ -242,26 +239,22 @@ verify_install() {
 
 install_opencontext() {
     echo ""
-    echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║          OpenContext Runtime Installer v${OPENCONTEXT_VERSION}          ║"
-    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo "  OpenContext Runtime — installer"
+    echo "  Installing the latest release…"
     echo ""
 
-    # pipx is the cleanest path — suggest it first
+    # pipx is the cleanest path for a CLI — use it automatically when present
+    # (isolated app, upgradable). No prompt: the one-liner stays hands-off.
     if detect_pipx; then
-        echo "✓ pipx detected"
-        echo "  Run: pipx install opencontext-cli"
-        echo "  (or continue with this installer for the full setup)"
-        echo ""
-        if [ "$YES_MODE" = false ]; then
-            read -rp "Install via pipx instead? [y/N] " use_pipx
-            case "$use_pipx" in
-                [Yy]*)
-                    install_via_pipx && { verify_install; show_finish; return; }
-                    echo "  pipx install failed, falling back to pip..."
-                    ;;
-            esac
+        echo "✓ pipx detected — installing as an isolated app"
+        if install_via_pipx; then
+            pipx ensurepath >/dev/null 2>&1 || true  # make 'opencontext' resolvable on PATH
+            register_product_manifest
+            verify_install
+            show_finish
+            return
         fi
+        echo "  pipx install failed, falling back to pip..."
     fi
 
     check_python
@@ -286,7 +279,7 @@ install_opencontext() {
         echo ""
 
         if [ ! -d "$VENV_DIR" ]; then
-            if [ "$YES_MODE" = true ] || [ "$IS_LOCAL" = true ]; then
+            if [ "$YES_MODE" = true ] || [ "$IS_LOCAL" = true ] || [ ! -t 0 ]; then
                 create_venv
             else
                 read -rp "Create virtual environment at $VENV_DIR? [Y/n] " answer
@@ -368,7 +361,7 @@ show_finish() {
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
     echo ""
-    echo "OpenContext Runtime v${OPENCONTEXT_VERSION} is installed!"
+    echo "OpenContext Runtime is installed!"
     echo ""
     echo "Quick start:"
     echo "  1. cd your-project"
