@@ -252,9 +252,9 @@ class TestDispatchWiring:
     def test_unwired_tool_exits_nonzero(self, tmp_path: Path) -> None:
         from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
 
-        # "stats" has no backend implementation — must exit 2 always
+        # "timeline" has no backend implementation — must exit 2 always
         with pytest.raises(SystemExit) as excinfo:
-            _dispatch_tool("stats", tmp_path, argparse.Namespace())
+            _dispatch_tool("timeline", tmp_path, argparse.Namespace())
         assert excinfo.value.code == 2
 
     # --- T6: lifecycle roundtrip ---
@@ -384,10 +384,34 @@ class TestDispatchWiring:
         assert "learned A" in data
 
     def test_backendless_verbs_exit_2(self, tmp_path: Path) -> None:
-        """stats, timeline, merge-projects have no backend and must exit 2."""
+        """timeline, merge-projects have no backend and must exit 2."""
         from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
 
-        for verb in ("stats", "timeline", "merge-projects"):
+        for verb in ("timeline", "merge-projects"):
             with pytest.raises(SystemExit) as excinfo:
                 _dispatch_tool(verb, tmp_path, argparse.Namespace())
             assert excinfo.value.code == 2, f"{verb}: expected exit 2, got {excinfo.value.code}"
+
+    def test_stats_reports_total_after_saves(self, tmp_path: Path, capsys: Any) -> None:
+        """stats exits 0 and reports the observation count doctor already tracks."""
+        from opencontext_cli.commands.memory_v2_cmd import _dispatch_tool
+
+        for i in range(3):
+            _dispatch_tool(
+                "save",
+                tmp_path,
+                argparse.Namespace(
+                    title=f"obs {i}",
+                    content=f"content {i}",
+                    type="manual",
+                    scope="project",
+                    topic_key=None,
+                    no_capture_prompt=True,
+                ),
+            )
+        capsys.readouterr()  # drop the save receipts
+
+        # stats must NOT raise SystemExit (exit 0) and must report the count.
+        _dispatch_tool("stats", tmp_path, argparse.Namespace())
+        data = json.loads(capsys.readouterr().out)
+        assert data["total_observations"] == 3

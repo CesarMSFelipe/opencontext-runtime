@@ -137,7 +137,7 @@ def handle_sdd(args: Any) -> None:
     """Dispatch ``args.sdd_command`` to the appropriate handler."""
     verb = args.sdd_command
     cwd = Path(getattr(args, "cwd", ".")).resolve()
-    change = getattr(args, "change", None)
+    change = _resolve_change_arg(getattr(args, "change", None), cwd)
     topic = getattr(args, "topic", None)
     task = getattr(args, "task", None)
     verbose = getattr(args, "verbose", False)
@@ -199,7 +199,7 @@ def _handle_status(change: str | None, cwd: Path, verbose: bool) -> None:
     """Resolve and print the SDD status."""
     from opencontext_sdd.status import Resolve
 
-    status = Resolve(change or "", cwd=str(cwd))
+    status = Resolve(change, cwd=str(cwd))
     _print_json(status.model_dump(mode="json", exclude_none=True), verbose)
 
 
@@ -598,6 +598,23 @@ def _run_phase(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _resolve_change_arg(change: str | None, cwd: Path) -> str | None:
+    """Normalize a missing change name to the sole active change (or ``None``).
+
+    argparse hands an absent positional through as ``None`` — and status verbs
+    default ``--change`` to ``None`` too — but when exactly one active change
+    exists every verb (status, ff, continue, phase verbs) should target it. When
+    zero or multiple changes exist the value stays ``None`` so the existing
+    ambiguous/``select-change`` paths still fire. A given name is returned as-is.
+    """
+    if change:
+        return change
+    from opencontext_sdd.status import _list_changes
+
+    names = _list_changes(cwd / "openspec" / "changes")
+    return names[0] if len(names) == 1 else None
 
 
 def _verb_help(verb: str) -> str:
