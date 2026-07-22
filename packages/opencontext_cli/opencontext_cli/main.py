@@ -1722,6 +1722,126 @@ def _normalize_pack_args(args: argparse.Namespace) -> None:
         args.format = "json"
 
 
+# Cheap, robust "is this a real project?" heuristic for first-run onboarding.
+# A .git dir OR any recognizable source/manifest file is enough — we deliberately
+# keep this broad so we onboard in real repos but not in an empty/HOME directory.
+_PROJECT_SOURCE_GLOBS = (
+    "*.py",
+    "*.js",
+    "*.ts",
+    "*.tsx",
+    "*.jsx",
+    "*.go",
+    "*.rs",
+    "*.java",
+    "*.rb",
+    "*.php",
+    "*.c",
+    "*.cpp",
+    "*.cs",
+    "pyproject.toml",
+    "setup.py",
+    "package.json",
+    "go.mod",
+    "Cargo.toml",
+    "pom.xml",
+    "build.gradle",
+    "Gemfile",
+)
+
+
+def _looks_like_project(root: Path) -> bool:
+    """Return True when ``root`` looks like a real project worth onboarding.
+
+    True if a ``.git`` directory exists, or any recognizable source/manifest file
+    is present in the top level. Kept simple and defensive so a bare
+    ``opencontext`` in ``$HOME`` or an empty dir does NOT trigger install.
+    """
+    try:
+        if (root / ".git").is_dir():
+            return True
+        for pattern in _PROJECT_SOURCE_GLOBS:
+            if next(root.glob(pattern), None) is not None:
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _first_run_onboarding(root: Path) -> None:
+    """First bare ``opencontext`` run in a fresh project.
+
+    Non-tty: print short, actionable guidance and return cleanly (never block).
+    TTY: brief welcome + one YES-default confirm; on YES run the SAME complete
+    flow as ``opencontext install --yes`` (stack detect, index, SDD/TDD, agents,
+    MCP wiring, verify) so nothing is skipped.
+    """
+    if not sys.stdout.isatty():
+        # No terminal (CI, piped, agent shell). Guidance only — no prompt, no menu.
+        console.print()
+        console.print("[bold cyan]👋 Welcome to OpenContext — first run in this project.[/]")
+        console.print()
+        console.print("  [bold]Set up this project[/] (stack detect, index, SDD/TDD, agent wiring")
+        console.print("  — all sensible defaults):")
+        console.print("    [cyan]opencontext install --yes[/]")
+        console.print()
+        console.print("  [bold]Then start a task[/] inside your agent (Claude Code / opencode),")
+        console.print("  AFTER restarting it so it loads the OpenContext MCP server:")
+        console.print("    [cyan]/oc-new <task description>[/]")
+        console.print("  or from this terminal:")
+        console.print('    [cyan]opencontext oc-new start "<task description>"[/]')
+        console.print("    [cyan]opencontext oc-new status[/]")
+        console.print()
+        console.print("[dim]For help: opencontext --help[/]")
+        return
+
+    console.panel(
+        "It looks like this is your first time using OpenContext here.\n\n"
+        "OpenContext can set this project up end-to-end with sensible defaults:\n"
+        "  • Detect your stack and index your code\n"
+        "  • Configure SDD/TDD\n"
+        "  • Wire your agent (Claude Code / Codex / OpenCode) and the MCP server",
+        title="[bold cyan]Welcome to OpenContext[/]",
+        fit=True,
+    )
+    console.print()
+
+    try:
+        from opencontext_core import prompts
+
+        proceed = prompts.confirm(
+            "Set up OpenContext for this project now? "
+            "(Detects your stack, indexes your code, configures SDD/TDD, "
+            "and wires your agent — all with sensible defaults.)",
+            default=True,
+        )
+    except Exception:
+        proceed = False
+
+    if proceed:
+        # Reuse the EXACT `opencontext install --yes` pipeline (MCP + agents wired,
+        # verify pass). Build the real install namespace from the parser so defaults
+        # stay in lock-step with the install command; only pin the detected root.
+        install_args = _build_parser().parse_args(["install", "--yes"])
+        install_args.root = str(root)
+        _install(install_args)
+        return
+
+    # Declined — tell them how to run it later, then fall back to the menu.
+    console.print()
+    console.print(
+        "[yellow]Skipped.[/] Run [cyan]opencontext install[/] anytime to set up this project."
+    )
+    console.print(
+        "  To start a task later: [cyan]/oc-new <task>[/] inside your agent, or "
+        '[cyan]opencontext oc-new start "<task>"[/] from the terminal.'
+    )
+    console.print()
+    from opencontext_cli.commands.menu_cmd import run_main_menu
+
+    run_main_menu()
+
+
 def _dispatch(args: argparse.Namespace) -> None:
     command = getattr(args, "command", None)
 
@@ -1738,7 +1858,19 @@ def _dispatch(args: argparse.Namespace) -> None:
         _check_first_run(command, args)
 
     if command is None:
-        # No command — launch the main TUI menu
+        # No command. On a fresh project, a bare `opencontext` should onboard the
+        # developer (complete install + how to start a task) instead of dropping
+        # them into the config TUI (or, non-tty, a terse "needs a terminal" error).
+        try:
+            root = Path.cwd()
+            first_run = is_first_run(root) and _looks_like_project(root)
+        except Exception:
+            first_run = False
+        if first_run:
+            _first_run_onboarding(root)
+            return
+
+        # Otherwise launch the main TUI menu.
         from opencontext_cli.commands.menu_cmd import run_main_menu
 
         run_main_menu()
@@ -3140,18 +3272,24 @@ def _install(args: argparse.Namespace) -> None:
         _supports_oc_new = flow == "oc-new"
 
     console.print()
-    console.print("[bold]Next steps:[/]")
+    console.print("[bold]Next steps — how to start a task:[/]")
     console.print(
-        "  [yellow]↻ Restart your agent (Claude Code / Codex / OpenCode) so it loads "
+        "  [yellow]1) ↻ Restart your agent (Claude Code / Codex / OpenCode) so it loads "
         "the OpenContext MCP server.[/]"
     )
     if _supports_oc_new:
-        console.print("  [cyan]/oc-new your task description[/]  ← start a new change")
-        console.print("  [cyan]opencontext oc-new status[/]       ← check run state")
+        console.print("  2) [bold]Inside your agent[/] (the chat, NOT this terminal), type:")
+        console.print("       [cyan]/oc-new <task description>[/]   ← starts a new change")
+        console.print("     [dim]Or from THIS terminal, without an agent:[/dim]")
+        console.print('       [cyan]opencontext oc-new start "<task description>"[/]')
+        console.print("       [cyan]opencontext oc-new status[/]     ← check run state")
     else:
-        console.print("  [cyan]opencontext harness run --workflow sdd --task 'Your task'[/]")
-    console.print("  [cyan]opencontext config wizard[/]")
+        console.print("  2) [bold]From this terminal[/] (your agent doesn't support /oc-new):")
+        console.print("       [cyan]opencontext harness run --workflow sdd --task 'Your task'[/]")
+    console.print()
+    console.print("[bold]Other useful commands (this terminal):[/]")
     console.print("  [cyan]opencontext pack . --query 'Explain this code' --copy[/]")
+    console.print("  [cyan]opencontext config wizard[/]")
     console.print()
     try:
         import yaml as _yaml
