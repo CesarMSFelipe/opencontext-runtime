@@ -93,6 +93,91 @@ _NESTING_TYPES: dict[str, frozenset[str]] = {
     "python": _PYTHON_NESTING_TYPES,
 }
 
+# Declaration node types the GENERIC extractor turns into symbols, per language.
+# Used for grammars that load but have no dedicated ``_extract_*`` (c, cpp,
+# ruby, csharp, and future kotlin/swift). Each set was derived empirically from
+# the installed grammar's parse tree, not guessed — the node names differ per
+# language (C/C++ use ``*_specifier``/``function_definition`` with the name
+# buried in a ``declarator`` subtree; C# uses ``*_declaration``; Ruby uses bare
+# ``class``/``module``/``method``). Symbols are the priority; edges are optional
+# for these languages and the generic path emits none.
+_GENERIC_SYMBOL_NODE_TYPES: dict[str, frozenset[str]] = {
+    "c": frozenset(
+        {
+            "function_definition",
+            "struct_specifier",
+            "enum_specifier",
+            "union_specifier",
+            "type_definition",
+        }
+    ),
+    "cpp": frozenset(
+        {
+            "function_definition",
+            "class_specifier",
+            "struct_specifier",
+            "enum_specifier",
+            "union_specifier",
+            "namespace_definition",
+        }
+    ),
+    "ruby": frozenset({"class", "module", "method", "singleton_method"}),
+    "csharp": frozenset(
+        {
+            "class_declaration",
+            "struct_declaration",
+            "interface_declaration",
+            "enum_declaration",
+            "record_declaration",
+            "method_declaration",
+            "constructor_declaration",
+            "namespace_declaration",
+        }
+    ),
+    # Best-effort for grammars that may be added later; safe supersets that
+    # match the common tree-sitter naming. Absent a loaded grammar these are
+    # simply never consulted.
+    "kotlin": frozenset(
+        {"class_declaration", "object_declaration", "function_declaration"}
+    ),
+    "swift": frozenset(
+        {
+            "class_declaration",
+            "protocol_declaration",
+            "function_declaration",
+            "init_declaration",
+        }
+    ),
+}
+
+# Generic node type -> emitted symbol ``kind``. Anything not listed falls back
+# to a coarse class/function guess in :meth:`TreeSitterParser._extract_generic`.
+_GENERIC_KIND_BY_TYPE: dict[str, str] = {
+    "function_definition": "function",
+    "function_declaration": "function",
+    "method_declaration": "method",
+    "constructor_declaration": "method",
+    "method": "method",
+    "singleton_method": "method",
+    "init_declaration": "method",
+    "struct_specifier": "struct",
+    "struct_declaration": "struct",
+    "class_specifier": "class",
+    "class_declaration": "class",
+    "object_declaration": "class",
+    "record_declaration": "class",
+    "interface_declaration": "interface",
+    "protocol_declaration": "interface",
+    "enum_specifier": "enum",
+    "enum_declaration": "enum",
+    "union_specifier": "struct",
+    "type_definition": "type",
+    "namespace_definition": "namespace",
+    "namespace_declaration": "namespace",
+    "module": "module",
+    "class": "class",
+}
+
 
 @dataclass
 class ParsedSymbol:
@@ -192,10 +277,16 @@ class TreeSitterParser:
             self._load_language("go", "tree_sitter_go")
             self._load_language("rust", "tree_sitter_rust")
             self._load_language("java", "tree_sitter_java")
-            self._load_language("php", "tree_sitter_php")
+            # tree_sitter_php exposes language_php() (and language_php_only()),
+            # NOT language() — the combined-grammar wheel keys the frontend by
+            # variant, so the default fn_name silently fails to load PHP.
+            self._load_language("php", "tree_sitter_php", fn_name="language_php")
             self._load_language("c", "tree_sitter_c")
             self._load_language("cpp", "tree_sitter_cpp")
             self._load_language("ruby", "tree_sitter_ruby")
+            # tree_sitter_c_sharp ships under the module name tree_sitter_c_sharp
+            # (dist "tree-sitter-c-sharp"); LANGUAGE_EXTENSIONS maps .cs -> "csharp".
+            self._load_language("csharp", "tree_sitter_c_sharp")
             self._load_language("swift", "tree_sitter_swift")
             self._load_language("kotlin", "tree_sitter_kotlin")
 
@@ -477,6 +568,13 @@ class TreeSitterParser:
             symbols, edges = self._extract_java(file_path, content, root)
         elif language == "php":
             symbols, edges = self._extract_php(file_path, content, root)
+        else:
+            # Any loaded grammar WITHOUT a dedicated extractor (c, cpp, ruby,
+            # csharp, kotlin, swift, …) falls through here. Before this fallback
+            # existed the parse returned empty symbols/edges — a loaded grammar
+            # that indexed nothing. The generic extractor pulls declaration-level
+            # symbols so these languages are searchable in the KG.
+            symbols, edges = self._extract_generic(file_path, content, root, language)
 
         return symbols, edges
 
@@ -901,6 +999,86 @@ class TreeSitterParser:
         walk(root)
         return symbols, edges
 
+    def _extract_generic(
+        self, file_path: str, content: str, root: Any, language: str
+    ) -> tuple[list[ParsedSymbol], list[ParsedEdge]]:
+        """Extract declaration-level symbols for a loaded grammar with no dedicated extractor.
+
+        Handles c, cpp, ruby, csharp (and best-effort kotlin/swift): walks the
+        AST and, for every node whose type is in the language's
+        :data:`_GENERIC_SYMBOL_NODE_TYPES` set, emits a :class:`ParsedSymbol`.
+        The name is read from the ``name`` field where the grammar provides it
+        (ruby/csharp/cpp-classes/c-structs); C/C++ functions and C ``typedef``s
+        keep the name inside a ``declarator`` subtree, so this descends to the
+        innermost identifier as a fallback. Edges are intentionally not produced
+        for generic languages — symbols are the priority and a wrong/partial
+        edge is worse than none. Container tracking is a lightweight stack of the
+        enclosing type/namespace so methods get a sensible ``container``.
+        """
+
+        symbol_types = _GENERIC_SYMBOL_NODE_TYPES.get(language)
+        if not symbol_types:
+            return [], []
+
+        symbols: list[ParsedSymbol] = []
+        # A node type is "container-like" if it can hold nested declarations.
+        container_kinds = {"class", "struct", "interface", "enum", "namespace", "module"}
+
+        def descend_declarator(node: Any) -> str | None:
+            """Innermost identifier of a C/C++ declarator subtree (function/typedef name)."""
+            if node.type in ("identifier", "field_identifier", "type_identifier"):
+                return str(node.text.decode("utf-8", errors="replace"))
+            for child in node.children:
+                found = descend_declarator(child)
+                if found is not None:
+                    return found
+            return None
+
+        def name_of(node: Any) -> str | None:
+            name_node = node.child_by_field_name("name")
+            if name_node is not None:
+                return str(name_node.text.decode("utf-8", errors="replace"))
+            declarator = node.child_by_field_name("declarator")
+            if declarator is not None:
+                return descend_declarator(declarator)
+            return None
+
+        def walk(node: Any, container: str | None) -> None:
+            next_container = container
+            if node.type in symbol_types:
+                name = name_of(node)
+                if name:
+                    kind = _GENERIC_KIND_BY_TYPE.get(node.type, "symbol")
+                    # A bare function inside a container reads as a method; a
+                    # container-kind node becomes the container for its children.
+                    if kind == "function" and container is not None:
+                        kind = "method"
+                    symbols.append(
+                        ParsedSymbol(
+                            name=name,
+                            kind=kind,
+                            line=node.start_point[0] + 1,
+                            column=node.start_point[1],
+                            end_line=node.end_point[0] + 1,
+                            container=container if kind in ("method", "function") else None,
+                            docstring=None,
+                            signature=None,
+                            # Ruby/C: leading-underscore/lowercase isn't a
+                            # reliable export signal across these langs, so index
+                            # every top-level declaration as visible.
+                            is_exported=True,
+                            content_snippet=self._snippet(node),
+                        )
+                    )
+                    if kind in container_kinds and name:
+                        next_container = name
+
+            for child in node.children:
+                walk(child, next_container)
+
+        walk(root, None)
+        return symbols, []
+
     def _snippet(self, node: Any, max_chars: int = 400) -> str | None:
         """Return up to max_chars of the node's raw source text for FTS indexing."""
         try:
@@ -962,21 +1140,30 @@ class TreeSitterParser:
         edges: list[ParsedEdge] = []
 
         def walk_calls(child: Any) -> None:
-            # Python uses "call"; JS/TS/Go/Rust use "call_expression"
-            if child.type in ("call", "call_expression"):
+            # Python uses "call"; JS/TS/Go/Rust use "call_expression"; PHP uses
+            # "function_call_expression" — all expose the callee on a "function"
+            # field, so they share one path.
+            if child.type in ("call", "call_expression", "function_call_expression"):
                 func_node = child.child_by_field_name("function")
                 if func_node:
                     target = func_node.text.decode("utf-8")
                     receiver: str | None = None
                     attr = target
                     # Decompose attribute/method targets: receiver.attr(...)
-                    if func_node.type in ("attribute", "member_expression", "field_expression"):
+                    if func_node.type in (
+                        "attribute",
+                        "member_expression",
+                        "field_expression",
+                        "member_access_expression",  # PHP $obj->method(...)
+                    ):
                         obj_node = func_node.child_by_field_name(
                             "object"
                         ) or func_node.child_by_field_name("argument")
-                        attr_node = func_node.child_by_field_name(
-                            "attribute"
-                        ) or func_node.child_by_field_name("field")
+                        attr_node = (
+                            func_node.child_by_field_name("attribute")
+                            or func_node.child_by_field_name("field")
+                            or func_node.child_by_field_name("name")  # PHP member access
+                        )
                         if attr_node is not None:
                             attr = attr_node.text.decode("utf-8")
                         if obj_node is not None:
@@ -984,6 +1171,27 @@ class TreeSitterParser:
                     if "." in attr and receiver is None:
                         # Fallback decomposition from the raw dotted text.
                         receiver, attr = attr.rsplit(".", 1)
+                    edges.append(
+                        ParsedEdge(
+                            source_name=caller_name,
+                            target_name=target,
+                            kind="calls",
+                            call_site_line=child.start_point[0] + 1,
+                            attr=attr,
+                            receiver=receiver,
+                        )
+                    )
+
+            # Java "method_invocation" is shaped differently: the callee is on a
+            # "name" field and the (optional) receiver on an "object" field, with
+            # no single "function" node — so it gets its own branch.
+            elif child.type == "method_invocation":
+                name_node = child.child_by_field_name("name")
+                if name_node is not None:
+                    attr = name_node.text.decode("utf-8")
+                    obj_node = child.child_by_field_name("object")
+                    receiver = obj_node.text.decode("utf-8") if obj_node is not None else None
+                    target = f"{receiver}.{attr}" if receiver else attr
                     edges.append(
                         ParsedEdge(
                             source_name=caller_name,
