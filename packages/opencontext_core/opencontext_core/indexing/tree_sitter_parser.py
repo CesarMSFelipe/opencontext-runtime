@@ -137,9 +137,7 @@ _GENERIC_SYMBOL_NODE_TYPES: dict[str, frozenset[str]] = {
     # Best-effort for grammars that may be added later; safe supersets that
     # match the common tree-sitter naming. Absent a loaded grammar these are
     # simply never consulted.
-    "kotlin": frozenset(
-        {"class_declaration", "object_declaration", "function_declaration"}
-    ),
+    "kotlin": frozenset({"class_declaration", "object_declaration", "function_declaration"}),
     "swift": frozenset(
         {
             "class_declaration",

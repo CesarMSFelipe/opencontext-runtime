@@ -286,9 +286,7 @@ class TestGenericExtractorParseMode:
         parser = TreeSitterParser()
         _require(parser, language)
         result = parser.parse_file_status(path, source)
-        assert result.mode == "tree_sitter", (
-            f"{language} parsed in degraded mode: {result.mode}"
-        )
+        assert result.mode == "tree_sitter", f"{language} parsed in degraded mode: {result.mode}"
         assert len(result.symbols) > 0
 
 

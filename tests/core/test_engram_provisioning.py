@@ -21,10 +21,13 @@ def test_plan_install_returns_install_plan() -> None:
     assert isinstance(plan.detected, bool)
 
 
-def test_no_pm_degrades_gracefully() -> None:
-    """Engram has no automated install; plan_install returns None command with guidance."""
+def test_no_go_toolchain_degrades_gracefully() -> None:
+    """No Engram and no Go toolchain → None command with actionable guidance."""
     provisioner = EngramProvisioner()
-    with patch.object(provisioner, "detect", return_value=False):
+    with (
+        patch.object(provisioner, "detect", return_value=False),
+        patch("shutil.which", return_value=None),
+    ):
         plan = provisioner.plan_install()
     assert plan.install_command is None
     assert plan.detected is False
@@ -40,19 +43,30 @@ def test_already_detected_returns_detected_plan() -> None:
     assert "already" in plan.message.lower()
 
 
-def test_install_when_not_detected_returns_plan_with_guidance() -> None:
+def test_install_when_not_detected_no_go_returns_plan_with_guidance() -> None:
     """install() with no automated command returns a plan with a helpful message."""
     provisioner = EngramProvisioner()
-    with patch.object(provisioner, "detect", return_value=False):
+    with (
+        patch.object(provisioner, "detect", return_value=False),
+        patch("shutil.which", return_value=None),
+    ):
         plan = provisioner.install(yes=False)
     assert plan.install_command is None
     assert plan.detected is False
-    assert "plugin" in plan.message.lower() or "install" in plan.message.lower()
+    assert "install" in plan.message.lower()
 
 
-def test_install_plan_has_no_automated_command() -> None:
-    """No automated install path exists; users install via Claude Code plugin mechanism."""
+def test_install_command_uses_go_when_available() -> None:
+    """With a Go toolchain, the automated install is `go install` of the Engram module."""
     provisioner = EngramProvisioner()
-    with patch.object(provisioner, "detect", return_value=False):
+    with (
+        patch.object(provisioner, "detect", return_value=False),
+        patch("shutil.which", return_value="/usr/bin/go"),
+    ):
         plan = provisioner.plan_install()
-    assert plan.install_command is None
+    assert plan.install_command == [
+        "go",
+        "install",
+        "github.com/Gentleman-Programming/engram/cmd/engram@latest",
+    ]
+    assert plan.detected is False

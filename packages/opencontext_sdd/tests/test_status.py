@@ -15,7 +15,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from opencontext_sdd.status import Resolve, Status, parse_verify_report
 
 # ---------------------------------------------------------------------------
