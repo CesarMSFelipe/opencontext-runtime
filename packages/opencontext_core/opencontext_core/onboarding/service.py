@@ -59,7 +59,7 @@ class OnboardingOptions:
     # picks); presets (cheap/hybrid/premium) route per phase, tunable per persona.
     sdd_model_profile: str = "default"
     orchestrator_profile: str = "multi-phase"
-    memory_provider: str = "local"
+    memory_provider: str = "auto"
     setup_mcp: bool = False
     force_agent_files: bool = False
     token_budget_per_phase: int | None = None
