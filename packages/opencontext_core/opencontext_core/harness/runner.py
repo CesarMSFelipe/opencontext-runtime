@@ -133,8 +133,17 @@ class HarnessState:
         self.trace_ids: list[str] = []
         self.warnings: list[str] = []
         # Verified context pack rendered by the explore phase, fed to later phases'
-        # executor prompts so the model works from retrieved evidence.
+        # executor prompts so the model works from retrieved evidence. Middle phases
+        # REBUILD this each phase as explore_pack + that phase's fresh KG block, so it
+        # holds the explore base + at most ONE phase's KG block at a time.
         self.context_pack: str = ""
+        # Stable snapshot of the explore-phase context pack, captured ONCE before any
+        # middle-phase KG fold. Middle phases compose their fresh KG block onto THIS
+        # base (never onto the accumulated context_pack), so prior phases' KG blocks
+        # do not stack across the pipeline — the per-phase executor context stays
+        # bounded by explore_base + one phase block (the anti-bloat invariant). None
+        # until the first fold (or ExplorePhase) captures it.
+        self.explore_pack: str | None = None
         # Rendered recalled-memory block for the phase currently running, set by
         # the runner's PhaseMemoryGateway.recall() before each phase and appended
         # into the middle phases' executor context (run_phase_executor). Empty
@@ -1010,6 +1019,15 @@ class HarnessRunner:
             # concrete file edits so ApplyPhase writes real source instead of a
             # scaffold. forbidden_paths + rollback in ApplyPhase guard the write.
             if phase_id == "apply" and not state.apply_edits and state.delegate is not None:
+                # Rodaja 3: fold ONE fresh, KG-grounded pack derived from the task
+                # list's symbols/files into state.context_pack (capped to the apply
+                # budget) BEFORE codegen, so the model sees task-scoped evidence.
+                from opencontext_core.harness.phases import _fold_apply_kg_context
+
+                _apply_cfg = self.config.phases.get("apply")
+                _fold_apply_kg_context(
+                    state, _apply_cfg.budget_tokens if _apply_cfg is not None else 12000
+                )
                 state.apply_edits = self._generate_apply_edits(state)
 
             phase_obj = self._build_phase(phase_id, budget_mode)
