@@ -16,6 +16,7 @@ Layering (doc 58): L9 composing L1 ids, L2 stores, L8 brain (via port), L6 regis
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -51,6 +52,7 @@ from opencontext_core.oc_flow.models import (
 )
 from opencontext_core.oc_flow.nodes import (
     NODE_HANDLERS,
+    OC_FLOW_NODE_TO_PHASE,
     DeterministicNodeExecutor,
     NodeExecutor,
     OCFlowContext,
@@ -84,12 +86,28 @@ from opencontext_core.tdd.red_green import (
     runner_available,
 )
 
+_log = logging.getLogger(__name__)
+
 # Safety cap on total node steps (the diagnosis attempt budget already bounds the
 # loop; this guards against any pathological graph cycle).
 _MAX_STEPS = 50
 
 # Event family per node event (doc 59 §Event hierarchy).
 _NODE_EVENT_FAMILY = "workflow"
+
+# Node outcomes that mark a mapped node as FAILED for phase-memory persistence
+# (Sub-PR 2): a blocking inspection failure or an exhausted/blocked path is a real
+# failure that should land a FAILURE-layer record so a future run's failure boost
+# can activate. A recoverable inspection failure is NOT terminal (the diagnose loop
+# may still fix it), so it is not counted here.
+_FAILURE_OUTCOMES = frozenset(
+    {
+        NodeOutcome.FAILED_BLOCKING,
+        NodeOutcome.ATTEMPTS_EXHAUSTED,
+        NodeOutcome.POLICY_BLOCKED,
+        NodeOutcome.NEEDS_CONTEXT,
+    }
+)
 
 
 @dataclass
@@ -320,6 +338,20 @@ class OCFlowRunner:
         self._compression_enabled = False
         self._compression_config: Any | None = None
         self._resolve_memory_and_compression()
+        # PhaseMemoryGateway (Sub-PR 2): the ONE shared service that recalls a
+        # mapped middle node's PHASE_MEMORY_POLICY read_layers before it runs and
+        # persists its write_layers after — enforcing the policy on OC Flow's
+        # previously memory-blind middle nodes (plan/mutate/local_inspection) via
+        # the SAME gateway the SDD harness uses. Built from the resolved store so
+        # it is backend-transparent and no-ops on a Null/absent store; never raises
+        # (memory is optional). gather_context/consolidation keep their own memory
+        # and are NOT mapped, so the gateway never touches them.
+        from opencontext_core.memory.phase_gateway import PhaseMemoryGateway
+
+        self._phase_gateway = PhaseMemoryGateway(
+            self._memory_store,
+            approval_required=self._memory_approval_required,
+        )
         self._tdd_mode = self._resolve_tdd_mode()
 
     def _resolve_tdd_mode(self) -> str:
@@ -907,10 +939,44 @@ class OCFlowRunner:
             if handler is None:
                 raise OCFlowError(f"no handler for node {node!r}")
 
+            # Phase-policy memory (Sub-PR 2): for a MAPPED memory-blind middle node,
+            # recall the mapped phase's read_layers BEFORE the handler and render
+            # them onto ctx.phase_memory so the mapped handler folds prior-run
+            # knowledge into its executor/model context. Unmapped nodes (incl.
+            # gather_context/consolidation, which own their memory) resolve to None
+            # and skip the gateway entirely. Wrapped: a memory error never blocks
+            # the node (memory is optional).
+            mapped_phase = OC_FLOW_NODE_TO_PHASE.get(node)
+            ctx.phase_memory = ""
+            if mapped_phase is not None:
+                try:
+                    recall = self._phase_gateway.recall(mapped_phase, ctx.task)
+                    ctx.phase_memory = recall.render()
+                except Exception as exc:  # pragma: no cover - defensive; memory is optional
+                    _log.debug("oc-flow phase-recall failed (node=%s): %s", node, exc)
+
             self._emit_event(events, "node.started", node, {})
             result = handler(ctx)
             visited.append(node)
             guard.charge(node, result.llm_tokens)
+
+            # Persist the mapped phase's write_layers AFTER the node ran (apply's
+            # EPISODIC+FAILURE for mutate, verify's EPISODIC for local_inspection,
+            # etc.). A node that produced no honest completion is recorded as a
+            # FAILED outcome so the recent-failure boost can activate. Wrapped:
+            # memory is optional and must never break the node loop.
+            if mapped_phase is not None:
+                try:
+                    node_failed = result.outcome in _FAILURE_OUTCOMES
+                    self._phase_gateway.persist(
+                        mapped_phase,
+                        self._phase_gateway.outcome(
+                            content=self._node_memory_content(node, ctx, result),
+                            failed=node_failed,
+                        ),
+                    )
+                except Exception as exc:  # pragma: no cover - defensive; memory is optional
+                    _log.debug("oc-flow phase-persist failed (node=%s): %s", node, exc)
             self._emit_event(
                 events,
                 "node.completed",
@@ -1268,6 +1334,20 @@ class OCFlowRunner:
                 "data": data,
             }
         )
+
+    @staticmethod
+    def _node_memory_content(node: str, ctx: OCFlowContext, result: Any) -> str:
+        """Compose the compact prose the gateway persists for a mapped middle node.
+
+        Kept small and self-describing (mirrors the harness _phase_memory_content):
+        the node, its typed outcome, the task, and the changed-file count when the
+        node produced edits. This is what a LATER run recalls, not the artifact body.
+        """
+        outcome = getattr(getattr(result, "outcome", None), "value", "unknown")
+        parts = [f"node={node}", f"outcome={outcome}", f"task={ctx.task}"]
+        if ctx.changed_files:
+            parts.append(f"changed_files={len(ctx.changed_files)}")
+        return " ".join(str(p) for p in parts)
 
     def _config_valid(self) -> bool:
         """True when the project config resolves cleanly (defaults count as valid)."""
