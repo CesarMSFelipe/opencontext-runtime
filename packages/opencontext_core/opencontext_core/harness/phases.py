@@ -1345,6 +1345,13 @@ def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
             health_block = _render_health_for_design(snapshot)
             if health_block:
                 base_context = f"{base_context}\n\n{health_block}" if base_context else health_block
+    # Recalled memory (rendered by the runner's PhaseMemoryGateway before this
+    # phase ran) is appended LAST so the model sees prior-run knowledge for this
+    # phase alongside the artifact + pack. Empty string when memory recalled
+    # nothing, so it adds no blank section.
+    phase_memory = getattr(state, "phase_memory", "") or ""
+    if phase_memory:
+        base_context = f"{base_context}\n\n{phase_memory}" if base_context else phase_memory
     context = {
         "task": getattr(state, "task", ""),
         "phase": phase,

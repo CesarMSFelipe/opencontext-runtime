@@ -125,6 +125,11 @@ class HarnessState:
         # Verified context pack rendered by the explore phase, fed to later phases'
         # executor prompts so the model works from retrieved evidence.
         self.context_pack: str = ""
+        # Rendered recalled-memory block for the phase currently running, set by
+        # the runner's PhaseMemoryGateway.recall() before each phase and appended
+        # into the middle phases' executor context (run_phase_executor). Empty
+        # string when memory is disabled or the phase recalled nothing.
+        self.phase_memory: str = ""
         # Concrete file edits produced by the executor for ApplyPhase to write.
         # List of {"path": ..., "content": ...} dicts (or FileEdit instances).
         self.apply_edits: list[Any] = []
@@ -178,8 +183,14 @@ class HarnessRunner:
         config: HarnessConfig | None = None,
         *,
         llm_gateway: Any = None,
+        memory_store: Any = None,
     ) -> None:
         self.root = root.resolve()
+        # Optional explicit agent memory store injection. When provided it wins
+        # over the config-resolved store below (tests inject a recording store;
+        # a host may inject a pre-built CompositeMemoryStore). None → resolve
+        # from project config as usual.
+        self._memory_store_override = memory_store
         self.config = config or HarnessConfig.from_yaml_file(
             resolve_workspace_path(root, StorageMode.local) / "harness.yaml"
         )
@@ -242,10 +253,32 @@ class HarnessRunner:
                 storage_path = resolve_storage_path(self.root, StorageMode.local)
             storage_path.mkdir(parents=True, exist_ok=True)
             self._memory_store = BackendFactory.create_memory_store(oc_config, storage_path)
+            # Global memory-approval posture (MEMORY_CONTRACT). When true the
+            # PhaseMemoryGateway persists write-layer records as candidate+stale
+            # ("needs review") regardless of the per-phase policy default.
+            self._memory_approval_required = bool(
+                getattr(getattr(oc_config, "memory", None), "approval_required", False)
+            )
         except Exception:
             from opencontext_core.memory.agent import NullAgentMemoryStore
 
             self._memory_store = NullAgentMemoryStore()
+            self._memory_approval_required = False
+
+        # An explicit injected store wins over the config-resolved one.
+        if self._memory_store_override is not None:
+            self._memory_store = self._memory_store_override
+
+        # PhaseMemoryGateway: the ONE shared service that recalls memory before
+        # each phase and persists after, enforcing PHASE_MEMORY_POLICY. Built
+        # from the resolved store so it is backend-transparent (no-ops on a Null
+        # store). Never raises here — memory is optional.
+        from opencontext_core.memory.phase_gateway import PhaseMemoryGateway
+
+        self._phase_gateway = PhaseMemoryGateway(
+            self._memory_store,
+            approval_required=self._memory_approval_required,
+        )
 
     def create_run(self, workflow: str, task: str) -> HarnessState:
         """Create a new run with a unique run_id.
@@ -875,6 +908,18 @@ class HarnessRunner:
                 )
                 continue
 
+            # Recall memory for this phase BEFORE it runs, over the layers its
+            # PHASE_MEMORY_POLICY declares. The rendered block is injected onto
+            # state.phase_memory so the work-producing phases' executor prompts
+            # see it (run_phase_executor). Wrapped so a memory failure — or an
+            # unknown phase — never blocks the phase (memory is optional).
+            state.phase_memory = ""
+            try:
+                recall = self._phase_gateway.recall(phase_id, state.task)
+                state.phase_memory = recall.render()
+            except Exception as exc:  # pragma: no cover - defensive; memory is optional
+                _log.debug("phase-memory recall failed (phase=%s): %s", phase_id, exc)
+
             # Evaluate ConfidenceGate before running the phase
             phase_config = self.config.phases.get(phase_id)
             if phase_config is not None and phase_config.confidence_threshold is not None:
@@ -976,6 +1021,22 @@ class HarnessRunner:
                 state.warnings.append(f"{phase_id}: {exc}")
 
             results.append(result)
+
+            # Persist this phase's outcome into the layers its PHASE_MEMORY_POLICY
+            # declares, AFTER it ran. require_approval maps onto the native record
+            # lifecycle inside the gateway (active vs candidate+stale). A FAILED
+            # phase also lands a FAILURE-layer record so a future run's recent-
+            # failure boost can activate. Wrapped: memory is optional.
+            try:
+                phase_failed = result.status == GateStatus.FAILED
+                outcome = self._phase_gateway.outcome(
+                    content=self._phase_memory_content(state, phase_id, result),
+                    failed=phase_failed,
+                )
+                self._phase_gateway.persist(phase_id, outcome)
+            except Exception as exc:  # pragma: no cover - defensive; memory is optional
+                _log.debug("phase-memory persist failed (phase=%s): %s", phase_id, exc)
+
             state.ledgers.extend([result.ledger] if result.ledger else [])
             state.gates.extend(result.gates)
             state.artifacts.extend(result.artifacts)
@@ -2435,6 +2496,21 @@ class HarnessRunner:
         )
         if result.status in (GateStatus.FAILED, GateStatus.WARNING):
             state.warnings.append("risk-gated judgment surfaced findings (advisory)")
+
+    @staticmethod
+    def _phase_memory_content(state: HarnessState, phase_id: str, result: Any) -> str:
+        """Compose the compact prose payload the gateway persists for a phase.
+
+        Keeps the write-layer record small and self-describing: the phase, its
+        gate status, the task, and the first artifact path when present. This is
+        what a later run recalls, not the full artifact body.
+        """
+        status = getattr(getattr(result, "status", None), "value", "unknown")
+        parts = [f"phase={phase_id}", f"status={status}", f"task={state.task}"]
+        artifacts = getattr(result, "artifacts", None) or []
+        if artifacts:
+            parts.append(f"artifact={getattr(artifacts[0], 'path', '')}")
+        return " ".join(str(p) for p in parts)
 
     def _build_phase(self, phase_id: str, budget_mode: BudgetMode) -> HarnessPhase | None:
         """Build a phase instance by ID."""
