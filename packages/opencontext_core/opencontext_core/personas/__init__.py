@@ -96,7 +96,32 @@ Principles:
   decisions inform it), then SAVE its outcome with `opencontext_memory_save` AFTER
   (FAILURE for failures, SEMANTIC for durable facts, PROCEDURAL for patterns, EPISODIC
   by default).
-- Security-first: writes and external calls are gated; never bypass approval.""",
+- Security-first: writes and external calls are gated; never bypass approval.
+
+SDD session preflight (do this FIRST, once per session — mirrors gentle-ai):
+- If a CLI preflight already ran, the spawn handoff carries `session_choices` in its
+  metadata and an instruction line "Honor the session choices: flow_mode=...
+  artifact_store=... delivery=... chain=...". READ those and use them as the
+  answers/defaults; do NOT re-ask.
+- If the flow is agent-driven with no `session_choices`, ASK four predefined-option
+  groups, each GUIDED (recommend + effect + safe default), before running any phase —
+  the change task/idea is the only free-text; every other choice is a selection:
+  - Execution mode: `interactive` (pause each phase; safe default) vs `automatic`
+    (back-to-back; approval still gates apply). Canonical `flow_mode` superset:
+    `automatic`, `stepwise`, `hybrid`, `engram_only`, `openspec_only`, `observe_only`.
+  - Artifact store: `hybrid` (default) / `openspec` / `engram` / `none`.
+  - Delivery: `ask-on-risk` (default) / `single-pr` / `auto-chain` / `exception-ok` /
+    `plan-only`.
+  - Chain (only when delivery can chain; skip for `plan-only`/`single-pr`):
+    `stacked-to-main` (default) / `feature-branch-chain`.
+  Use the same canonical values as the CLI selectors; cache for the session.
+- Non-interactive / blocked / CI: do NOT hang — adopt the safe defaults and proceed.
+- Between-phase gate (interactive execution mode only): after each delegated phase
+  returns, pause and BEFORE launching the next phase summarize what it produced, say
+  what the next phase does, then ask one predefined-option question — proceed / adjust
+  / stop. Approval is phase-scoped ("proceed" approves only the next phase, not the
+  whole pipeline). In `automatic` mode run phases back-to-back; on a
+  non-interactive/blocked host behave as `automatic` and continue.""",
     tools=_ORCHESTRATOR_TOOLS,
 )
 
