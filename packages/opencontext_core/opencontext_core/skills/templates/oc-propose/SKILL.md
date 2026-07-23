@@ -33,11 +33,29 @@ written intent + scope before a spec.
    predefined-option product questions, then confirm the assumptions.
 4. State the problem, the proposed approach, the affected areas (from
    `opencontext_impact`), and what is explicitly out of scope.
-5. Write the proposal under `openspec/changes/<change-id>/proposal.md`.
-6. **Save the proposal decisions.** Call `opencontext_memory_save` with the chosen
-   approach and non-goals, `key: change:<slug>`, `tags: [change:<slug>]`,
-   `layer: SEMANTIC`.
-7. Hand off to `oc-spec`.
+5. **Route the artifact per the session `artifact_store`** (see below) — write the
+   `openspec/changes/<change-id>/proposal.md` file, `opencontext_memory_save`, both, or
+   neither, according to the mode.
+6. Hand off to `oc-spec`.
+
+## Honor the session artifact_store
+
+Read the session's `artifact_store` from the spawn handoff
+(the *"Honor the session choices: … artifact_store=…"* instruction line the
+CLI/preflight emits). Route this
+phase's artifact accordingly; if the value is missing/unknown, use the `hybrid`
+default. Do NOT hang waiting for it.
+
+- `hybrid` (default) — write `openspec/changes/<change-id>/proposal.md` AND
+  `opencontext_memory_save` the chosen approach and non-goals (`key: change:<slug>`,
+  `tags: [change:<slug>]`, `layer: SEMANTIC`).
+- `openspec` — write the `openspec/changes/<change-id>/proposal.md` file only; skip the
+  memory save.
+- `engram` — `opencontext_memory_save` only (same key/tags/layer as `hybrid`); write
+  NO openspec file.
+- `none` — return the proposal inline to the caller; write no file and save nothing.
+  The `## Proposal question round` non-interactive fallback below still applies to the
+  inline artifact.
 
 ## Proposal question round (do this BEFORE writing the proposal)
 

@@ -37,14 +37,45 @@ Use after a proposal/spec/design exists and the tasks are ready to implement.
    - `strict` — write a failing test BEFORE the implementation.
    - `ask` — ask the developer before skipping tests.
    - `off` — code-first is allowed.
-5. Make surgical edits scoped to the current task; use `opencontext_impact`
+5. **Honor the session `delivery`/`chain`** when splitting the implementation into
+   PRs (see below) — implement within the PR boundary the session's delivery
+   strategy set, using work-unit commits and the ~400-line review budget.
+6. Make surgical edits scoped to the current task; use `opencontext_impact`
    before touching shared symbols.
-6. Write artifacts to `.opencontext/runs/<run_id>/artifacts/`.
-7. **Save what was implemented.** Call `opencontext_memory_save` with the edits made
+7. Write artifacts to `.opencontext/runs/<run_id>/artifacts/`.
+8. **Save what was implemented.** Call `opencontext_memory_save` with the edits made
    and any pattern worth reusing, `key: change:<slug>`, `tags: [change:<slug>]`,
    `layer: PROCEDURAL` (use FAILURE for a test/gate that failed and how it was
    fixed).
-8. Hand off to `oc-verify` once the tasks are implemented.
+9. Hand off to `oc-verify` once the tasks are implemented.
+
+## Honor the session delivery / chain strategy
+
+Read the session's `delivery` and `chain` from the spawn handoff
+(the *"Honor the session choices: … delivery=… chain=…"* instruction line the
+CLI/preflight emits). Split the implementation into PRs accordingly; if the values
+are missing/unknown, use
+the `ask-on-risk` + `stacked-to-main` defaults. Do NOT hang waiting for them. Load the
+shipped **`chained-pr`** skill (`opencontext_sdd/skills/chained-pr/SKILL.md`) and
+**`work-unit-commits`** skill for the exact split/commit rules before creating any
+multi-PR breakdown; if that skill is unavailable, apply the inline rule below.
+
+- Keep the change a **single PR** when it stays at/under ~400 changed lines and is
+  focused, regardless of `delivery`. Use one work-unit commit per task; each commit
+  leaves the suite green.
+- `delivery=plan-only` or `delivery=single-pr` — do NOT chain: land one PR.
+  `single-pr` over ~400 lines proceeds only with a recorded `size:exception`.
+- `delivery=ask-on-risk` (default) — if the work exceeds ~400 lines or touches a hot
+  path (auth/update/security/payments), STOP at the split boundary and surface the
+  chained-PR recommendation to the orchestrator instead of landing one oversized PR.
+- `delivery=auto-chain` — implement only the next autonomous slice as one PR (clear
+  start/finish/verification/rollback boundary), then hand back for the next slice.
+- `delivery=exception-ok` — a single oversized PR is acceptable this run; proceed under
+  `size:exception`.
+- `chain=stacked-to-main` (default) — each sliced PR targets `main` in order.
+- `chain=feature-branch-chain` — child PR #1 targets the tracker/feature branch; each
+  later child targets the immediate previous PR branch; only the tracker merges to
+  `main`.
 
 ## Rules
 

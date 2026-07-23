@@ -29,11 +29,27 @@ After `oc-propose` is approved, before design.
    `change:<slug>` to load the proposal's intent and scope before writing the spec.
 3. Write requirements with RFC 2119 keywords (MUST/SHALL/SHOULD) and
    GIVEN/WHEN/THEN scenarios.
-4. Save the delta spec under `openspec/changes/<change-id>/spec.md`.
-5. **Save the requirements summary.** Call `opencontext_memory_save` with the key
-   requirements/scenarios, `key: change:<slug>`, `tags: [change:<slug>]`,
-   `layer: SEMANTIC`.
-6. Hand off to `oc-design`.
+4. **Route the artifact per the session `artifact_store`** (see below) — write the
+   `openspec/changes/<change-id>/spec.md` file, `opencontext_memory_save`, both, or
+   neither, according to the mode.
+5. Hand off to `oc-design`.
+
+## Honor the session artifact_store
+
+Read the session's `artifact_store` from the spawn handoff
+(the *"Honor the session choices: … artifact_store=…"* instruction line the
+CLI/preflight emits). Route this
+phase's artifact accordingly; if the value is missing/unknown, use the `hybrid`
+default. Do NOT hang waiting for it.
+
+- `hybrid` (default) — write `openspec/changes/<change-id>/spec.md` AND
+  `opencontext_memory_save` the requirements summary (`key: change:<slug>`,
+  `tags: [change:<slug>]`, `layer: SEMANTIC`).
+- `openspec` — write the `openspec/changes/<change-id>/spec.md` file only; skip the
+  memory save.
+- `engram` — `opencontext_memory_save` only (same key/tags/layer as `hybrid`); write
+  NO openspec file.
+- `none` — return the spec inline to the caller; write no file and save nothing.
 
 ## Rules
 

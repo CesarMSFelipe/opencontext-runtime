@@ -33,11 +33,27 @@ After `oc-spec`, before tasks.
 4. Decide architecture, components, files to create/modify, data flow, and the
    testing strategy. Make trade-offs explicit; prefer the simplest design that
    meets the spec.
-5. Save under `openspec/changes/<change-id>/design.md`.
-6. **Save the design decisions.** Call `opencontext_memory_save` with the chosen
-   architecture and the patterns to follow, `key: change:<slug>`,
-   `tags: [change:<slug>]`, `layer: PROCEDURAL` (it is a pattern the builder
-   must follow). Hand off to `oc-tasks`.
+5. **Route the artifact per the session `artifact_store`** (see below) — write the
+   `openspec/changes/<change-id>/design.md` file, `opencontext_memory_save`, both, or
+   neither, according to the mode. Hand off to `oc-tasks`.
+
+## Honor the session artifact_store
+
+Read the session's `artifact_store` from the spawn handoff
+(the *"Honor the session choices: … artifact_store=…"* instruction line the
+CLI/preflight emits). Route this
+phase's artifact accordingly; if the value is missing/unknown, use the `hybrid`
+default. Do NOT hang waiting for it.
+
+- `hybrid` (default) — write `openspec/changes/<change-id>/design.md` AND
+  `opencontext_memory_save` the design decisions (`key: change:<slug>`,
+  `tags: [change:<slug>]`, `layer: PROCEDURAL` — it is a pattern the builder must
+  follow).
+- `openspec` — write the `openspec/changes/<change-id>/design.md` file only; skip the
+  memory save.
+- `engram` — `opencontext_memory_save` only (same key/tags/layer as `hybrid`); write
+  NO openspec file.
+- `none` — return the design inline to the caller; write no file and save nothing.
 
 ## Rules
 

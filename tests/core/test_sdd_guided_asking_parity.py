@@ -325,3 +325,177 @@ class TestOcNewCommandCarriesParity:
     def test_command_promises_non_interactive_fallback(self) -> None:
         body = _oc_new_command_body().lower()
         assert "never hangs" in body or "never hang" in body
+
+
+# --------------------------------------------------------------------------- #
+# Slice 3 — the SDD skills HONOR the session choices.
+#
+# Slices 1-2 made the choices RIDE the handoff and made the agent ASK/READ them.
+# Slice 3 makes the artifact-producing skills ACT on them: (1) route their artifact
+# per the session ``artifact_store``, and (2) size/split work per the session
+# ``delivery``/``chain`` strategy. The instruction lives in the SHIPPED SOURCE
+# templates, so these tests assert the CONTRACT is present in that source.
+# --------------------------------------------------------------------------- #
+
+
+# The doc-producing phase skills that must route their artifact per artifact_store.
+ARTIFACT_STORE_SKILLS: tuple[str, ...] = (
+    "oc-propose",
+    "oc-spec",
+    "oc-design",
+    "oc-tasks",
+    "oc-archive",
+)
+
+# The phase skills that must honor delivery/chain when sizing/splitting into PRs.
+DELIVERY_CHAIN_SKILLS: tuple[str, ...] = ("oc-tasks", "oc-apply")
+
+
+class TestArtifactStoreRouting:
+    """Each doc-producing skill routes its artifact per the session ``artifact_store``.
+
+    The CURRENT behaviour (write the openspec file AND ``opencontext_memory_save``) is
+    the ``hybrid``/``openspec`` path and must stay present; only ``engram``/``none``
+    change behaviour. The routing is a CONDITIONAL on the mode, not a rewrite.
+    """
+
+    def test_every_doc_skill_reads_the_session_artifact_store(self) -> None:
+        for skill in ARTIFACT_STORE_SKILLS:
+            content = _read_template(skill)
+            assert "artifact_store" in content, (
+                f"{skill}: must READ the session's artifact_store to route its artifact"
+            )
+            # It reads it from the slice-1 handoff line, not by re-asking.
+            assert "Honor the session choices" in content, (
+                f"{skill}: must read artifact_store from the 'Honor the session choices' "
+                f"handoff line, not re-ask"
+            )
+
+    def test_every_doc_skill_names_all_four_modes(self) -> None:
+        for skill in ARTIFACT_STORE_SKILLS:
+            content = _read_template(skill)
+            for value in ARTIFACT_STORE_VALUES:
+                assert value in content, (
+                    f"{skill}: artifact_store routing must handle the canonical '{value}' mode"
+                )
+
+    def test_hybrid_is_the_default_and_writes_file_and_memory(self) -> None:
+        for skill in ARTIFACT_STORE_SKILLS:
+            content = _read_template(skill)
+            lower = content.lower()
+            # hybrid stays the default so an unknown/missing value keeps current behaviour.
+            assert "hybrid" in content and "default" in lower, (
+                f"{skill}: hybrid must be the default artifact_store mode"
+            )
+            # The hybrid path keeps BOTH the openspec write and the memory save.
+            assert "opencontext_memory_save" in content, (
+                f"{skill}: hybrid must still call opencontext_memory_save"
+            )
+
+    def test_file_based_modes_still_write_the_openspec_artifact(self) -> None:
+        # oc-archive syncs specs into openspec rather than writing a single change file,
+        # so it is asserted separately below; the four change-doc phases write the file.
+        for skill in ("oc-propose", "oc-spec", "oc-design", "oc-tasks"):
+            content = _read_template(skill)
+            assert "openspec/changes/<change-id>/" in content, (
+                f"{skill}: hybrid/openspec modes must still write the "
+                f"openspec/changes/<change-id>/ artifact (current behaviour preserved)"
+            )
+
+    def test_archive_file_mode_syncs_openspec_specs(self) -> None:
+        content = _read_template("oc-archive")
+        assert "openspec" in content.lower(), (
+            "oc-archive hybrid/openspec modes must still sync the change spec into openspec"
+        )
+
+    def test_engram_mode_saves_memory_and_writes_no_openspec_file(self) -> None:
+        for skill in ARTIFACT_STORE_SKILLS:
+            content = _read_template(skill).lower()
+            # The engram branch must exist and must say "no openspec file".
+            assert "engram" in content, f"{skill}: must define the engram-only routing branch"
+            assert "no openspec" in content, (
+                f"{skill}: engram mode must write NO openspec file (memory only)"
+            )
+
+    def test_none_mode_returns_inline_and_writes_nothing(self) -> None:
+        for skill in ARTIFACT_STORE_SKILLS:
+            content = _read_template(skill).lower()
+            assert "inline" in content, (
+                f"{skill}: none mode must return the artifact inline (write nothing)"
+            )
+
+    def test_routing_does_not_hang_when_value_unknown(self) -> None:
+        for skill in ARTIFACT_STORE_SKILLS:
+            content = _read_template(skill).lower()
+            assert "missing/unknown" in content or "missing" in content, (
+                f"{skill}: must default (not hang) when artifact_store is missing/unknown"
+            )
+
+
+class TestDeliveryChainHonoring:
+    """``oc-tasks`` and ``oc-apply`` honor delivery/chain when sizing/splitting PRs."""
+
+    def test_reads_the_session_delivery_and_chain(self) -> None:
+        for skill in DELIVERY_CHAIN_SKILLS:
+            content = _read_template(skill)
+            assert "delivery" in content and "chain" in content, (
+                f"{skill}: must READ the session's delivery and chain strategy"
+            )
+            assert "Honor the session choices" in content, (
+                f"{skill}: must read delivery/chain from the 'Honor the session choices' "
+                f"handoff line"
+            )
+
+    def test_names_the_canonical_delivery_values(self) -> None:
+        for skill in DELIVERY_CHAIN_SKILLS:
+            content = _read_template(skill)
+            for value in DELIVERY_VALUES:
+                assert value in content, (
+                    f"{skill}: delivery honoring must handle the canonical '{value}' strategy"
+                )
+
+    def test_names_the_canonical_chain_values(self) -> None:
+        for skill in DELIVERY_CHAIN_SKILLS:
+            content = _read_template(skill)
+            for value in CHAIN_VALUES:
+                assert value in content, (
+                    f"{skill}: chain honoring must handle the canonical '{value}' strategy"
+                )
+
+    def test_honors_the_400_line_review_budget(self) -> None:
+        for skill in DELIVERY_CHAIN_SKILLS:
+            content = _read_template(skill)
+            assert "400" in content, (
+                f"{skill}: PR sizing must honor the ~400-line review budget intent"
+            )
+
+    def test_plan_only_and_single_pr_do_not_chain(self) -> None:
+        for skill in DELIVERY_CHAIN_SKILLS:
+            content = _read_template(skill).lower()
+            assert "plan-only" in content and "single-pr" in content, (
+                f"{skill}: must name plan-only and single-pr"
+            )
+            # Both must be stated as NON-chaining paths.
+            assert "do not chain" in content or "not chain" in content, (
+                f"{skill}: plan-only/single-pr must be stated as no-chaining paths"
+            )
+
+    def test_references_the_shipped_chained_pr_skill(self) -> None:
+        # The repo ships a chained-PR skill under opencontext_sdd; the honoring must
+        # reference it (and work-unit-commits) rather than reinventing the split rule.
+        for skill in DELIVERY_CHAIN_SKILLS:
+            content = _read_template(skill)
+            assert "chained-pr" in content, (
+                f"{skill}: must reference the shipped chained-pr skill for the split rule"
+            )
+            assert "work-unit-commits" in content, (
+                f"{skill}: must reference the work-unit-commits skill for commit boundaries"
+            )
+
+    def test_falls_back_to_defaults_and_does_not_hang(self) -> None:
+        for skill in DELIVERY_CHAIN_SKILLS:
+            content = _read_template(skill).lower()
+            # ask-on-risk + stacked-to-main are the safe defaults when unknown.
+            assert "ask-on-risk" in content and "stacked-to-main" in content, (
+                f"{skill}: must default to ask-on-risk + stacked-to-main when unknown"
+            )
