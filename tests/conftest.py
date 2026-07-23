@@ -3,7 +3,19 @@
 Some tests configure agents or run installers that write instruction files
 (AGENTS.md, CLAUDE.md, ...) relative to the working directory. This guard ensures
 no test can leave a write in the repository's own root files: it snapshots them
-around every test and restores any that changed.
+at session start and restores any that changed at session end, so tests never
+permanently pollute the developer's repo-root instruction files.
+
+The snapshot/restore runs ONCE GLOBALLY — on the xdist controller (or the single
+process in a serial run), never on a worker. HOME isolation cannot cover the
+repo root: it is a fixed path shared across all xdist workers. A per-test
+snapshot would therefore race — a sibling worker writing a repo-root file (via a
+``root="."`` / cwd-relative default) mid-run could be captured by another
+worker's concurrent snapshot as its baseline and then "restored", corrupting the
+file and flaking the suite. Snapshotting once on the controller before any worker
+spawns, and restoring once after every worker has exited, removes the per-test
+snapshot entirely, so there is nothing to race while the files are still restored
+to their pre-suite state. See ``pytest_configure``/``pytest_unconfigure`` below.
 """
 
 from __future__ import annotations
@@ -139,15 +151,21 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _GUARDED = ("AGENTS.md", "CLAUDE.md", "GEMINI.md", "QWEN.md", "opencontext.yaml")
 _LOG = os.environ.get("OPENCONTEXT_POLLUTION_LOG")
 
+# Session snapshot of the repo-root instruction files, taken ONCE on the
+# controller (see module docstring). ``None`` for a file means it did not exist
+# at snapshot time and must be removed again if a test created it.
+_REPO_ROOT_SNAPSHOT: dict[str, str | None] = {}
 
-@pytest.fixture(autouse=True)
-def _protect_repo_root_files(request: pytest.FixtureRequest):
-    before = {
+
+def _snapshot_repo_root_files() -> dict[str, str | None]:
+    return {
         name: (path.read_text(encoding="utf-8") if (path := _REPO_ROOT / name).exists() else None)
         for name in _GUARDED
     }
-    yield
-    for name, prior in before.items():
+
+
+def _restore_repo_root_files(snapshot: dict[str, str | None]) -> None:
+    for name, prior in snapshot.items():
         path = _REPO_ROOT / name
         now = path.read_text(encoding="utf-8") if path.exists() else None
         if now == prior:
@@ -158,4 +176,35 @@ def _protect_repo_root_files(request: pytest.FixtureRequest):
             path.write_text(prior, encoding="utf-8")
         if _LOG:
             with open(_LOG, "a", encoding="utf-8") as handle:
-                handle.write(f"{request.node.nodeid} -> {name}\n")
+                handle.write(f"session -> {name}\n")
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Snapshot the repo-root instruction files ONCE, before any test runs.
+
+    Guarded to the controller / serial process (``_xdist_worker_id() is None``):
+    under ``-n auto`` this fires exactly once, strictly before any worker is
+    spawned, so the baseline is captured before any test can write a repo-root
+    file. Workers never snapshot, so there is no per-test snapshot to race.
+    """
+    if _xdist_worker_id() is not None:
+        return
+    _REPO_ROOT_SNAPSHOT.clear()
+    _REPO_ROOT_SNAPSHOT.update(_snapshot_repo_root_files())
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Restore the repo-root instruction files ONCE, after every test has run.
+
+    Guarded to the controller / serial process: under ``-n auto`` this fires
+    exactly once, strictly after every worker has finished (and therefore after
+    all repo-root writes), so any test-induced change is reverted to the
+    pre-suite state. Restoring the snapshot instead of asserting keeps benign
+    pre-existing writes from turning unrelated tests into hard failures.
+    """
+    if _xdist_worker_id() is not None:
+        return
+    if not _REPO_ROOT_SNAPSHOT:
+        return
+    _restore_repo_root_files(_REPO_ROOT_SNAPSHOT)
+    _REPO_ROOT_SNAPSHOT.clear()
