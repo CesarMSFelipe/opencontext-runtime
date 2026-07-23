@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from opencontext_core.memory.capture import CaptureEventKind, MemoryCaptureService
 from opencontext_core.memory.project_memory import ProjectMemory
 from opencontext_core.memory.stores import (
     LocalProjectMemoryStore,
@@ -24,10 +23,8 @@ if TYPE_CHECKING:
     from opencontext_core.memory.provider import MemoryProvider, MemoryStoreProvider
 
 __all__ = [
-    "CaptureEventKind",
     "KgLinkPort",
     "LocalProjectMemoryStore",
-    "MemoryCaptureService",
     "MemoryHarness",
     "MemoryProvider",
     "MemoryStoreProvider",

@@ -73,6 +73,16 @@ from opencontext_core.workflow.delegation_validator import (
 _log = logging.getLogger(__name__)
 _delegation_validator = DelegationValidator()
 
+# Phases the shared PhaseMemoryGateway must NOT drive: they already own their
+# memory. ExplorePhase recalls prior memory itself (folded into
+# state.context_pack) and ArchivePhase harvests/persists via the MemoryHarvester,
+# so wrapping them in the gateway too would double-recall / double-persist. This
+# is the symmetric mirror of OC Flow excluding gather_context / consolidation from
+# OC_FLOW_NODE_TO_PHASE (see oc_flow/nodes.py). The runner checks this set before
+# every gateway recall/persist call; the gateway's own recall/persist logic is
+# unchanged (still valid for any phase when called directly).
+_MEMORY_GATEWAY_EXCLUDED_PHASES: frozenset[str] = frozenset({"explore", "archive"})
+
 # Verb lists for the NOT_APPLIED mutation-detection heuristic.
 # Imported once at module load; the fallback (None) is handled inline.
 # Declared as Optional so the None-fallback branch is reachable to mypy.
@@ -913,12 +923,15 @@ class HarnessRunner:
             # state.phase_memory so the work-producing phases' executor prompts
             # see it (run_phase_executor). Wrapped so a memory failure — or an
             # unknown phase — never blocks the phase (memory is optional).
+            # explore/archive are excluded: they own their bespoke recall/harvest
+            # (mirrors OC Flow excluding gather_context/consolidation).
             state.phase_memory = ""
-            try:
-                recall = self._phase_gateway.recall(phase_id, state.task)
-                state.phase_memory = recall.render()
-            except Exception as exc:  # pragma: no cover - defensive; memory is optional
-                _log.debug("phase-memory recall failed (phase=%s): %s", phase_id, exc)
+            if phase_id not in _MEMORY_GATEWAY_EXCLUDED_PHASES:
+                try:
+                    recall = self._phase_gateway.recall(phase_id, state.task)
+                    state.phase_memory = recall.render()
+                except Exception as exc:  # pragma: no cover - defensive; memory is optional
+                    _log.debug("phase-memory recall failed (phase=%s): %s", phase_id, exc)
 
             # Evaluate ConfidenceGate before running the phase
             phase_config = self.config.phases.get(phase_id)
@@ -1027,15 +1040,18 @@ class HarnessRunner:
             # lifecycle inside the gateway (active vs candidate+stale). A FAILED
             # phase also lands a FAILURE-layer record so a future run's recent-
             # failure boost can activate. Wrapped: memory is optional.
-            try:
-                phase_failed = result.status == GateStatus.FAILED
-                outcome = self._phase_gateway.outcome(
-                    content=self._phase_memory_content(state, phase_id, result),
-                    failed=phase_failed,
-                )
-                self._phase_gateway.persist(phase_id, outcome)
-            except Exception as exc:  # pragma: no cover - defensive; memory is optional
-                _log.debug("phase-memory persist failed (phase=%s): %s", phase_id, exc)
+            # explore/archive are excluded: archive already harvests/persists and
+            # explore owns its recall (mirrors OC Flow gather_context/consolidation).
+            if phase_id not in _MEMORY_GATEWAY_EXCLUDED_PHASES:
+                try:
+                    phase_failed = result.status == GateStatus.FAILED
+                    outcome = self._phase_gateway.outcome(
+                        content=self._phase_memory_content(state, phase_id, result),
+                        failed=phase_failed,
+                    )
+                    self._phase_gateway.persist(phase_id, outcome)
+                except Exception as exc:  # pragma: no cover - defensive; memory is optional
+                    _log.debug("phase-memory persist failed (phase=%s): %s", phase_id, exc)
 
             state.ledgers.extend([result.ledger] if result.ledger else [])
             state.gates.extend(result.gates)

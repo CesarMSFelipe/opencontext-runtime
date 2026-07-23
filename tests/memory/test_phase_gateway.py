@@ -12,8 +12,9 @@ persists after, honouring the (previously metadata-only) ``phase_policy``:
 - An unknown phase and a Null store are safe no-ops (never raise).
 
 These tests use a recording fake that implements ONLY the real store port
-surface (``search(query, scope, limit)`` + ``write(record)``); they must not
-depend on ``MemoryCaptureService`` (which calls a non-existent ``.store()``).
+surface (``search(query, scope, limit)`` + ``write(record)``). The gateway is the
+sole phase-boundary memory path; it superseded and retired the old
+``MemoryCaptureService`` (removed), which called a non-existent ``.store()``.
 """
 
 from __future__ import annotations

@@ -1,14 +1,25 @@
-"""Every SDD phase recalls its read_layers and persists its write_layers.
+"""Every MIDDLE SDD phase recalls its read_layers and persists its write_layers.
 
-Group B of the memory-wiring slice: the HarnessRunner phase loop must drive a
-shared ``PhaseMemoryGateway`` so that — for a real ``sdd`` run — each phase in
-PHASE_ORDER issues a recall over exactly its declared ``read_layers`` and a
-write over exactly its declared ``write_layers`` (from ``PHASE_MEMORY_POLICY``).
-It must also inject the recalled memory into the middle phases' executor
-``context`` so the model prompts actually see it.
+Group B of the memory-wiring slice: the HarnessRunner phase loop drives a shared
+``PhaseMemoryGateway`` so that — for a real ``sdd`` run — each MIDDLE phase issues
+a recall over exactly its declared ``read_layers`` and a write over exactly its
+declared ``write_layers`` (from ``PHASE_MEMORY_POLICY``). It must also inject the
+recalled memory into the middle phases' executor ``context`` so the model prompts
+actually see it.
+
+``explore`` and ``archive`` are DELIBERATELY EXCLUDED from the gateway
+(``runner._MEMORY_GATEWAY_EXCLUDED_PHASES``): ExplorePhase already recalls prior
+memory itself (folded into ``state.context_pack`` via a ``scope=None`` whole-store
+search) and ArchivePhase already harvests/persists via the ``MemoryHarvester``.
+Wrapping them in the gateway too would double-recall / double-persist — the exact
+symmetric case OC Flow handles by excluding ``gather_context``/``consolidation``
+from ``OC_FLOW_NODE_TO_PHASE``.
 
 The store is injected via ``HarnessRunner(..., memory_store=<recording fake>)``;
-the fake implements ONLY the real port surface (``search`` + ``write``).
+the fake implements ONLY the real port surface (``search`` + ``write``). The
+gateway is the only consumer that searches with a CONCRETE layer scope, so scoped
+searches attribute cleanly to gateway recall; ExplorePhase's bespoke recall and
+the harvester always sweep with ``scope=None``.
 """
 
 from __future__ import annotations
@@ -19,13 +30,16 @@ from typing import Any
 
 from opencontext_core.agents.sdd_orchestrator import PHASE_ORDER
 from opencontext_core.harness.models import BudgetMode
-from opencontext_core.harness.runner import HarnessRunner
+from opencontext_core.harness.runner import _MEMORY_GATEWAY_EXCLUDED_PHASES, HarnessRunner
 from opencontext_core.memory.phase_policy import PHASE_MEMORY_POLICY
 from opencontext_core.models.agent_memory import (
     DecayPolicy,
     MemoryLayer,
     MemoryRecord,
 )
+
+# The phases the gateway drives: PHASE_ORDER minus the ones that own their memory.
+MIDDLE_PHASES = [p for p in PHASE_ORDER if p not in _MEMORY_GATEWAY_EXCLUDED_PHASES]
 
 
 @dataclass
@@ -92,80 +106,138 @@ class CapturingDelegate:
         return _R()
 
 
+def _scoped_searches(store: RecordingStore) -> list[MemoryLayer]:
+    """Gateway searches only — the ones carrying a concrete layer scope."""
+    return [scope for (_q, scope, _lim) in store.searches if scope is not None]
+
+
 def _searched_layers(store: RecordingStore) -> set[MemoryLayer]:
-    return {scope for (_q, scope, _lim) in store.searches if scope is not None}
+    return {scope for scope in _scoped_searches(store)}
 
 
-def test_each_sdd_phase_recalls_its_read_layers(tmp_path: Path) -> None:
+def _run_sdd(store: RecordingStore, tmp_path: Path, task: str) -> None:
     (tmp_path / "auth.py").write_text("def auth(u, p):\n    return u == p\n", encoding="utf-8")
-    store = RecordingStore()
     runner = HarnessRunner(root=tmp_path, memory_store=store)
+    runner.run("sdd", task, BudgetMode.WARN, approved_phases={"apply"})
 
-    runner.run(
-        "sdd",
-        "improve authenticate password hashing",
-        BudgetMode.WARN,
-        approved_phases={"apply"},
-    )
 
-    # Aggregate: the union of everything searched must cover each phase's read
-    # layers. (Layers overlap across phases, so we verify coverage of the union
-    # of all PHASE_ORDER read layers rather than per-call attribution here.)
+def test_explore_and_archive_are_excluded_from_the_gateway() -> None:
+    """The exclusion set is the symmetric mirror of OC Flow's gather/consolidation."""
+    assert _MEMORY_GATEWAY_EXCLUDED_PHASES == frozenset({"explore", "archive"})
+    # These two are real phases (present in PHASE_ORDER) — the exclusion is meaningful.
+    assert "explore" in PHASE_ORDER
+    assert "archive" in PHASE_ORDER
+
+
+def test_each_middle_phase_recalls_its_read_layers(tmp_path: Path) -> None:
+    store = RecordingStore()
+    _run_sdd(store, tmp_path, "improve authenticate password hashing")
+
+    # The union of everything the GATEWAY searched (scoped) must cover each MIDDLE
+    # phase's read layers — and must NOT be driven by explore/archive.
     expected_read_union: set[MemoryLayer] = set()
-    for phase in PHASE_ORDER:
+    for phase in MIDDLE_PHASES:
         expected_read_union |= set(PHASE_MEMORY_POLICY[phase].read_layers)
 
     searched = _searched_layers(store)
     missing = expected_read_union - searched
-    assert not missing, f"phases never recalled these read layers: {missing}"
+    assert not missing, f"middle phases never recalled these read layers: {missing}"
 
 
-def test_each_sdd_phase_persists_its_write_layers(tmp_path: Path) -> None:
-    (tmp_path / "auth.py").write_text("def auth(u, p):\n    return u == p\n", encoding="utf-8")
+def test_each_middle_phase_persists_its_write_layers(tmp_path: Path) -> None:
     store = RecordingStore()
-    runner = HarnessRunner(root=tmp_path, memory_store=store)
-
-    runner.run(
-        "sdd",
-        "improve authenticate password hashing",
-        BudgetMode.WARN,
-        approved_phases={"apply"},
-    )
+    _run_sdd(store, tmp_path, "improve authenticate password hashing")
 
     expected_write_union: set[MemoryLayer] = set()
-    for phase in PHASE_ORDER:
+    for phase in MIDDLE_PHASES:
         expected_write_union |= set(PHASE_MEMORY_POLICY[phase].write_layers)
 
-    written = {rec.layer for rec in store.writes}
-    missing = expected_write_union - written
-    assert not missing, f"phases never persisted these write layers: {missing}"
+    # Gateway writes carry the phase name in structured metadata; the harvester's
+    # archive writes do not go through the gateway. We assert the gateway covered
+    # every middle write layer.
+    gateway_written = {
+        rec.layer
+        for rec in store.writes
+        if isinstance(rec.structured, dict) and rec.structured.get("phase") in MIDDLE_PHASES
+    }
+    missing = expected_write_union - gateway_written
+    assert not missing, f"middle phases never persisted these write layers: {missing}"
 
 
-def test_recall_count_matches_read_layer_cardinality(tmp_path: Path) -> None:
-    """The gateway must issue one SCOPED search per declared read layer per phase.
-
-    The runner's memory store is shared: ExplorePhase's own recall and the
-    harvester also hit it, but ALWAYS with ``scope=None`` (whole-store sweeps).
-    The PhaseMemoryGateway is the only consumer that searches with a concrete
-    layer scope, so the count of scoped searches must equal the sum of
-    ``read_layers`` over PHASE_ORDER (each phase runs once in a fresh sdd run).
-    """
-    (tmp_path / "auth.py").write_text("def auth(u, p):\n    return u == p\n", encoding="utf-8")
+def test_gateway_never_recalls_or_persists_for_explore_or_archive(tmp_path: Path) -> None:
+    """No gateway write may be tagged explore/archive; those phases own their memory."""
     store = RecordingStore()
-    runner = HarnessRunner(root=tmp_path, memory_store=store)
+    _run_sdd(store, tmp_path, "improve authenticate hashing")
 
-    runner.run(
-        "sdd",
-        "improve authenticate hashing",
-        BudgetMode.WARN,
-        approved_phases={"apply"},
+    tagged_phases = {
+        rec.structured.get("phase")
+        for rec in store.writes
+        if isinstance(rec.structured, dict) and rec.structured.get("phase") is not None
+    }
+    assert "explore" not in tagged_phases, "gateway double-persisted explore (it owns its memory)"
+    assert "archive" not in tagged_phases, "gateway double-persisted archive (it owns its memory)"
+
+
+def test_recall_count_matches_middle_read_layer_cardinality(tmp_path: Path) -> None:
+    """The gateway issues one SCOPED search per declared read layer per MIDDLE phase.
+
+    ExplorePhase's own recall and the harvester also hit the shared store, but
+    ALWAYS with ``scope=None`` (whole-store sweeps). The gateway is the only
+    consumer that searches with a concrete layer scope, so the count of scoped
+    searches must equal the sum of ``read_layers`` over the MIDDLE phases —
+    explore's read layers are excluded because explore is not driven by the
+    gateway.
+    """
+    store = RecordingStore()
+    _run_sdd(store, tmp_path, "improve authenticate hashing")
+
+    scoped = _scoped_searches(store)
+    expected_searches = sum(len(PHASE_MEMORY_POLICY[p].read_layers) for p in MIDDLE_PHASES)
+    assert len(scoped) == expected_searches, (
+        f"expected {expected_searches} scoped searches (sum of read_layers over the "
+        f"MIDDLE phases {MIDDLE_PHASES}), got {len(scoped)}"
     )
 
-    scoped = [scope for (_q, scope, _lim) in store.searches if scope is not None]
-    expected_searches = sum(len(PHASE_MEMORY_POLICY[p].read_layers) for p in PHASE_ORDER)
-    assert len(scoped) == expected_searches, (
-        f"expected {expected_searches} scoped searches (sum of read_layers over "
-        f"PHASE_ORDER), got {len(scoped)}"
+
+def test_explore_bespoke_recall_still_runs_exactly_once(tmp_path: Path) -> None:
+    """ExplorePhase keeps its ONE unscoped recall; the gateway does not add a second.
+
+    Because explore is excluded from the gateway, the only ``scope=None`` search
+    over ``state.task`` in the whole run is ExplorePhase's bespoke fold-into-
+    context recall. There must be exactly one such whole-store sweep of the task
+    query (no gateway double, no harvester query — the harvester reads run
+    artifacts, not the raw task string via ``search``).
+    """
+    store = RecordingStore()
+    task = "improve authenticate password hashing"
+    _run_sdd(store, tmp_path, task)
+
+    explore_recalls = [
+        (q, scope) for (q, scope, _lim) in store.searches if scope is None and q == task
+    ]
+    assert len(explore_recalls) == 1, (
+        "explore's bespoke recall must issue exactly ONE unscoped search of the task "
+        f"(gateway must not double it); got {len(explore_recalls)}: {explore_recalls}"
+    )
+
+
+def test_archive_bespoke_persist_still_occurs(tmp_path: Path) -> None:
+    """ArchivePhase's harvester still writes; the gateway does not persist archive.
+
+    A successful sdd run harvests at archive. Those writes are NOT gateway writes
+    (no ``phase`` structured tag), proving archive keeps its bespoke persistence
+    while being excluded from the gateway.
+    """
+    store = RecordingStore()
+    _run_sdd(store, tmp_path, "improve authenticate hashing")
+
+    non_gateway_writes = [
+        rec
+        for rec in store.writes
+        if not (isinstance(rec.structured, dict) and rec.structured.get("phase"))
+    ]
+    assert non_gateway_writes, (
+        "archive's bespoke harvester persist did not occur (no non-gateway writes seen)"
     )
 
 

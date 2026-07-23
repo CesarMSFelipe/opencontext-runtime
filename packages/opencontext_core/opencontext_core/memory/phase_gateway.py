@@ -35,10 +35,10 @@ Port surface: recall uses ONLY the real
 :class:`opencontext_core.memory.harness.MemoryHarness` (``harness.write(record)``),
 the single sanctioned durable writer (book OC-MEMORY-001 §8/§10, enforced by the
 ``no-direct-memory-writes`` fitness guard) — so every phase record still gets the
-conflict-check + KG-link tail. This gateway deliberately does NOT reuse
-:class:`~opencontext_core.memory.capture.MemoryCaptureService`, whose ``capture()``
-calls ``store.store(...)`` — a method the real store does not expose (the real
-writer surface is ``write``).
+conflict-check + KG-link tail. This gateway is the sole phase-boundary memory path;
+it superseded and retired the old ``MemoryCaptureService`` (removed), whose
+``capture()`` called a non-existent ``store.store(...)`` (the real writer surface is
+``write``).
 
 Safety ("todo funcione sí o sí"): an unknown phase name is a no-op, a ``None`` /
 ``NullAgentMemoryStore`` backend is a no-op, and any store exception is swallowed

@@ -26,7 +26,6 @@ from opencontext_core.workflow.phase_result import PhaseResultEnvelope
 if TYPE_CHECKING:
     from opencontext_core.agentic.budget_controller import BudgetDecision
     from opencontext_core.agentic.config import AgenticFlowConfig
-    from opencontext_core.memory.capture import MemoryCaptureService
     from opencontext_core.memory.phase_policy import PhaseMemoryPolicy
     from opencontext_core.workflow.leases import AgentCoordinationStore
 
@@ -57,11 +56,9 @@ class OcNewConductor:
     def __init__(
         self,
         root: Path | str = ".",
-        capture_service: MemoryCaptureService | None = None,
     ) -> None:
         self.root = Path(root)
         self.store = OcNewStore(self.root)
-        self._capture_service = capture_service
         self.__coord_store: object | None = None  # backing attr for lazy property
 
     @property
@@ -222,13 +219,6 @@ class OcNewConductor:
         state = self._replace_phase(state, updated)
         if blocked_reason is not None:
             state = state.model_copy(update={"blocked_reason": blocked_reason})
-
-        # NOTE: Emit capture events for phase boundaries.
-        self._emit_phase_capture(
-            phase_name=phase_name,
-            run_id=run_id,
-            status=status,
-        )
 
         self._record_phase_budget(
             run_id,
@@ -464,12 +454,6 @@ class OcNewConductor:
                 "write_layers": [layer.value for layer in policy.write_layers] if policy else [],
                 "key": state.identity.memory_key,
             }
-
-            # NOTE: Emit PHASE_START capture event before returning spawn action.
-            self._emit_phase_start_capture(
-                phase_name=phase_def.name,
-                run_id=state.identity.run_id,
-            )
 
             # NOTE: REQ-2 — acquire a lease and emit STARTED for this phase.
             # Fail-soft: any exception is logged and swallowed; it must NEVER
@@ -803,55 +787,6 @@ class OcNewConductor:
         ledger = ledger.add_phase(entry)
         ledger_path.parent.mkdir(parents=True, exist_ok=True)
         ledger_path.write_text(json.dumps(ledger.model_dump(), indent=2))
-
-    def _emit_phase_capture(
-        self,
-        phase_name: str,
-        run_id: str,
-        status: str,
-    ) -> None:
-        """Emit PHASE_END (and optionally VERIFY_FAILURE) capture events."""
-        if self._capture_service is None:
-            return
-        try:
-            from opencontext_core.memory.capture import CaptureEventKind, MemoryCaptureEvent
-
-            end_event = MemoryCaptureEvent(
-                kind=CaptureEventKind.PHASE_END,
-                phase=phase_name,
-                run_id=run_id,
-                content=f"Phase {phase_name} completed with status={status}",
-            )
-            self._capture_service.capture(end_event)
-
-            if status == "failed":
-                failure_event = MemoryCaptureEvent(
-                    kind=CaptureEventKind.VERIFY_FAILURE,
-                    phase=phase_name,
-                    run_id=run_id,
-                    content=f"Phase {phase_name} failed",
-                )
-                self._capture_service.capture(failure_event)
-        except Exception:
-            # NOTE: Capture errors must never interrupt the main conductor flow.
-            pass
-
-    def _emit_phase_start_capture(self, phase_name: str, run_id: str) -> None:
-        """Emit PHASE_START capture event."""
-        if self._capture_service is None:
-            return
-        try:
-            from opencontext_core.memory.capture import CaptureEventKind, MemoryCaptureEvent
-
-            start_event = MemoryCaptureEvent(
-                kind=CaptureEventKind.PHASE_START,
-                phase=phase_name,
-                run_id=run_id,
-                content=f"Phase {phase_name} starting",
-            )
-            self._capture_service.capture(start_event)
-        except Exception:
-            pass
 
     def _replace_phase(self, state: OcNewRunState, updated: PhaseState) -> OcNewRunState:
         return state.model_copy(

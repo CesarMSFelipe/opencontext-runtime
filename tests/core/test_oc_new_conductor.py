@@ -215,6 +215,59 @@ def test_mark_done_raises_when_envelope_missing(tmp_path):
         )
 
 
+def test_memory_capture_service_is_retired() -> None:
+    """The dead, miswired MemoryCaptureService is gone (superseded by PhaseMemoryGateway).
+
+    It called ``store.store(...)`` — a method the real AgentMemoryStore never
+    exposes (its writer surface is ``write``) — and was only ever injected into
+    this deprecated conductor by tests, never in a production path. Retiring it
+    removes a latent AttributeError footgun. The capture module must no longer be
+    importable, and it must not be re-exported from the memory package.
+    """
+    import importlib
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("opencontext_core.memory.capture")
+
+    import opencontext_core.memory as memory_pkg
+
+    assert not hasattr(memory_pkg, "MemoryCaptureService")
+    assert "MemoryCaptureService" not in getattr(memory_pkg, "__all__", [])
+
+
+def test_conductor_no_longer_accepts_capture_service(tmp_path) -> None:
+    """The conductor's capture wiring is removed; the run loop still advances.
+
+    ``mark_done``/``_advance`` used to emit capture events; after retirement they
+    must keep driving the flow with no capture hook. Passing a ``capture_service``
+    kwarg must now be a TypeError (the parameter no longer exists).
+    """
+    with pytest.raises(TypeError):
+        OcNewConductor(tmp_path, capture_service=object())  # type: ignore[call-arg]
+
+    # The deprecated conductor still starts and advances a phase without capture.
+    conductor = OcNewConductor(tmp_path)
+    assert not hasattr(conductor, "_capture_service")
+    state = conductor.start("Add graph health command")
+
+    run_dir = tmp_path / ".opencontext" / "runs" / state.identity.run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "explore.artifact.json").write_text("{}", encoding="utf-8")
+    _write_envelope(
+        run_dir,
+        state.identity.run_id,
+        state.identity.change_id,
+        "explore",
+        artifacts=["explore.artifact.json"],
+    )
+    state = conductor.mark_done(
+        state.identity.run_id,
+        "explore",
+        artifact_paths=["explore.artifact.json"],
+    )
+    assert state.current_phase == "propose"
+
+
 @pytest.fixture(autouse=True)
 def _legacy_local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
     """This module asserts the legacy in-repo layout; pin local storage mode."""
