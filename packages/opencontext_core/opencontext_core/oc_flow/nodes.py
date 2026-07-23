@@ -33,6 +33,7 @@ from opencontext_core.agents.executor import (
     ApplyEdit,
     ApplyOperation,
     apply_edit,
+    tdd_codegen_note,
 )
 from opencontext_core.config import SecurityMode
 from opencontext_core.errors import ProviderError
@@ -442,6 +443,8 @@ class ProviderBackedNodeExecutor:
         is_allowed_path: Any = None,
         max_output_tokens: int = 6000,
         approval_granted: bool | None = None,
+        tdd_mode: str = "ask",
+        tdd_red_exit_code: int | None = None,
     ) -> None:
         self._gateway = gateway
         self._root = Path(root)
@@ -451,6 +454,12 @@ class ProviderBackedNodeExecutor:
         self._is_allowed_path = is_allowed_path
         self._max_output_tokens = max_output_tokens
         self._fallback = DeterministicNodeExecutor()
+        # Rodaja 5 A: the strict-TDD posture (and the pre-mutation RED exit code,
+        # when the runner already proved a failing test) so ``mutate`` can surface
+        # the TDD line in code-gen. node_mutate refreshes these from ctx before
+        # each call; the defaults keep a directly-constructed executor unchanged.
+        self.tdd_mode = tdd_mode
+        self.tdd_red_exit_code = tdd_red_exit_code
         self.block_reason: str | None = None
         # Policy-gate flags read by node_mutate (RUN_STATE_CONTRACT): approval
         # resolves from the project config unless the caller decides explicitly.
@@ -484,9 +493,13 @@ class ProviderBackedNodeExecutor:
         self.policy_approval_required = False
         # Minimal-diff signal FIRST (OC Flow does not use the SDD Builder persona,
         # so this is the RUNTIME channel that reaches mutate code-gen), then the
-        # output-format instruction and the task. Additive — negligible tokens.
+        # TDD posture line (strict-only), the output-format instruction, and the
+        # task. Additive — negligible tokens; empty TDD line for ask/off.
+        red_proven = self.tdd_red_exit_code is not None and self.tdd_red_exit_code != 0
+        tdd_line = tdd_codegen_note(self.tdd_mode, red_proven=red_proven)
+        preamble = MINIMAL_DIFF_INSTRUCTION + (f"\n\n{tdd_line}" if tdd_line else "")
         prompt = (
-            f"{MINIMAL_DIFF_INSTRUCTION}\n\n{_APPLY_EDIT_INSTRUCTION}\n\n"
+            f"{preamble}\n\n{_APPLY_EDIT_INSTRUCTION}\n\n"
             f"Task: {contract.scope}\n"
             f"Acceptance: {'; '.join(contract.acceptance_criteria)}"
         )
@@ -1209,6 +1222,14 @@ def node_mutate(ctx: OCFlowContext) -> NodeResult:
     # provider-backed mutator sees prior-run knowledge (e.g. a recent failure for
     # this task). Deterministic executor ignores context, so this is a safe no-op there.
     _fold_phase_memory(ctx)
+    # Rodaja 5 A: thread the runner-resolved TDD posture (and any pre-mutation RED
+    # evidence) onto the executor so a provider-backed mutate surfaces the TDD line
+    # in code-gen. Guarded so model-free executors (DeterministicNodeExecutor) that
+    # do not carry these attributes are untouched.
+    if hasattr(ctx.executor, "tdd_mode"):
+        ctx.executor.tdd_mode = ctx.tdd_mode
+    if hasattr(ctx.executor, "tdd_red_exit_code"):
+        ctx.executor.tdd_red_exit_code = ctx.tdd_red_exit_code
     edits = ctx.executor.mutate(ctx.contract, ctx.envelope or ContextEnvelope(task=ctx.task))
     # A productive executor records WHY it produced no usable edits (invalid edit
     # set / policy denial); surface it so the completion gate + CLI can report it.

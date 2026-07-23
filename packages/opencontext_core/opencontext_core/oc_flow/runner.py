@@ -357,17 +357,18 @@ class OCFlowRunner:
     def _resolve_tdd_mode(self) -> str:
         """Resolve the strict-TDD posture for this run root.
 
-        Mirrors the harness resolution: OPENCONTEXT_TDD_MODE env wins, then the
-        installed ``.opencontext/harness.yaml`` (``workflow_defaults.tdd_mode`` —
-        the SAME file HarnessRunner reads), then the opencontext.yaml
-        ``harness.tdd_mode``. Defaults to ``ask`` so the RED-first pre-check stays
-        off unless explicitly opted into strict TDD.
+        Reads THIS spine's source of truth — the installed
+        ``.opencontext/harness.yaml`` (``workflow_defaults.tdd_mode``, the SAME
+        file HarnessRunner reads) then the ``opencontext.yaml`` ``harness.tdd_mode``
+        — and delegates the env-vs-config merge, ``{strict,ask,off}`` normalization,
+        and ``ask`` default to the shared ``resolve_tdd_mode`` so the two spines
+        can never drift. Canonical precedence: env > config > default.
         """
         import os
 
-        env = os.environ.get("OPENCONTEXT_TDD_MODE")
-        if env in ("strict", "ask", "off"):
-            return env
+        from opencontext_core.harness.config import resolve_tdd_mode
+
+        config_value: object = None
         try:
             import yaml
 
@@ -375,20 +376,21 @@ class OCFlowRunner:
             if harness_path.is_file():
                 data = yaml.safe_load(harness_path.read_text(encoding="utf-8")) or {}
                 if isinstance(data, dict):
-                    mode = (data.get("workflow_defaults") or {}).get("tdd_mode")
-                    if mode in ("strict", "ask", "off"):
-                        return str(mode)
+                    config_value = (data.get("workflow_defaults") or {}).get("tdd_mode")
         except Exception:
-            pass  # harness.yaml is advisory here; fall through to opencontext.yaml
-        try:
-            from opencontext_core.config import load_config_or_defaults
+            config_value = None  # harness.yaml is advisory; fall through to opencontext.yaml
+        if config_value not in ("strict", "ask", "off"):
+            try:
+                from opencontext_core.config import load_config_or_defaults
 
-            cfg = load_config_or_defaults(self.root / "opencontext.yaml", auto_detect=False)
-            harness_cfg = getattr(cfg, "harness", None)
-            mode = getattr(harness_cfg, "tdd_mode", "ask") if harness_cfg is not None else "ask"
-            return str(mode) if mode in ("strict", "ask", "off") else "ask"
-        except Exception:
-            return "ask"
+                cfg = load_config_or_defaults(self.root / "opencontext.yaml", auto_detect=False)
+                harness_cfg = getattr(cfg, "harness", None)
+                config_value = getattr(harness_cfg, "tdd_mode", None)
+            except Exception:
+                config_value = None
+        return resolve_tdd_mode(
+            env_value=os.environ.get("OPENCONTEXT_TDD_MODE"), config_value=config_value
+        )
 
     # -- config / kg resolution ----------------------------------------------
     def _resolve_config_error(self) -> str | None:

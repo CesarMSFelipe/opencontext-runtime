@@ -198,6 +198,35 @@ MINIMAL_DIFF_INSTRUCTION = (
     "code you touch. Boring over clever."
 )
 
+# Rodaja 5 A: the code model never learned the TDD posture even though both
+# spines ENFORCE the gate. ``tdd_codegen_note`` builds ONE short line reflecting
+# the resolved ``tdd_mode`` (and, when known, whether a failing test is already
+# proven RED) and is composed into BOTH code-gen prompts alongside the
+# minimal-diff signal. Additive — negligible tokens; empty for every non-strict
+# posture so ``ask``/``off`` prompts are byte-for-byte unchanged.
+_TDD_STRICT_RED_PROVEN = (
+    "TDD strict: a failing test is already proven RED for this change — write the "
+    "minimal code to make it pass, nothing more."
+)
+_TDD_STRICT_RED_UNKNOWN = (
+    "TDD strict: a failing test must drive this change. If a failing test is "
+    "already proven RED, write the minimal code to make it pass; if no failing "
+    "test exists yet, write the failing test first, then the minimal code."
+)
+
+
+def tdd_codegen_note(tdd_mode: str | None, *, red_proven: bool | None = None) -> str:
+    """The short TDD line for the code-gen prompt, or ``""`` when none applies.
+
+    ``strict`` yields a single directive; ``red_proven`` (when known) selects the
+    "make it pass" half, otherwise the model is told to write the failing test
+    first if none exists. ``ask`` / ``off`` (and anything else) yield ``""`` — the
+    posture line is strict-only, so non-strict prompts are unchanged.
+    """
+    if tdd_mode != "strict":
+        return ""
+    return _TDD_STRICT_RED_PROVEN if red_proven else _TDD_STRICT_RED_UNKNOWN
+
 
 def parse_file_edits(text: str) -> list[dict[str, str] | ApplyEdit]:
     """Parse a model response into file-edit objects.
@@ -269,7 +298,14 @@ def generate_apply_edits(
     persona = persona_for_phase("apply")
     # Minimal-diff signal FIRST so the economy directive frames the whole request,
     # then the output-format instruction. Additive — a few lines, negligible tokens.
-    parts = [MINIMAL_DIFF_INSTRUCTION, _APPLY_INSTRUCTION, f"\nTask: {context.get('task', '')}"]
+    parts = [MINIMAL_DIFF_INSTRUCTION]
+    # Rodaja 5 A: surface the resolved TDD posture to the code model so strict runs
+    # know a failing test must drive the change. Empty (and thus skipped) for
+    # ask/off, so non-strict prompts are byte-for-byte unchanged.
+    tdd_line = tdd_codegen_note(context.get("tdd_mode"), red_proven=context.get("tdd_red_proven"))
+    if tdd_line:
+        parts.append(tdd_line)
+    parts += [_APPLY_INSTRUCTION, f"\nTask: {context.get('task', '')}"]
     pack = (context.get("context") or "").strip()
     if pack:
         parts.append(f"\n## Verified context\n{pack}")

@@ -417,7 +417,22 @@ class HarnessRunner:
             gateway, provider, model = self._resolve_gateway()
             if gateway is None or provider == "mock":
                 return []
-            context = {"task": state.task, "context": state.context_pack}
+            # Rodaja 5 A: surface the resolved TDD posture to the code model. Use the
+            # SAME resolver the apply pre-gates use so codegen and enforcement agree.
+            # RED is "proven" when the failing-test pre-gate has already PASSED for
+            # this run (it runs before codegen), so strict codegen tells the model to
+            # write the minimal passing code rather than a fresh failing test.
+            tdd_mode, _ = self._harness_governance()
+            red_proven = any(
+                g.id == "failing_test_exists" and g.status == GateStatus.PASSED
+                for g in getattr(state, "gates", [])
+            )
+            context = {
+                "task": state.task,
+                "context": state.context_pack,
+                "tdd_mode": tdd_mode,
+                "tdd_red_proven": red_proven,
+            }
             return list(generate_apply_edits(gateway, context, provider=provider, model=model))
         except Exception as exc:
             state.warnings.append(f"apply: codegen failed, planned only: {exc}")
@@ -1642,11 +1657,17 @@ class HarnessRunner:
         """
         import os
 
+        from opencontext_core.harness.config import resolve_tdd_mode
+
         _cfg_tdd = getattr(self.config, "tdd_mode", "ask")
-        # Env var only applies when config is at the default ("ask"); an explicit
-        # config value (e.g. from a test fixture) always wins.
-        tdd_mode = (
-            os.environ.get("OPENCONTEXT_TDD_MODE", _cfg_tdd) if _cfg_tdd == "ask" else _cfg_tdd
+        # This spine's precedence: an EXPLICIT config value (e.g. a test fixture)
+        # wins outright; only when config is the "ask" default does the env var
+        # apply. Feed the shared resolver accordingly — env_value is withheld when
+        # config is explicit — so the env-vs-config merge, {strict,ask,off}
+        # normalization, and default all live in one place.
+        tdd_mode = resolve_tdd_mode(
+            env_value=(os.environ.get("OPENCONTEXT_TDD_MODE") if _cfg_tdd == "ask" else None),
+            config_value=_cfg_tdd,
         )
         approval_required = bool(getattr(self.config, "approval_required_for_writes", False))
 
@@ -1659,7 +1680,10 @@ class HarnessRunner:
                 harness_cfg = getattr(cfg, "harness", None)
                 if harness_cfg is not None:
                     if tdd_mode == "ask":
-                        tdd_mode = getattr(harness_cfg, "tdd_mode", tdd_mode)
+                        tdd_mode = resolve_tdd_mode(
+                            env_value=None,
+                            config_value=getattr(harness_cfg, "tdd_mode", tdd_mode),
+                        )
                     if not approval_required:
                         approval_required = bool(
                             getattr(harness_cfg, "approval_required_for_writes", False)
