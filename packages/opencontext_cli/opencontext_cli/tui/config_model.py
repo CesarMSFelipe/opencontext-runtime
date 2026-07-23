@@ -318,11 +318,12 @@ def build_config_model() -> list[Category]:
                 t("config.leaf.memory"),
                 "launch",
                 desc(
-                    "Current: local / engram / auto.",
+                    "Current: local (native 7-layer) / engram (co-resident) / auto.",
                     "Effect: controls what phase memory reads/writes.",
-                    "Recommended: auto if Engram is installed; local otherwise.",
+                    "Recommended: auto — native + Engram when detected; local otherwise.",
                     "Risk / note: Engram is external; local is project-scoped.",
-                    "CLI: opencontext config set memory.provider auto",
+                    "CLI: opencontext config wizard  (memory.provider lives in "
+                    "opencontext.yaml; 'config set' does not write yaml keys)",
                 ),
                 config_key="memory.provider",
             ),
