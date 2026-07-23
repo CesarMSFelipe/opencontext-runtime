@@ -200,7 +200,11 @@ def _handle_status(change: str | None, cwd: Path, verbose: bool) -> None:
     from opencontext_sdd.status import Resolve
 
     status = Resolve(change, cwd=str(cwd))
-    _print_json(status.model_dump(mode="json", exclude_none=True), verbose)
+    data = status.model_dump(mode="json", exclude_none=True)
+    # GOLD-013 contract: `sdd status --json` always carries `changeName` (null when no
+    # change is resolved) — exclude_none would otherwise drop a None value.
+    data.setdefault("changeName", status.changeName)
+    _print_json(data, verbose)
 
 
 def _handle_review(change: str | None, cwd: Path, verbose: bool) -> None:
