@@ -180,6 +180,24 @@ _APPLY_INSTRUCTION = (
     "No prose, no Markdown fences, nothing outside the array."
 )
 
+# The neutrally-named minimal-diff code-generation signal. A short RUNTIME
+# instruction pushing the code model toward the SMALLEST working change. It is
+# the single source of truth composed into BOTH flow spines' code-gen: the
+# harness ``apply`` prompt (``generate_apply_edits`` below) and the OC Flow
+# ``mutate`` prompt (``oc_flow.nodes.ProviderBackedNodeExecutor.mutate``, which
+# imports this constant). Kept compact — a handful of lines, negligible tokens.
+# The sentinel is the leading line, used by tests (and injection guards) to
+# detect the signal without matching the full body.
+MINIMAL_DIFF_SENTINEL = "Produce the SMALLEST change that makes the task pass."
+MINIMAL_DIFF_INSTRUCTION = (
+    f"{MINIMAL_DIFF_SENTINEL} "
+    "Climb the ladder before adding code: does it need to exist at all (YAGNI)? "
+    "reach for the stdlib or an existing symbol before writing new code; one line "
+    "before fifty. No speculative abstractions — no interface, factory, or base "
+    "class without a second caller today; no boilerplate for later. Delete dead "
+    "code you touch. Boring over clever."
+)
+
 
 def parse_file_edits(text: str) -> list[dict[str, str] | ApplyEdit]:
     """Parse a model response into file-edit objects.
@@ -249,7 +267,9 @@ def generate_apply_edits(
     from opencontext_core.personas import persona_for_phase
 
     persona = persona_for_phase("apply")
-    parts = [_APPLY_INSTRUCTION, f"\nTask: {context.get('task', '')}"]
+    # Minimal-diff signal FIRST so the economy directive frames the whole request,
+    # then the output-format instruction. Additive — a few lines, negligible tokens.
+    parts = [MINIMAL_DIFF_INSTRUCTION, _APPLY_INSTRUCTION, f"\nTask: {context.get('task', '')}"]
     pack = (context.get("context") or "").strip()
     if pack:
         parts.append(f"\n## Verified context\n{pack}")

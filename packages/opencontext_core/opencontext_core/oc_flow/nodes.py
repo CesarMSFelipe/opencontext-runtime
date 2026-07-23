@@ -28,7 +28,12 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from opencontext_core.actions.policy import ActionRequest, ActionType, evaluate_action
-from opencontext_core.agents.executor import ApplyEdit, ApplyOperation, apply_edit
+from opencontext_core.agents.executor import (
+    MINIMAL_DIFF_INSTRUCTION,
+    ApplyEdit,
+    ApplyOperation,
+    apply_edit,
+)
 from opencontext_core.config import SecurityMode
 from opencontext_core.errors import ProviderError
 from opencontext_core.harness.checkpoint import CheckpointStore
@@ -477,8 +482,12 @@ class ProviderBackedNodeExecutor:
         self.provider_available = True
         self.policy_blocked = False
         self.policy_approval_required = False
+        # Minimal-diff signal FIRST (OC Flow does not use the SDD Builder persona,
+        # so this is the RUNTIME channel that reaches mutate code-gen), then the
+        # output-format instruction and the task. Additive — negligible tokens.
         prompt = (
-            f"{_APPLY_EDIT_INSTRUCTION}\n\nTask: {contract.scope}\n"
+            f"{MINIMAL_DIFF_INSTRUCTION}\n\n{_APPLY_EDIT_INSTRUCTION}\n\n"
+            f"Task: {contract.scope}\n"
             f"Acceptance: {'; '.join(contract.acceptance_criteria)}"
         )
         request = LLMRequest(

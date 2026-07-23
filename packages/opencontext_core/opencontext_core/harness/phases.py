@@ -1334,9 +1334,11 @@ def _phase_skill_rules(phase: str, max_skills: int = 2) -> str:
         from opencontext_core.skills.compact_rules import generate_compact_rules
         from opencontext_core.skills.resolver import resolve_skills
 
-        matched = resolve_skills(
-            registry, file_patterns=[], task_type=phase, max_matches=max_skills
-        )
+        # The apply phase carries two dedicated skills (oc-apply-rules and the
+        # neutrally-named minimal-diff signal); widen the cap so neither displaces
+        # the other under the default of 2.
+        effective = max(max_skills, 3) if phase == "apply" else max_skills
+        matched = resolve_skills(registry, file_patterns=[], task_type=phase, max_matches=effective)
         if not matched:
             return ""
         rules = generate_compact_rules(matched, max_per_skill=6).strip()
