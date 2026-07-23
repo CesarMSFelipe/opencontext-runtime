@@ -226,11 +226,16 @@ def test_t5_default_suite_resolves() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_t6_conductor_metadata_no_lease_id() -> None:
+def test_t6_conductor_metadata_no_lease_id(tmp_path: Path) -> None:
     """NextAction.metadata must contain handoff block + non-null context_report_ref."""
     from opencontext_core.oc_new.conductor import OcNewConductor
 
-    conductor = OcNewConductor()
+    # Root the conductor at ``tmp_path``: the default ``root="."`` resolves the
+    # store to the process CWD (the repo ``.opencontext/runs``), and under the
+    # parallel unit lane that write races the snapshot guards in
+    # ``test_ci_quality_checks.py`` / ``test_quality_gate.py``. Every other
+    # conductor test is already tmp_path-rooted; this one was the sole leak.
+    conductor = OcNewConductor(tmp_path)
     # Bootstrap a minimal run state to get the first spawn action.
     state = conductor.start(task="add feature X")
     # Advance until we get a spawn_subagent action (or done).
