@@ -18,6 +18,7 @@ from opencontext_core.oc_new.models import (
     OcNewRunState,
     PhaseDefinition,
     PhaseState,
+    SessionChoices,
 )
 from opencontext_core.oc_new.store import OcNewStore
 from opencontext_core.paths.execution_state import execution_workspace, runs_root
@@ -81,19 +82,36 @@ class OcNewConductor:
                 self.__coord_store = _NoopCoordStore()
         return self.__coord_store  # type: ignore[return-value]
 
-    def start(self, task: str, config: AgenticFlowConfig | None = None) -> OcNewRunState:
+    def start(
+        self,
+        task: str,
+        config: AgenticFlowConfig | None = None,
+        session_choices: SessionChoices | None = None,
+    ) -> OcNewRunState:
         """Start a new oc-new run, optionally with an AgenticFlowConfig.
 
         When *config* is None the conductor reads ``sdd.flow_mode`` from the
         project's ``opencontext.yaml`` (if present) so that a user-configured
         flow_mode is honoured without needing an explicit ``--flow`` flag.
         An explicit *config* always wins over the yaml value.
+
+        *session_choices* carries the this-run-only guided SDD choices (artifact
+        store / delivery / chain) captured by the preflight. They are persisted on
+        the run state and ride the agent-facing handoff (see ``_advance``); the
+        config file is never written from here. Unset fields fall back to the
+        project's resolved SDD config when the handoff is built.
         """
         if config is None:
             config = self._config_from_yaml()
         identity = ChangeIdentity.from_task(task)
         phases = [PhaseState(name=phase.name) for phase in OC_NEW_FLOW]
-        state = OcNewRunState(identity=identity, task=task, phases=phases, config=config)
+        state = OcNewRunState(
+            identity=identity,
+            task=task,
+            phases=phases,
+            config=config,
+            session_choices=session_choices,
+        )
         state = self._advance(state)
         self.store.save(state)
         return state
@@ -510,15 +528,27 @@ class OcNewConductor:
             # SDD-CONV: persist the handoff as a PersonaHandoff artifact on disk so
             # the phase transition leaves an inspectable input-naming record.
             self._write_handoff_artifact(state, phase_def.name, handoff)
+            # NOTE: the session's guided choices (flow_mode + artifact store /
+            # delivery / chain) ride the agent-facing handoff so a later phase/skill
+            # can READ and HONOUR them. Values default from the resolved SDD config
+            # when the preflight did not capture an explicit choice for this run.
+            session_choices = self._resolved_session_choices(state)
             metadata: dict[str, object] = {
                 "memory": mem_metadata,
                 "context_report_ref": context_report_ref,
                 "result_schema": "opencontext.phase_result.v1",
                 "handoff": handoff.model_dump(mode="json"),
+                "session_choices": session_choices,
             }
             if lease_metadata is not None:
                 metadata["lease"] = lease_metadata
 
+            choices_line = (
+                f" Honor the session choices: flow_mode={session_choices['flow_mode']}, "
+                f"artifact_store={session_choices['artifact_store']}, "
+                f"delivery={session_choices['delivery_strategy']}, "
+                f"chain={session_choices['chain_strategy']}."
+            )
             return state.model_copy(
                 update={
                     "current_phase": phase_def.name,
@@ -531,6 +561,7 @@ class OcNewConductor:
                             f"Run {phase_def.skill} as {phase_def.persona}. "
                             f"Use memory key {state.identity.memory_key}. "
                             f"Produce: {', '.join(phase_def.expected_artifacts)}."
+                            f"{choices_line}"
                         ),
                         required_tools=phase_def.required_tools,
                         expected_artifacts=phase_def.expected_artifacts,
@@ -570,6 +601,46 @@ class OcNewConductor:
         from opencontext_core.agentic.modes import should_execute_code
 
         return should_execute_code(state.config.flow_mode)
+
+    def _sdd_config_defaults(self) -> tuple[str, str, str]:
+        """Resolved (artifact_store, delivery, chain) from the project's SDD config.
+
+        Falls back to the built-in SDD defaults when the config is missing or
+        unreadable, so the handoff always names a legal value for each choice.
+        """
+        store = "none"
+        delivery = "plan-only"
+        chain = "stacked-to-main"
+        try:
+            from opencontext_core.config import find_config, load_config
+
+            config_path = find_config(self.root)
+            if config_path is not None:
+                sdd = load_config(config_path).sdd
+                store = str(sdd.artifact_store.mode.value)
+                delivery = str(sdd.delivery_strategy.value)
+                chain = str(sdd.chain_strategy.value)
+        except Exception:
+            pass
+        return store, delivery, chain
+
+    def _resolved_session_choices(self, state: OcNewRunState) -> dict[str, str]:
+        """Build the agent-facing session-choices block for the handoff metadata.
+
+        Combines the flow_mode (from the run config) with the three this-run-only
+        guided choices captured by the preflight (:class:`SessionChoices`). Any
+        choice the preflight did not capture defaults to the project's resolved
+        SDD config value, so the agent always receives a complete, legal set.
+        """
+        store_default, delivery_default, chain_default = self._sdd_config_defaults()
+        choices = state.session_choices or SessionChoices()
+        flow_mode = state.config.flow_mode.value if state.config is not None else "automatic"
+        return {
+            "flow_mode": str(flow_mode),
+            "artifact_store": choices.artifact_store or store_default,
+            "delivery_strategy": choices.delivery_strategy or delivery_default,
+            "chain_strategy": choices.chain_strategy or chain_default,
+        }
 
     def _config_from_yaml(self) -> AgenticFlowConfig | None:
         """Build a minimal AgenticFlowConfig seeded from opencontext.yaml sdd.flow_mode.
