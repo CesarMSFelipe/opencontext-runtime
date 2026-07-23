@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from opencontext_core.verification import (
     CheckResult,
     check_adapters,
@@ -72,6 +74,7 @@ class TestRunAllChecks:
         assert "Boundary Service" in check_names
         assert len(report.results) >= 11  # 7 original + 4 new
 
+    @pytest.mark.no_home_isolation  # probes real machine health; needs the real HOME
     def test_healthy_if_no_failures(self) -> None:
         """The report should be healthy if there are zero failures."""
         report = run_all_checks()

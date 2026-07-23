@@ -39,5 +39,15 @@ def test_install_methods_never_counted_as_residue(monkeypatch, tmp_path: Path) -
     from opencontext_cli.commands.uninstall_cmd import verify_no_global_traces
 
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    # Point the HOME env vars at the same clean dir: verify_no_global_traces
+    # resolves some state roots via platformdirs, which reads $HOME/$XDG_* from
+    # the environment rather than Path.home(). Without this the check can pick up
+    # state under an ambient HOME (e.g. the per-worker HOME used under
+    # pytest-xdist) that this test's Path.home() patch never covered.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
     # A clean HOME → no residue, regardless of how the package is installed.
     assert verify_no_global_traces([]) == []

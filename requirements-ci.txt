@@ -6,6 +6,11 @@
 ruff==0.15.20
 mypy==2.1.0
 pytest==9.1.1
+# Parallelizes the unit lane (`pytest -n auto`) across CPUs — the CI `test` job
+# and `make test-unit` rely on it. Per-worker HOME isolation lives in
+# tests/conftest.py so parallel workers can't collide on ~/.opencontext /
+# ~/.engram. Without this pin, `-n auto` fails with "unrecognized arguments".
+pytest-xdist==3.8.0
 # Surfaces pytest failures as GitHub annotations (readable via the public API),
 # so a failure on a runner we can't reproduce locally (e.g. Windows) is
 # diagnosable without log access. No-op outside GitHub Actions.

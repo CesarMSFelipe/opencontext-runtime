@@ -35,6 +35,7 @@ markers = [
   "acceptance: black-box acceptance tests driving the opencontext binary via --oc-bin (AC-001..AC-030)",
   "smoke: fast acceptance subset equivalent to SMOKE-001..010, run on every PR",
   "quarantine: skip-marked tests parked under tests/quarantine (archived or flaky; excluded from default signal)",
+  "no_home_isolation: real-environment probe; keeps the real HOME even under pytest-xdist (opts out of the per-worker HOME redirect in tests/conftest.py)",
 ]
 pythonpath = [
   ".",
