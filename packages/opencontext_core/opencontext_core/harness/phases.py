@@ -298,6 +298,24 @@ def _dedup_terms(terms: list[str]) -> list[str]:
     return list(seen)[:_MAX_QUERY_TERMS]
 
 
+def _stop_runtime_worker(runtime: Any) -> None:
+    """Best-effort: stop a runtime's embedding worker so its thread does not leak.
+
+    The middle-phase / explore KG folds build a fresh ``OpenContextRuntime`` that,
+    with ``embedding.enabled=True``, starts an ``AsyncEmbeddingWorker`` thread on
+    construction. The runtime has no ``close``/context-manager, so the worker is
+    stopped here after the pack is built. Swallows everything — a worker that never
+    started, has no ``stop``, or errors on stop must never break the phase.
+    """
+    worker = getattr(runtime, "embedding_worker", None)
+    stop = getattr(worker, "stop", None)
+    if callable(stop):
+        try:
+            stop()
+        except Exception:  # pragma: no cover - defensive; worker teardown is optional
+            pass
+
+
 def _fold_kg_context(state: Any, phase: str, query: str, budget: int) -> None:
     """Build a FRESH, KG-grounded context pack for a middle phase and fold it in.
 
@@ -343,7 +361,14 @@ def _fold_kg_context(state: Any, phase: str, query: str, budget: int) -> None:
             else None,
             storage_path=resolve_storage_path(state.root, StorageMode.local),
         )
-        pack = runtime.build_context_pack(q, budget)
+        try:
+            pack = runtime.build_context_pack(q, budget)
+        finally:
+            # LOW: a fresh runtime per middle phase starts an embedding worker when
+            # ``embedding.enabled`` is True; without stopping it the worker thread
+            # leaks (one per phase). Stop it best-effort once the pack is built — the
+            # runtime is not reused past this call. Never masks a build failure.
+            _stop_runtime_worker(runtime)
     except Exception:
         return  # KG unavailable — fold nothing, never block the phase
     included = list(getattr(pack, "included", []) or [])
@@ -715,6 +740,11 @@ class ExplorePhase(HarnessPhase):
                 description="Exploration findings consumed by the propose phase",
             )
         )
+
+        # LOW: stop the explore runtime's embedding worker so its thread does not
+        # leak past the phase. Stopping the worker does not touch ``runtime.config``,
+        # so the ``semantic_layer`` metadata below still reads correctly.
+        _stop_runtime_worker(runtime)
 
         return PhaseResult(
             phase="explore",
@@ -1114,7 +1144,7 @@ class ProposePhase(HarnessPhase):
         # Delegate to the wired executor for a REAL proposal narrative; fall back to the
         # structured scaffold when no model is wired (mirrors spec/design/tasks — honest,
         # never a fabricated "success"). Keeps the JSON contract spec reads downstream.
-        outcome = run_phase_executor(state, "propose")
+        outcome = run_phase_executor(state, "propose", self.config.budget_tokens)
         real = outcome.is_real
         narrative = (outcome.output or "").strip() if real else ""
         used = estimate_tokens(outcome.output or "") if real else 0
@@ -1418,7 +1448,7 @@ def _render_program_plan(plan: Any) -> str:
         return ""
 
 
-def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
+def run_phase_executor(state: Any, phase: str, budget: int | None = None) -> ExecutorOutcome:
     """Invoke the wired executor for a work-producing phase, honestly.
 
     Looks for a delegation layer on the run ``state`` (``state.delegate`` — a
@@ -1426,6 +1456,14 @@ def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
     exposing ``delegate(phase, context) -> SubAgentResult``). This mirrors how
     :class:`ApplyPhase` reads ``state.apply_edits``: the executor/delegation
     layer is supplied on the state, never fabricated by the phase.
+
+    ``budget`` (the phase's ``PhaseConfig.budget_tokens``) caps the FULLY ASSEMBLED
+    executor context. The individual signals are each bounded upstream (KG block, the
+    forwarded prior artifact), but their CONCATENATION had no final cap, so a large
+    explore pack + a fresh KG block + the prior artifact + recalled memory + skills +
+    health could together exceed the phase budget. When provided, the assembled
+    ``base_context`` is compacted toward it (keeping every signal present but bounded).
+    ``None`` leaves the legacy uncapped behaviour unchanged.
 
     Returns an :class:`ExecutorOutcome` describing whether a real executor ran.
     The phase uses the outcome to decide between reporting a real, completed
@@ -1470,6 +1508,14 @@ def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
     phase_memory = getattr(state, "phase_memory", "") or ""
     if phase_memory:
         base_context = f"{base_context}\n\n{phase_memory}" if base_context else phase_memory
+    # MEDIUM: cap the FULLY ASSEMBLED context toward the phase budget. Each signal is
+    # bounded upstream, but their concatenation was not — a large explore pack + KG
+    # block + prior artifact + memory + skills + health could together blow the phase
+    # budget. ``_compact_artifact`` summarizes-to-budget (no-op when already within),
+    # so every signal stays present but the whole stays bounded. Only when a budget is
+    # supplied and the context is non-empty.
+    if budget and budget > 0 and base_context:
+        base_context = _compact_artifact(base_context, state, target_tokens=budget)
     context = {
         "task": getattr(state, "task", ""),
         "phase": phase,
@@ -2118,7 +2164,7 @@ class SpecPhase(HarnessPhase):
 
         # Honest executor contract: run the real executor when wired, otherwise
         # emit a clearly-marked scaffold reported as "planned" (NOT a success).
-        outcome = run_phase_executor(state, "spec")
+        outcome = run_phase_executor(state, "spec", self.config.budget_tokens)
         if outcome.is_real:
             spec_content = outcome.output or ""
         else:
@@ -2262,7 +2308,7 @@ class DesignPhase(HarnessPhase):
 
         # Honest executor contract: run the real executor when wired, otherwise
         # emit a clearly-marked scaffold reported as "planned" (NOT a success).
-        outcome = run_phase_executor(state, "design")
+        outcome = run_phase_executor(state, "design", self.config.budget_tokens)
         if outcome.is_real:
             design_content = outcome.output or ""
         else:
@@ -2412,8 +2458,12 @@ class TasksPhase(HarnessPhase):
         # Rodaja 3: build a FRESH KG-grounded pack scoped to the DESIGN's own
         # components/files (file paths named in the design + component identifiers),
         # capped to the tasks phase budget, and fold it into state.context_pack.
+        # LOW: ``cc`` was missing from the alternation, so a ``.cc`` path matched only
+        # its trailing ``.c`` (the greedy ``[\w./-]+`` ate the first ``c``) — truncating
+        # ``foo.cc`` to ``foo.c``. Add ``cc`` in longest-first order (``cpp|cc|c``) so each
+        # C-family extension is captured whole and no shorter alternative shadows it.
         tasks_terms = re.findall(
-            r"[\w./-]+\.(?:py|ts|js|go|rs|java|rb|php|cs|cpp|c|h)", design_content
+            r"[\w./-]+\.(?:py|ts|js|go|rs|java|rb|php|cs|cpp|cc|c|h)", design_content
         )
         for line in design_content.split("\n"):
             if line.lstrip().startswith(("- ", "* ")):
@@ -2423,7 +2473,7 @@ class TasksPhase(HarnessPhase):
 
         # Honest executor contract: run the real executor when wired, otherwise
         # emit a clearly-marked scaffold reported as "planned" (NOT a success).
-        outcome = run_phase_executor(state, "tasks")
+        outcome = run_phase_executor(state, "tasks", self.config.budget_tokens)
         if not outcome.is_real and getattr(state, "delegate", None) is None:
             state.warnings.append(
                 "Phase 'TasksPhase': no model bound — emitted a structured plan for your "

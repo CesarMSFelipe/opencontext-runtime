@@ -498,10 +498,17 @@ class ProviderBackedNodeExecutor:
         red_proven = self.tdd_red_exit_code is not None and self.tdd_red_exit_code != 0
         tdd_line = tdd_codegen_note(self.tdd_mode, red_proven=red_proven)
         preamble = MINIMAL_DIFF_INSTRUCTION + (f"\n\n{tdd_line}" if tdd_line else "")
+        # HIGH 2: render the runner-recalled phase memory (folded onto the envelope as
+        # source="memory" item(s) by ``_fold_phase_memory``) INTO the mutate prompt so a
+        # provider-backed mutate actually SEES prior-run knowledge. Without this the
+        # envelope was unused here and the recalled memory was DROPPED before the model.
+        # Kept short/budget-aware: only the memory items, capped, appended after the task.
+        memory_block = _render_envelope_memory(envelope)
         prompt = (
             f"{preamble}\n\n{_APPLY_EDIT_INSTRUCTION}\n\n"
             f"Task: {contract.scope}\n"
             f"Acceptance: {'; '.join(contract.acceptance_criteria)}"
+            + (f"\n\n{memory_block}" if memory_block else "")
         )
         request = LLMRequest(
             prompt=prompt,
@@ -1155,6 +1162,37 @@ def _fold_memory_recall(ctx: OCFlowContext, envelope: ContextEnvelope) -> Contex
 
 
 _PHASE_MEMORY_WHY = "phase-memory:recall"
+
+# Cap the recalled-memory block rendered INTO the mutate prompt (HIGH 2). Mutate is
+# a surgical code-gen prompt, so the memory context is a small, bounded aside — not a
+# full context dump. Sized to comfortably hold a handful of `_MEMORY_SUMMARY_MAX_CHARS`
+# item summaries without letting a large recall balloon the prompt.
+_MUTATE_MEMORY_MAX_CHARS = 1200
+
+
+def _render_envelope_memory(envelope: ContextEnvelope | None) -> str:
+    """Render the envelope's ``source="memory"`` items as a compact prompt block.
+
+    HIGH 2: the recalled phase memory reaches OC Flow as ``source="memory"`` items on
+    the ContextEnvelope (folded by ``_fold_phase_memory`` / ``_fold_memory_recall``),
+    but ``ProviderBackedNodeExecutor.mutate`` built its prompt from the contract alone.
+    This turns those items back into a short, budget-capped block so the mutate model
+    actually sees prior-run knowledge. Returns ``""`` when there is no envelope or no
+    memory item, so the caller appends it unconditionally with no blank section.
+    """
+    if envelope is None:
+        return ""
+    summaries = [
+        item.summary.strip()
+        for item in envelope.items
+        if item.source == "memory" and item.summary.strip()
+    ]
+    if not summaries:
+        return ""
+    body = "\n".join(f"- {s}" for s in summaries)
+    if len(body) > _MUTATE_MEMORY_MAX_CHARS:
+        body = body[:_MUTATE_MEMORY_MAX_CHARS].rstrip()
+    return f"## Recalled memory (prior-run knowledge)\n{body}"
 
 
 def _fold_phase_memory(ctx: OCFlowContext) -> None:

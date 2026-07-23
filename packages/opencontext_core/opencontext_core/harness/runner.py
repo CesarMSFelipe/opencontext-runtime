@@ -427,9 +427,21 @@ class HarnessRunner:
                 g.id == "failing_test_exists" and g.status == GateStatus.PASSED
                 for g in getattr(state, "gates", [])
             )
+            # HIGH 1: fold the runner-recalled apply memory into the codegen context.
+            # ApplyPhase reads ``state.apply_edits`` (this method) rather than routing
+            # through ``run_phase_executor`` (the sole ``state.phase_memory`` consumer,
+            # phases.py ~1470), so without this append the memory the run loop recalled
+            # onto ``state.phase_memory`` before apply would be DISCARDED. Mirror the
+            # run_phase_executor tail: append phase_memory LAST so it reaches the
+            # apply-codegen prompt's verified-context block alongside explore + KG. Empty
+            # string when recall found nothing, so it adds no blank section.
+            pack = state.context_pack or ""
+            phase_memory = getattr(state, "phase_memory", "") or ""
+            if phase_memory:
+                pack = f"{pack}\n\n{phase_memory}" if pack else phase_memory
             context = {
                 "task": state.task,
-                "context": state.context_pack,
+                "context": pack,
                 "tdd_mode": tdd_mode,
                 "tdd_red_proven": red_proven,
             }
