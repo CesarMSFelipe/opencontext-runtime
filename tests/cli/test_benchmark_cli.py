@@ -20,8 +20,16 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 _CLAIM = re.compile(r"%|reduction_pct|\bbadge\b|fewer tokens", re.IGNORECASE)
 
 
-def _run_cli(*args: str, timeout: int = 180) -> subprocess.CompletedProcess:
-    """Run the opencontext CLI as a subprocess from the project root."""
+def _run_cli(*args: str, timeout: int = 600) -> subprocess.CompletedProcess:
+    """Run the opencontext CLI as a subprocess from the project root.
+
+    The ``benchmark run`` cases index + pack the real project inside the spawned
+    process; on the Windows CI runner that subprocess is several times slower than
+    on Linux (process spawn + disk I/O), which flaked the previous 180s ceiling
+    with ``TimeoutExpired``. The timeout is generous so it finishes there instead
+    of flaking; the fast ``list``/``help`` cases still return in well under a
+    second, so the higher ceiling never slows them.
+    """
     return subprocess.run(
         [sys.executable, "-m", "opencontext_cli", *args],
         capture_output=True,
