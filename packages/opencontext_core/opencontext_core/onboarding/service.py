@@ -59,7 +59,7 @@ class OnboardingOptions:
     # picks); presets (cheap/hybrid/premium) route per phase, tunable per persona.
     sdd_model_profile: str = "default"
     orchestrator_profile: str = "multi-phase"
-    memory_provider: str = "local"
+    memory_provider: str = "auto"
     setup_mcp: bool = False
     force_agent_files: bool = False
     token_budget_per_phase: int | None = None
@@ -213,11 +213,23 @@ class OnboardingService:
 
         # 4. Index project
         try:
+            from opencontext_core.config import load_config_or_defaults
             from opencontext_core.runtime import OpenContextRuntime
 
-            runtime = OpenContextRuntime(
-                config_path=config_path,
+            # Anchor project_index.root to the resolved project root before the
+            # runtime resolves its storage path. The written opencontext.yaml keeps
+            # project_index.root="." (cwd-relative); without this override the
+            # onboarding runtime would hash the *current cwd* instead of the project
+            # root, so `install <root>` run from a different cwd wrote its state under
+            # a different project_id than `index <root>` (which anchors the root via
+            # the CLI's _runtime_for_root). That split-state left install's KG/memory
+            # in an orphaned hash dir. Resolve the root once here so install and index
+            # converge on the same project_id.
+            _cfg = load_config_or_defaults(config_path if config_path.exists() else None)
+            _cfg = _cfg.model_copy(
+                update={"project_index": _cfg.project_index.model_copy(update={"root": str(root)})}
             )
+            runtime = OpenContextRuntime(config=_cfg)
             manifest = runtime.index_project(root)
             result.indexed_files = len(manifest.files)
             result.indexed_symbols = len(manifest.symbols)

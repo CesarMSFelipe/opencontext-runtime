@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from opencontext_core.verification import (
     CheckResult,
+    VerificationReport,
     check_adapters,
     check_boundary_service,
     check_harness_phases,
@@ -72,10 +73,34 @@ class TestRunAllChecks:
         assert "Boundary Service" in check_names
         assert len(report.results) >= 11  # 7 original + 4 new
 
-    def test_healthy_if_no_failures(self) -> None:
-        """The report should be healthy if there are zero failures."""
-        report = run_all_checks()
-        # Warnings don't count as failures
-        assert report.failures >= 0
-        if report.failures == 0:
-            assert report.is_healthy is True
+    def test_is_healthy_reflects_failures_and_kg_warning(self) -> None:
+        """``is_healthy`` iff zero failures AND no Knowledge Graph warning.
+
+        A Knowledge Graph warning degrades health (most OC features depend on the
+        KG); other advisory warnings (e.g. Python version) do not. Exercised on
+        synthetic reports so it never depends on the live machine's KG state,
+        which is legitimately unindexed in CI / any fresh environment (that
+        env-coupling is exactly what used to make this assertion flake).
+        """
+        # No failures, no KG warning -> healthy.
+        healthy = VerificationReport(
+            results=[CheckResult(name="Python Version", status="passed", message="ok")]
+        )
+        assert healthy.failures == 0
+        assert healthy.is_healthy is True
+        # A non-KG advisory warning does NOT degrade health.
+        advisory = VerificationReport(
+            results=[CheckResult(name="Python Version", status="warning", message="old")]
+        )
+        assert advisory.is_healthy is True
+        # A Knowledge Graph warning DOES degrade health, even with zero failures.
+        kg_degraded = VerificationReport(
+            results=[CheckResult(name="Knowledge Graph", status="warning", message="no db")]
+        )
+        assert kg_degraded.failures == 0
+        assert kg_degraded.is_healthy is False
+        # Any failure degrades health.
+        failing = VerificationReport(
+            results=[CheckResult(name="Boundary Service", status="failed", message="down")]
+        )
+        assert failing.is_healthy is False

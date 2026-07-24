@@ -120,11 +120,86 @@ class InteractiveOnboardingWizard:
         """Valid config-template choices."""
         return list(_TEMPLATE_CHOICES)
 
+    # Values the "recommended defaults" quick-start applies with no prompts.
+    # These mirror the non-interactive per-step defaults (generic / private_project
+    # / ask) plus memory 'auto' so a co-resident Engram is used when present —
+    # the same posture as ``opencontext install --yes``.
+    QUICKSTART_TEMPLATE = "generic"
+    QUICKSTART_SECURITY_MODE = SecurityMode.PRIVATE_PROJECT.value
+    QUICKSTART_TDD = "ask"
+    QUICKSTART_MEMORY_PROVIDER = "auto"
+
+    @classmethod
+    def quickstart_defaults(cls) -> dict[str, Any]:
+        """The complete sane-defaults set applied by the quick-start path.
+
+        Every decision the wizard would otherwise prompt for gets its recommended
+        value, so a brand-new user can produce a working config with ZERO forced
+        choices. ``agents`` resolves to the agent CLIs actually detected on this
+        host (opencode fallback), matching the non-interactive install.
+        """
+        from opencontext_core.onboarding.service import default_active_clients
+
+        return {
+            "template": cls.QUICKSTART_TEMPLATE,
+            "security_mode": cls.QUICKSTART_SECURITY_MODE,
+            "tdd": cls.QUICKSTART_TDD,
+            "agents": default_active_clients(),
+            "memory_provider": cls.QUICKSTART_MEMORY_PROVIDER,
+        }
+
+    def _choose_setup_mode(self) -> str:
+        """The single up-front gate: recommended defaults vs customize.
+
+        Returns ``"quickstart"`` (apply sane defaults, no further prompts) or
+        ``"customize"`` (walk every per-step selector). Default is quickstart so
+        pressing Enter just starts working. TTY-only; callers gate on interactive.
+        """
+        choices = [
+            {
+                "value": "quickstart",
+                "name": "Use recommended defaults  — start working now "
+                "(generic, private, TDD ask, memory auto, detected agents)",
+            },
+            {
+                "value": "customize",
+                "name": "Customize each option      — choose template, security, "
+                "TDD, agents, memory yourself",
+            },
+        ]
+        return str(prompts.select("How would you like to set up?", choices, default="quickstart"))
+
     def run(self, **overrides: Any) -> OnboardingResult:
-        """Run the full onboarding wizard."""
+        """Run the onboarding wizard.
+
+        Progressive disclosure: when interactive and the caller passed no explicit
+        choices, a single gate asks recommended-defaults vs customize. The default
+        (recommended) applies sane defaults with NO per-step prompts so a new user
+        starts working immediately; customize walks the full per-step flow, which
+        is left entirely intact. Explicit overrides (CLI flags) bypass the gate.
+        """
         force_non_interactive = overrides.pop("non_interactive", False)
         if force_non_interactive:
             self._interactive = False
+
+        # Quick-start gate: only when interactive AND the caller decided nothing.
+        # Any explicit override means the user already chose — skip the gate and
+        # honor the existing behavior (overridden steps never prompt anyway).
+        if self._interactive and not overrides and self._choose_setup_mode() == "quickstart":
+            defaults = self.quickstart_defaults()
+            options = OnboardingOptions(
+                root=self.root,
+                template=defaults["template"],
+                security_mode=defaults["security_mode"],
+                tdd_mode=defaults["tdd"],
+                active_clients=defaults["agents"],
+                memory_provider=defaults["memory_provider"],
+                setup_mcp=False,
+                force_agent_files=True,
+            )
+            result = self._run_onboarding(options)
+            self._show_summary(result)
+            return result
 
         self._plan_steps(overrides)
         self._show_welcome()

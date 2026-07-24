@@ -73,6 +73,16 @@ from opencontext_core.workflow.delegation_validator import (
 _log = logging.getLogger(__name__)
 _delegation_validator = DelegationValidator()
 
+# Phases the shared PhaseMemoryGateway must NOT drive: they already own their
+# memory. ExplorePhase recalls prior memory itself (folded into
+# state.context_pack) and ArchivePhase harvests/persists via the MemoryHarvester,
+# so wrapping them in the gateway too would double-recall / double-persist. This
+# is the symmetric mirror of OC Flow excluding gather_context / consolidation from
+# OC_FLOW_NODE_TO_PHASE (see oc_flow/nodes.py). The runner checks this set before
+# every gateway recall/persist call; the gateway's own recall/persist logic is
+# unchanged (still valid for any phase when called directly).
+_MEMORY_GATEWAY_EXCLUDED_PHASES: frozenset[str] = frozenset({"explore", "archive"})
+
 # Verb lists for the NOT_APPLIED mutation-detection heuristic.
 # Imported once at module load; the fallback (None) is handled inline.
 # Declared as Optional so the None-fallback branch is reachable to mypy.
@@ -123,8 +133,22 @@ class HarnessState:
         self.trace_ids: list[str] = []
         self.warnings: list[str] = []
         # Verified context pack rendered by the explore phase, fed to later phases'
-        # executor prompts so the model works from retrieved evidence.
+        # executor prompts so the model works from retrieved evidence. Middle phases
+        # REBUILD this each phase as explore_pack + that phase's fresh KG block, so it
+        # holds the explore base + at most ONE phase's KG block at a time.
         self.context_pack: str = ""
+        # Stable snapshot of the explore-phase context pack, captured ONCE before any
+        # middle-phase KG fold. Middle phases compose their fresh KG block onto THIS
+        # base (never onto the accumulated context_pack), so prior phases' KG blocks
+        # do not stack across the pipeline — the per-phase executor context stays
+        # bounded by explore_base + one phase block (the anti-bloat invariant). None
+        # until the first fold (or ExplorePhase) captures it.
+        self.explore_pack: str | None = None
+        # Rendered recalled-memory block for the phase currently running, set by
+        # the runner's PhaseMemoryGateway.recall() before each phase and appended
+        # into the middle phases' executor context (run_phase_executor). Empty
+        # string when memory is disabled or the phase recalled nothing.
+        self.phase_memory: str = ""
         # Concrete file edits produced by the executor for ApplyPhase to write.
         # List of {"path": ..., "content": ...} dicts (or FileEdit instances).
         self.apply_edits: list[Any] = []
@@ -178,8 +202,14 @@ class HarnessRunner:
         config: HarnessConfig | None = None,
         *,
         llm_gateway: Any = None,
+        memory_store: Any = None,
     ) -> None:
         self.root = root.resolve()
+        # Optional explicit agent memory store injection. When provided it wins
+        # over the config-resolved store below (tests inject a recording store;
+        # a host may inject a pre-built CompositeMemoryStore). None → resolve
+        # from project config as usual.
+        self._memory_store_override = memory_store
         self.config = config or HarnessConfig.from_yaml_file(
             resolve_workspace_path(root, StorageMode.local) / "harness.yaml"
         )
@@ -242,10 +272,32 @@ class HarnessRunner:
                 storage_path = resolve_storage_path(self.root, StorageMode.local)
             storage_path.mkdir(parents=True, exist_ok=True)
             self._memory_store = BackendFactory.create_memory_store(oc_config, storage_path)
+            # Global memory-approval posture (MEMORY_CONTRACT). When true the
+            # PhaseMemoryGateway persists write-layer records as candidate+stale
+            # ("needs review") regardless of the per-phase policy default.
+            self._memory_approval_required = bool(
+                getattr(getattr(oc_config, "memory", None), "approval_required", False)
+            )
         except Exception:
             from opencontext_core.memory.agent import NullAgentMemoryStore
 
             self._memory_store = NullAgentMemoryStore()
+            self._memory_approval_required = False
+
+        # An explicit injected store wins over the config-resolved one.
+        if self._memory_store_override is not None:
+            self._memory_store = self._memory_store_override
+
+        # PhaseMemoryGateway: the ONE shared service that recalls memory before
+        # each phase and persists after, enforcing PHASE_MEMORY_POLICY. Built
+        # from the resolved store so it is backend-transparent (no-ops on a Null
+        # store). Never raises here — memory is optional.
+        from opencontext_core.memory.phase_gateway import PhaseMemoryGateway
+
+        self._phase_gateway = PhaseMemoryGateway(
+            self._memory_store,
+            approval_required=self._memory_approval_required,
+        )
 
     def create_run(self, workflow: str, task: str) -> HarnessState:
         """Create a new run with a unique run_id.
@@ -365,7 +417,34 @@ class HarnessRunner:
             gateway, provider, model = self._resolve_gateway()
             if gateway is None or provider == "mock":
                 return []
-            context = {"task": state.task, "context": state.context_pack}
+            # Rodaja 5 A: surface the resolved TDD posture to the code model. Use the
+            # SAME resolver the apply pre-gates use so codegen and enforcement agree.
+            # RED is "proven" when the failing-test pre-gate has already PASSED for
+            # this run (it runs before codegen), so strict codegen tells the model to
+            # write the minimal passing code rather than a fresh failing test.
+            tdd_mode, _ = self._harness_governance()
+            red_proven = any(
+                g.id == "failing_test_exists" and g.status == GateStatus.PASSED
+                for g in getattr(state, "gates", [])
+            )
+            # HIGH 1: fold the runner-recalled apply memory into the codegen context.
+            # ApplyPhase reads ``state.apply_edits`` (this method) rather than routing
+            # through ``run_phase_executor`` (the sole ``state.phase_memory`` consumer,
+            # phases.py ~1470), so without this append the memory the run loop recalled
+            # onto ``state.phase_memory`` before apply would be DISCARDED. Mirror the
+            # run_phase_executor tail: append phase_memory LAST so it reaches the
+            # apply-codegen prompt's verified-context block alongside explore + KG. Empty
+            # string when recall found nothing, so it adds no blank section.
+            pack = state.context_pack or ""
+            phase_memory = getattr(state, "phase_memory", "") or ""
+            if phase_memory:
+                pack = f"{pack}\n\n{phase_memory}" if pack else phase_memory
+            context = {
+                "task": state.task,
+                "context": pack,
+                "tdd_mode": tdd_mode,
+                "tdd_red_proven": red_proven,
+            }
             return list(generate_apply_edits(gateway, context, provider=provider, model=model))
         except Exception as exc:
             state.warnings.append(f"apply: codegen failed, planned only: {exc}")
@@ -875,6 +954,21 @@ class HarnessRunner:
                 )
                 continue
 
+            # Recall memory for this phase BEFORE it runs, over the layers its
+            # PHASE_MEMORY_POLICY declares. The rendered block is injected onto
+            # state.phase_memory so the work-producing phases' executor prompts
+            # see it (run_phase_executor). Wrapped so a memory failure — or an
+            # unknown phase — never blocks the phase (memory is optional).
+            # explore/archive are excluded: they own their bespoke recall/harvest
+            # (mirrors OC Flow excluding gather_context/consolidation).
+            state.phase_memory = ""
+            if phase_id not in _MEMORY_GATEWAY_EXCLUDED_PHASES:
+                try:
+                    recall = self._phase_gateway.recall(phase_id, state.task)
+                    state.phase_memory = recall.render()
+                except Exception as exc:  # pragma: no cover - defensive; memory is optional
+                    _log.debug("phase-memory recall failed (phase=%s): %s", phase_id, exc)
+
             # Evaluate ConfidenceGate before running the phase
             phase_config = self.config.phases.get(phase_id)
             if phase_config is not None and phase_config.confidence_threshold is not None:
@@ -952,6 +1046,15 @@ class HarnessRunner:
             # concrete file edits so ApplyPhase writes real source instead of a
             # scaffold. forbidden_paths + rollback in ApplyPhase guard the write.
             if phase_id == "apply" and not state.apply_edits and state.delegate is not None:
+                # Rodaja 3: fold ONE fresh, KG-grounded pack derived from the task
+                # list's symbols/files into state.context_pack (capped to the apply
+                # budget) BEFORE codegen, so the model sees task-scoped evidence.
+                from opencontext_core.harness.phases import _fold_apply_kg_context
+
+                _apply_cfg = self.config.phases.get("apply")
+                _fold_apply_kg_context(
+                    state, _apply_cfg.budget_tokens if _apply_cfg is not None else 12000
+                )
                 state.apply_edits = self._generate_apply_edits(state)
 
             phase_obj = self._build_phase(phase_id, budget_mode)
@@ -976,6 +1079,25 @@ class HarnessRunner:
                 state.warnings.append(f"{phase_id}: {exc}")
 
             results.append(result)
+
+            # Persist this phase's outcome into the layers its PHASE_MEMORY_POLICY
+            # declares, AFTER it ran. require_approval maps onto the native record
+            # lifecycle inside the gateway (active vs candidate+stale). A FAILED
+            # phase also lands a FAILURE-layer record so a future run's recent-
+            # failure boost can activate. Wrapped: memory is optional.
+            # explore/archive are excluded: archive already harvests/persists and
+            # explore owns its recall (mirrors OC Flow gather_context/consolidation).
+            if phase_id not in _MEMORY_GATEWAY_EXCLUDED_PHASES:
+                try:
+                    phase_failed = result.status == GateStatus.FAILED
+                    outcome = self._phase_gateway.outcome(
+                        content=self._phase_memory_content(state, phase_id, result),
+                        failed=phase_failed,
+                    )
+                    self._phase_gateway.persist(phase_id, outcome)
+                except Exception as exc:  # pragma: no cover - defensive; memory is optional
+                    _log.debug("phase-memory persist failed (phase=%s): %s", phase_id, exc)
+
             state.ledgers.extend([result.ledger] if result.ledger else [])
             state.gates.extend(result.gates)
             state.artifacts.extend(result.artifacts)
@@ -1547,11 +1669,17 @@ class HarnessRunner:
         """
         import os
 
+        from opencontext_core.harness.config import resolve_tdd_mode
+
         _cfg_tdd = getattr(self.config, "tdd_mode", "ask")
-        # Env var only applies when config is at the default ("ask"); an explicit
-        # config value (e.g. from a test fixture) always wins.
-        tdd_mode = (
-            os.environ.get("OPENCONTEXT_TDD_MODE", _cfg_tdd) if _cfg_tdd == "ask" else _cfg_tdd
+        # This spine's precedence: an EXPLICIT config value (e.g. a test fixture)
+        # wins outright; only when config is the "ask" default does the env var
+        # apply. Feed the shared resolver accordingly — env_value is withheld when
+        # config is explicit — so the env-vs-config merge, {strict,ask,off}
+        # normalization, and default all live in one place.
+        tdd_mode = resolve_tdd_mode(
+            env_value=(os.environ.get("OPENCONTEXT_TDD_MODE") if _cfg_tdd == "ask" else None),
+            config_value=_cfg_tdd,
         )
         approval_required = bool(getattr(self.config, "approval_required_for_writes", False))
 
@@ -1564,7 +1692,10 @@ class HarnessRunner:
                 harness_cfg = getattr(cfg, "harness", None)
                 if harness_cfg is not None:
                     if tdd_mode == "ask":
-                        tdd_mode = getattr(harness_cfg, "tdd_mode", tdd_mode)
+                        tdd_mode = resolve_tdd_mode(
+                            env_value=None,
+                            config_value=getattr(harness_cfg, "tdd_mode", tdd_mode),
+                        )
                     if not approval_required:
                         approval_required = bool(
                             getattr(harness_cfg, "approval_required_for_writes", False)
@@ -2435,6 +2566,21 @@ class HarnessRunner:
         )
         if result.status in (GateStatus.FAILED, GateStatus.WARNING):
             state.warnings.append("risk-gated judgment surfaced findings (advisory)")
+
+    @staticmethod
+    def _phase_memory_content(state: HarnessState, phase_id: str, result: Any) -> str:
+        """Compose the compact prose payload the gateway persists for a phase.
+
+        Keeps the write-layer record small and self-describing: the phase, its
+        gate status, the task, and the first artifact path when present. This is
+        what a later run recalls, not the full artifact body.
+        """
+        status = getattr(getattr(result, "status", None), "value", "unknown")
+        parts = [f"phase={phase_id}", f"status={status}", f"task={state.task}"]
+        artifacts = getattr(result, "artifacts", None) or []
+        if artifacts:
+            parts.append(f"artifact={getattr(artifacts[0], 'path', '')}")
+        return " ".join(str(p) for p in parts)
 
     def _build_phase(self, phase_id: str, budget_mode: BudgetMode) -> HarnessPhase | None:
         """Build a phase instance by ID."""

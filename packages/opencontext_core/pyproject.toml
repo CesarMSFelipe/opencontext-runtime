@@ -27,6 +27,20 @@ dependencies = [
   "tree-sitter-javascript>=0.23",
   "tree-sitter-python>=0.25",
   "tree-sitter-typescript>=0.23",
+  # Multi-language KG grammars. Each wheel BUNDLES its compiled grammar
+  # (offline-safe, no runtime download) and loads against tree-sitter>=0.24;
+  # versions below were verified ABI-compatible with tree-sitter 0.25.2 in a
+  # clean venv. go/rust/java/php have dedicated extractors; c/cpp/ruby/c-sharp
+  # go through the generic declaration extractor. NOTE: tree-sitter-php exposes
+  # language_php(), not language() — handled in _init_tree_sitter.
+  "tree-sitter-go>=0.23",
+  "tree-sitter-rust>=0.23",
+  "tree-sitter-java>=0.23",
+  "tree-sitter-php>=0.23",
+  "tree-sitter-c>=0.23",
+  "tree-sitter-cpp>=0.23",
+  "tree-sitter-ruby>=0.23",
+  "tree-sitter-c-sharp>=0.23",
   "watchdog>=6.0",
   "rich>=13.0",
   # prompts.py drives every interactive selector through InquirerPy; it pulls

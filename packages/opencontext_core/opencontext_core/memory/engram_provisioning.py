@@ -2,10 +2,12 @@
 
 Design decisions:
 - detect() delegates to engram_bridge.detect_engram() so there is one source of truth.
-- plan_install() probes brew/scoop and returns an InstallPlan; if no PM is found
-  it returns install_command=None and never raises.
-- install() only runs subprocess when yes=True; raises RuntimeError when detection fails
-  and yes=False so the caller can prompt the user.
+- Engram is an external Go application (github.com/Gentleman-Programming/engram); the
+  coexistence bridge talks to its ``engram`` binary. plan_install() returns a ``go
+  install`` command when a Go toolchain is present, else install_command=None with an
+  actionable message; it never raises.
+- install() only runs the subprocess when yes=True; raises RuntimeError when detection
+  fails and yes=False so the caller can prompt the user.
 """
 
 from __future__ import annotations
@@ -36,9 +38,14 @@ class EngramInstallPlan:
 
 
 def _install_command() -> list[str] | None:
-    # NOTE: Engram is distributed as a Claude Code plugin, not a PyPI/pipx package.
-    # There is no automated install command; users install it via their agent's
-    # plugin mechanism (e.g. `claude plugin install plugin:engram:engram`).
+    # Engram is an external Go application. The coexistence bridge needs its ``engram``
+    # binary on PATH, so the supported automated install is ``go install`` when a Go
+    # toolchain is available. Without Go there is no self-contained install command; the
+    # caller surfaces an actionable message (release binary / Claude Code plugin).
+    import shutil
+
+    if shutil.which("go"):
+        return ["go", "install", "github.com/Gentleman-Programming/engram/cmd/engram@latest"]
     return None
 
 
@@ -79,9 +86,11 @@ class EngramProvisioner:
                 install_command=None,
                 setup_command=None,
                 message=(
-                    "Engram not detected. Engram is a Claude Code plugin — install it "
-                    "via your agent's plugin mechanism (e.g. `claude plugin install "
-                    "plugin:engram:engram`) then re-run this command."
+                    "Engram not detected and no Go toolchain found. Install Go and re-run "
+                    "(`opencontext engram install --yes` runs `go install "
+                    "github.com/Gentleman-Programming/engram/cmd/engram@latest`), or grab a "
+                    "release binary from https://github.com/Gentleman-Programming/engram/releases, "
+                    "then ensure `engram` is on PATH."
                 ),
             )
         return EngramInstallPlan(

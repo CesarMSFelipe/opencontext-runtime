@@ -28,7 +28,13 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from opencontext_core.actions.policy import ActionRequest, ActionType, evaluate_action
-from opencontext_core.agents.executor import ApplyEdit, ApplyOperation, apply_edit
+from opencontext_core.agents.executor import (
+    MINIMAL_DIFF_INSTRUCTION,
+    ApplyEdit,
+    ApplyOperation,
+    apply_edit,
+    tdd_codegen_note,
+)
 from opencontext_core.config import SecurityMode
 from opencontext_core.errors import ProviderError
 from opencontext_core.harness.checkpoint import CheckpointStore
@@ -121,6 +127,14 @@ class OCFlowContext:
     tdd_red_exit_code: int | None = None
     memory_v2_enabled: bool = False  # runtime.memory_v2_enabled → MemoryHarness routing
     run_id: str = ""  # run provenance carried into harvested memory records
+    # Phase-policy recall (Sub-PR 2): the runner's PhaseMemoryGateway renders the
+    # recalled memory for a MAPPED middle node (OC_FLOW_NODE_TO_PHASE) into this
+    # field BEFORE the handler runs; the mapped middle handlers fold it into their
+    # executor/model context (the OC-Flow analog of run_phase_executor appending
+    # phase_memory). Empty string on unmapped nodes and when recall found nothing,
+    # so a handler can surface it unconditionally without a blank section. Mirrors
+    # HarnessState.phase_memory.
+    phase_memory: str = ""
     # Compression parity (context substrate): when enabled, gather_context runs the
     # CompressionEngine over oversized envelope content (SQLite-KG items honestly
     # skipped) and records the evidence in context-receipt.json.
@@ -429,6 +443,8 @@ class ProviderBackedNodeExecutor:
         is_allowed_path: Any = None,
         max_output_tokens: int = 6000,
         approval_granted: bool | None = None,
+        tdd_mode: str = "ask",
+        tdd_red_exit_code: int | None = None,
     ) -> None:
         self._gateway = gateway
         self._root = Path(root)
@@ -438,6 +454,12 @@ class ProviderBackedNodeExecutor:
         self._is_allowed_path = is_allowed_path
         self._max_output_tokens = max_output_tokens
         self._fallback = DeterministicNodeExecutor()
+        # Rodaja 5 A: the strict-TDD posture (and the pre-mutation RED exit code,
+        # when the runner already proved a failing test) so ``mutate`` can surface
+        # the TDD line in code-gen. node_mutate refreshes these from ctx before
+        # each call; the defaults keep a directly-constructed executor unchanged.
+        self.tdd_mode = tdd_mode
+        self.tdd_red_exit_code = tdd_red_exit_code
         self.block_reason: str | None = None
         # Policy-gate flags read by node_mutate (RUN_STATE_CONTRACT): approval
         # resolves from the project config unless the caller decides explicitly.
@@ -469,9 +491,24 @@ class ProviderBackedNodeExecutor:
         self.provider_available = True
         self.policy_blocked = False
         self.policy_approval_required = False
+        # Minimal-diff signal FIRST (OC Flow does not use the SDD Builder persona,
+        # so this is the RUNTIME channel that reaches mutate code-gen), then the
+        # TDD posture line (strict-only), the output-format instruction, and the
+        # task. Additive — negligible tokens; empty TDD line for ask/off.
+        red_proven = self.tdd_red_exit_code is not None and self.tdd_red_exit_code != 0
+        tdd_line = tdd_codegen_note(self.tdd_mode, red_proven=red_proven)
+        preamble = MINIMAL_DIFF_INSTRUCTION + (f"\n\n{tdd_line}" if tdd_line else "")
+        # HIGH 2: render the runner-recalled phase memory (folded onto the envelope as
+        # source="memory" item(s) by ``_fold_phase_memory``) INTO the mutate prompt so a
+        # provider-backed mutate actually SEES prior-run knowledge. Without this the
+        # envelope was unused here and the recalled memory was DROPPED before the model.
+        # Kept short/budget-aware: only the memory items, capped, appended after the task.
+        memory_block = _render_envelope_memory(envelope)
         prompt = (
-            f"{_APPLY_EDIT_INSTRUCTION}\n\nTask: {contract.scope}\n"
+            f"{preamble}\n\n{_APPLY_EDIT_INSTRUCTION}\n\n"
+            f"Task: {contract.scope}\n"
             f"Acceptance: {'; '.join(contract.acceptance_criteria)}"
+            + (f"\n\n{memory_block}" if memory_block else "")
         )
         request = LLMRequest(
             prompt=prompt,
@@ -1124,10 +1161,81 @@ def _fold_memory_recall(ctx: OCFlowContext, envelope: ContextEnvelope) -> Contex
     return envelope.model_copy(update={"items": items, "token_estimate": total})
 
 
+_PHASE_MEMORY_WHY = "phase-memory:recall"
+
+# Cap the recalled-memory block rendered INTO the mutate prompt (HIGH 2). Mutate is
+# a surgical code-gen prompt, so the memory context is a small, bounded aside — not a
+# full context dump. Sized to comfortably hold a handful of `_MEMORY_SUMMARY_MAX_CHARS`
+# item summaries without letting a large recall balloon the prompt.
+_MUTATE_MEMORY_MAX_CHARS = 1200
+
+
+def _render_envelope_memory(envelope: ContextEnvelope | None) -> str:
+    """Render the envelope's ``source="memory"`` items as a compact prompt block.
+
+    HIGH 2: the recalled phase memory reaches OC Flow as ``source="memory"`` items on
+    the ContextEnvelope (folded by ``_fold_phase_memory`` / ``_fold_memory_recall``),
+    but ``ProviderBackedNodeExecutor.mutate`` built its prompt from the contract alone.
+    This turns those items back into a short, budget-capped block so the mutate model
+    actually sees prior-run knowledge. Returns ``""`` when there is no envelope or no
+    memory item, so the caller appends it unconditionally with no blank section.
+    """
+    if envelope is None:
+        return ""
+    summaries = [
+        item.summary.strip()
+        for item in envelope.items
+        if item.source == "memory" and item.summary.strip()
+    ]
+    if not summaries:
+        return ""
+    body = "\n".join(f"- {s}" for s in summaries)
+    if len(body) > _MUTATE_MEMORY_MAX_CHARS:
+        body = body[:_MUTATE_MEMORY_MAX_CHARS].rstrip()
+    return f"## Recalled memory (prior-run knowledge)\n{body}"
+
+
+def _fold_phase_memory(ctx: OCFlowContext) -> None:
+    """Surface the runner-recalled phase memory into the envelope (Sub-PR 2).
+
+    The runner's PhaseMemoryGateway rendered the mapped phase's read_layers onto
+    ``ctx.phase_memory`` before this handler ran. Fold it into the envelope as a
+    single ``source="memory"`` item so a provider-backed executor that reads the
+    envelope sees prior-run knowledge — the OC-Flow analog of ``run_phase_executor``
+    appending ``phase_memory`` to the SDD executor context. Idempotent (guards on
+    the marker) and a no-op when recall found nothing or no envelope exists yet, so
+    it adds no blank section and never blows the gather budget for the model-free
+    deterministic path (which ignores context entirely).
+    """
+    block = getattr(ctx, "phase_memory", "") or ""
+    if not block or ctx.envelope is None:
+        return
+    if any(i.why_included == _PHASE_MEMORY_WHY for i in ctx.envelope.items):
+        return
+    from opencontext_core.context.budgeting import estimate_tokens
+
+    item = ContextEnvelopeItem(
+        source="memory",
+        ref="phase-memory",
+        summary=block[:_MEMORY_SUMMARY_MAX_CHARS],
+        tokens=estimate_tokens(block),
+        why_included=_PHASE_MEMORY_WHY,
+    )
+    ctx.envelope = ctx.envelope.model_copy(
+        update={
+            "items": [*ctx.envelope.items, item],
+            "token_estimate": ctx.envelope.token_estimate + item.tokens,
+        }
+    )
+
+
 def node_plan(ctx: OCFlowContext) -> NodeResult:
     """Produce the frozen :class:`TaskContract` and persist it (book §9, FLOW-4)."""
     if ctx.envelope is None:
         raise OCFlowError("plan requires a context envelope")
+    # Fold the runner-recalled propose-phase memory into the envelope so a
+    # provider-backed planner sees prior-run knowledge (deterministic path ignores it).
+    _fold_phase_memory(ctx)
     contract = ctx.executor.plan(ctx.task, ctx.envelope)
     ctx.contract = contract
     name = _write_json(ctx.artifacts_dir / "task-contract.json", contract.model_dump())
@@ -1148,6 +1256,18 @@ def node_mutate(ctx: OCFlowContext) -> NodeResult:
     (book §10, FLOW-7)."""
     if ctx.contract is None:
         raise OCFlowError("mutate requires a frozen task contract")
+    # Fold the runner-recalled apply-phase memory into the envelope so a
+    # provider-backed mutator sees prior-run knowledge (e.g. a recent failure for
+    # this task). Deterministic executor ignores context, so this is a safe no-op there.
+    _fold_phase_memory(ctx)
+    # Rodaja 5 A: thread the runner-resolved TDD posture (and any pre-mutation RED
+    # evidence) onto the executor so a provider-backed mutate surfaces the TDD line
+    # in code-gen. Guarded so model-free executors (DeterministicNodeExecutor) that
+    # do not carry these attributes are untouched.
+    if hasattr(ctx.executor, "tdd_mode"):
+        ctx.executor.tdd_mode = ctx.tdd_mode
+    if hasattr(ctx.executor, "tdd_red_exit_code"):
+        ctx.executor.tdd_red_exit_code = ctx.tdd_red_exit_code
     edits = ctx.executor.mutate(ctx.contract, ctx.envelope or ContextEnvelope(task=ctx.task))
     # A productive executor records WHY it produced no usable edits (invalid edit
     # set / policy denial); surface it so the completion gate + CLI can report it.
@@ -1676,6 +1796,28 @@ NODE_HANDLERS: dict[str, Any] = {
     "diagnose": node_diagnose,
     "escalation": node_escalation,
     "consolidation": node_consolidation,
+}
+
+
+# Sub-PR 2: connect OC Flow's memory-BLIND middle nodes to PHASE_MEMORY_POLICY via
+# the SAME shared PhaseMemoryGateway the SDD harness uses — WITHOUT duplicating OC
+# Flow's existing working memory. Maps ONLY the currently memory-blind middle nodes
+# to an SDD phase whose read/write layer policy they should honor:
+#
+#   plan             -> propose   (recall propose's read_layers before planning)
+#   mutate           -> apply     (persist apply's write_layers after the edit)
+#   local_inspection -> verify    (recall/persist verify's layers around inspection)
+#
+# gather_context and consolidation are DELIBERATELY excluded: they already own real
+# memory (``_fold_memory_recall`` at gather, harvest at consolidation). Mapping them
+# would double-recall / double-persist. An unmapped node name resolves to None here
+# and the runner treats it as a gateway no-op. diagnose/escalation are also excluded:
+# diagnose re-enters mutate in a bounded loop (mapping it would re-persist apply per
+# attempt) and escalation is a human-handoff node with no clean phase analog.
+OC_FLOW_NODE_TO_PHASE: dict[str, str] = {
+    "plan": "propose",
+    "mutate": "apply",
+    "local_inspection": "verify",
 }
 
 

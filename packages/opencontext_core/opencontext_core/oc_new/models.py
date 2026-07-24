@@ -112,6 +112,23 @@ class NextAction(BaseModel):
     metadata: dict[str, object] = Field(default_factory=dict)
 
 
+class SessionChoices(BaseModel):
+    """This-run-only guided SDD choices captured by the oc-new preflight.
+
+    ``flow_mode`` lives on :class:`AgenticFlowConfig`; these three had no runtime
+    home before. They are captured for THIS RUN ONLY (the config file is never
+    written) and ride the agent-facing handoff so a later phase/skill can read and
+    honour them (e.g. ``artifact_store=engram, delivery=auto-chain,
+    chain=stacked-to-main``). Empty string means "not chosen for this run".
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_store: str = ""
+    delivery_strategy: str = ""
+    chain_strategy: str = ""
+
+
 class OcNewRunState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -125,6 +142,10 @@ class OcNewRunState(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
     # NOTE: config is persisted so resume() is faithful to the original preset.
     config: AgenticFlowConfig | None = None
+    # NOTE: this-run-only guided SDD choices (artifact store / delivery / chain)
+    # captured by the preflight; persisted so resume() forwards the same choices
+    # into the agent handoff. flow_mode continues to live on ``config``.
+    session_choices: SessionChoices | None = None
 
     def phase(self, name: PhaseName) -> PhaseState:
         for p in self.phases:

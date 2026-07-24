@@ -206,7 +206,19 @@ OPENCONTEXT_COMMANDS: tuple[tuple[str, str, str], ...] = (
         "end with `opencontext_memory_save` (`key`/`tags` = `change:<slug>`; layer "
         "SEMANTIC for facts, PROCEDURAL for patterns, FAILURE for errors).\n"
         "Build context with `opencontext_context` and check `opencontext_impact` "
-        "before any edit; pause for approval before writing code.\n\n"
+        "before any edit; pause for approval before writing code.\n"
+        "Session preflight FIRST (once): if the handoff carries `session_choices`, "
+        "honor them; else ASK four predefined-option groups (execution mode "
+        "interactive/automatic, artifact store hybrid/openspec/engram/none, delivery "
+        "ask-on-risk/single-pr/auto-chain/exception-ok/plan-only, chain "
+        "stacked-to-main/feature-branch-chain), each guided (recommend + effect + "
+        "safe default), cached for the session — non-interactive falls back to safe "
+        "defaults, never hangs. In `interactive` mode, pause after each phase: "
+        "summarize, then ask proceed/adjust/stop (phase-scoped).\n"
+        "The `oc-propose` phase runs a proposal question round (3 to 5 "
+        "predefined-option product questions, then accept/revise/second-round) before "
+        "writing the proposal; non-interactive writes a `## Proposal question round` "
+        "section instead of hanging.\n\n"
         "Change: $ARGUMENTS",
     ),
 )

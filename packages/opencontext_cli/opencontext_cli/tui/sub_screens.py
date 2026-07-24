@@ -229,9 +229,9 @@ def memory_screen() -> PickOneScreen:
     from opencontext_core.config_sync import set_yaml_key
 
     options = [
-        ("local", "Local — OpenContext's own engine"),
-        ("engram", "Engram — episodic & semantic → Engram, rest → OpenContext"),
-        ("auto", "Auto — couple with Engram if present, else local"),
+        ("local", "Local — native 7-layer store only"),
+        ("engram", "Engram — co-resident Engram (episodic & semantic → Engram, rest local)"),
+        ("auto", "Auto (recommended) — native + Engram when detected"),
     ]
 
     def pick(value: str) -> None:

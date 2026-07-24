@@ -16,6 +16,23 @@ LANGUAGE_BY_EXTENSION: dict[str, str] = {
     ".jsx": "javascript",
     ".ts": "typescript",
     ".tsx": "typescript",
+    # Compiled/systems + scripting languages the KG now parses via tree-sitter.
+    # Kept in sync with tree_sitter_parser.LANGUAGE_EXTENSIONS: the scanner
+    # classifies by THIS map, and a file whose language is not in _KG_LANGUAGES
+    # is skipped before it ever reaches the parser — so an omission here silently
+    # drops the whole language from the graph regardless of the loaded grammar.
+    ".go": "go",
+    ".rs": "rust",
+    ".java": "java",
+    ".cs": "csharp",
+    ".rb": "ruby",
+    ".c": "c",
+    ".h": "c",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".hpp": "cpp",
+    ".hh": "cpp",
     ".json": "json",
     ".yaml": "yaml",
     ".yml": "yaml",
@@ -72,6 +89,21 @@ def classify_file(path: Path) -> FileKind:
         return FileKind.TEMPLATE
     if suffix in {".json", ".yaml", ".yml", ".toml", ".ini", ".xml"} or rel in CONFIG_FILENAMES:
         return FileKind.CONFIG
-    if detect_language(path) in {"python", "php", "javascript", "typescript", "css", "scss", "sql"}:
+    if detect_language(path) in {
+        "python",
+        "php",
+        "javascript",
+        "typescript",
+        "css",
+        "scss",
+        "sql",
+        "go",
+        "rust",
+        "java",
+        "csharp",
+        "ruby",
+        "c",
+        "cpp",
+    }:
         return FileKind.CODE
     return FileKind.UNKNOWN

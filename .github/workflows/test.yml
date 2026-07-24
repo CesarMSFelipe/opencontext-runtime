@@ -52,8 +52,16 @@ jobs:
         run: ruff format --check .
       - name: Type check (core + api + cli + profiles)
         run: mypy packages/opencontext_core packages/opencontext_api packages/opencontext_cli packages/opencontext_profiles
-      - name: Test
-        run: pytest
+      - name: Test (unit lane, parallel)
+        # Parallel unit lane across CPUs (pytest-xdist). Excludes the black-box
+        # acceptance tests (run serially below) and the real_host end-to-end
+        # tests. Per-worker HOME isolation in tests/conftest.py keeps parallel
+        # workers from colliding on ~/.opencontext / ~/.engram.
+        run: pytest -n auto --ignore=tests/acceptance -m "not real_host"
+      - name: Test (acceptance lane, serial)
+        # Acceptance tests drive the real CLI with isolated $HOME + temp
+        # workspaces and long subprocess timeouts; kept serial on purpose.
+        run: pytest tests/acceptance -m "not real_host"
       - name: Build distributions
         # Mirrors the publish.yml matrix so a packaging break in any published
         # package fails here, before a release is attempted.

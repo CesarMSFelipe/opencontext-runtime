@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from opencontext_sdd.status import Resolve, Status, parse_verify_report
 
 # ---------------------------------------------------------------------------
@@ -131,6 +132,24 @@ def test_REQ_OSS_002_resolve_ambiguous_when_multiple_changes_and_none(
     assert status.changeName is None
     assert "ambiguous:select-change" in status.blockedReasons
     assert status.nextRecommended == "select-change"
+
+
+@pytest.mark.parametrize("no_name", [None, ""])
+def test_REQ_OSS_002_resolve_single_active_change_auto_resolves(
+    tmp_path: Path, no_name: str | None
+) -> None:
+    """With EXACTLY ONE active change, a missing name (``None`` OR ``""`` — the
+    CLI passes ``""`` for an absent positional) resolves to that change instead
+    of scanning the ``changes/`` dir itself and reporting all artifacts missing.
+    """
+    changes = tmp_path / "openspec" / "changes" / "solo"
+    _write_minimal_change(changes)
+
+    status = Resolve(no_name, cwd=str(tmp_path))
+    assert status.changeName == "solo"
+    assert "ambiguous:select-change" not in status.blockedReasons
+    assert status.artifacts.get("proposal") == "done"
+    assert status.nextRecommended == "spec"
 
 
 # ---------------------------------------------------------------------------

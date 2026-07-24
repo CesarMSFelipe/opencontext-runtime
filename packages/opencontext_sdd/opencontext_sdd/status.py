@@ -338,7 +338,10 @@ def Resolve(change: str | None, *, cwd: str) -> Status:
     changes_root = cwd_path / "openspec" / "changes"
     gates, gates_run = _load_latest_gates(cwd_path)
 
-    if change is None:
+    # Falsy change (None or "") means "no name given" — auto-resolve when exactly
+    # one active change exists. The CLI passes "" for a missing positional, so
+    # matching on ``not change`` keeps status/ff/continue consistent.
+    if not change:
         names = _list_changes(changes_root)
         if len(names) != 1:
             return Status(

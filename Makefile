@@ -1,7 +1,7 @@
 # OpenContext Runtime Makefile
 # Common development tasks
 
-.PHONY: help install dev test lint format type-check clean docs e2e validate binary release-zip ci ci-check ci-clean
+.PHONY: help install dev test test-unit test-acceptance lint format type-check clean docs e2e validate binary release-zip ci ci-check ci-clean
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -35,8 +35,23 @@ dev:
 	$(PIP) install -e packages/opencontext_core -e packages/opencontext_cli -e packages/opencontext_api
 	$(PIP) install -r requirements-ci.txt
 
-test:
-	$(PYTEST) -q
+# Full suite: fast parallel unit lane, then the serial acceptance lane.
+test: test-unit test-acceptance
+
+# Unit lane — everything except the black-box acceptance tests and the
+# real-host end-to-end tests, run in parallel across CPUs (pytest-xdist). Per-
+# worker HOME isolation lives in tests/conftest.py so parallel workers can't
+# collide on ~/.opencontext / ~/.engram. Scope mirrors CI's `test` job (the
+# `testpaths = ["tests"]` in pyproject, minus acceptance and real_host).
+test-unit:
+	$(PYTEST) -n auto --ignore=tests/acceptance -m "not real_host"
+
+# Acceptance lane — black-box tests that drive the real CLI (install/index/run)
+# with isolated $HOME + temp workspaces and long subprocess timeouts. Kept
+# SERIAL on purpose: they spawn heavyweight subprocesses and manage their own
+# isolation, so running them in parallel adds contention without benefit.
+test-acceptance:
+	$(PYTEST) tests/acceptance -q
 
 test-sdd:
 	$(PYTEST) packages/opencontext_sdd/tests/ -q

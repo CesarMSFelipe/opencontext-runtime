@@ -255,9 +255,9 @@ def _dispatch_tool(tool: str, cwd: Path, args: argparse.Namespace) -> None:
     Every tool is wired to the local SQLite store (via ``_open_store``) or
     dispatched as a pure function when the tool takes no store.
 
-    Verbs without a backend implementation (``stats``, ``timeline``,
-    ``merge-projects``) exit 2 with an honest message so the caller is never
-    silently swallowed by a no-op.
+    Verbs without a backend implementation (``timeline``, ``merge-projects``)
+    exit 2 with an honest message so the caller is never silently swallowed by
+    a no-op. ``stats`` surfaces the counts ``doctor`` already computes.
     """
     # --- save ---
     if tool == "save":
@@ -526,6 +526,23 @@ def _dispatch_tool(tool: str, cwd: Path, args: argparse.Namespace) -> None:
 
         report = mem_doctor(_open_store(cwd))
         print(report.model_dump_json(indent=2))
+        return
+
+    # --- stats ---
+    if tool == "stats":
+        from opencontext_memory import mem_doctor
+
+        # Reuse the counts the store already exposes via doctor — total
+        # observations plus the lifecycle breakdown — rather than inventing a
+        # new counting API. Honest by design: the same numbers `doctor` reports.
+        report = mem_doctor(_open_store(cwd))
+        stats = {
+            "total_observations": report.observations,
+            "pending_judgments": report.pending_judgments,
+            "stale_observations": report.stale_observations,
+            "needs_review": report.needs_review,
+        }
+        print(json.dumps(stats, indent=2, default=str))
         return
 
     # --- current-project (no store — pure cwd detection) ---

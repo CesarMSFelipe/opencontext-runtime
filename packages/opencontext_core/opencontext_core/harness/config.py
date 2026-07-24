@@ -7,6 +7,46 @@ from pathlib import Path
 
 from opencontext_core.harness.models import PrivacyProfile
 
+# --------------------------------------------------------------------------- #
+# Shared TDD-mode resolution (Rodaja 5 B).
+#
+# The SDD harness (``HarnessRunner._harness_governance``) and OC Flow
+# (``OCFlowRunner._resolve_tdd_mode``) each used to hand-roll the same three
+# pieces: read the ``OPENCONTEXT_TDD_MODE`` env var, normalize the value against
+# ``{strict, ask, off}``, and default to ``ask``. That duplicated logic lives
+# here now, so the two spines can never drift on precedence or normalization.
+#
+# Each spine still reads its OWN source of truth (the harness reads its resolved
+# ``config`` dataclass with its config-explicit-wins fallback; OC Flow reads the
+# installed ``harness.yaml`` / ``opencontext.yaml`` chain) and feeds the merged
+# inputs in. The shared function owns only the env-vs-config merge, normalization,
+# and default — canonical precedence ``env > config > default``. Behaviour stays
+# byte-identical to what each spine previously computed.
+# --------------------------------------------------------------------------- #
+TDD_MODES: tuple[str, ...] = ("strict", "ask", "off")
+DEFAULT_TDD_MODE = "ask"
+
+
+def normalize_tdd_mode(candidate: object, default: str = DEFAULT_TDD_MODE) -> str:
+    """Return ``candidate`` if it is a canonical TDD mode, else ``default``.
+
+    Canonical modes are ``strict`` / ``ask`` / ``off``. Anything else (including
+    ``None`` and unknown strings) collapses to ``default``.
+    """
+    return candidate if candidate in TDD_MODES else default
+
+
+def resolve_tdd_mode(*, env_value: object, config_value: object) -> str:
+    """Resolve the effective TDD mode with canonical precedence.
+
+    Precedence: a VALID ``env_value`` wins; otherwise the (already
+    source-resolved) ``config_value`` if valid; otherwise the ``ask`` default.
+    Both inputs are normalized against ``{strict, ask, off}``.
+    """
+    if env_value in TDD_MODES:
+        return env_value
+    return normalize_tdd_mode(config_value)
+
 
 @dataclass
 class PhaseConfig:

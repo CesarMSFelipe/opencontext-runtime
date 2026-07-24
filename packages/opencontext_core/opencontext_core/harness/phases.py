@@ -35,6 +35,7 @@ from opencontext_core.harness.models import (
 )
 from opencontext_core.paths import StorageMode, resolve_storage_path, resolve_workspace_path
 from opencontext_core.paths.execution_state import runs_root
+from opencontext_core.runtime import OpenContextRuntime
 
 
 @dataclass
@@ -281,6 +282,141 @@ def _compact_artifact(text: str, state: Any, target_tokens: int = _HANDOFF_TARGE
     return summarize_to_budget(text, target_tokens, gateway)
 
 
+# Cap the salient terms that seed a middle phase's fresh-context query, so the
+# query stays a tight, relevant retrieval seed (the phase's specific symbols/files)
+# rather than a re-run of explore's whole broad pack (anti-bloat rule).
+_MAX_QUERY_TERMS = 12
+
+
+def _dedup_terms(terms: list[str]) -> list[str]:
+    """Order-preserving de-dup of non-empty, stripped terms, capped for a query."""
+    seen: dict[str, None] = {}
+    for raw in terms:
+        t = (raw or "").strip()
+        if t and t not in seen:
+            seen[t] = None
+    return list(seen)[:_MAX_QUERY_TERMS]
+
+
+def _stop_runtime_worker(runtime: Any) -> None:
+    """Best-effort: stop a runtime's embedding worker so its thread does not leak.
+
+    The middle-phase / explore KG folds build a fresh ``OpenContextRuntime`` that,
+    with ``embedding.enabled=True``, starts an ``AsyncEmbeddingWorker`` thread on
+    construction. The runtime has no ``close``/context-manager, so the worker is
+    stopped here after the pack is built. Swallows everything — a worker that never
+    started, has no ``stop``, or errors on stop must never break the phase.
+    """
+    worker = getattr(runtime, "embedding_worker", None)
+    stop = getattr(worker, "stop", None)
+    if callable(stop):
+        try:
+            stop()
+        except Exception:  # pragma: no cover - defensive; worker teardown is optional
+            pass
+
+
+def _fold_kg_context(state: Any, phase: str, query: str, budget: int) -> None:
+    """Build a FRESH, KG-grounded context pack for a middle phase and fold it in.
+
+    Rodaja 3: give the MIDDLE phases (spec/design/tasks) a fresh context pack built
+    with the SAME builder ``ExplorePhase`` uses
+    (``OpenContextRuntime.build_context_pack``), but with a ``query`` DERIVED from
+    THAT phase's own input artifact and capped to the phase's own token ``budget``
+    (``PhaseConfig.budget_tokens`` — the "compresión adecuada"). The rendered pack is
+    COMPOSED with ``state.context_pack`` ALONGSIDE the prior artifact + memory
+    (never replaced), so it reaches the executor via ``run_phase_executor``.
+
+    Anti-bloat (the load-bearing invariant): ``state.context_pack`` is REBUILT each
+    phase as ``explore_base + THIS phase's fresh block`` — it is NOT appended to the
+    accumulated value. ``state.context_pack`` is set once by :class:`ExplorePhase` and
+    is never reset by the runner, so a plain append would stack spec+design+tasks+apply
+    blocks and blow the per-phase budget (spec appends, design on top, …). Snapshotting
+    the explore base once (``state.explore_pack``) and composing from it keeps each
+    phase's executor context bounded by ``explore_base + one phase block`` and drops
+    every PRIOR phase's KG block (the distilled prior-phase OUTPUT is forwarded
+    separately via ``state.prior_artifact``, so nothing useful is lost).
+
+    The query is targeted to the phase's specific symbols/files, and the fresh block is
+    additionally capped toward ``budget`` so a single phase's context can never blow the
+    phase's token budget. Best-effort — a missing index / unavailable KG leaves
+    ``state.context_pack`` untouched and never raises (mirrors explore's best-effort KG
+    posture).
+    """
+    q = (query or "").strip()
+    if not q or budget <= 0:
+        return
+    # Snapshot the explore base ONCE (the pack ExplorePhase set, before any KG fold).
+    # A missing attribute means this is the first fold on this state, so whatever is
+    # currently in context_pack IS the explore base. Sentinel-guarded so an explore
+    # base of "" is captured as "" (and not re-snapshotted after the first block is
+    # composed in), which is what makes the composition idempotent across phases.
+    if getattr(state, "explore_pack", None) is None:
+        state.explore_pack = getattr(state, "context_pack", "") or ""
+    explore_base = state.explore_pack or ""
+    try:
+        runtime = OpenContextRuntime(
+            config_path=state.root / "opencontext.yaml"
+            if (state.root / "opencontext.yaml").exists()
+            else None,
+            storage_path=resolve_storage_path(state.root, StorageMode.local),
+        )
+        try:
+            pack = runtime.build_context_pack(q, budget)
+        finally:
+            # LOW: a fresh runtime per middle phase starts an embedding worker when
+            # ``embedding.enabled`` is True; without stopping it the worker thread
+            # leaks (one per phase). Stop it best-effort once the pack is built — the
+            # runtime is not reused past this call. Never masks a build failure.
+            _stop_runtime_worker(runtime)
+    except Exception:
+        return  # KG unavailable — fold nothing, never block the phase
+    included = list(getattr(pack, "included", []) or [])
+    if not included:
+        return
+    rendered = "\n\n".join(
+        f"### {getattr(item, 'source', '?')}\n{getattr(item, 'content', '')}" for item in included
+    ).strip()
+    if not rendered:
+        return
+    block = f"### fresh {phase} context (KG-grounded, budget {budget})\n{rendered}"
+    # Cap the folded block toward the phase budget so it cannot exceed the phase's
+    # token budget (the budget IS the compression target). ``_compact_artifact`` is a
+    # no-op when already within budget and a deterministic trim otherwise.
+    block = _compact_artifact(block, state, target_tokens=budget)
+    # REBUILD from the stable explore base + THIS block — never append to the
+    # accumulated value, so prior phases' KG blocks do not stack across the pipeline.
+    state.context_pack = f"{explore_base}\n\n{block}" if explore_base else block
+
+
+def _fold_apply_kg_context(state: Any, budget: int) -> None:
+    """Fold ONE fresh KG pack derived from the task list's symbols/files (apply).
+
+    Kept SIMPLE per the change brief: a single pack whose query is derived from the
+    task list (``tasks.json`` file_paths + descriptions), NOT a per-task loop. The
+    pack reaches the apply codegen via ``state.context_pack``. Per-task impact is a
+    possible follow-up. Best-effort — never raises.
+    """
+    run_dir = runs_root(state.root) / state.run_id
+    tasks_path = run_dir / "tasks.json"
+    terms: list[str] = []
+    if tasks_path.exists():
+        try:
+            data = json.loads(tasks_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = None
+        task_items = data.get("tasks", []) if isinstance(data, dict) else data
+        for t in task_items or []:
+            if not isinstance(t, dict):
+                continue
+            for fp in t.get("file_paths", []) or []:
+                terms.append(str(fp))
+            desc = str(t.get("description", "") or "")
+            terms.extend(re.findall(r"[A-Za-z_][A-Za-z0-9_]{3,}", desc))
+    query = " ".join(_dedup_terms(terms)) or (getattr(state, "task", "") or "")
+    _fold_kg_context(state, "apply", query, budget)
+
+
 class HarnessPhase:
     """Base class for a single harness phase."""
 
@@ -429,6 +565,11 @@ class ExplorePhase(HarnessPhase):
             state.context_pack = _compact_artifact(
                 state.context_pack, state, target_tokens=cap_tokens
             )
+        # Capture the finalized explore pack as the STABLE base the middle phases
+        # compose their per-phase KG block onto (anti-bloat: no cross-phase KG
+        # accumulation). Setting it here — rather than lazily on the first fold —
+        # keeps the base authoritative even if that first fold's KG lookup fails.
+        state.explore_pack = state.context_pack
 
         # KG wiring: run impact analysis if task is provided
         impact_affected_files: list[str] = []
@@ -599,6 +740,11 @@ class ExplorePhase(HarnessPhase):
                 description="Exploration findings consumed by the propose phase",
             )
         )
+
+        # LOW: stop the explore runtime's embedding worker so its thread does not
+        # leak past the phase. Stopping the worker does not touch ``runtime.config``,
+        # so the ``semantic_layer`` metadata below still reads correctly.
+        _stop_runtime_worker(runtime)
 
         return PhaseResult(
             phase="explore",
@@ -998,7 +1144,7 @@ class ProposePhase(HarnessPhase):
         # Delegate to the wired executor for a REAL proposal narrative; fall back to the
         # structured scaffold when no model is wired (mirrors spec/design/tasks — honest,
         # never a fabricated "success"). Keeps the JSON contract spec reads downstream.
-        outcome = run_phase_executor(state, "propose")
+        outcome = run_phase_executor(state, "propose", self.config.budget_tokens)
         real = outcome.is_real
         narrative = (outcome.output or "").strip() if real else ""
         used = estimate_tokens(outcome.output or "") if real else 0
@@ -1218,9 +1364,11 @@ def _phase_skill_rules(phase: str, max_skills: int = 2) -> str:
         from opencontext_core.skills.compact_rules import generate_compact_rules
         from opencontext_core.skills.resolver import resolve_skills
 
-        matched = resolve_skills(
-            registry, file_patterns=[], task_type=phase, max_matches=max_skills
-        )
+        # The apply phase carries two dedicated skills (oc-apply-rules and the
+        # neutrally-named minimal-diff signal); widen the cap so neither displaces
+        # the other under the default of 2.
+        effective = max(max_skills, 3) if phase == "apply" else max_skills
+        matched = resolve_skills(registry, file_patterns=[], task_type=phase, max_matches=effective)
         if not matched:
             return ""
         rules = generate_compact_rules(matched, max_per_skill=6).strip()
@@ -1300,7 +1448,7 @@ def _render_program_plan(plan: Any) -> str:
         return ""
 
 
-def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
+def run_phase_executor(state: Any, phase: str, budget: int | None = None) -> ExecutorOutcome:
     """Invoke the wired executor for a work-producing phase, honestly.
 
     Looks for a delegation layer on the run ``state`` (``state.delegate`` — a
@@ -1308,6 +1456,14 @@ def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
     exposing ``delegate(phase, context) -> SubAgentResult``). This mirrors how
     :class:`ApplyPhase` reads ``state.apply_edits``: the executor/delegation
     layer is supplied on the state, never fabricated by the phase.
+
+    ``budget`` (the phase's ``PhaseConfig.budget_tokens``) caps the FULLY ASSEMBLED
+    executor context. The individual signals are each bounded upstream (KG block, the
+    forwarded prior artifact), but their CONCATENATION had no final cap, so a large
+    explore pack + a fresh KG block + the prior artifact + recalled memory + skills +
+    health could together exceed the phase budget. When provided, the assembled
+    ``base_context`` is compacted toward it (keeping every signal present but bounded).
+    ``None`` leaves the legacy uncapped behaviour unchanged.
 
     Returns an :class:`ExecutorOutcome` describing whether a real executor ran.
     The phase uses the outcome to decide between reporting a real, completed
@@ -1345,6 +1501,21 @@ def run_phase_executor(state: Any, phase: str) -> ExecutorOutcome:
             health_block = _render_health_for_design(snapshot)
             if health_block:
                 base_context = f"{base_context}\n\n{health_block}" if base_context else health_block
+    # Recalled memory (rendered by the runner's PhaseMemoryGateway before this
+    # phase ran) is appended LAST so the model sees prior-run knowledge for this
+    # phase alongside the artifact + pack. Empty string when memory recalled
+    # nothing, so it adds no blank section.
+    phase_memory = getattr(state, "phase_memory", "") or ""
+    if phase_memory:
+        base_context = f"{base_context}\n\n{phase_memory}" if base_context else phase_memory
+    # MEDIUM: cap the FULLY ASSEMBLED context toward the phase budget. Each signal is
+    # bounded upstream, but their concatenation was not — a large explore pack + KG
+    # block + prior artifact + memory + skills + health could together blow the phase
+    # budget. ``_compact_artifact`` summarizes-to-budget (no-op when already within),
+    # so every signal stays present but the whole stays bounded. Only when a budget is
+    # supplied and the context is non-empty.
+    if budget and budget > 0 and base_context:
+        base_context = _compact_artifact(base_context, state, target_tokens=budget)
     context = {
         "task": getattr(state, "task", ""),
         "phase": phase,
@@ -1980,9 +2151,20 @@ class SpecPhase(HarnessPhase):
             state,
         )
 
+        # Rodaja 3: build a FRESH KG-grounded pack scoped to the PROPOSAL's own
+        # symbols/files (its scope), capped to the spec phase budget, and fold it
+        # into state.context_pack alongside the prior artifact + memory.
+        scope = proposal.get("scope", {}) if isinstance(proposal.get("scope"), dict) else {}
+        spec_terms = _dedup_terms(
+            list(proposal.get("required_symbols", []) or scope.get("required_symbols", []) or [])
+            + list(proposal.get("affected_files", []) or scope.get("affected_files", []) or [])
+            + [task]
+        )
+        _fold_kg_context(state, "spec", " ".join(spec_terms), self.config.budget_tokens)
+
         # Honest executor contract: run the real executor when wired, otherwise
         # emit a clearly-marked scaffold reported as "planned" (NOT a success).
-        outcome = run_phase_executor(state, "spec")
+        outcome = run_phase_executor(state, "spec", self.config.budget_tokens)
         if outcome.is_real:
             spec_content = outcome.output or ""
         else:
@@ -2112,9 +2294,21 @@ class DesignPhase(HarnessPhase):
         # Forward the compacted spec to the design executor — the model-facing handoff.
         state.prior_artifact = f"## Spec from the prior phase (compacted)\n{spec_content}"
 
+        # Rodaja 3: build a FRESH KG-grounded pack scoped to the SPEC's own
+        # requirements/affected symbols (requirement headings + resolved symbols),
+        # capped to the design phase budget, and fold it into state.context_pack.
+        design_terms = [
+            line.split("### Requirement:", 1)[1].strip()
+            for line in spec_content.split("\n")
+            if "### Requirement:" in line
+        ]
+        design_terms += list(getattr(state, "contract_required_symbols", []) or [])
+        design_query = " ".join(_dedup_terms(design_terms)) or task
+        _fold_kg_context(state, "design", design_query, self.config.budget_tokens)
+
         # Honest executor contract: run the real executor when wired, otherwise
         # emit a clearly-marked scaffold reported as "planned" (NOT a success).
-        outcome = run_phase_executor(state, "design")
+        outcome = run_phase_executor(state, "design", self.config.budget_tokens)
         if outcome.is_real:
             design_content = outcome.output or ""
         else:
@@ -2261,9 +2455,25 @@ class TasksPhase(HarnessPhase):
         # Forward the compacted design to the tasks executor — the model-facing handoff.
         state.prior_artifact = f"## Design from the prior phase (compacted)\n{design_content}"
 
+        # Rodaja 3: build a FRESH KG-grounded pack scoped to the DESIGN's own
+        # components/files (file paths named in the design + component identifiers),
+        # capped to the tasks phase budget, and fold it into state.context_pack.
+        # LOW: ``cc`` was missing from the alternation, so a ``.cc`` path matched only
+        # its trailing ``.c`` (the greedy ``[\w./-]+`` ate the first ``c``) — truncating
+        # ``foo.cc`` to ``foo.c``. Add ``cc`` in longest-first order (``cpp|cc|c``) so each
+        # C-family extension is captured whole and no shorter alternative shadows it.
+        tasks_terms = re.findall(
+            r"[\w./-]+\.(?:py|ts|js|go|rs|java|rb|php|cs|cpp|cc|c|h)", design_content
+        )
+        for line in design_content.split("\n"):
+            if line.lstrip().startswith(("- ", "* ")):
+                tasks_terms += re.findall(r"[A-Za-z_][A-Za-z0-9_]{3,}", line)
+        tasks_query = " ".join(_dedup_terms(tasks_terms)) or task
+        _fold_kg_context(state, "tasks", tasks_query, self.config.budget_tokens)
+
         # Honest executor contract: run the real executor when wired, otherwise
         # emit a clearly-marked scaffold reported as "planned" (NOT a success).
-        outcome = run_phase_executor(state, "tasks")
+        outcome = run_phase_executor(state, "tasks", self.config.budget_tokens)
         if not outcome.is_real and getattr(state, "delegate", None) is None:
             state.warnings.append(
                 "Phase 'TasksPhase': no model bound — emitted a structured plan for your "

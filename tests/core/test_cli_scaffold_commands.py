@@ -150,7 +150,12 @@ def test_pack_output_file_is_redacted(tmp_path: Path, capsys) -> None:
     runtime.index_project(project)
     output = tmp_path / ".opencontext/context-packs/auth.md"
 
-    _pack(runtime, "API_KEY", 2000, "markdown", "audit", False, str(output))
+    # Root the pack at the tmp project: ``_pack`` records a telemetry event under
+    # ``<root>/.opencontext/telemetry/events.jsonl`` and ``root`` defaults to
+    # ``"."`` (the process CWD == this repo). Under the parallel unit lane that
+    # append races the snapshot guards in ``test_ci_quality_checks.py`` /
+    # ``test_quality_gate.py``. Passing the tmp project keeps the write hermetic.
+    _pack(runtime, "API_KEY", 2000, "markdown", "audit", False, str(output), root=str(project))
 
     assert "Wrote context pack" in capsys.readouterr().out
     rendered = output.read_text(encoding="utf-8")

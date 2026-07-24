@@ -325,10 +325,19 @@ def run_preflight(*, task: str, workflow: str, lane: str, profile: str, root: Pa
 # ---------------------------------------------------------- oc-new preflight
 @dataclass(frozen=True)
 class OcNewDecision:
-    """Outcome of the oc-new preflight: whether to start and the run's flow mode."""
+    """Outcome of the oc-new preflight.
+
+    ``flow_mode`` maps onto ``AgenticFlowConfig`` and drives the conductor. The
+    remaining three are guided SDD choices captured for THIS RUN ONLY — they are
+    surfaced (and echoed as ``config set`` hints) but never written to the config
+    file, mirroring the flow-mode "this run only" contract.
+    """
 
     proceed: bool
     flow_mode: str
+    artifact_store: str = ""
+    delivery_strategy: str = ""
+    chain_strategy: str = ""
 
 
 _FLOW_MODE_MEANINGS: dict[str, str] = {
@@ -391,6 +400,137 @@ def _flow_mode_cards(active: str, source: str) -> list[tuple[str, str, DetailCar
     return rows
 
 
+# --- guided SDD selectors (artifact store / delivery / chain) ----------------
+# gentle-ai's SDD Session Preflight asks these predefined-option groups with
+# guidance. OpenContext mirrors that here as config-TUI detail-card selectors,
+# PREDEFINED answers only, defaulted from the resolved SDDConfig. Every choice is
+# THIS RUN ONLY — the config file is never written.
+
+# value -> (meaning, recommended, risk). Order is the presentation order.
+_ARTIFACT_STORE_CARDS: dict[str, tuple[str, str, str]] = {
+    "hybrid": (
+        "writes OpenSpec files AND mirrors artifacts to Engram memory",
+        "The safe default: reviewable files plus cross-session recovery.",
+        "Highest token cost of the four — artifacts are stored twice.",
+    ),
+    "openspec": (
+        "writes a reviewable OpenSpec artifact trail under openspec/",
+        "Sharing a committable spec/design/tasks trail with a team.",
+        "No memory mirror — artifacts are lost if the files are deleted.",
+    ),
+    "engram": (
+        "keeps artifacts in Engram memory only (no files created)",
+        "Fast solo iteration where you don't want files in the tree.",
+        "Re-running a phase overwrites the previous version (no history).",
+    ),
+    "none": (
+        "returns artifacts inline only; nothing is persisted",
+        "Throwaway exploration where persistence adds no value.",
+        "No recovery — nothing survives the session.",
+    ),
+}
+
+# value -> (meaning, recommended, risk).
+_DELIVERY_STRATEGY_CARDS: dict[str, tuple[str, str, str]] = {
+    "ask-on-risk": (
+        "pause to decide PR sizing only when the change is risky/large",
+        "The safe default: chains only when review focus is at risk.",
+        "May interrupt a large change to ask how to split it.",
+    ),
+    "single-pr": (
+        "deliver everything in one PR (requires a size exception if large)",
+        "Small, cohesive changes that fit one focused review.",
+        "A large single PR strains review; may need size:exception.",
+    ),
+    "auto-chain": (
+        "automatically split into chained/stacked PRs by autonomous slice",
+        "Large changes you want sliced without being asked each time.",
+        "Creates multiple PRs; needs a chain strategy to sequence them.",
+    ),
+    "exception-ok": (
+        "proceed past the size budget with a recorded size exception",
+        "You accept a big diff and want the budget waived up front.",
+        "Bypasses the 400-line review budget guard for this run.",
+    ),
+    "plan-only": (
+        "produce plan artifacts only; no PR is created",
+        "Planning a change without delivering code yet.",
+        "Nothing ships — apply/PR is out of scope for this run.",
+    ),
+}
+
+# value -> (meaning, recommended, risk).
+_CHAIN_STRATEGY_CARDS: dict[str, tuple[str, str, str]] = {
+    "stacked-to-main": (
+        "each PR merges to main in order",
+        "Speed-first teams and independent slices; fix on the go.",
+        "Every slice lands on main as it merges — less rollback control.",
+    ),
+    "feature-branch-chain": (
+        "child PRs target the previous branch; only the tracker merges to main",
+        "Rollback control and coordinated releases; focused review diffs.",
+        "Slower integration — main sees the change only when the tracker merges.",
+    ),
+}
+
+# Deliveries where nothing chains, so the chain-strategy question is moot.
+_NON_CHAINING_DELIVERIES = frozenset({"plan-only", "single-pr"})
+
+
+def _guided_cards(
+    active: str,
+    meanings: dict[str, tuple[str, str, str]],
+    config_key: str,
+) -> list[tuple[str, str, DetailCard]]:
+    """(value, label, card) rows for a predefined-option SDD selector."""
+    rows: list[tuple[str, str, DetailCard]] = []
+    for value, (meaning, recommended, risk) in meanings.items():
+        current = "default for this run (from config)" if value == active else "not selected"
+        rows.append(
+            (
+                value,
+                f"{value} — {meaning}",
+                DetailCard(
+                    current=current,
+                    effect=f"For this run: {meaning}.",
+                    recommended=recommended,
+                    risk=risk,
+                    cli=f"opencontext config set {config_key} {value}",
+                ),
+            )
+        )
+    return rows
+
+
+def _guided_select(
+    *,
+    title: str,
+    question: str,
+    default: str,
+    meanings: dict[str, tuple[str, str, str]],
+    config_key: str,
+) -> str:
+    """Render one guided detail-card selector and return the chosen value.
+
+    THIS RUN ONLY: prints a ``config set`` persistence hint, never writes config.
+    On a non-TTY, ``prompts.select`` returns *default* untouched, so machine and
+    scripted runs behave exactly as before.
+    """
+    cards = _guided_cards(default, meanings, config_key)
+    _render_option_cards(title, [(label, card) for _, label, card in cards])
+    chosen = str(
+        prompts.select(
+            question,
+            [(value, label) for value, label, _ in cards],
+            default=default,
+        )
+    )
+    console.dim(
+        f"Applies to this run only. Persist with: opencontext config set {config_key} {chosen}"
+    )
+    return chosen
+
+
 def _oc_new_briefing_lines(task: str, flow_mode: str, source: str, root: Path) -> list[str]:
     """Flow briefing: mode + meaning, phase list, and the project's SDD knobs."""
     try:
@@ -432,11 +572,35 @@ def _oc_new_briefing_lines(task: str, flow_mode: str, source: str, root: Path) -
     ]
 
 
+def _sdd_defaults(root: Path) -> tuple[str, str, str]:
+    """Resolved (artifact_store, delivery_strategy, chain_strategy) from SDDConfig.
+
+    Falls back to the built-in SDD defaults when the project config is missing or
+    unreadable, so the selectors always seed a legal enum value.
+    """
+    store = "none"
+    delivery = "plan-only"
+    chain = "stacked-to-main"
+    try:
+        from opencontext_core.config import load_config_or_defaults
+        from opencontext_core.config_resolver import resolve_config_path
+
+        cfg = load_config_or_defaults(resolve_config_path(root), auto_detect=False)
+        store = str(cfg.sdd.artifact_store.mode.value)
+        delivery = str(cfg.sdd.delivery_strategy.value)
+        chain = str(cfg.sdd.chain_strategy.value)
+    except Exception:
+        pass
+    return store, delivery, chain
+
+
 def oc_new_preflight(*, task: str, flow_mode: str, source: str, root: Path) -> OcNewDecision:
     """Interactive preflight for ``opencontext oc-new start``.
 
-    Explains the flow, asks for the execution mode (this run only — the
-    persistence hint is printed, the config is never written), then confirms.
+    Explains the flow, then asks predefined-option questions for THIS RUN ONLY:
+    the execution mode, the artifact store, the delivery strategy, and (when
+    delivery can chain) the chain strategy. Each choice prints a ``config set``
+    persistence hint but never writes the config. Finally confirms the start.
     """
     console.header("oc-new Preflight")
     briefing = "\n".join(_oc_new_briefing_lines(task, flow_mode, source, root))
@@ -455,9 +619,50 @@ def oc_new_preflight(*, task: str, flow_mode: str, source: str, root: Path) -> O
         f"Applies to this run only. Persist with: opencontext config set sdd.flow_mode {chosen}"
     )
 
+    store_default, delivery_default, chain_default = _sdd_defaults(root)
+
+    artifact_store = _guided_select(
+        title="Artifact store options",
+        question="Where should SDD artifacts be stored for this run?",
+        default=store_default,
+        meanings=_ARTIFACT_STORE_CARDS,
+        config_key="sdd.artifact_store.mode",
+    )
+
+    delivery_strategy = _guided_select(
+        title="Delivery strategy options",
+        question="How should delivery be sized for review?",
+        default=delivery_default,
+        meanings=_DELIVERY_STRATEGY_CARDS,
+        config_key="sdd.delivery_strategy",
+    )
+
+    # Chain strategy is only meaningful when delivery may split into chained PRs.
+    chain_strategy = ""
+    if delivery_strategy not in _NON_CHAINING_DELIVERIES:
+        chain_strategy = _guided_select(
+            title="Chain strategy options",
+            question="How should chained PRs be sequenced?",
+            default=chain_default,
+            meanings=_CHAIN_STRATEGY_CARDS,
+            config_key="sdd.chain_strategy",
+        )
+
     if not prompts.confirm("Start the oc-new run now?", default=True):
-        return OcNewDecision(proceed=False, flow_mode=chosen)
-    return OcNewDecision(proceed=True, flow_mode=chosen)
+        return OcNewDecision(
+            proceed=False,
+            flow_mode=chosen,
+            artifact_store=artifact_store,
+            delivery_strategy=delivery_strategy,
+            chain_strategy=chain_strategy,
+        )
+    return OcNewDecision(
+        proceed=True,
+        flow_mode=chosen,
+        artifact_store=artifact_store,
+        delivery_strategy=delivery_strategy,
+        chain_strategy=chain_strategy,
+    )
 
 
 # ------------------------------------------------------------- gate rendering

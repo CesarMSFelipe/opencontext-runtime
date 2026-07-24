@@ -156,6 +156,47 @@ def test_native_tokens_input_persists(tmp_path, monkeypatch: pytest.MonkeyPatch)
     assert UserConfigStore().load().default_token_budget == 9000
 
 
+def test_memory_backend_options_are_labeled_for_the_three_providers() -> None:
+    """The memory-backend picker must offer exactly the three provider choices with
+    the user-facing labels (Local / Engram / Auto-recommended), each mapped to the
+    ``memory.provider`` value the BackendFactory resolves."""
+    from opencontext_cli.tui.sub_screens import memory_screen
+
+    screen = memory_screen()
+    options = list(screen._options)
+    values = [key for key, _ in options]
+    assert values == ["local", "engram", "auto"]
+
+    labels = {key: label for key, label in options}
+    # Values must be exactly the provider keys the factory understands.
+    assert "7-layer" in labels["local"]
+    assert "Engram" in labels["engram"]
+    assert "recommended" in labels["auto"].lower()
+
+
+def test_memory_backend_pick_persists_each_provider_to_yaml(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Selecting each option persists the correct ``memory.provider`` to
+    opencontext.yaml through the shared safe writer (set_yaml_key). Drives the
+    picker's on_pick handler directly — no interactive keypresses."""
+    from opencontext_cli.tui.sub_screens import memory_screen
+    from opencontext_core.config import find_config, load_config
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "opencontext.yaml").write_text("memory:\n  provider: local\n", encoding="utf-8")
+
+    def _resolved_provider() -> str:
+        cf = find_config(str(tmp_path))
+        assert cf is not None
+        return load_config(cf).memory.provider
+
+    for value in ("engram", "auto", "local"):
+        screen = memory_screen()
+        screen._on_pick(value)  # exactly what OptionList selection invokes
+        assert _resolved_provider() == value
+
+
 def test_native_models_two_step_persists(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     from opencontext_cli.tui.app import OpenContextApp
     from opencontext_cli.tui.sub_screens import ModelsScreen

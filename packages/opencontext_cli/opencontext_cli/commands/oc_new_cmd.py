@@ -197,6 +197,42 @@ def _resolve_flow_mode(args: Any, root: Path) -> tuple[str, str]:
     return "automatic", "default"
 
 
+def _session_choices_from_decision(decision: Any) -> Any:
+    """Project the preflight decision onto a SessionChoices for the conductor.
+
+    Returns None when there was no interactive decision (``--yes`` / ``--json`` /
+    non-TTY), so those runs behave exactly as before and the handoff falls back to
+    the project's resolved SDD config. The choices are transport-only for this run;
+    the config file is never written.
+    """
+    if decision is None:
+        return None
+    from opencontext_core.oc_new.models import SessionChoices
+
+    return SessionChoices(
+        artifact_store=str(getattr(decision, "artifact_store", "") or ""),
+        delivery_strategy=str(getattr(decision, "delivery_strategy", "") or ""),
+        chain_strategy=str(getattr(decision, "chain_strategy", "") or ""),
+    )
+
+
+def _echo_guided_choices(decision: Any) -> None:
+    """Print the this-run-only guided SDD choices captured by the preflight.
+
+    These are transport-only for this run: the config file is never written
+    (the preflight already emitted the per-choice ``config set`` hints).
+    """
+    parts: list[str] = []
+    if getattr(decision, "artifact_store", ""):
+        parts.append(f"artifact store={decision.artifact_store}")
+    if getattr(decision, "delivery_strategy", ""):
+        parts.append(f"delivery={decision.delivery_strategy}")
+    if getattr(decision, "chain_strategy", ""):
+        parts.append(f"chain={decision.chain_strategy}")
+    if parts:
+        console.dim("This run only — " + ", ".join(parts))
+
+
 def handle_oc_new(args: Any) -> None:
     root = _root(args)
     conductor = OcNewConductor(root)
@@ -211,19 +247,31 @@ def handle_oc_new(args: Any) -> None:
         # chosen mode applies to THIS RUN ONLY — the config file is never written.
         from opencontext_cli.flow_preflight import is_interactive, oc_new_preflight
 
+        preflight_decision = None
         if is_interactive(args):
             current_mode, source = _resolve_flow_mode(args, root)
-            decision = oc_new_preflight(
+            preflight_decision = oc_new_preflight(
                 task=args.task, flow_mode=current_mode, source=source, root=root
             )
-            if not decision.proceed:
+            if not preflight_decision.proceed:
                 console.dim("oc-new start cancelled — nothing was created.")
                 return
-            if decision.flow_mode != current_mode:
+            if preflight_decision.flow_mode != current_mode:
                 from opencontext_core.agentic.config import AgenticFlowConfig, FlowMode
 
-                config = AgenticFlowConfig(flow_mode=FlowMode(decision.flow_mode))
-        state = conductor.start(args.task, config=config)
+                config = AgenticFlowConfig(flow_mode=FlowMode(preflight_decision.flow_mode))
+        # Forward the this-run-only guided SDD choices (artifact store / delivery /
+        # chain) into the conductor so they ride the agent-facing handoff. This is
+        # transport-only: the config file is never written (the preflight already
+        # printed the per-choice `config set` hints).
+        session_choices = _session_choices_from_decision(preflight_decision)
+        state = conductor.start(args.task, config=config, session_choices=session_choices)
+        # The guided SDD choices (artifact store / delivery / chain) apply to THIS
+        # RUN ONLY — the preflight already printed their `config set` hints and the
+        # config file is untouched. Echo the resolved selection so the run's console
+        # record reflects what was chosen, mirroring the flow-mode this-run contract.
+        if preflight_decision is not None and not json_out:
+            _echo_guided_choices(preflight_decision)
         _print_state(state, json_out=json_out)
 
     elif cmd == "status":

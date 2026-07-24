@@ -1,4 +1,6 @@
-"""Wizard memory step: OpenContext memory by default, Engram as explicit opt-in."""
+"""Wizard memory step: memory provider defaults to 'auto' (couple to a co-resident
+Engram when present, else OpenContext's own local memory); the interactive wizard
+still offers an explicit choice when Engram is detected."""
 
 from __future__ import annotations
 
@@ -12,10 +14,11 @@ from opencontext_core.onboarding.service import OnboardingOptions, OnboardingSer
 from opencontext_core.onboarding.wizard import InteractiveOnboardingWizard
 
 
-def test_default_memory_provider_is_local(tmp_path: Path) -> None:
-    # No explicit choice -> OpenContext's own memory, never silently Engram.
+def test_default_memory_provider_is_auto(tmp_path: Path) -> None:
+    # No explicit choice -> 'auto': couple to a co-resident Engram when present,
+    # else OpenContext's own local memory (the factory degrades gracefully).
     OnboardingService().run(OnboardingOptions(root=tmp_path, force_agent_files=True))
-    assert load_config(tmp_path / "opencontext.yaml").memory.provider == "local"
+    assert load_config(tmp_path / "opencontext.yaml").memory.provider == "auto"
 
 
 def test_service_honors_engram_choice(tmp_path: Path) -> None:

@@ -27,10 +27,26 @@ from opencontext_core.project.profiles import (
 
 _log = logging.getLogger(__name__)
 
-# Languages the tree-sitter parser has real symbol extractors for. Files in other
-# languages are still scanned/searchable but don't get graph symbols+edges. Keep
-# in sync with TreeSitterParser._parse_with_tree_sitter.
-_KG_LANGUAGES = frozenset({"python", "javascript", "typescript", "go", "rust", "java", "php"})
+# Languages the tree-sitter parser extracts symbols for. python/js/ts/go/rust/
+# java/php have dedicated extractors; c/cpp/ruby/csharp go through the generic
+# declaration extractor (symbols, no edges). Files in other languages are still
+# scanned/searchable but don't get graph symbols+edges. Keep in sync with
+# TreeSitterParser._parse_with_tree_sitter (specific + generic dispatch).
+_KG_LANGUAGES = frozenset(
+    {
+        "python",
+        "javascript",
+        "typescript",
+        "go",
+        "rust",
+        "java",
+        "php",
+        "c",
+        "cpp",
+        "ruby",
+        "csharp",
+    }
+)
 
 # File extensions whose language the KG extracts symbols for. Used to decide which
 # changed files to re-index after a task (kept in sync with _KG_LANGUAGES).
