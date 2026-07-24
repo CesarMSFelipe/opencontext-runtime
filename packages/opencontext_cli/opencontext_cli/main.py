@@ -3219,9 +3219,14 @@ def _install(args: argparse.Namespace) -> None:
 
     try:
         from opencontext_core.doctor.checks import run_doctor
-        from opencontext_core.runtime import OpenContextRuntime
 
-        rt = OpenContextRuntime(config_path=str(root / "opencontext.yaml"))
+        # Anchor the runtime to the resolved project root (not cwd). The written
+        # opencontext.yaml keeps project_index.root=".", so a bare config_path build
+        # would resolve "." against the current cwd and create a second storage dir
+        # under a cwd-derived project_id — split-state from the index/onboard dir.
+        # _runtime_for_root canonicalizes the root once so all install-time storage
+        # lands under the same project_id as `index <root>`.
+        rt = _runtime_for_root(str(root / "opencontext.yaml"), root)
         checks = run_doctor(rt.config)
         passed = sum(1 for c in checks if c.ok)
         summary.append(f"✓ Verify ({passed}/{len(checks)} checks passed)")
