@@ -4,7 +4,7 @@
 # format rules or adding checks can no longer break CI out of nowhere; bump these
 # deliberately (and re-run `make ci`) instead.
 ruff==0.15.22
-mypy==2.3.0
+mypy==2.3.1
 pytest==9.1.1
 # Parallelizes the unit lane (`pytest -n auto`) across CPUs — the CI `test` job
 # and `make test-unit` rely on it. Per-worker HOME isolation lives in
