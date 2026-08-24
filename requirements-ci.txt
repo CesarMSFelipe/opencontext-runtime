@@ -16,6 +16,6 @@ pytest-xdist==3.8.0
 # diagnosable without log access. No-op outside GitHub Actions.
 pytest-github-actions-annotate-failures==0.4.2
 build==1.5.1
-types-PyYAML==6.0.12.20260518
+types-PyYAML==6.0.12.20260815
 types-requests==2.33.0.20260712
 types-pyperclip==1.11.0.20260508
